@@ -17,7 +17,7 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
     @GeneratedValue(strategy = GenerationType.IDENTITY) // 5. Auto Increment (1, 2, 3... 번호 자동 증가)
     private Long id;
 
-    @Column(nullable = false, unique = true)// 6. 필수 입력(Not Null) + 중복 금지(Unique)
+    @Column(nullable = false, unique = true) // 6. 필수 입력(Not Null) + 중복 금지(Unique)
     private String loginId;
 
     @Column(nullable = false)
