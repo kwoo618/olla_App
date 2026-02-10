@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 
 @Entity // 1. JPA에게 "이건 DB 테이블이랑 짝꿍이야"라고 알려줌
 @Getter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@NoArgsConstructor(access = AccessLevel.PROTECTED)  // 파라미터가 없는 기본 생성자(public Member() {}), 아무나 못 쓰게 protected
 @Table(name = "member") // 2. DB 테이블 이름을 명시적으로 'member'로 지정
 public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 자동 관리
 
