@@ -16,7 +16,7 @@ public class SignupRequest {
     private String loginId;
 
     @NotBlank
-    @Pattern(regexp = "(?=.*[A-Za-z])(?=.*[0-9])(?=\\S+$).{6}}", message = "비밀번호는 최소 6자 이상이어야 하며, 영문자와 숫자를 포함해야 합니다.")
+    @Pattern(regexp = "(?=.*[A-Za-z])(?=.*[0-9])(?=\\S+$).{6,}", message = "비밀번호는 최소 6자 이상이어야 하며, 영문자와 숫자를 포함해야 합니다.")
     private String password;
 
     @NotBlank(message = "이름은 필수 입력입니다.")

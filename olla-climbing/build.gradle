@@ -1,6 +1,6 @@
 plugins {
 	id 'java'
-	id 'org.springframework.boot' version '4.0.2'
+	id 'org.springframework.boot' version '3.2.2'
 	id 'io.spring.dependency-management' version '1.1.7'
 }
 
@@ -25,19 +25,21 @@ repositories {
 }
 
 dependencies {
-	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-	implementation 'org.springframework.boot:spring-boot-starter-security'
-	implementation 'org.springframework.boot:spring-boot-starter-validation'
-	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
-	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.2.0'	//[Swagger] API 문서를 자동으로 만들어주는 라이브러리
-	compileOnly 'org.projectlombok:lombok'
-	runtimeOnly 'com.mysql:mysql-connector-j'
-	annotationProcessor 'org.projectlombok:lombok'
-	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
-	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	implementation 'org.springframework.boot:spring-boot-starter-web'			// [Web] 웹 서버 기능을 위한 라이브러리 모음
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'		// [JPA] JPA 관련 라이브러리 모음
+	implementation 'org.springframework.boot:spring-boot-starter-security'		// [Security] 스프링 보안 관련 라이브러리 모음
+	implementation 'org.springframework.boot:spring-boot-starter-validation'	// [Validation] 유효성 검사를 도와주는 라이브러리
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'	//[Swagger] API 문서를 자동으로 만들어주는 라이브러리
+
+	runtimeOnly 'com.mysql:mysql-connector-j'	// [MySQL] MySQL 데이터베이스와 연동하기 위한 JDBC 드라이버
+
+	compileOnly 'org.projectlombok:lombok'	// 컴파일 시점에만 필요한 라이브러리
+	annotationProcessor 'org.projectlombok:lombok'	// 롬복 애노테이션을 처리하는 어노테이션 프로세서
+
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'	// [Test] 테스트 관련 라이브러리 모음
+	testImplementation 'org.springframework.security:spring-security-test'	// [Test] 스프링 보안 테스트 관련 라이브러리
+
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'	// 최신 버전 스프링 부트에서는 이게 없으면 가끔 테스트 실행 버튼이 안 먹힐 때가 있어서 넣어주는 게 좋다.
 
 }
 
