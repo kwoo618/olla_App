@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+// @Service를 붙이지 않으면 스프링이 인식 못함(일반 자바 파일 취급) -> 의존성 주입 불가
 @Service    // 스프링이 해당 클래스를 서비스 빈으로 등록
 @RequiredArgsConstructor    // final로 선언된 필드를 매개변수로 받는 생성자를 자동 생성
 public class AuthService {
