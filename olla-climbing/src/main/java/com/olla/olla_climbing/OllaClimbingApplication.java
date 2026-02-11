@@ -11,5 +11,4 @@ public class OllaClimbingApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(OllaClimbingApplication.class, args);
 	}
-
 }
