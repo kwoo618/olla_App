@@ -35,6 +35,17 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
     @Enumerated(EnumType.STRING) // 7. Enum을 DB에 저장할 때 숫자가 아니라 문자("USER")로 저장해라
     private Role role;
 
+    // one-to-one 양방향 매핑: MemberDetail과 MemberPrivacy는 Member를 참조, Member는 Detail과 Privacy를 참조
+    // mappedBy = "member": MemberDetail과 MemberPrivacy에서 "member" 필드가 이 관계의 주인이라는 뜻, DB에서는 MemberDetail과 MemberPrivacy 테이블에 member_id 외래키가 생김
+    // fetch = FetchType.LAZY: Member를 조회할 때 Detail과 Privacy는 바로 가져오지 않고, 실제로 사용할 때 가져옴(성능 최적화)
+    // cascade = CascadeType.ALL: Member가 저장될 때 Detail, Privacy도 같이 저장됨
+    // 양방향 매핑 이유? Member에서 Detail과 Privacy를 바로 참조할 수 있게 해서 편리하게 접근하려고, 예) member.getMemberDetail().getHeight() 이런 식으로
+    @OneToOne(mappedBy = "member", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    private MemberDetail memberDetail;
+
+    @OneToOne(mappedBy = "member", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    private MemberPrivacy memberPrivacy;
+
     // 프로필 공개 여부 (기본값 false)
     private boolean isProfilePublic;
 
