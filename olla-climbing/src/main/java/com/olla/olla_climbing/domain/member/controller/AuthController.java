@@ -1,6 +1,8 @@
 package com.olla.olla_climbing.domain.member.controller;
 
+import com.olla.olla_climbing.domain.member.dto.request.LoginRequest;
 import com.olla.olla_climbing.domain.member.dto.request.SignupRequest;
+import com.olla.olla_climbing.domain.member.dto.response.TokenResponse;
 import com.olla.olla_climbing.domain.member.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
@@ -14,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController // "API를 처리하는 컨트롤러"
 @RequestMapping("/api/v1/auth") // 이 컨트롤러의 기본 URL 경로 설정
 @RequiredArgsConstructor    // 자동 주입
-public class AuthContoller {
+public class AuthController {
 
     private final AuthService authService;
 
@@ -30,5 +32,13 @@ public class AuthContoller {
 
         authService.signup(request);
         return ResponseEntity.ok("회원가입이 완료되었습니다.");
+    }
+
+    @PostMapping("/login") // POST /api/v1/auth/login
+    @Operation(summary = "로그인", description = "회원 정보를 받아 로그인 처리 후 JWT 토큰을 반환합니다.")
+    public ResponseEntity<TokenResponse> login(@Valid @RequestBody LoginRequest request) {
+
+        TokenResponse tokenResponse = authService.login(request);
+        return ResponseEntity.ok(tokenResponse); // 로그인 성공 시 JWT 토큰 반환
     }
 }
