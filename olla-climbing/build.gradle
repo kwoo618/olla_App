@@ -31,6 +31,11 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-validation'	// [Validation] 유효성 검사를 도와주는 라이브러리
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'	//[Swagger] API 문서를 자동으로 만들어주는 라이브러리
 
+	// [JWT] 토큰 생성 및 검증을 위한 라이브러리 (jjwt 0.12.3 버전)
+	implementation 'io.jsonwebtoken:jjwt-api:0.12.3'	// JWT API 인터페이스 제공
+	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.3'		// JWT 구현체 제공
+	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.3'	// JSON 파싱용
+
 	runtimeOnly 'com.mysql:mysql-connector-j'	// [MySQL] MySQL 데이터베이스와 연동하기 위한 JDBC 드라이버
 
 	compileOnly 'org.projectlombok:lombok'	// 컴파일 시점에만 필요한 라이브러리
