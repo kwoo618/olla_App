@@ -6,6 +6,7 @@ package com.olla.olla_climbing.domain.member.service;
 import com.olla.olla_climbing.domain.member.Member;
 import com.olla.olla_climbing.domain.member.dto.request.LoginRequest;
 import com.olla.olla_climbing.domain.member.dto.request.SignupRequest;
+import com.olla.olla_climbing.domain.member.dto.response.TokenResponse;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
 import com.olla.olla_climbing.global.security.jwt.JwtTokenProvider;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,7 +46,7 @@ public class AuthService {
 
     // 로그인 비즈니스 로직
     @Transactional(readOnly = true)   // 읽기 전용 트랜잭션, 성능 최적화
-    public String login(LoginRequest request){
+    public TokenResponse login(LoginRequest request){
         // 1. 회원 조회: 로그인 ID로 DB에서 회원을 조회, 없으면 예외 발생
         Member member = memberRepository.findByLoginId(request.getLoginId())
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 아이디입니다."));
