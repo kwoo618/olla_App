@@ -35,6 +35,13 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
     @Enumerated(EnumType.STRING) // 7. Enum을 DB에 저장할 때 숫자가 아니라 문자("USER")로 저장해라
     private Role role;
 
+    // cascade = CascadeType.ALL: Member가 저장될 때 Detail, Privacy도 같이 저장됨
+    @OneToOne(mappedBy = "member", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    private MemberDetail memberDetail;
+
+    @OneToOne(mappedBy = "member", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    private MemberPrivacy memberPrivacy;
+
     // 프로필 공개 여부 (기본값 false)
     private boolean isProfilePublic;
 
