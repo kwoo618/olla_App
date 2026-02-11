@@ -2,6 +2,7 @@ package com.olla.olla_climbing.domain.member.controller;
 
 import com.olla.olla_climbing.domain.member.dto.request.LoginRequest;
 import com.olla.olla_climbing.domain.member.dto.request.SignupRequest;
+import com.olla.olla_climbing.domain.member.dto.response.TokenResponse;
 import com.olla.olla_climbing.domain.member.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
@@ -35,8 +36,9 @@ public class AuthController {
 
     @PostMapping("/login") // POST /api/v1/auth/login
     @Operation(summary = "로그인", description = "회원 정보를 받아 로그인 처리 후 JWT 토큰을 반환합니다.")
-    public ResponseEntity<String> login(@Valid @RequestBody LoginRequest request) {
-        String token = authService.login(request);
-        return ResponseEntity.ok(token); // 로그인 성공 시 JWT 토큰 반환
+    public ResponseEntity<TokenResponse> login(@Valid @RequestBody LoginRequest request) {
+
+        TokenResponse tokenResponse = authService.login(request);
+        return ResponseEntity.ok(tokenResponse); // 로그인 성공 시 JWT 토큰 반환
     }
 }

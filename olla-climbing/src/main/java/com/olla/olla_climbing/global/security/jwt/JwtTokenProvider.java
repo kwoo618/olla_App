@@ -1,5 +1,6 @@
 package com.olla.olla_climbing.global.security.jwt;
 
+import com.olla.olla_climbing.domain.member.dto.response.TokenResponse;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
@@ -20,7 +21,8 @@ public class JwtTokenProvider {
 
     private SecretKey key;  // 키 객체
 
-    private final long tokenValidityInMilliseconds = 1000L * 60 * 60; // 토큰 유효 기간: 1시간
+    private final long accessTokenValidity = 1000L * 60 * 30; // 토큰 유효 기간: 30분
+    private final long refreshTokenValidity = 1000L * 60 * 60 * 24 * 28; // 28일
 
     // 초기화: 서버가 켜질 때 비밀키를 디코딩해서 사용할 준비
     @PostConstruct      // PostConstruct 어노테이션은 의존성 주입이 완료된 후에 실행되는 메서드를 지정할 때 사용
@@ -31,16 +33,32 @@ public class JwtTokenProvider {
     }
 
     // 토큰 생성
-    public String createToken(String loginId) {
-        Date now = new Date();
-        Date validity = new Date(now.getTime() + tokenValidityInMilliseconds);  // 만료 시간 설정: 현재 시간 + 유효 기간
+    public TokenResponse createToken(String loginId) {
 
-        return Jwts.builder()
+        Date now = new Date();
+        Date accessTokenValidity = new Date(now.getTime() + this.accessTokenValidity);      // 액세스 토큰 만료 시간(현재 시간 + 엑세스 토큰 유효 기간(30분))
+        Date refreshTokenValidity = new Date(now.getTime() + this.refreshTokenValidity);    // 리프레시 토큰 만료 시간(현재 시간 + 리프레시 토큰 유효 기간(28일))
+
+        // 액세스 토큰 생성
+        String accessToken = Jwts.builder()
                 .subject(loginId)       // 토큰의 주체를 로그인 ID로 설정
                 .issuedAt(now)          // 토큰 발행 시간
-                .expiration(validity)   // 토큰 만료 시간
+                .expiration(accessTokenValidity)   // 액세스 토큰 만료 시간
                 .signWith(key)          // 비밀 키로 서명
                 .compact();             // 토큰 생성
+
+        // 리프레시 토큰 생성: 보통은 리프레시 토큰에 추가 정보를 담지 않음
+        String refreshToken = Jwts.builder()
+                .expiration(refreshTokenValidity)   // 리프레시 토큰 만료 시간
+                .signWith(key)          // 비밀 키로 서명
+                .compact();             // 토큰 생성
+
+        // 토큰 응답 DTO 생성 및 반환
+        return TokenResponse.builder()
+                .grantType("Bearer")    // 토큰 타입 설정
+                .accessToken(accessToken)   // 액세스 토큰 설정
+                .refreshToken(refreshToken) // 리프레시 토큰 설정
+                .build();
     }
 
     // 토큰에서 로그인 ID 추출
