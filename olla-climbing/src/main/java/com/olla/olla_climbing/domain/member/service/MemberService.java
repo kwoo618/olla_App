@@ -1,6 +1,9 @@
 package com.olla.olla_climbing.domain.member.service;
 
 import com.olla.olla_climbing.domain.member.Member;
+import com.olla.olla_climbing.domain.member.NotificationSetting;
+import com.olla.olla_climbing.domain.member.dto.request.AlertUpdateRequest;
+import com.olla.olla_climbing.domain.member.dto.response.AlertResponse;
 import com.olla.olla_climbing.domain.member.dto.response.MemberResponse;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
@@ -62,5 +65,39 @@ public class MemberService {
 
         // 6. 수정된 결과를 다시 DTO로 만들어서 반환
         return MemberResponse.from(member);
+    }
+
+    // 알림 설정 업데이트 비즈니스 로직
+    @Transactional
+    public AlertResponse updateAlertSettings(String loginId, AlertUpdateRequest request) {
+        Member member = memberRepository.findByLoginId(loginId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
+
+        if (member.getNotificationSetting() == null) {
+            // 최초 설정 시
+            NotificationSetting newSetting = new NotificationSetting(member);
+            newSetting.update(
+                    request.getIsGlobalAlertOn(), request.getIsMembershipWeekBeforeAlertOn(),
+                    request.getIsMembershipDayBeforeAlertOn(), request.getIsMembershipExpiredAlertOn(),
+                    request.getIsNoticeAlertOn(), request.getIsCrewParticipantChangeAlertOn(),
+                    request.getIsCrewMeetingReminderAlertOn(), request.getIsRankingChangeAlertOn(),
+                    request.getIsWeeklyReportAlertOn(), request.getIsInactivityAlertOn(),
+                    request.getInactivityDays()
+            );
+            member.setNotificationSetting(newSetting);
+        } else {
+            // 기존 설정 변경 시
+            member.getNotificationSetting().update(
+                    request.getIsGlobalAlertOn(), request.getIsMembershipWeekBeforeAlertOn(),
+                    request.getIsMembershipDayBeforeAlertOn(), request.getIsMembershipExpiredAlertOn(),
+                    request.getIsNoticeAlertOn(), request.getIsCrewParticipantChangeAlertOn(),
+                    request.getIsCrewMeetingReminderAlertOn(), request.getIsRankingChangeAlertOn(),
+                    request.getIsWeeklyReportAlertOn(), request.getIsInactivityAlertOn(),
+                    request.getInactivityDays()
+            );
+        }
+
+        // 업데이트된 결과를 DTO로 변환하여 반환
+        return AlertResponse.from(member.getNotificationSetting());
     }
 }

@@ -33,6 +33,12 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
     @Enumerated(EnumType.STRING) // 7. Enum을 DB에 저장할 때 숫자가 아니라 문자("USER")로 저장해라
     private Role role;
 
+    // 프로필 공개 여부 (기본값 false)
+    private boolean isProfilePublic;
+
+    // 기록 공개 여부 (기본값 false)
+    private boolean isRecordPublic;
+
     // one-to-one 양방향 매핑: MemberDetail과 MemberPrivacy는 Member를 참조, Member는 Detail과 Privacy를 참조
     // mappedBy = "member": MemberDetail과 MemberPrivacy에서 "member" 필드가 이 관계의 주인이라는 뜻, DB에서는 MemberDetail과 MemberPrivacy 테이블에 member_id 외래키가 생김
     // fetch = FetchType.LAZY: Member를 조회할 때 Detail과 Privacy는 바로 가져오지 않고, 실제로 사용할 때 가져옴(성능 최적화)
@@ -45,18 +51,20 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
     @OneToOne(mappedBy = "member", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
     private MemberPrivacy memberPrivacy;
 
-    // 프로필 공개 여부 (기본값 false)
-    private boolean isProfilePublic;
-
-    // 기록 공개 여부 (기본값 false)
-    private boolean isRecordPublic;
-
     public void setMemberDetail(MemberDetail memberDetail) {
         this.memberDetail = memberDetail;
     }
 
     public void setMemberPrivacy(MemberPrivacy memberPrivacy) {
         this.memberPrivacy = memberPrivacy;
+    }
+
+    // 알림 설정
+    @OneToOne(mappedBy = "member", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    private NotificationSetting notificationSetting;
+
+    public void setNotificationSetting(NotificationSetting notificationSetting) {
+        this.notificationSetting = notificationSetting;
     }
 
     // 생성자 (회원가입 할 때 씀)

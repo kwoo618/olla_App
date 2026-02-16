@@ -11,6 +11,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import com.olla.olla_climbing.domain.member.dto.request.AlertUpdateRequest;
+import com.olla.olla_climbing.domain.member.dto.response.AlertResponse;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+
 @RestController
 @RequestMapping("/api/v1/members")
 @RequiredArgsConstructor
@@ -51,6 +56,21 @@ public class MemberController {
 
         // 서비스에 '누구의 정보'를 '어떻게' 수정할지 넘겨줌
         MemberResponse response = memberService.updateMyInfo(member.getLoginId(), request);
+
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/me/alert")
+    @Operation(summary = "알림 설정 수정", description = "로그인한 회원의 확장된 알림 설정을 수정합니다.",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<AlertResponse> updateAlertSettings(@AuthenticationPrincipal Member member, @RequestBody AlertUpdateRequest request) {
+
+        if (member == null) {
+            throw new IllegalArgumentException("로그인 인증 정보가 없습니다.");
+        }
+
+        // 서비스에 알림 수정 요청
+        AlertResponse response = memberService.updateAlertSettings(member.getLoginId(), request);
 
         return ResponseEntity.ok(response);
     }
