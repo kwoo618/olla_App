@@ -1,6 +1,7 @@
 package com.olla.olla_climbing.domain.member.controller;
 
 import com.olla.olla_climbing.domain.member.Member;
+import com.olla.olla_climbing.domain.member.dto.request.MemberUpdateRequest;
 import com.olla.olla_climbing.domain.member.dto.response.MemberResponse;
 import com.olla.olla_climbing.domain.member.service.MemberService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -8,9 +9,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/members")
@@ -35,6 +34,23 @@ public class MemberController {
 
         // 토큰에서 추출한 회원 ID(loginId)로 서비스에 조회 요청
         MemberResponse response = memberService.getMyInfo(member.getLoginId());
+
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/me")
+    @Operation(summary = "내 정보 수정", description = "로그인한 회원의 정보를 수정합니다. (수정할 필드만 전송 가능)",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<MemberResponse> updateMyInfo(
+            @AuthenticationPrincipal Member member,
+            @RequestBody MemberUpdateRequest request) { // 클라이언트가 보낸 JSON 데이터를 받음
+
+        if (member == null) {
+            throw new IllegalArgumentException("로그인 인증 정보가 없습니다.");
+        }
+
+        // 서비스에 '누구의 정보'를 '어떻게' 수정할지 넘겨줌
+        MemberResponse response = memberService.updateMyInfo(member.getLoginId(), request);
 
         return ResponseEntity.ok(response);
     }

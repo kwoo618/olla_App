@@ -36,12 +36,12 @@ public class MemberPrivacy {
     }
 
     // 설정 변경 메서드
-    public void update(boolean isPhonePublic, boolean isEmailPublic, boolean isHeightPublic, boolean isWeightPublic, boolean isArmSpanPublic, boolean isFootSizePublic) {
-        this.isPhonePublic = isPhonePublic;
-        this.isEmailPublic = isEmailPublic;
-        this.isHeightPublic = isHeightPublic;
-        this.isWeightPublic = isWeightPublic;
-        this.isArmSpanPublic = isArmSpanPublic;
-        this.isFootSizePublic = isFootSizePublic;
+    public void update(Boolean isPhonePublic, Boolean isEmailPublic, Boolean isHeightPublic, Boolean isWeightPublic, Boolean isArmSpanPublic, Boolean isFootSizePublic) {
+        if (isPhonePublic != null) this.isPhonePublic = isPhonePublic;
+        if (isEmailPublic != null) this.isEmailPublic = isEmailPublic;
+        if (isHeightPublic != null) this.isHeightPublic = isHeightPublic;
+        if (isWeightPublic != null) this.isWeightPublic = isWeightPublic;
+        if (isArmSpanPublic != null) this.isArmSpanPublic = isArmSpanPublic;
+        if (isFootSizePublic != null) this.isFootSizePublic = isFootSizePublic;
     }
 }

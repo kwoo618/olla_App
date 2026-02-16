@@ -1,5 +1,6 @@
 package com.olla.olla_climbing.domain.member;
 
+import com.olla.olla_climbing.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -13,7 +14,7 @@ import java.time.LocalDateTime;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class MemberDetail {
+public class MemberDetail extends BaseTimeEntity {
 
     @Id
     private Long memberId; // PK이자 FK
@@ -36,8 +37,6 @@ public class MemberDetail {
 
     private Double footSize;
 
-    private LocalDateTime updatedAt;
-
     // 생성자: 처음엔 정보가 없으니 Member만 연결하고 나머지는 Null
     public MemberDetail(Member member) {
         this.member = member;
@@ -45,11 +44,10 @@ public class MemberDetail {
 
     // 나중에 정보를 업데이트할 때 쓸 메서드 (Setter 대신 사용)
     public void update(Integer age, Double height, Double weight, Double armSpan, Double footSize) {
-        this.age = age;
-        this.height = height;
-        this.weight = weight;
-        this.armSpan = armSpan;
-        this.footSize = footSize;
-        this.updatedAt = LocalDateTime.now();
+        if (age != null) this.age = age;
+        if (height != null) this.height = height;
+        if (weight != null) this.weight = weight;
+        if (armSpan != null) this.armSpan = armSpan;
+        if (footSize != null) this.footSize = footSize;
     }
 }

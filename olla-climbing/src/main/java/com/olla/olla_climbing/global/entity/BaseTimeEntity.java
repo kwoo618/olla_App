@@ -1,5 +1,6 @@
 package com.olla.olla_climbing.global.entity;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.EntityListeners;
 import jakarta.persistence.MappedSuperclass;
 import lombok.Getter;
@@ -15,6 +16,7 @@ import java.time.LocalDateTime;
 public abstract class BaseTimeEntity {
 
     @CreatedDate
+    @Column(updatable = false)
     private LocalDateTime createdAt; // 생성될 때 시간 자동 저장
 
     @LastModifiedDate
