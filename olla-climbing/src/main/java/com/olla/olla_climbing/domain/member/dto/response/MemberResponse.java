@@ -20,6 +20,7 @@ public class MemberResponse {
     // 회원의 상세 정보와 개인정보 공개 설정을 담는 내부 DTO 클래스
     // 새로운 클래스로 분리하여 MemberResponse의 가독성을 높이고, 필요한 정보만 포함하도록 설계
     // MemberDetail과 MemberPrivacy의 모든 필드를 포함하지 않고, 필요한 필드만 선택적으로 포함하여 응답의 크기를 줄임
+    // API 응답용 DTO는 보통 public으로 열어둠, Swagger 같은 API 문서화 도구에서 자동으로 인식할 수 있도록
     @Getter @Builder
     public static class DetailDto {
         private Integer age;
@@ -39,6 +40,9 @@ public class MemberResponse {
         private boolean isFootSizePublic;
     }
 
+    // 자바 개발자들 사이의 암묵적인 룰(네이밍 컨벤션)
+    // from: 매개변수를 딱 1개 받아서 객체를 만들 때 주로 쓰는 이름 (예: Member 1개를 받아서 MemberResponse로 변환)
+    // of: 매개변수를 여러 개 받아서 객체를 만들 때 주로 쓰는 이름
     public static MemberResponse from(Member member) {
         // MemberResponse를 만들 때, MemberDetail과 MemberPrivacy가 Null일 수 있으므로, Null 체크 후 DTO로 변환
         MemberDetail detail = member.getMemberDetail();
