@@ -1,9 +1,10 @@
-package com.olla.olla_climbing.domain.member.controller;
+package com.olla.olla_climbing.domain.auth.controller;
 
-import com.olla.olla_climbing.domain.member.dto.request.LoginRequest;
-import com.olla.olla_climbing.domain.member.dto.request.SignupRequest;
-import com.olla.olla_climbing.domain.member.dto.response.TokenResponse;
-import com.olla.olla_climbing.domain.member.service.AuthService;
+import com.olla.olla_climbing.domain.auth.dto.request.LoginRequest;
+import com.olla.olla_climbing.domain.auth.dto.request.LogoutRequest;
+import com.olla.olla_climbing.domain.auth.dto.request.SignupRequest;
+import com.olla.olla_climbing.domain.auth.dto.response.TokenResponse;
+import com.olla.olla_climbing.domain.auth.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -40,5 +41,12 @@ public class AuthController {
 
         TokenResponse tokenResponse = authService.login(request);
         return ResponseEntity.ok(tokenResponse); // 로그인 성공 시 JWT 토큰 반환
+    }
+
+    @PostMapping("/logout")
+    @Operation(summary = "로그아웃", description = "Refresh Token을 DB에서 삭제하여 로그아웃 처리합니다.")
+    public ResponseEntity<String> logout(@RequestBody LogoutRequest request) {
+        authService.logout(request);
+        return ResponseEntity.ok("로그아웃이 완료되었습니다.");
     }
 }

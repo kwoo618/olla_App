@@ -2,10 +2,8 @@ package com.olla.olla_climbing.domain.member;
 
 import com.olla.olla_climbing.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
-import lombok.AccessLevel;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
+import org.springframework.util.StringUtils;
 
 @Entity // 1. JPA에게 "이건 DB 테이블이랑 짝꿍이야"라고 알려줌
 @Getter
@@ -41,6 +39,34 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
     // 기록 공개 여부 (기본값 false)
     private boolean isRecordPublic;
 
+    // one-to-one 양방향 매핑: MemberDetail과 MemberPrivacy는 Member를 참조, Member는 Detail과 Privacy를 참조
+    // mappedBy = "member": MemberDetail과 MemberPrivacy에서 "member" 필드가 이 관계의 주인이라는 뜻, DB에서는 MemberDetail과 MemberPrivacy 테이블에 member_id 외래키가 생김
+    // fetch = FetchType.LAZY: Member를 조회할 때 Detail과 Privacy는 바로 가져오지 않고, 실제로 사용할 때 가져옴(성능 최적화)
+    // cascade = CascadeType.ALL: Member가 저장될 때 Detail, Privacy도 같이 저장됨
+    // 양방향 매핑 이유? Member에서 Detail과 Privacy를 바로 참조할 수 있게 해서 편리하게 접근하려고, 예) member.getMemberDetail().getHeight() 이런 식으로
+    @OneToOne(mappedBy = "member", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    private MemberDetail memberDetail;
+
+    // @Setter 대신 setMemberPrivacy() 메서드를 만들어서, MemberPrivacy를 세팅할 때, MemberPrivacy에도 "네 주인은 나야"라고 명시적으로 알려주는 것이 좋음 (연관관계 편의 메서드)
+    @OneToOne(mappedBy = "member", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    private MemberPrivacy memberPrivacy;
+
+    public void setMemberDetail(MemberDetail memberDetail) {
+        this.memberDetail = memberDetail;
+    }
+
+    public void setMemberPrivacy(MemberPrivacy memberPrivacy) {
+        this.memberPrivacy = memberPrivacy;
+    }
+
+    // 알림 설정
+    @OneToOne(mappedBy = "member", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    private NotificationSetting notificationSetting;
+
+    public void setNotificationSetting(NotificationSetting notificationSetting) {
+        this.notificationSetting = notificationSetting;
+    }
+
     // 생성자 (회원가입 할 때 씀)
     @Builder // 8. 객체를 만들 때 헷갈리지 않게 도와주는 도구
     public Member(String loginId, String password, String name, String phone, String email, Role role) {
@@ -52,5 +78,17 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
         this.role = role;
         this.isProfilePublic = false; // 가입 시 기본 비공개
         this.isRecordPublic = false;
+    }
+
+    // 회원의 기본 정보(이름, 전화번호) 업데이트 메서드
+    public void updateBasicInfo(String name, String phone) {
+
+        // name != null -> StringUtils.hasText(name) : null 체크 + 빈 문자열 체크, 빈 문자열("")은 null이 아니지만 유효한 값이 아니므로 같이 체크
+        if (StringUtils.hasText(name)) {
+            this.name = name;
+        }
+        if (StringUtils.hasText(phone)) {
+            this.phone = phone;
+        }
     }
 }

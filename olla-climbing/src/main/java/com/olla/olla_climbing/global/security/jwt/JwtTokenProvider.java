@@ -1,6 +1,6 @@
 package com.olla.olla_climbing.global.security.jwt;
 
-import com.olla.olla_climbing.domain.member.dto.response.TokenResponse;
+import com.olla.olla_climbing.domain.auth.dto.response.TokenResponse;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
@@ -27,48 +27,55 @@ public class JwtTokenProvider {
     // 초기화: 서버가 켜질 때 비밀키를 디코딩해서 사용할 준비
     @PostConstruct      // PostConstruct 어노테이션은 의존성 주입이 완료된 후에 실행되는 메서드를 지정할 때 사용
     protected void init(){
+
         // 비밀 키 디코딩 (Base64 -> byte[]), application.yml에 Base64로 인코딩된 문자열이 저장되어 있다고 가정, 이를 byte 배열로 변환, 키 생성에 사용
         byte[] keyBytes = Decoders.BASE64.decode(secretKey);
         this.key = Keys.hmacShaKeyFor(keyBytes);        // 비밀 키 생성
     }
 
-    // 토큰 생성
-    public TokenResponse createToken(String loginId) {
-
+    // Access Token 단독 생성
+    public String createAccessToken(String loginId, String role) {
         Date now = new Date();
-        Date accessTokenValidity = new Date(now.getTime() + this.accessTokenValidity);      // 액세스 토큰 만료 시간(현재 시간 + 엑세스 토큰 유효 기간(30분))
-        Date refreshTokenValidity = new Date(now.getTime() + this.refreshTokenValidity);    // 리프레시 토큰 만료 시간(현재 시간 + 리프레시 토큰 유효 기간(28일))
+        Date validity = new Date(now.getTime() + this.accessTokenValidity);
 
-        // 액세스 토큰 생성
-        String accessToken = Jwts.builder()
-                .subject(loginId)       // 토큰의 주체를 로그인 ID로 설정
-                .issuedAt(now)          // 토큰 발행 시간
-                .expiration(accessTokenValidity)   // 액세스 토큰 만료 시간
-                .signWith(key)          // 비밀 키로 서명
-                .compact();             // 토큰 생성
+        return Jwts.builder()
+                .subject(loginId)   // 누구의 토큰인지 식별용
+                .claim("role", role)    // 페이로드에 권한(role) 정보 추가
+                .issuedAt(now)  // 토큰 발행 시간
+                .expiration(validity)   // 토큰 만료 시간
+                .signWith(key)  // 비밀 키로 서명
+                .compact(); // JWT 토큰 생성
+    }
 
-        // 리프레시 토큰 생성: 보통은 리프레시 토큰에 추가 정보를 담지 않음
-        String refreshToken = Jwts.builder()
-                .expiration(refreshTokenValidity)   // 리프레시 토큰 만료 시간
-                .signWith(key)          // 비밀 키로 서명
-                .compact();             // 토큰 생성
+    // Refresh Token 단독 생성 (권한 정보 없이 가볍게 생성)
+    public String createRefreshToken(String loginId) {
+        Date now = new Date();
+        Date validity = new Date(now.getTime() + this.refreshTokenValidity);
 
-        // 토큰 응답 DTO 생성 및 반환
-        return TokenResponse.builder()
-                .grantType("Bearer")    // 토큰 타입 설정
-                .accessToken(accessToken)   // 액세스 토큰 설정
-                .refreshToken(refreshToken) // 리프레시 토큰 설정
-                .build();
+        // Refresh Token은 Access Token보다 더 긴 유효 기간을 가지며, 권한 정보 없이 생성됩니다. 로그인 ID만 포함하여 토큰을 생성합니다.
+        return Jwts.builder()
+                .subject(loginId) // 누구의 토큰인지 식별용
+                .issuedAt(now)
+                .expiration(validity)
+                .signWith(key)
+                .compact();
     }
 
     // 토큰에서 로그인 ID 추출
+    // 토큰이 만료된 경우에도 로그인 ID를 추출할 수 있도록 예외 처리
     public String getLoginId(String token) {
-        return Jwts.parser()
-                .verifyWith(key)    // 비밀 키로 서명 검증
-                .build()
-                .parseSignedClaims(token)   // 토큰 파싱
-                .getPayload()   // 페이로드(Claims)에서 로그인 ID 추출
-                .getSubject();  // subject 필드 반환
+        try {
+            return Jwts.parser()
+                    .verifyWith(key)    // 비밀 키로 서명 검증
+                    .build()
+                    .parseSignedClaims(token)   // 토큰 파싱
+                    .getPayload()   // 페이로드(Claims)에서 로그인 ID 추출
+                    .getSubject();  // subject 필드 반환
+        } catch (ExpiredJwtException e) {
+            // [핵심] 토큰이 만료되어 에러가 났더라도, 예외 객체(e) 안에 기존 페이로드 데이터가 남아있음!
+            // 재발급(Reissue)을 위해 만료된 토큰에서도 아이디를 끄집어냄
+            return e.getClaims().getSubject();
+    }
     }
 
     // 토큰 검증

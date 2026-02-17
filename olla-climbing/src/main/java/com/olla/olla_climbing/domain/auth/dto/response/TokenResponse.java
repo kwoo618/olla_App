@@ -1,4 +1,4 @@
-package com.olla.olla_climbing.domain.member.dto.response;
+package com.olla.olla_climbing.domain.auth.dto.response;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
