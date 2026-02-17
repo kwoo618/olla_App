@@ -3,27 +3,26 @@ package com.olla.olla_climbing.domain.record.controller;
 import com.olla.olla_climbing.domain.member.Member;
 import com.olla.olla_climbing.domain.record.dto.request.RecordLeadRequest;
 import com.olla.olla_climbing.domain.record.dto.response.RecordLeadResponse;
+import com.olla.olla_climbing.domain.record.service.RecordEnduranceService;
 import com.olla.olla_climbing.domain.record.service.RecordLeadService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDate;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/records")
+@RequestMapping("/api/v1/records/endurances") // URL 공통 부분 추출!
 @RequiredArgsConstructor
-public class RecordController {
+public class RecordLeadController {
 
     private final RecordLeadService recordLeadService;
 
-    @PostMapping("/leads")
+    @PostMapping
     @Operation(summary = "리드 기록 저장", description = "리드 등반 기록을 저장합니다.", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<RecordLeadResponse> saveLeadRecord(@AuthenticationPrincipal Member member, @Valid @RequestBody RecordLeadRequest request) {
 
@@ -35,7 +34,7 @@ public class RecordController {
         return ResponseEntity.ok(response);
     }
 
-    @GetMapping("/leads/best")
+    @GetMapping("/best")
     @Operation(summary = "난이도별 최고 기록 조회", description = "각 난이도(색상)별 회원의 가장 높은 기록을 조회합니다.", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<List<RecordLeadResponse>> getBestLeadRecords(
             @AuthenticationPrincipal Member member) {
@@ -48,7 +47,7 @@ public class RecordController {
         return ResponseEntity.ok(responses);
     }
 
-    @GetMapping("/leads/history")
+    @GetMapping("/history")
     @Operation(summary = "리드 기록 전체 상세 내역", description = "모든 리드 등반 기록을 날짜 최신순으로 조회합니다.", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<List<RecordLeadResponse>> getDetailedLeadHistory(
             @AuthenticationPrincipal Member member) {
@@ -61,7 +60,7 @@ public class RecordController {
         return ResponseEntity.ok(responses);
     }
 
-    @DeleteMapping("/leads/{id}")
+    @DeleteMapping("/{id}")
     @Operation(summary = "리드 기록 삭제", description = "자신의 특정 리드 기록을 삭제합니다.", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<String> deleteLeadRecord(
             @AuthenticationPrincipal Member member,
