@@ -91,4 +91,12 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
             this.phone = phone;
         }
     }
+
+    // 회원 탈퇴 여부를 나타내는 필드, 실제로 DB에서 회원 데이터를 삭제하는 대신 이 필드를 true로 바꿔서 탈퇴 처리
+    private boolean isDeleted = false; // 기본값은 false(활동 중)
+
+    // 탈퇴 처리 메서드
+    public void withdraw() {
+        this.isDeleted = true;
+    }
 }
