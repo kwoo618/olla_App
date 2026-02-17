@@ -9,4 +9,7 @@ import java.util.Optional;
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long> {
     // 로그인 아이디로 토큰을 찾는 메서드
     Optional<RefreshToken> findByLoginId(String loginId);
+
+    // 실제 토큰 값으로 토큰을 찾는 메서드 (로그아웃 시 토큰 삭제할 때 사용)
+    Optional<RefreshToken> findByToken(String token);
 }
