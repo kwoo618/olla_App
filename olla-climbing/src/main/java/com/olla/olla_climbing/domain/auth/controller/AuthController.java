@@ -1,9 +1,9 @@
-package com.olla.olla_climbing.domain.member.controller;
+package com.olla.olla_climbing.domain.auth.controller;
 
-import com.olla.olla_climbing.domain.member.dto.request.LoginRequest;
-import com.olla.olla_climbing.domain.member.dto.request.SignupRequest;
-import com.olla.olla_climbing.domain.member.dto.response.TokenResponse;
-import com.olla.olla_climbing.domain.member.service.AuthService;
+import com.olla.olla_climbing.domain.auth.dto.request.LoginRequest;
+import com.olla.olla_climbing.domain.auth.dto.request.SignupRequest;
+import com.olla.olla_climbing.domain.auth.dto.response.TokenResponse;
+import com.olla.olla_climbing.domain.auth.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

@@ -1,4 +1,4 @@
-package com.olla.olla_climbing.domain.member.dto.request;
+package com.olla.olla_climbing.domain.auth.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
