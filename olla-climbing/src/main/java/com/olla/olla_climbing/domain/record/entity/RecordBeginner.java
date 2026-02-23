@@ -15,8 +15,8 @@ import java.time.LocalDate;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Table(name = "record_lead")
-public class RecordLead extends BaseTimeEntity {
+@Table(name = "record_beginner")
+public class RecordBeginner extends BaseTimeEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -47,8 +47,8 @@ public class RecordLead extends BaseTimeEntity {
     private LocalDate recordDate; // 기록 측정 날짜 (생성일 createdAt과는 다름, 과거 기록을 입력할 수도 있으므로)
 
     @Builder
-    public RecordLead(Member member, Difficulty difficulty, AttemptType attemptType,
-                      boolean isSuccess, Integer maxHoldNo, LocalDate recordDate) {
+    public RecordBeginner(Member member, Difficulty difficulty, AttemptType attemptType,
+                          boolean isSuccess, Integer maxHoldNo, LocalDate recordDate) {
         this.member = member;
         this.difficulty = difficulty;
         this.attemptType = attemptType;

@@ -2,11 +2,8 @@ package com.olla.olla_climbing.domain.record.controller;
 
 import com.olla.olla_climbing.domain.member.Member;
 import com.olla.olla_climbing.domain.record.dto.request.RecordEnduranceRequest;
-import com.olla.olla_climbing.domain.record.dto.request.RecordLeadRequest;
 import com.olla.olla_climbing.domain.record.dto.response.RecordEnduranceResponse;
-import com.olla.olla_climbing.domain.record.dto.response.RecordLeadResponse;
 import com.olla.olla_climbing.domain.record.service.RecordEnduranceService;
-import com.olla.olla_climbing.domain.record.service.RecordLeadService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;

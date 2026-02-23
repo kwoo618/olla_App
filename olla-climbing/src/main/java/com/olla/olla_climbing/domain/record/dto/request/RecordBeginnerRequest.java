@@ -10,7 +10,7 @@ import java.time.LocalDate;
 
 @Getter
 @NoArgsConstructor
-public class RecordLeadRequest {
+public class RecordBeginnerRequest {
 
     @NotNull(message = "난이도는 필수입니다.")
     private Difficulty difficulty;
