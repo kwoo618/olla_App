@@ -6,7 +6,6 @@ import com.olla.olla_climbing.domain.record.dto.request.RecordBeginnerRequest;
 import com.olla.olla_climbing.domain.record.dto.response.RecordBeginnerResponse;
 import com.olla.olla_climbing.domain.record.entity.RecordBeginner;
 import com.olla.olla_climbing.domain.record.enums.AttemptType;
-import com.olla.olla_climbing.domain.record.repository.RecordBeginnerRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
