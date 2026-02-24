@@ -17,7 +17,7 @@ public class PostResponse {
     private String gymPlace;
     private LocalDateTime meetDateTime;
     private int maxMember;
-    private int currentMemberCount;
+    private int memberCount;
     private LocalDateTime createdAt;
 
     public static PostResponse from(Post post) {
@@ -30,7 +30,7 @@ public class PostResponse {
                 .gymPlace(post.getGymPlace())
                 .meetDateTime(post.getMeetDateTime())
                 .maxMember(post.getMaxMember())
-                .currentMemberCount(post.getCurrentMemberCount())
+                .memberCount(post.getMemberCount())
                 .createdAt(post.getCreatedAt())
                 .build();
     }

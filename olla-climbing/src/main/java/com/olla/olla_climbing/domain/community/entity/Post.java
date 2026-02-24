@@ -44,7 +44,7 @@ public class Post extends BaseTimeEntity {
     private Integer maxMember; // 모집 최대 인원 (예: 4명)
 
     @Column(nullable = false)
-    private Integer currentMemberCount; // 현재 참여 인원 (작성자 포함 기본 1명부터 시작)
+    private Integer memberCount; // 현재 참여 인원 (작성자 포함 기본 1명부터 시작)
 
     @Column(nullable = false)
     private boolean isDeleted; // 삭제 여부 (Soft Delete 방식 적용)
@@ -59,22 +59,22 @@ public class Post extends BaseTimeEntity {
         this.gymPlace = gymPlace;
         this.meetDateTime = meetDateTime;
         this.maxMember = maxMember;
-        this.currentMemberCount = 1; // 글 작성 시 본인은 무조건 참여 상태이므로 1로 초기화
+        this.memberCount = 1; // 글 작성 시 본인은 무조건 참여 상태이므로 1로 초기화
         this.isDeleted = false; // 기본값 활성 상태
     }
 
     // 참여 인원 증가 로직
     public void addParticipant() {
-        if (this.currentMemberCount >= this.maxMember) {
+        if (this.memberCount >= this.maxMember) {
             throw new IllegalStateException("모집 인원이 마감되었습니다.");
         }
-        this.currentMemberCount++;
+        this.memberCount++;
     }
 
     // 참여 인원 감소 로직
     public void removeParticipant() {
-        if (this.currentMemberCount > 1) { // 작성자는 빠질 수 없다고 가정할 경우 1 유지 (추후 정책에 따라 변경 가능)
-            this.currentMemberCount--;
+        if (this.memberCount > 1) { // 작성자는 빠질 수 없다고 가정할 경우 1 유지 (추후 정책에 따라 변경 가능)
+            this.memberCount--;
         }
     }
 
