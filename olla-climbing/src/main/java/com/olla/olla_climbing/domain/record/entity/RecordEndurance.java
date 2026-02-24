@@ -1,6 +1,6 @@
 package com.olla.olla_climbing.domain.record.entity;
 
-import com.olla.olla_climbing.domain.member.Member;
+import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.record.enums.EnduranceZone;
 import com.olla.olla_climbing.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;

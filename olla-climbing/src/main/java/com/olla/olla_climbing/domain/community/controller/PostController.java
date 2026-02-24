@@ -4,7 +4,7 @@ import com.olla.olla_climbing.domain.community.dto.request.PostCreateRequest;
 import com.olla.olla_climbing.domain.community.dto.response.PostResponse;
 import com.olla.olla_climbing.domain.community.dto.request.PostUpdateRequest;
 import com.olla.olla_climbing.domain.community.service.PostService;
-import com.olla.olla_climbing.domain.member.Member;
+import com.olla.olla_climbing.domain.member.entity.Member;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;

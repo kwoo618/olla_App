@@ -1,9 +1,8 @@
 package com.olla.olla_climbing.domain.record.controller;
 
-import com.olla.olla_climbing.domain.member.Member;
+import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.record.dto.request.RecordBeginnerRequest;
 import com.olla.olla_climbing.domain.record.dto.response.RecordBeginnerResponse;
-import com.olla.olla_climbing.domain.record.entity.RecordBeginner;
 import com.olla.olla_climbing.domain.record.service.RecordBeginnerService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;

@@ -1,7 +1,7 @@
 package com.olla.olla_climbing.domain.community.controller;
 
 import com.olla.olla_climbing.domain.community.service.PostParticipantService;
-import com.olla.olla_climbing.domain.member.Member;
+import com.olla.olla_climbing.domain.member.entity.Member;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import lombok.RequiredArgsConstructor;

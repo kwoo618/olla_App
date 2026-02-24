@@ -1,4 +1,4 @@
-package com.olla.olla_climbing.domain.member;
+package com.olla.olla_climbing.domain.member.enums;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;

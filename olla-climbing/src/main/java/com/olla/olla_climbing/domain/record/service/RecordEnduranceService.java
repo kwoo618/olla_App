@@ -1,6 +1,6 @@
 package com.olla.olla_climbing.domain.record.service;
 
-import com.olla.olla_climbing.domain.member.Member;
+import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
 import com.olla.olla_climbing.domain.record.dto.request.RecordEnduranceRequest;
 import com.olla.olla_climbing.domain.record.dto.response.RecordEnduranceResponse;

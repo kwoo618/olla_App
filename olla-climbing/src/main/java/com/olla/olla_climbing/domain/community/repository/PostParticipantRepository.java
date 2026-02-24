@@ -2,7 +2,7 @@ package com.olla.olla_climbing.domain.community.repository;
 
 import com.olla.olla_climbing.domain.community.entity.Post;
 import com.olla.olla_climbing.domain.community.entity.PostParticipant;
-import com.olla.olla_climbing.domain.member.Member;
+import com.olla.olla_climbing.domain.member.entity.Member;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

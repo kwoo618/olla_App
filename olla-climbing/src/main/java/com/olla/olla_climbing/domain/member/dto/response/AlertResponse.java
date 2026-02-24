@@ -1,6 +1,6 @@
 package com.olla.olla_climbing.domain.member.dto.response;
 
-import com.olla.olla_climbing.domain.member.NotificationSetting;
+import com.olla.olla_climbing.domain.member.entity.NotificationSetting;
 import lombok.Builder;
 import lombok.Getter;
 
