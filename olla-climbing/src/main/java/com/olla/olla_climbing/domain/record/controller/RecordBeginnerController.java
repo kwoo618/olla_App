@@ -1,10 +1,10 @@
 package com.olla.olla_climbing.domain.record.controller;
 
 import com.olla.olla_climbing.domain.member.Member;
-import com.olla.olla_climbing.domain.record.dto.request.RecordLeadRequest;
-import com.olla.olla_climbing.domain.record.dto.response.RecordLeadResponse;
-import com.olla.olla_climbing.domain.record.service.RecordEnduranceService;
-import com.olla.olla_climbing.domain.record.service.RecordLeadService;
+import com.olla.olla_climbing.domain.record.dto.request.RecordBeginnerRequest;
+import com.olla.olla_climbing.domain.record.dto.response.RecordBeginnerResponse;
+import com.olla.olla_climbing.domain.record.entity.RecordBeginner;
+import com.olla.olla_climbing.domain.record.service.RecordBeginnerService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
@@ -18,45 +18,45 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/records/endurances") // URL 공통 부분 추출!
 @RequiredArgsConstructor
-public class RecordLeadController {
+public class RecordBeginnerController {
 
-    private final RecordLeadService recordLeadService;
+    private final RecordBeginnerService recordLeadService;
 
     @PostMapping
     @Operation(summary = "리드 기록 저장", description = "리드 등반 기록을 저장합니다.", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<RecordLeadResponse> saveLeadRecord(@AuthenticationPrincipal Member member, @Valid @RequestBody RecordLeadRequest request) {
+    public ResponseEntity<RecordBeginnerResponse> saveLeadRecord(@AuthenticationPrincipal Member member, @Valid @RequestBody RecordBeginnerRequest request) {
 
         if (member == null) {
             throw new IllegalArgumentException("로그인 인증 정보가 없습니다.");
         }
 
-        RecordLeadResponse response = recordLeadService.saveRecord(member.getLoginId(), request);
+        RecordBeginnerResponse response = recordLeadService.saveRecord(member.getLoginId(), request);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/best")
     @Operation(summary = "난이도별 최고 기록 조회", description = "각 난이도(색상)별 회원의 가장 높은 기록을 조회합니다.", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<List<RecordLeadResponse>> getBestLeadRecords(
+    public ResponseEntity<List<RecordBeginnerResponse>> getBestLeadRecords(
             @AuthenticationPrincipal Member member) {
 
         if (member == null) {
             throw new IllegalArgumentException("로그인 인증 정보가 없습니다.");
         }
 
-        List<RecordLeadResponse> responses = recordLeadService.getBestRecords(member.getLoginId());
+        List<RecordBeginnerResponse> responses = recordLeadService.getBestRecords(member.getLoginId());
         return ResponseEntity.ok(responses);
     }
 
     @GetMapping("/history")
     @Operation(summary = "리드 기록 전체 상세 내역", description = "모든 리드 등반 기록을 날짜 최신순으로 조회합니다.", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<List<RecordLeadResponse>> getDetailedLeadHistory(
+    public ResponseEntity<List<RecordBeginnerResponse>> getDetailedLeadHistory(
             @AuthenticationPrincipal Member member) {
 
         if (member == null) {
             throw new IllegalArgumentException("로그인 인증 정보가 없습니다.");
         }
 
-        List<RecordLeadResponse> responses = recordLeadService.getDetailedHistory(member.getLoginId());
+        List<RecordBeginnerResponse> responses = recordLeadService.getDetailedHistory(member.getLoginId());
         return ResponseEntity.ok(responses);
     }
 

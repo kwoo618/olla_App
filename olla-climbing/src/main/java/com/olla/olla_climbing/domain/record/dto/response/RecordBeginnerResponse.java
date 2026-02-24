@@ -1,6 +1,6 @@
 package com.olla.olla_climbing.domain.record.dto.response;
 
-import com.olla.olla_climbing.domain.record.entity.RecordLead;
+import com.olla.olla_climbing.domain.record.entity.RecordBeginner;
 import com.olla.olla_climbing.domain.record.enums.AttemptType;
 import com.olla.olla_climbing.domain.record.enums.Difficulty;
 import lombok.Builder;
@@ -10,7 +10,7 @@ import java.time.LocalDate;
 
 @Getter
 @Builder
-public class RecordLeadResponse {
+public class RecordBeginnerResponse {
     private Long id;
     private Difficulty difficulty;
     private AttemptType attemptType;
@@ -18,8 +18,8 @@ public class RecordLeadResponse {
     private Integer maxHoldNo;
     private LocalDate recordDate;
 
-    public static RecordLeadResponse from(RecordLead record) {
-        return RecordLeadResponse.builder()
+    public static RecordBeginnerResponse from(RecordBeginner record) {
+        return RecordBeginnerResponse.builder()
                 .id(record.getId())     // id는 DB에서 자동 생성되므로 클라이언트가 보내는 게 아니라 서버가 응답할 때 넣어줍니다.
                 .difficulty(record.getDifficulty())     // 난이도
                 .attemptType(record.getAttemptType())   // 도전 유형
