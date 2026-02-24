@@ -2,6 +2,7 @@ package com.olla.olla_climbing.domain.community.controller;
 
 import com.olla.olla_climbing.domain.community.dto.request.PostCreateRequest;
 import com.olla.olla_climbing.domain.community.dto.response.PostResponse;
+import com.olla.olla_climbing.domain.community.dto.request.PostUpdateRequest;
 import com.olla.olla_climbing.domain.community.service.PostService;
 import com.olla.olla_climbing.domain.member.Member;
 import io.swagger.v3.oas.annotations.Operation;
@@ -41,4 +42,28 @@ public class PostController {
         return ResponseEntity.ok(response);
     }
 
+    @PatchMapping("/{id}")
+    @Operation(summary = "게시글 수정", description = "작성자가 자신의 모집글을 수정합니다.", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<PostResponse> updatePost(
+            @PathVariable("id") Long postId,
+            @AuthenticationPrincipal Member member,
+            @Valid @RequestBody PostUpdateRequest request) {
+
+        if (member == null) throw new IllegalArgumentException("인증 정보가 없습니다.");
+
+        PostResponse response = postService.updatePost(postId, member.getLoginId(), request);
+        return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "게시글 삭제", description = "작성자가 자신의 모집글을 삭제(Soft Delete)합니다.", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<String> deletePost(
+            @PathVariable("id") Long postId,
+            @AuthenticationPrincipal Member member) {
+
+        if (member == null) throw new IllegalArgumentException("인증 정보가 없습니다.");
+
+        postService.deletePost(postId, member.getLoginId());
+        return ResponseEntity.ok("게시글이 성공적으로 삭제되었습니다.");
+    }
 }

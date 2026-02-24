@@ -82,4 +82,14 @@ public class Post extends BaseTimeEntity {
     public void markAsDeleted() {
         this.isDeleted = true;
     }
+
+    public void updatePost(String title, String content, boolean isDifferentGym,
+                           String gymPlace, LocalDateTime meetDateTime, Integer maxMember) {
+        this.title = title;
+        this.content = content;
+        this.isDifferentGym = isDifferentGym;
+        this.gymPlace = gymPlace;
+        this.meetDateTime = meetDateTime;
+        this.maxMember = maxMember;
+    }
 }
