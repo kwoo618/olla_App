@@ -1,8 +1,11 @@
 package com.olla.olla_climbing.domain.community.service;
 
 import com.olla.olla_climbing.domain.community.dto.request.PostCreateRequest;
+import com.olla.olla_climbing.domain.community.dto.response.ParticipantDto;
 import com.olla.olla_climbing.domain.community.dto.response.PostResponse;
 import com.olla.olla_climbing.domain.community.entity.Post;
+import com.olla.olla_climbing.domain.community.entity.PostParticipant;
+import com.olla.olla_climbing.domain.community.repository.PostParticipantRepository;
 import com.olla.olla_climbing.domain.community.repository.PostRepository;
 import com.olla.olla_climbing.domain.member.Member;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
@@ -12,14 +15,17 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 @Service
 @RequiredArgsConstructor
 public class PostService {
 
     private final PostRepository postRepository;
     private final MemberRepository memberRepository;
+    private final PostParticipantRepository participantRepository;
 
-    // @Transactional: 이 메서드 안의 DB 작업들이 모두 성공해야 커밋되고, 하나라도 실패하면 롤백
     @Transactional
     public PostResponse createPost(String loginId, PostCreateRequest request) {
         Member member = memberRepository.findByLoginId(loginId)
@@ -36,14 +42,13 @@ public class PostService {
                 .build();
 
         Post savedPost = postRepository.save(post);
-        return PostResponse.from(savedPost);
+        return PostResponse.from(savedPost); // from 메서드 사용
     }
 
     @Transactional(readOnly = true)
     public Page<PostResponse> getPostList(Pageable pageable) {
-        // Pageable 객체가 내부적으로 LIMIT, OFFSET 쿼리를 생성하여 DB에 전달합니다.
         Page<Post> posts = postRepository.findByIsDeletedFalseOrderByCreatedAtDesc(pageable);
-        return posts.map(PostResponse::from);
+        return posts.map(PostResponse::from); // from 메서드 사용
     }
 
     @Transactional(readOnly = true)
@@ -55,6 +60,18 @@ public class PostService {
             throw new IllegalArgumentException("삭제된 게시글입니다.");
         }
 
-        return PostResponse.from(post);
+        // DB에서 해당 게시글의 모든 참여 내역 조회
+        List<PostParticipant> participants = participantRepository.findByPost(post);
+
+        // 엔티티를 DTO로 변환
+        List<ParticipantDto> participantDtos = participants.stream()
+                .map(p -> ParticipantDto.from(p.getMember()))
+                .collect(Collectors.toList());
+
+        // 작성자 본인을 명단 맨 앞에 추가
+        participantDtos.add(0, ParticipantDto.from(post.getMember()));
+
+        // of 메서드를 사용하여 참여자 리스트와 함께 반환
+        return PostResponse.of(post, participantDtos);
     }
 }

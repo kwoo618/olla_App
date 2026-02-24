@@ -5,6 +5,7 @@ import com.olla.olla_climbing.domain.community.entity.PostParticipant;
 import com.olla.olla_climbing.domain.member.Member;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.List;
 import java.util.Optional;
 
 // PostParticipantRepository는 게시글 참여자(PostParticipant) 엔티티에 대한 데이터 액세스 레이어를 담당하는 인터페이스
@@ -16,4 +17,7 @@ public interface PostParticipantRepository extends JpaRepository<PostParticipant
 
     // 참여 취소를 위해 특정 회원의 참여 기록을 찾는 메서드
     Optional<PostParticipant> findByPostAndMember(Post post, Member member);
+
+   // 특정 게시글에 참여한 모든 참여자 목록을 조회하는 메서드
+    List<PostParticipant> findByPost(Post post);
 }
