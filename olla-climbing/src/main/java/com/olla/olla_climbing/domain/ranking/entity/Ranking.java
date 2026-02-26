@@ -12,6 +12,8 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+// 나중에 유저의 '마이페이지'에서 "이 유저가 보유한 모든 랭킹 배지를 보여줘"라고 할 때, 테이블이 3개면 쿼리를 3번 날리거나 복잡한 JOIN을 해야 한다
+// 그래서 랭킹 테이블 하나로 통합해서 관리하는 게 낫다고 판단(null이 들어가서 불필요한 칼럼이 생기긴 하지만, 쿼리 최적화 측면에서 더 효율적일 것으로 예상)
 @Entity
 @Getter
 @NoArgsConstructor(access= AccessLevel.PROTECTED)
@@ -29,7 +31,6 @@ public class Ranking extends BaseTimeEntity {
     @Column(nullable = false)
     private LocalDateTime baseDate;
 
-    // ▼▼▼ 누락되었던 rankType 필드 추가 ▼▼▼
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
     private RankType rankType;
@@ -53,7 +54,7 @@ public class Ranking extends BaseTimeEntity {
     public Ranking(Member member, LocalDateTime baseDate, RankType rankType, Difficulty difficulty, Integer ranking, Double score, boolean isMaster) {
         this.member = member;
         this.baseDate = baseDate;
-        this.rankType = rankType; // 매핑 추가
+        this.rankType = rankType;
         this.difficulty = difficulty;
         this.ranking = ranking;
         this.score = score;

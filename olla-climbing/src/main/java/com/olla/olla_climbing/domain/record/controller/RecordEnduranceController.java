@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/records")
+@RequestMapping("/api/v1/records/endurance") // URL 공통 부분 추출!
 @RequiredArgsConstructor
 public class RecordEnduranceController {
 

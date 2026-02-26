@@ -1,7 +1,6 @@
 package com.olla.olla_climbing.domain.record.dto.response;
 
 import com.olla.olla_climbing.domain.record.entity.RecordEndurance;
-import com.olla.olla_climbing.domain.record.enums.EnduranceZone;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -11,17 +10,19 @@ import java.time.LocalDate;
 @Builder
 public class RecordEnduranceResponse {
     private Long id;
-    private Integer completedOneWays;
-    private EnduranceZone dropZone;
+    private Integer oneWayCount;
+    private Integer additionalBlocks;
     private Integer timeSeconds;
+    private Double totalScore;
     private LocalDate recordDate;
 
     public static RecordEnduranceResponse from(RecordEndurance record) {
         return RecordEnduranceResponse.builder()
                 .id(record.getId())
-                .completedOneWays(record.getCompletedOneWays())
-                .dropZone(record.getDropZone())
+                .oneWayCount(record.getOneWayCount())
+                .additionalBlocks(record.getAdditionalBlocks())
                 .timeSeconds(record.getTimeSeconds())
+                .totalScore(record.getTotalScore())
                 .recordDate(record.getRecordDate())
                 .build();
     }
