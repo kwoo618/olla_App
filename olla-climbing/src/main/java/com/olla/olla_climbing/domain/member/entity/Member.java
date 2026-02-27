@@ -1,5 +1,6 @@
-package com.olla.olla_climbing.domain.member;
+package com.olla.olla_climbing.domain.member.entity;
 
+import com.olla.olla_climbing.domain.member.enums.Role;
 import com.olla.olla_climbing.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
 import lombok.*;

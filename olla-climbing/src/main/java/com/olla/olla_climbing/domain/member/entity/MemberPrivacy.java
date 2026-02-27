@@ -1,4 +1,4 @@
-package com.olla.olla_climbing.domain.member;
+package com.olla.olla_climbing.domain.member.entity;
 
 import jakarta.persistence.*;
 import lombok.AccessLevel;

@@ -9,7 +9,7 @@ import com.olla.olla_climbing.domain.auth.dto.request.SignupRequest;
 import com.olla.olla_climbing.domain.auth.dto.response.TokenResponse;
 import com.olla.olla_climbing.domain.auth.entity.RefreshToken;
 import com.olla.olla_climbing.domain.auth.repository.RefreshTokenRepository;
-import com.olla.olla_climbing.domain.member.Member;
+import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
 import com.olla.olla_climbing.global.security.jwt.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;

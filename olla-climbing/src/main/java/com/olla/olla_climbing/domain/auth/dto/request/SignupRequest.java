@@ -1,7 +1,7 @@
 package com.olla.olla_climbing.domain.auth.dto.request;
 
-import com.olla.olla_climbing.domain.member.Member;
-import com.olla.olla_climbing.domain.member.Role;
+import com.olla.olla_climbing.domain.member.entity.Member;
+import com.olla.olla_climbing.domain.member.enums.Role;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;

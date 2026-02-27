@@ -1,7 +1,8 @@
 package com.olla.olla_climbing.domain.record.service;
 
-import com.olla.olla_climbing.domain.member.Member;
+import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
+import com.olla.olla_climbing.domain.ranking.service.SeriesRankingService;
 import com.olla.olla_climbing.domain.record.dto.request.RecordSeriesRequest;
 import com.olla.olla_climbing.domain.record.dto.response.RecordSeriesResponse;
 import com.olla.olla_climbing.domain.record.entity.RecordSeries;
@@ -20,6 +21,7 @@ public class RecordSeriesService {
 
     private final RecordSeriesRepository recordSeriesRepository;
     private final MemberRepository memberRepository;
+    private final SeriesRankingService seriesRankingService;
 
     @Transactional
     public RecordSeriesResponse saveRecord(String loginId, RecordSeriesRequest request) {
@@ -46,6 +48,10 @@ public class RecordSeriesService {
                 .totalScore(calculatedTotalScore)
                 .recordDate(request.getRecordDate())
                 .build();
+
+        RecordSeries savedRecord = recordSeriesRepository.save(record);
+
+        seriesRankingService.updateBeginnerSeriesRanking(member, savedRecord.getTotalScore());
 
         return RecordSeriesResponse.from(recordSeriesRepository.save(record));
     }
@@ -79,5 +85,7 @@ public class RecordSeriesService {
         }
 
         recordSeriesRepository.delete(record);
+
+        seriesRankingService.syncSeriesRankingOnRecordDelete(record.getMember());
     }
 }

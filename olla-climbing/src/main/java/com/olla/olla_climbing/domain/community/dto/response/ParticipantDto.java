@@ -1,6 +1,6 @@
 package com.olla.olla_climbing.domain.community.dto.response;
 
-import com.olla.olla_climbing.domain.member.Member;
+import com.olla.olla_climbing.domain.member.entity.Member;
 import lombok.Builder;
 import lombok.Getter;
 

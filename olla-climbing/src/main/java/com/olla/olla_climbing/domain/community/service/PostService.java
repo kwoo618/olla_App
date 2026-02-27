@@ -8,7 +8,7 @@ import com.olla.olla_climbing.domain.community.entity.Post;
 import com.olla.olla_climbing.domain.community.entity.PostParticipant;
 import com.olla.olla_climbing.domain.community.repository.PostParticipantRepository;
 import com.olla.olla_climbing.domain.community.repository.PostRepository;
-import com.olla.olla_climbing.domain.member.Member;
+import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;

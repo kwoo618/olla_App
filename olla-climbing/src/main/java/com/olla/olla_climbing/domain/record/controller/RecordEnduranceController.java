@@ -1,6 +1,6 @@
 package com.olla.olla_climbing.domain.record.controller;
 
-import com.olla.olla_climbing.domain.member.Member;
+import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.record.dto.request.RecordEnduranceRequest;
 import com.olla.olla_climbing.domain.record.dto.response.RecordEnduranceResponse;
 import com.olla.olla_climbing.domain.record.service.RecordEnduranceService;
@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/records")
+@RequestMapping("/api/v1/records/endurance") // URL 공통 부분 추출!
 @RequiredArgsConstructor
 public class RecordEnduranceController {
 

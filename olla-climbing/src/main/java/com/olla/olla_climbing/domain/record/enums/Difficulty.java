@@ -16,5 +16,5 @@ public enum Difficulty {
     BLACK(30, 80);   // 검정: 기초점수 80점
 
     private final int holdCount; // 총 홀드 수
-    private final int baseScore; // ▼▼ 추가된 기초 점수 ▼▼
+    private final int baseScore; // 추가된 기초 점수
 }

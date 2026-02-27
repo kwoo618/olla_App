@@ -1,12 +1,10 @@
-package com.olla.olla_climbing.domain.member;
+package com.olla.olla_climbing.domain.member.entity;
 
 import com.olla.olla_climbing.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
 
 // 회원의 상세 정보 엔티티: 나중에 입력하는 정보들을 담는 테이블
 // ERD에서는 MemberDetail 테이블로 표현, Member와 1:1 관계, PK는 memberId(FK)

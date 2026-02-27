@@ -1,7 +1,7 @@
 package com.olla.olla_climbing.domain.member.service;
 
-import com.olla.olla_climbing.domain.member.Member;
-import com.olla.olla_climbing.domain.member.NotificationSetting;
+import com.olla.olla_climbing.domain.member.entity.Member;
+import com.olla.olla_climbing.domain.member.entity.NotificationSetting;
 import com.olla.olla_climbing.domain.member.dto.request.AlertUpdateRequest;
 import com.olla.olla_climbing.domain.member.dto.response.AlertResponse;
 import com.olla.olla_climbing.domain.member.dto.response.MemberResponse;
@@ -10,8 +10,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.olla.olla_climbing.domain.member.dto.request.MemberUpdateRequest;
-import com.olla.olla_climbing.domain.member.MemberDetail;
-import com.olla.olla_climbing.domain.member.MemberPrivacy;
+import com.olla.olla_climbing.domain.member.entity.MemberDetail;
+import com.olla.olla_climbing.domain.member.entity.MemberPrivacy;
 
 @Service
 @RequiredArgsConstructor

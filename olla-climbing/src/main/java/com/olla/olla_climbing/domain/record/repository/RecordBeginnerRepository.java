@@ -1,11 +1,14 @@
 package com.olla.olla_climbing.domain.record.repository;
 
+import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.record.entity.RecordBeginner;
+import com.olla.olla_climbing.domain.record.enums.Difficulty;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface RecordBeginnerRepository extends JpaRepository<RecordBeginner, Long> {
 
@@ -31,4 +34,7 @@ public interface RecordBeginnerRepository extends JpaRepository<RecordBeginner, 
 
     // 2. 상세 내역용 날짜순 정렬 쿼리
     List<RecordBeginner> findByMemberIdOrderByRecordDateDesc(Long memberId);
+
+    // 3. 랭킹 산정용: 난이도별로 성공 여부, 홀드 번호 기준으로 1등만 추출하는 쿼리 (메모리 최적화)
+    Optional<RecordBeginner> findTopByMemberAndDifficultyOrderBySuccessDescMaxHoldNoDesc(Member member, Difficulty difficulty);
 }

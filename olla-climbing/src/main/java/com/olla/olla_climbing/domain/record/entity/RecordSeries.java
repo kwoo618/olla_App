@@ -1,6 +1,6 @@
 package com.olla.olla_climbing.domain.record.entity;
 
-import com.olla.olla_climbing.domain.member.Member;
+import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.record.converter.DifficultyListConverter;
 import com.olla.olla_climbing.domain.record.enums.Difficulty;
 import com.olla.olla_climbing.global.entity.BaseTimeEntity;

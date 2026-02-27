@@ -1,5 +1,6 @@
 package com.olla.olla_climbing.domain.record.repository;
 
+import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.record.entity.RecordSeries;
 import org.springframework.data.jpa.repository.JpaRepository;
 
