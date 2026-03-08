@@ -22,7 +22,7 @@ public class RecordBeginnerController {
     private final RecordBeginnerService recordLeadService;
 
     @PostMapping
-    @Operation(summary = "리드 기록 저장", description = "리드 등반 기록을 저장합니다.", security = @SecurityRequirement(name = "bearerAuth"))
+    @Operation(summary = "초보벽 지구력 기록 저장", description = "초보벽 지구력 등반 기록을 저장합니다.", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<RecordBeginnerResponse> saveLeadRecord(@AuthenticationPrincipal Member member, @Valid @RequestBody RecordBeginnerRequest request) {
 
         if (member == null) {
@@ -47,7 +47,7 @@ public class RecordBeginnerController {
     }
 
     @GetMapping("/history")
-    @Operation(summary = "리드 기록 전체 상세 내역", description = "모든 리드 등반 기록을 날짜 최신순으로 조회합니다.", security = @SecurityRequirement(name = "bearerAuth"))
+    @Operation(summary = " 기록 전체 상세 내역", description = "모든 리드 등반 기록을 날짜 최신순으로 조회합니다.", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<List<RecordBeginnerResponse>> getDetailedLeadHistory(
             @AuthenticationPrincipal Member member) {
 

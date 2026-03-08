@@ -36,5 +36,5 @@ public interface RecordBeginnerRepository extends JpaRepository<RecordBeginner, 
     List<RecordBeginner> findByMemberIdOrderByRecordDateDesc(Long memberId);
 
     // 3. 랭킹 산정용: 난이도별로 성공 여부, 홀드 번호 기준으로 1등만 추출하는 쿼리 (메모리 최적화)
-    Optional<RecordBeginner> findTopByMemberAndDifficultyOrderBySuccessDescMaxHoldNoDesc(Member member, Difficulty difficulty);
+    Optional<RecordBeginner> findTopByMemberAndDifficultyOrderByIsSuccessDescMaxHoldNoDesc(Member member, Difficulty difficulty);
 }

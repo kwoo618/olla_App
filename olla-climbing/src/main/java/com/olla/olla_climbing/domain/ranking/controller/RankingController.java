@@ -28,7 +28,7 @@ public class RankingController {
     // 1. 초보벽 단일 리드 랭킹 조회
     // 예: GET /api/v1/rankings/beginner?difficulty=YELLOW
     @GetMapping("/beginner")
-    @Operation(summary = "초보벽 리드 랭킹 조회", description = "특정 난이도의 마스터 및 챌린저 랭킹 목록을 조회합니다.")
+    @Operation(summary = "초보벽 지구력 랭킹 조회", description = "특정 난이도의 마스터 및 챌린저 랭킹 목록을 조회합니다.")
     public ResponseEntity<BeginnerRankingResponse> getBeginnerRanking(
             @RequestParam("difficulty") Difficulty difficulty) {
 
