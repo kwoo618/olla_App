@@ -23,7 +23,7 @@ public class VisitLog extends BaseTimeEntity {
     @JoinColumn(name = "member_id", nullable = false)
     private Member member;
 
-    // QR을 스캔하고 입장을 승인한 관리자 (포스기 계정 등)
+    // QR을 스캔하고 입장을 승인한 관리자 (포스기 계정)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "admin_id", nullable = false)
     private Member admin;
