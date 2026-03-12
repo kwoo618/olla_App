@@ -39,3 +39,6 @@ out/
 ### System ###
 .DS_Store
 Thumbs.db
+
+### Secret properties ###
+application-secret.yml

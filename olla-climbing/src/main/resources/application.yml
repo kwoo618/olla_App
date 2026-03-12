@@ -6,10 +6,11 @@ spring:
   application:
     name: olla-climbing
 
+  # 분리해둔 secret 파일을 불러와서 합칩니다.
+  config:
+    import: optional:classpath:application-secret.yml
+
   datasource:
-    url: jdbc:mysql://localhost:3306/olla_db?useSSL=false&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
-    username: root
-    password:
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
@@ -23,6 +24,3 @@ spring:
 logging:
   level:
     org.hibernate.SQL: debug
-
-jwt:
-  secret: VlwEyVlPKZ6yV9yVlwEyVlPKZ6yV9yVlwEyVlPKZ6yV9yVlwEyVlPKZ6yV9y== # 임시 비밀키 (실제로는 더 복잡해야 함)
