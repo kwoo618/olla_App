@@ -27,7 +27,8 @@ public class BeginnerRankingService {
     // 초보벽 단일 리드 랭킹 조회 (난이도별로 명예의 전당과 챌린저 구분)
     @Transactional(readOnly = true)
     public BeginnerRankingResponse getBeginnerRanking(Difficulty difficulty) {
-        List<Ranking> masterRankings = rankingRepository.findByRankTypeAndDifficultyAndMasterTrueOrderByBaseDateDesc(RankType.BEGINNER, difficulty);
+        // 💡 수정 1: 명예의 전당은 IsMasterTrue 여야 하며, 메서드명에 Difficulty가 누락되어 있던 것을 추가했습니다.
+        List<Ranking> masterRankings = rankingRepository.findByRankTypeAndDifficultyAndIsMasterTrueOrderByBaseDateDesc(RankType.BEGINNER, difficulty);
         List<BeginnerRankingResponse.MasterDto> masterDtos = masterRankings.stream()
                 .map(r -> BeginnerRankingResponse.MasterDto.builder()
                         .memberId(r.getMember().getId())
@@ -41,7 +42,8 @@ public class BeginnerRankingService {
         LocalDateTime latestBaseDate = rankingRepository.findLatestBaseDate(RankType.BEGINNER, difficulty).orElse(null);
 
         if (latestBaseDate != null) {
-            List<Ranking> challengerRankings = rankingRepository.findByRankTypeAndDifficultyAndMasterFalseAndBaseDateOrderByRankingAsc(RankType.BEGINNER, difficulty, latestBaseDate);
+            // 💡 수정 2: 파라미터 3개(RankType, Difficulty, BaseDate)를 받는 메서드로 정확히 매핑했습니다.
+            List<Ranking> challengerRankings = rankingRepository.findByRankTypeAndDifficultyAndIsMasterFalseAndBaseDateOrderByRankingAsc(RankType.BEGINNER, difficulty, latestBaseDate);
             challengerDtos = challengerRankings.stream()
                     .map(r -> BeginnerRankingResponse.ChallengerDto.builder()
                             .memberId(r.getMember().getId())
@@ -90,7 +92,7 @@ public class BeginnerRankingService {
         Ranking ranking = rankingRepository.findByMemberAndRankTypeAndDifficulty(member, RankType.BEGINNER, difficulty).orElse(null);
         if (ranking == null) return;
 
-        RecordBeginner bestRemainingRecord = recordRepository.findTopByMemberAndDifficultyOrderBySuccessDescMaxHoldNoDesc(member, difficulty).orElse(null);
+        RecordBeginner bestRemainingRecord = recordRepository.findTopByMemberAndDifficultyOrderByIsSuccessDescMaxHoldNoDesc(member, difficulty).orElse(null);
         boolean isRankingChanged = false;
 
         if (bestRemainingRecord == null) {
@@ -111,7 +113,8 @@ public class BeginnerRankingService {
 
     // 챌린저 랭킹 재계산 로직 (초보벽 단일 리드 난이도별)
     private void recalculateChallengerRankings(Difficulty difficulty) {
-        List<Ranking> challengers = rankingRepository.findByRankTypeAndDifficultyAndMasterFalseOrderByScoreDescBaseDateAsc(RankType.BEGINNER, difficulty);
+        // 💡 수정 3: 메서드명에 Difficulty 누락되어 있던 것을 매핑했습니다.
+        List<Ranking> challengers = rankingRepository.findByRankTypeAndDifficultyAndIsMasterFalseOrderByScoreDescBaseDateAsc(RankType.BEGINNER, difficulty);
         int currentRank = 1;
         for (Ranking challenger : challengers) {
             challenger.updateRanking(currentRank);

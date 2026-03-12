@@ -24,7 +24,8 @@ public abstract class BaseRankingService {
     protected List<Ranking> getRankingsByLatestBaseDate(RankType rankType) {
         LocalDateTime latestBaseDate = rankingRepository.findLatestBaseDateByRankType(rankType).orElse(null);
         if (latestBaseDate != null) {
-            return rankingRepository.findByRankTypeAndMasterFalseAndBaseDateOrderByRankingAsc(rankType, latestBaseDate);
+            // 💡 수정: MasterFalse -> IsMasterFalse
+            return rankingRepository.findByRankTypeAndIsMasterFalseAndBaseDateOrderByRankingAsc(rankType, latestBaseDate);
         }
         return new ArrayList<>();
     }
@@ -73,7 +74,8 @@ public abstract class BaseRankingService {
     // 4. 공통 재계산 로직
     // 랭킹이 변경된 경우, 해당 RankType의 모든 도전자 랭킹을 최신 점수 기준으로 재정렬하여 순위를 업데이트합니다. 마스터는 순위에서 제외됩니다.
     protected void recalculateRankings(RankType rankType) {
-        List<Ranking> rankings = rankingRepository.findByRankTypeAndMasterFalseOrderByScoreDescBaseDateAsc(rankType);
+        // 💡 수정: MasterFalse -> IsMasterFalse
+        List<Ranking> rankings = rankingRepository.findByRankTypeAndIsMasterFalseOrderByScoreDescBaseDateAsc(rankType);
         int currentRank = 1;
         for (Ranking ranking : rankings) {
             ranking.updateRanking(currentRank);

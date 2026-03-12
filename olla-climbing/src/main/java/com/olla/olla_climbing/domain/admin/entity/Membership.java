@@ -77,4 +77,20 @@ public class Membership extends BaseTimeEntity {
     public void expire() {
         this.status = MembershipStatus.EXPIRED;
     }
+
+    // 4. 입장 시 횟수 차감 로직 (새로 추가)
+    public void decreaseCount() {
+        if (this.membershipType != MembershipType.COUNT) {
+            return; // 기간권은 차감할 횟수가 없으므로 패스
+        }
+        if (this.remainingCount == null || this.remainingCount <= 0) {
+            throw new IllegalStateException("잔여 횟수가 부족합니다.");
+        }
+        this.remainingCount -= 1;
+
+        // 차감 후 0회가 되면 자동으로 만료 처리
+        if (this.remainingCount == 0) {
+            this.expire();
+        }
+    }
 }
