@@ -33,7 +33,7 @@ public class GlobalExceptionHandler {
             String errorMessage = error.getDefaultMessage();
             errors.put(fieldName, errorMessage);
         });
-
+ 
         // 상태 코드 400과 함께, data 필드에 errors 맵을 담아서 반환
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
