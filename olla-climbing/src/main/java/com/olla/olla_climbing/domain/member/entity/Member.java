@@ -40,6 +40,15 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
     // 기록 공개 여부 (기본값 false)
     private boolean isRecordPublic;
 
+    // [추가] 프로필 이미지 URL 저장용 컬럼
+    @Column(name = "profile_image_url", length = 1000)
+    private String profileImageUrl;
+
+    // [추가] 프로필 이미지 수정 메서드 (더티 체킹용)
+    public void updateProfileImage(String profileImageUrl) {
+        this.profileImageUrl = profileImageUrl;
+    }
+
     // one-to-one 양방향 매핑: MemberDetail과 MemberPrivacy는 Member를 참조, Member는 Detail과 Privacy를 참조
     // mappedBy = "member": MemberDetail과 MemberPrivacy에서 "member" 필드가 이 관계의 주인이라는 뜻, DB에서는 MemberDetail과 MemberPrivacy 테이블에 member_id 외래키가 생김
     // fetch = FetchType.LAZY: Member를 조회할 때 Detail과 Privacy는 바로 가져오지 않고, 실제로 사용할 때 가져옴(성능 최적화)

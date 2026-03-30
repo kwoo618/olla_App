@@ -40,6 +40,17 @@ public class MemberService {
         // 2. 기본 정보 수정 (null 체크는 엔티티 안에서 함)
         member.updateBasicInfo(request.getName(), request.getPhone());
 
+        // 프로필 이미지 처리 로직 고도화
+        String requestImageUrl = request.getProfileImageUrl();
+
+        if ("DEFAULT".equals(requestImageUrl)) {
+            // 프론트에서 "DEFAULT"라는 문자열을 보내면 사진 삭제(기본 이미지로 변경) 신호로 간주
+            member.updateProfileImage(null); // DB 컬럼을 null로 비움
+        } else if (org.springframework.util.StringUtils.hasText(requestImageUrl)) {
+            // 실제 S3 URL 값이 넘어오면 해당 주소로 업데이트
+            member.updateProfileImage(requestImageUrl);
+        }
+
         // 3. 상세 정보 수정 (처음 입력하는 거라면 객체를 새로 만들어줘야 함)
         if (member.getMemberDetail() == null) {
             MemberDetail newDetail = new MemberDetail(member);
