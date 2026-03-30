@@ -15,6 +15,7 @@ public class MemberResponse {
     private String name;
     private String email;
     private String phone;
+    private String profileImageUrl;
     private DetailDto detail;
     private PrivacyDto privacy;
     private AlertDto alert;
@@ -72,6 +73,7 @@ public class MemberResponse {
                 .name(member.getName())
                 .email(member.getEmail())
                 .phone(member.getPhone())
+                .profileImageUrl(member.getProfileImageUrl())
                 .detail(detail != null ? DetailDto.builder()
                         .age(detail.getAge())
                         .height(detail.getHeight())

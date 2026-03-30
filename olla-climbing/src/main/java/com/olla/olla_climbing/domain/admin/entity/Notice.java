@@ -30,7 +30,7 @@ public class Notice extends BaseTimeEntity {
     private String content;
 
     // 이미지 첨부가 필요한 경우를 대비한 URL 필드
-    @Column(name = "image_url")
+    @Column(name = "image_url", length = 1000)
     private String imageUrl;
 
     // 상단 고정 여부
