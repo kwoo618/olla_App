@@ -10,6 +10,8 @@ public class MemberUpdateRequest {
     private String name;
     private String phone;
 
+    private String profileImageUrl;
+
     // MemberDetail 신체 정보 수정용 (PATCH니까 다 null 허용)
     private Integer age;
     private Double height;
@@ -25,3 +27,4 @@ public class MemberUpdateRequest {
     private Boolean isArmSpanPublic;
     private Boolean isFootSizePublic;
 }
+
