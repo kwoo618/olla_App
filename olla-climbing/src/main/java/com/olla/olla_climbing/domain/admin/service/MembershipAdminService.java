@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -67,14 +68,35 @@ public class MembershipAdminService {
     // 유저 본인의 활성화된 이용권 조회
     @Transactional(readOnly = true)
     public MembershipResponse getMyMembership(Long memberId) {
-        Membership activeMembership = membershipRepository.findByMemberIdAndStatus(memberId, MembershipStatus.ACTIVE)
-                .orElse(null);
+        // ACTIVE뿐만 아니라 HOLDING 상태인 이용권도 가져오도록 수정
+        Membership activeOrHoldingMembership = membershipRepository.findByMemberIdAndStatusIn(
+                memberId, List.of(MembershipStatus.ACTIVE, MembershipStatus.HOLDING)
+        ).orElse(null);
 
-        // 활성화된 이용권이 없으면 null 반환 (프론트엔드에서 "이용권 없음" 처리)
-        if (activeMembership == null) {
-            return null;
+        if (activeOrHoldingMembership == null) {
+            return null; // 프론트엔드에서 "이용권 없음" 처리
         }
 
-        return MembershipResponse.from(activeMembership);
+        return MembershipResponse.from(activeOrHoldingMembership);
+    }
+
+    // 관리자의 이용권 일시정지 처리
+    @Transactional
+    public void pauseMembership(Long membershipId) {
+        Membership membership = membershipRepository.findById(membershipId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 이용권입니다."));
+
+        // 엔티티 내부의 pause() 호출 (더티 체킹으로 자동 UPDATE)
+        membership.pause();
+    }
+
+    // 관리자의 이용권 일시정지 해제 처리
+    @Transactional
+    public void unpauseMembership(Long membershipId) {
+        Membership membership = membershipRepository.findById(membershipId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 이용권입니다."));
+
+        // 엔티티 내부의 unpause() 호출 (만료일 연장 로직 포함)
+        membership.unpause();
     }
 }

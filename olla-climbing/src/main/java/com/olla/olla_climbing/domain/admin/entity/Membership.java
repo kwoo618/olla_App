@@ -37,6 +37,8 @@ public class Membership extends BaseTimeEntity {
     // 횟수권 전용 필드 (기간권일 경우 null 허용)
     private Integer remainingCount;
 
+    private LocalDate holdStartDate;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private MembershipStatus status;
@@ -92,5 +94,36 @@ public class Membership extends BaseTimeEntity {
         if (this.remainingCount == 0) {
             this.expire();
         }
+    }
+
+    // 5. 이용권 일시정지 처리 로직 (새로 추가)
+    public void pause() {
+        if (this.status != MembershipStatus.ACTIVE) {
+            throw new IllegalStateException("활성 상태의 이용권만 일시정지할 수 있습니다.");
+        }
+
+        this.status = MembershipStatus.HOLDING;
+        this.holdStartDate = LocalDate.now(); // 정지 시작일 기록
+    }
+
+    // 6. 이용권 일시정지 해제 로직 (새로 추가)
+    public void unpause() {
+        if (this.status != MembershipStatus.HOLDING) {
+            throw new IllegalStateException("일시정지 상태의 이용권만 해제할 수 있습니다.");
+        }
+
+        // 기간권일 경우: 정지되어 있던 일수만큼 만료일(endDate) 연장
+        if (this.membershipType == MembershipType.PERIOD && this.holdStartDate != null && this.endDate != null) {
+            long holdDays = java.time.temporal.ChronoUnit.DAYS.between(this.holdStartDate, LocalDate.now());
+
+            // 만약 당일 정지 후 당일 해제했다면 holdDays는 0이므로 endDate 변화 없음
+            if (holdDays > 0) {
+                this.endDate = this.endDate.plusDays(holdDays);
+            }
+        }
+
+        // 공통: 상태를 다시 활성으로 변경하고 정지 시작일 초기화
+        this.status = MembershipStatus.ACTIVE;
+        this.holdStartDate = null;
     }
 }

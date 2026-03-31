@@ -40,4 +40,18 @@ public class AdminMembershipController {
 
         return ResponseEntity.ok("이용권이 성공적으로 처리되었습니다.");
     }
+
+    @PatchMapping("/{membershipId}/pause")
+    @Operation(summary = "이용권 일시정지", description = "관리자가 회원의 활성화된 이용권을 일시정지합니다.")
+    public ResponseEntity<String> pauseMembership(@PathVariable("membershipId") Long membershipId) {
+        membershipAdminService.pauseMembership(membershipId);
+        return ResponseEntity.ok("이용권이 성공적으로 일시정지 되었습니다.");
+    }
+
+    @PatchMapping("/{membershipId}/unpause")
+    @Operation(summary = "이용권 정지 해제", description = "관리자가 일시정지된 이용권을 해제하고 기간을 연장합니다.")
+    public ResponseEntity<String> unpauseMembership(@PathVariable("membershipId") Long membershipId) {
+        membershipAdminService.unpauseMembership(membershipId);
+        return ResponseEntity.ok("이용권 일시정지가 해제되었습니다.");
+    }
 }
