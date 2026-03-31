@@ -3,6 +3,10 @@
 # MySQL 데이터베이스 연결 및 JPA 설정 포함
 
 spring:
+
+  profiles:
+    include: secret
+
   application:
     name: olla-climbing
 
