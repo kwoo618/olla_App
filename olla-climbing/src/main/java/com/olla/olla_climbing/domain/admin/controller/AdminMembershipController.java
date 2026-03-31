@@ -1,5 +1,6 @@
 package com.olla.olla_climbing.domain.admin.controller;
 
+import com.olla.olla_climbing.domain.admin.dto.response.AdminMemberResponse;
 import com.olla.olla_climbing.domain.admin.dto.request.MembershipGrantRequest;
 import com.olla.olla_climbing.domain.admin.service.MembershipAdminService;
 import com.olla.olla_climbing.domain.member.entity.Member;
@@ -11,6 +12,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 
 @RestController
 @RequestMapping("/api/v1/admin/memberships")
@@ -39,5 +43,29 @@ public class AdminMembershipController {
         );
 
         return ResponseEntity.ok("이용권이 성공적으로 처리되었습니다.");
+    }
+
+    @GetMapping("/members")
+    @Operation(summary = "관리자용 회원 리스트 조회", description = "전체 회원 목록과 이용권 상태를 페이징하여 조회합니다. (searchName으로 이름 검색 가능)")
+    public ResponseEntity<Page<AdminMemberResponse>> getMemberList(
+            @RequestParam(value = "searchName", required = false) String searchName,
+            @PageableDefault(size = 10) Pageable pageable) { // 기본 10명씩 페이징
+
+        Page<AdminMemberResponse> response = membershipAdminService.getAdminMemberList(searchName, pageable);
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/{membershipId}/pause")
+    @Operation(summary = "이용권 일시정지", description = "관리자가 회원의 활성화된 이용권을 일시정지합니다.")
+    public ResponseEntity<String> pauseMembership(@PathVariable("membershipId") Long membershipId) {
+        membershipAdminService.pauseMembership(membershipId);
+        return ResponseEntity.ok("이용권이 성공적으로 일시정지 되었습니다.");
+    }
+
+    @PatchMapping("/{membershipId}/unpause")
+    @Operation(summary = "이용권 정지 해제", description = "관리자가 일시정지된 이용권을 해제하고 기간을 연장합니다.")
+    public ResponseEntity<String> unpauseMembership(@PathVariable("membershipId") Long membershipId) {
+        membershipAdminService.unpauseMembership(membershipId);
+        return ResponseEntity.ok("이용권 일시정지가 해제되었습니다.");
     }
 }
