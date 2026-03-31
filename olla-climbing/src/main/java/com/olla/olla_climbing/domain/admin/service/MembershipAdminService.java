@@ -1,5 +1,6 @@
 package com.olla.olla_climbing.domain.admin.service;
 
+import com.olla.olla_climbing.domain.admin.dto.response.AdminMemberResponse;
 import com.olla.olla_climbing.domain.admin.dto.response.MembershipResponse;
 import com.olla.olla_climbing.domain.admin.entity.Membership;
 import com.olla.olla_climbing.domain.admin.enums.MembershipStatus;
@@ -10,6 +11,9 @@ import com.olla.olla_climbing.domain.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -78,6 +82,29 @@ public class MembershipAdminService {
         }
 
         return MembershipResponse.from(activeOrHoldingMembership);
+    }
+
+    // 관리자용 전체 회원 리스트 페이징 및 검색
+    @Transactional(readOnly = true)
+    public Page<AdminMemberResponse> getAdminMemberList(String searchName, Pageable pageable) {
+        Page<Member> memberPage;
+
+        // 1. 이름 검색어가 있으면 조건 검색, 없으면 전체 검색
+        if (StringUtils.hasText(searchName)) {
+            memberPage = memberRepository.findByNameContaining(searchName, pageable);
+        } else {
+            memberPage = memberRepository.findAll(pageable);
+        }
+
+        // 2. 조회된 회원 각각의 현재 이용권 상태를 매핑하여 DTO로 변환 (Page 객체의 map 기능 활용)
+        return memberPage.map(member -> {
+            // 회원 1명당 이용권 1번씩 조회 (N+1 발생 지점이지만 관리자 페이징 단위에서는 허용 가능한 수준)
+            Membership activeOrHolding = membershipRepository.findByMemberIdAndStatusIn(
+                    member.getId(), List.of(MembershipStatus.ACTIVE, MembershipStatus.HOLDING)
+            ).orElse(null);
+
+            return AdminMemberResponse.from(member, activeOrHolding);
+        });
     }
 
     // 관리자의 이용권 일시정지 처리
