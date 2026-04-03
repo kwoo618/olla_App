@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -46,10 +47,11 @@ public class AdminMembershipController {
     }
 
     @GetMapping("/members")
-    @Operation(summary = "관리자용 회원 리스트 조회", description = "전체 회원 목록과 이용권 상태를 페이징하여 조회합니다. (searchName으로 이름 검색 가능)")
+    @Operation(summary = "관리자용 회원 리스트 조회", description = "전체 회원 목록을 페이징 및 정렬하여 조회합니다.")
     public ResponseEntity<Page<AdminMemberResponse>> getMemberList(
             @RequestParam(value = "searchName", required = false) String searchName,
-            @PageableDefault(size = 10) Pageable pageable) { // 기본 10명씩 페이징
+            // 프론트에서 sort=name,desc 또는 sort=membershipType,asc 등으로 보낼 수 있음
+            @PageableDefault(size = 10, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
 
         Page<AdminMemberResponse> response = membershipAdminService.getAdminMemberList(searchName, pageable);
         return ResponseEntity.ok(response);
@@ -68,4 +70,6 @@ public class AdminMembershipController {
         membershipAdminService.unpauseMembership(membershipId);
         return ResponseEntity.ok("이용권 일시정지가 해제되었습니다.");
     }
+
+
 }

@@ -2,9 +2,11 @@ package com.olla.olla_climbing.domain.admin.service;
 
 import com.olla.olla_climbing.domain.admin.dto.response.AdminMemberResponse;
 import com.olla.olla_climbing.domain.admin.dto.response.MembershipResponse;
+import com.olla.olla_climbing.domain.admin.entity.AdminAlert;
 import com.olla.olla_climbing.domain.admin.entity.Membership;
 import com.olla.olla_climbing.domain.admin.enums.MembershipStatus;
 import com.olla.olla_climbing.domain.admin.enums.MembershipType;
+import com.olla.olla_climbing.domain.admin.repository.AdminAlertRepository;
 import com.olla.olla_climbing.domain.admin.repository.MembershipRepository;
 import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
@@ -14,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.util.StringUtils;
+import org.springframework.scheduling.annotation.Scheduled;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -24,6 +27,8 @@ public class MembershipAdminService {
 
     private final MembershipRepository membershipRepository;
     private final MemberRepository memberRepository;
+
+    private final AdminAlertRepository adminAlertRepository;
 
     // 관리자가 회원에게 이용권을 부여 (또는 연장)
     @Transactional
@@ -125,5 +130,34 @@ public class MembershipAdminService {
 
         // 엔티티 내부의 unpause() 호출 (만료일 연장 로직 포함)
         membership.unpause();
+    }
+
+    @Scheduled(cron = "0 0 9 * * *") // 매일 아침 9시 실행
+    @Transactional
+    public void generateExpirySummaryAlert() {
+        LocalDate today = LocalDate.now();
+        LocalDate d3 = today.plusDays(3);
+
+        // 1. 대상 조회
+        List<Membership> expiredToday = membershipRepository.findByEndDateAndStatus(today, MembershipStatus.ACTIVE);
+        List<Membership> expiringIn3Days = membershipRepository.findByEndDateAndStatus(d3, MembershipStatus.ACTIVE);
+
+        if (expiredToday.isEmpty() && expiringIn3Days.isEmpty()) return;
+
+        // 2. 메시지 구성
+        StringBuilder sb = new StringBuilder();
+        sb.append("[오늘 만료: ").append(expiredToday.size()).append("명]\n");
+        expiredToday.forEach(m -> sb.append("- ").append(m.getMember().getName()).append("\n"));
+
+        sb.append("\n[3일 뒤 만료: ").append(expiringIn3Days.size()).append("명]\n");
+        expiringIn3Days.forEach(m -> sb.append("- ").append(m.getMember().getName()).append("\n"));
+
+        // 3. 관리자 알림 저장 (SMS 대신 DB 저장)
+        AdminAlert alert = AdminAlert.builder()
+                .title(today + " 회원권 만료 요약 알림")
+                .content(sb.toString())
+                .build();
+
+        adminAlertRepository.save(alert);
     }
 }
