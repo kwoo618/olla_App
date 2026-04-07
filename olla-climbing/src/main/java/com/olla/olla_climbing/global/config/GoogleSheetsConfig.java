@@ -21,7 +21,7 @@ public class GoogleSheetsConfig {
     private static final String CREDENTIALS_FILE_PATH = "google-credentials.json";
 
     @Bean
-    public Sheets googleSheetsService() throws IOException, GeneralSecurityException {
+    public Sheets googleSheetsClient() throws IOException, GeneralSecurityException {
         // 1. resources 폴더에서 키 파일 읽기
         GoogleCredentials credentials = GoogleCredentials.fromStream(
                         new ClassPathResource(CREDENTIALS_FILE_PATH).getInputStream())
