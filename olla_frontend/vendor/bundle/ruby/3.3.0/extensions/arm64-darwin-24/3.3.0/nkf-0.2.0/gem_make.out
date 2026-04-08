@@ -1,0 +1,18 @@
+current directory: /Users/io8272/olla_App/olla_react/vendor/bundle/ruby/3.3.0/gems/nkf-0.2.0/ext/nkf
+/Users/io8272/.rbenv/versions/3.3.0/bin/ruby extconf.rb
+creating Makefile
+
+current directory: /Users/io8272/olla_App/olla_react/vendor/bundle/ruby/3.3.0/gems/nkf-0.2.0/ext/nkf
+make DESTDIR\= sitearchdir\=./.gem.20260408-77476-arrlpl sitelibdir\=./.gem.20260408-77476-arrlpl clean
+
+current directory: /Users/io8272/olla_App/olla_react/vendor/bundle/ruby/3.3.0/gems/nkf-0.2.0/ext/nkf
+make DESTDIR\= sitearchdir\=./.gem.20260408-77476-arrlpl sitelibdir\=./.gem.20260408-77476-arrlpl
+compiling nkf.c
+linking shared-object nkf.bundle
+
+current directory: /Users/io8272/olla_App/olla_react/vendor/bundle/ruby/3.3.0/gems/nkf-0.2.0/ext/nkf
+make DESTDIR\= sitearchdir\=./.gem.20260408-77476-arrlpl sitelibdir\=./.gem.20260408-77476-arrlpl install
+/usr/bin/install -c -m 0755 nkf.bundle ./.gem.20260408-77476-arrlpl
+
+current directory: /Users/io8272/olla_App/olla_react/vendor/bundle/ruby/3.3.0/gems/nkf-0.2.0/ext/nkf
+make DESTDIR\= sitearchdir\=./.gem.20260408-77476-arrlpl sitelibdir\=./.gem.20260408-77476-arrlpl clean
