@@ -1,3 +1,4 @@
+/* 기존 파일
 import React from 'react';
 import { SafeAreaView, StatusBar } from 'react-native';
 import LoginScreen from './src/screens/LoginScreen';
@@ -9,6 +10,16 @@ const App = () => {
       <LoginScreen />
     </SafeAreaView>
   );
+};
+
+export default App;
+*/
+
+import React from 'react';
+import LoginScreen from './LoginScreen';
+
+const App = () => {
+  return <LoginScreen />;
 };
 
 export default App;

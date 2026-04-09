@@ -1,0 +1,43 @@
+{
+  "buildFiles": [
+    "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-safe-area-context\\android\\src\\main\\jni\\CMakeLists.txt",
+    "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native\\ReactAndroid\\cmake-utils\\default-app-setup\\CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "C:\\Users\\82103\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+      "-C",
+      "C:\\Users\\82103\\olla_App\\olla_frontend\\android\\app\\.cxx\\Debug\\6zl5m3y2\\arm64-v8a",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "C:\\Users\\82103\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+    "-C",
+    "C:\\Users\\82103\\olla_App\\olla_frontend\\android\\app\\.cxx\\Debug\\6zl5m3y2\\arm64-v8a",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "react_codegen_safeareacontext::@7984cd80db47aa7b952a": {
+      "artifactName": "react_codegen_safeareacontext",
+      "abi": "arm64-v8a",
+      "output": "C:\\Users\\82103\\olla_App\\olla_frontend\\android\\app\\build\\intermediates\\cxx\\Debug\\6zl5m3y2\\obj\\arm64-v8a\\libreact_codegen_safeareacontext.so",
+      "runtimeFiles": [
+        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\3c01aea05d2737e987399f1309ae090e\\workspace\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.arm64-v8a\\libfbjni.so",
+        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\427eee61930a909b20cb384104452e26\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\jsi\\libs\\android.arm64-v8a\\libjsi.so",
+        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\427eee61930a909b20cb384104452e26\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\reactnative\\libs\\android.arm64-v8a\\libreactnative.so"
+      ]
+    },
+    "appmodules::@6890427a1f51a3e7e1df": {
+      "artifactName": "appmodules",
+      "abi": "arm64-v8a",
+      "output": "C:\\Users\\82103\\olla_App\\olla_frontend\\android\\app\\build\\intermediates\\cxx\\Debug\\6zl5m3y2\\obj\\arm64-v8a\\libappmodules.so",
+      "runtimeFiles": [
+        "C:\\Users\\82103\\olla_App\\olla_frontend\\android\\app\\build\\intermediates\\cxx\\Debug\\6zl5m3y2\\obj\\arm64-v8a\\libreact_codegen_safeareacontext.so",
+        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\3c01aea05d2737e987399f1309ae090e\\workspace\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.arm64-v8a\\libfbjni.so",
+        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\427eee61930a909b20cb384104452e26\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\jsi\\libs\\android.arm64-v8a\\libjsi.so",
+        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\427eee61930a909b20cb384104452e26\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\reactnative\\libs\\android.arm64-v8a\\libreactnative.so"
+      ]
+    }
+  }
+}
