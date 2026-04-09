@@ -1,20 +1,20 @@
 {
-  "root": "/Users/io8272/olla_App/olla_frontend",
-  "reactNativePath": "/Users/io8272/olla_App/olla_frontend/node_modules/react-native",
+  "root": "C:\\Users\\82103\\olla_App\\olla_frontend",
+  "reactNativePath": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native",
   "reactNativeVersion": "0.85",
   "dependencies": {
     "react-native-safe-area-context": {
-      "root": "/Users/io8272/olla_App/olla_frontend/node_modules/react-native-safe-area-context",
+      "root": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-safe-area-context",
       "name": "react-native-safe-area-context",
       "platforms": {
         "ios": {
-          "podspecPath": "/Users/io8272/olla_App/olla_frontend/node_modules/react-native-safe-area-context/react-native-safe-area-context.podspec",
+          "podspecPath": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-safe-area-context\\react-native-safe-area-context.podspec",
           "version": "5.7.0",
           "configurations": [],
           "scriptPhases": []
         },
         "android": {
-          "sourceDir": "/Users/io8272/olla_App/olla_frontend/node_modules/react-native-safe-area-context/android",
+          "sourceDir": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-safe-area-context\\android",
           "packageImportPath": "import com.th3rdwave.safeareacontext.SafeAreaContextPackage;",
           "packageInstance": "new SafeAreaContextPackage()",
           "buildTypes": [],
@@ -23,7 +23,7 @@
             "RNCSafeAreaProviderComponentDescriptor",
             "RNCSafeAreaViewComponentDescriptor"
           ],
-          "cmakeListsPath": "/Users/io8272/olla_App/olla_frontend/node_modules/react-native-safe-area-context/android/src/main/jni/CMakeLists.txt",
+          "cmakeListsPath": "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-safe-area-context/android/src/main/jni/CMakeLists.txt",
           "cxxModuleCMakeListsModuleName": null,
           "cxxModuleCMakeListsPath": null,
           "cxxModuleHeaderName": null,
@@ -194,7 +194,7 @@
         {
           "name": "--path <path>",
           "description": "Path to the React Native project root.",
-          "default": "/Users/io8272/olla_App/olla_frontend"
+          "default": "C:\\Users\\82103\\olla_App\\olla_frontend"
         },
         {
           "name": "--platform <string>",
@@ -251,7 +251,7 @@
         {
           "name": "--terminal <string>",
           "description": "Launches the Metro Bundler in a new window using the specified terminal path.",
-          "default": "Apple_Terminal"
+          "default": "cmd.exe"
         },
         {
           "name": "--binary-path <string>",
@@ -419,7 +419,7 @@
         {
           "name": "--terminal <string>",
           "description": "Launches the Metro Bundler in a new window using the specified terminal path.",
-          "default": "Apple_Terminal"
+          "default": "cmd.exe"
         },
         {
           "name": "--appId <string>",
@@ -494,7 +494,7 @@
   "assets": [],
   "project": {
     "ios": {
-      "sourceDir": "/Users/io8272/olla_App/olla_frontend/ios",
+      "sourceDir": "C:\\Users\\82103\\olla_App\\olla_frontend\\ios",
       "xcodeProject": {
         "name": "olla_react.xcworkspace",
         "path": ".",
@@ -503,7 +503,7 @@
       "assets": []
     },
     "android": {
-      "sourceDir": "/Users/io8272/olla_App/olla_frontend/android",
+      "sourceDir": "C:\\Users\\82103\\olla_App\\olla_frontend\\android",
       "appName": "app",
       "packageName": "com.olla_react",
       "applicationId": "com.olla_react",
