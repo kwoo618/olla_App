@@ -17,10 +17,11 @@ export default App;
 
 import React from 'react';
 //import LoginScreen from './LoginScreen';
-import SignupSCreen from './SignupScreen';
+//import SignupSCreen from './SignupScreen';
+import PersonalScreen from './PersonalScreen';
 
 const App = () => {
-  return <SignupSCreen />;
+  return <PersonalScreen />;
 };
 
 export default App;
