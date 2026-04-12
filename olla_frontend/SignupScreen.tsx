@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   middleText: {
-    color: '#888888',
+    color: '#ffffff',
     fontSize: 14,
     alignSelf: 'flex-start',
     marginBottom: 10,
