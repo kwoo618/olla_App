@@ -19,10 +19,11 @@ import React from 'react';
 //import LoginScreen from './LoginScreen';
 //import SignupSCreen from './SignupScreen';
 //import PersonalScreen from './PersonalScreen';
-import LoadingScreen from './LoadingScreen';
+//import LoadingScreen from './LoadingScreen';
+import HomeScreen from './HomeScreen';
 
 const App = () => {
-  return <LoadingScreen />;
+  return <HomeScreen />;
 };
 
 export default App;
