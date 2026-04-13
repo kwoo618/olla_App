@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Image, Animated, Easing } from 'react-native';
 
-const LoadingScreen = () => {
+const LoadingScreen = ({ navigation }: any) => {
   // 1. 로딩 상태 스위치 (true: 로딩 중, false: 로딩 완료)
   const [isLoading, setIsLoading] = useState(true);
 
@@ -28,12 +28,12 @@ const LoadingScreen = () => {
     // 4. 테스트를 위한 인위적인 로딩 시간 시뮬레이션 (3초)
     const loadingTimeout = setTimeout(() => {
       // 💡 여기서 나중에 서버의 응답을 받거나 비동기 작업이 완료되면 호출합니다.
-      setIsLoading(false); 
+      navigation.replace('Home');
     }, 3000); // 3000ms = 3초
 
     // 컴포넌트가 사라질 때 타이머 정리
     return () => clearTimeout(loadingTimeout);
-  }, [fadeAnim, scaleAnim]);
+  }, [fadeAnim, scaleAnim, navigation]);
 
   // 5. 로딩 중일 때 보여줄 UI (image_2.png 기반)
   const renderLoadingCard = () => (

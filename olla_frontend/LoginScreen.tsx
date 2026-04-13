@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Image } from 'react-native';
 import { Color } from 'react-native/types_generated/Libraries/Animated/AnimatedExports';
 
-const LoginScreen = () => {
+const LoginScreen = ({ navigation }: any) => { // 👈 네비게이션 추가
   return (
     <View style={styles.background}>
 
@@ -33,13 +33,13 @@ const LoginScreen = () => {
         />
 
         {/* 로그인 버튼 */}
-        <TouchableOpacity style={styles.button}>
+        <TouchableOpacity onPress={() => navigation.navigate('Loading')} style={styles.button}>
           <Text style={styles.buttonText}>로그인</Text>
         </TouchableOpacity>
         <View style={styles.signupContainer}>
         <Text style={styles.signupText}>계정이 없으신가요?  </Text>
         
-        <TouchableOpacity onPress={() => alert('나중에 회원가입 화면으로 이동할게요!')}>
+        <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
           <Text style={styles.signupLink}>회원가입</Text>
         </TouchableOpacity>
       </View>

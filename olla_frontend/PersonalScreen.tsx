@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 
-const PersonalScreen = () => {
+const PersonalScreen = ({ navigation }: any) => { // 👈 네비게이션 추가
   // 1. 데이터 저장소 (모두 선택 사항)
   const [age, setAge] = useState('');
   const [height, setHeight] = useState('');
@@ -70,7 +70,7 @@ const PersonalScreen = () => {
         </View>
         <TextInput style={styles.input} placeholder="발 사이즈를 입력하세요" placeholderTextColor="#ffffff80" value={footSize} onChangeText={setFootSize} keyboardType="numeric" />
 
-        <TouchableOpacity style={styles.button}>
+        <TouchableOpacity onPress={() => navigation.navigate('Loading')} style={styles.button}>
           <Text style={styles.buttonText}>회원가입</Text>
         </TouchableOpacity>
       </ScrollView>

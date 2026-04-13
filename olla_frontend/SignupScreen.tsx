@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 
-const SignupScreen = () => {
+const SignupScreen = ({ navigation }: any) => { // 👈 네비게이션 추가
   // 1️⃣ 각 항목별로 사용자가 입력하는 값을 저장할 공간
   const [id, setId] = useState('');
   const [password, setPassword] = useState('');
@@ -121,7 +121,7 @@ const SignupScreen = () => {
         {phoneError !== '' && <Text style={styles.errorText}>{phoneError}</Text>}
 
         {/* 찐 회원가입 진행 버튼 */}
-        <TouchableOpacity style={styles.button}>
+        <TouchableOpacity onPress={() => navigation.navigate('PersonalInfo')} style={styles.button}>
           <Text style={styles.buttonText}>다음으로</Text>
         </TouchableOpacity>
 

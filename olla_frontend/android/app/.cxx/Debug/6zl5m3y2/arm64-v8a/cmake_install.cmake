@@ -45,6 +45,7 @@ endif()
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for each subdirectory.
   include("C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/arm64-v8a/safeareacontext_autolinked_build/cmake_install.cmake")
+  include("C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/arm64-v8a/rnscreens_autolinked_build/cmake_install.cmake")
 
 endif()
 
