@@ -11,7 +11,7 @@
 				}
 			],
 			"type" : "UNINITIALIZED",
-			"value" : "x86"
+			"value" : "x86_64"
 		},
 		{
 			"name" : "ANDROID_NDK",
@@ -99,7 +99,7 @@
 				}
 			],
 			"type" : "UNINITIALIZED",
-			"value" : "x86"
+			"value" : "x86_64"
 		},
 		{
 			"name" : "CMAKE_ANDROID_NDK",
@@ -187,7 +187,7 @@
 				}
 			],
 			"type" : "INTERNAL",
-			"value" : "c:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/x86"
+			"value" : "c:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/x86_64"
 		},
 		{
 			"name" : "CMAKE_CACHE_MAJOR_VERSION",
@@ -659,7 +659,7 @@
 				}
 			],
 			"type" : "UNINITIALIZED",
-			"value" : "C:\\Users\\82103\\olla_App\\olla_frontend\\android\\app\\.cxx\\Debug\\6zl5m3y2\\prefab\\x86\\prefab"
+			"value" : "C:\\Users\\82103\\olla_App\\olla_frontend\\android\\app\\.cxx\\Debug\\6zl5m3y2\\prefab\\x86_64\\prefab"
 		},
 		{
 			"name" : "CMAKE_GENERATOR",
@@ -755,7 +755,7 @@
 				}
 			],
 			"type" : "UNINITIALIZED",
-			"value" : "C:\\Users\\82103\\olla_App\\olla_frontend\\android\\app\\build\\intermediates\\cxx\\Debug\\6zl5m3y2\\obj\\x86"
+			"value" : "C:\\Users\\82103\\olla_App\\olla_frontend\\android\\app\\build\\intermediates\\cxx\\Debug\\6zl5m3y2\\obj\\x86_64"
 		},
 		{
 			"name" : "CMAKE_LINKER",
@@ -1027,7 +1027,7 @@
 				}
 			],
 			"type" : "UNINITIALIZED",
-			"value" : "C:\\Users\\82103\\olla_App\\olla_frontend\\android\\app\\build\\intermediates\\cxx\\Debug\\6zl5m3y2\\obj\\x86"
+			"value" : "C:\\Users\\82103\\olla_App\\olla_frontend\\android\\app\\build\\intermediates\\cxx\\Debug\\6zl5m3y2\\obj\\x86_64"
 		},
 		{
 			"name" : "CMAKE_SHARED_LINKER_FLAGS",
@@ -1267,11 +1267,11 @@
 			[
 				{
 					"name" : "HELPSTRING",
-					"value" : "The CMake toolchain file"
+					"value" : "No help, variable specified on the command line."
 				}
 			],
-			"type" : "FILEPATH",
-			"value" : "C:/Users/82103/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake"
+			"type" : "UNINITIALIZED",
+			"value" : "C:\\Users\\82103\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\build\\cmake\\android.toolchain.cmake"
 		},
 		{
 			"name" : "CMAKE_VERBOSE_MAKEFILE",
@@ -1335,7 +1335,7 @@
 				}
 			],
 			"type" : "PATH",
-			"value" : "C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/prefab/x86/prefab/lib/i686-linux-android/cmake/ReactAndroid"
+			"value" : "C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/prefab/x86_64/prefab/lib/x86_64-linux-android/cmake/ReactAndroid"
 		},
 		{
 			"name" : "appmodules_BINARY_DIR",
@@ -1347,7 +1347,7 @@
 				}
 			],
 			"type" : "STATIC",
-			"value" : "C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/x86"
+			"value" : "C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/x86_64"
 		},
 		{
 			"name" : "appmodules_IS_TOP_LEVEL",
@@ -1383,7 +1383,7 @@
 				}
 			],
 			"type" : "PATH",
-			"value" : "C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/prefab/x86/prefab/lib/i686-linux-android/cmake/fbjni"
+			"value" : "C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/prefab/x86_64/prefab/lib/x86_64-linux-android/cmake/fbjni"
 		}
 	],
 	"kind" : "cache",
