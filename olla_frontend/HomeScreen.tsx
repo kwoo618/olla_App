@@ -1,10 +1,50 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Image } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-const HomeScreen = () => {
+const HomeScreen = ({ navigation }: any) => {
+  // 💡 1. 달력으로 스크롤하기 위한 Ref (조종기 역할)
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  // 💡 어떤 팝업을 띄울지 기억하는 State (null = 닫힘, 'QR' = QR팝업, 'Membership' = 회원권팝업)
+  const [activeModal, setActiveModal] = useState<string | null>(null);
+  const slideAnim = useRef(new Animated.Value(500)).current;
+
+  // 💡 공통 팝업 열기 함수
+  const openModal = (type: string) => {
+    setActiveModal(type); 
+    setTimeout(() => {
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    }, 50);
+  };
+
+  // 💡 공통 팝업 닫기 함수
+  const closeModal = () => {
+    Animated.timing(slideAnim, {
+      toValue: 500, 
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      setActiveModal(null); // 애니메이션이 끝나면 어떤 팝업이든 완전히 닫음
+    });
+  };
 
   const handlePopupPress = (title: string) => {
-    console.log(`${title} 팝업 띄우기!`);
+    if (title === '공지사항') {
+      navigation.navigate('Notice'); 
+    } else if (title === 'QR') {
+      openModal('QR'); // QR 팝업 열기
+    } else if (title === '회원권') {
+      openModal('Membership'); // 💡 회원권 팝업 열기 추가!
+    } else if (title === '이번달 방문') {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    } else {
+      console.log(`${title} 클릭됨!`);
+    }
   };
 
   // 💡 달력 구현을 위한 날짜 계산 (오늘 날짜 기준)
@@ -35,7 +75,8 @@ const HomeScreen = () => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      {/* 💡 여기에 ref={scrollViewRef} 를 달아주어 조종할 수 있게 합니다. */}
+      <ScrollView ref={scrollViewRef} showsVerticalScrollIndicator={false}>
         <View style={styles.scrollContent}>
           
           {/* 공지창 */}
@@ -144,6 +185,81 @@ const HomeScreen = () => {
         <TouchableOpacity style={styles.bottomNavItem}><Image source={require('./assets/mypage.png')} style={styles.navIcon} /><Text style={styles.bottomNavText}>마이페이지</Text></TouchableOpacity>
       </View>
 
+    {/* 💡 QR 하단 팝업 (Modal) 구현 */}
+      {/* 💡 공통 하단 팝업 (Modal) */}
+      <Modal 
+        visible={activeModal !== null} 
+        animationType="fade" 
+        transparent={true} 
+        onRequestClose={closeModal}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeModal}>
+          <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: slideAnim }] }]}>
+            <TouchableOpacity activeOpacity={1} style={{ width: '100%', alignItems: 'center' }}>
+              <View style={styles.dragHandle} />
+            
+            {/* 팝업 헤더 (제목 변경) */}
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>
+                {activeModal === 'QR' ? 'QR 체크인' : '회원권'}
+              </Text>
+              <TouchableOpacity onPress={closeModal}>
+                <Text style={styles.closeBtn}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* 💡 어떤 버튼을 눌렀느냐에 따라 내용이 바뀝니다 */}
+            {activeModal === 'QR' ? (
+              <>
+                {/* QR 팝업 내용 */}
+                <Image source={require('./assets/QR.png')} style={styles.largeQRImage} />
+                <Text style={styles.qrDesc}>QR 코드를 카메라에 맞춰주세요</Text>
+              </>
+            ) : (
+              <>
+                {/* 💡 새로 추가된 회원권 팝업 내용 */}
+                <View style={styles.membershipContainer}>
+                  
+                  {/* 상단: 남은 이용 기간 카드 */}
+                  <View style={styles.memCard}>
+                    <View style={styles.memCardHeader}>
+                      <Text style={styles.memCardTitle}>남은 이용 기간</Text>
+                      <Text style={styles.memCardBadge}>1개월권</Text>
+                    </View>
+                    
+                    {/* 프로그레스 바 */}
+                    <View style={styles.progressBarBg}>
+                      <View style={styles.progressBarFill} />
+                    </View>
+                    
+                    {/* 기간 텍스트 */}
+                    <View style={styles.memCardDates}>
+                      <Text style={styles.memDateText}>2026-03-01</Text>
+                      <Text style={styles.memDateText}>2026-04-01</Text>
+                    </View>
+                  </View>
+
+                  {/* 하단: 반반 나뉜 카드들 */}
+                  <View style={styles.memRow}>
+                    <View style={styles.memHalfCard}>
+                      <Text style={styles.memHalfTitle}>남은 기간</Text>
+                      <Text style={styles.memHalfValueGreen}>13일</Text>
+                    </View>
+                    
+                    <View style={styles.memHalfCard}>
+                      <Text style={styles.memHalfTitle}>최근 이용</Text>
+                      <Text style={styles.memHalfValueWhite}>3월 17일</Text>
+                    </View>
+                  </View>
+                  
+                </View>
+              </>
+            )}
+            </TouchableOpacity>
+          </Animated.View>
+        </TouchableOpacity>
+      </Modal>
+
     </SafeAreaView>
   );
 };
@@ -251,6 +367,87 @@ const styles = StyleSheet.create({
   navIcon: { width: 24, height: 24, marginBottom: 4, resizeMode: 'contain' },
   bottomNavText: { color: '#666666', fontSize: 11, fontWeight: '500' },
   bottomNavTextActive: { color: '#A1BE44', fontSize: 11, fontWeight: 'bold' },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)', // 반투명 검은 배경
+    justifyContent: 'flex-end', // 내용을 화면 맨 아래로 밀어냄
+  },
+  bottomSheet: {
+    backgroundColor: '#1E1E1E', // 팝업창 배경색
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingBottom: 50,
+    alignItems: 'center',
+  },
+  dragHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#333333',
+    borderRadius: 2,
+    marginTop: 12,
+    marginBottom: 20,
+    alignSelf: 'center',
+  },
+  sheetHeader: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  sheetTitle: {
+    color: '#ffffff',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginLeft: 10,
+  },
+  closeBtn: {
+    color: '#999999',
+    fontSize: 24,
+    paddingHorizontal: 10,
+  },
+  qrDummyContainer: {
+    width: 200,
+    height: 200,
+    backgroundColor: '#D4FF00', // 네온 초록 임시 배경
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  qrDummyText: {
+    color: '#1A1A1A',
+    fontWeight: 'bold',
+    fontSize: 18,
+  },
+  largeQRImage: {
+    width: 200,
+    height: 200,
+    resizeMode: 'contain', // 이미지 비율 유지
+    marginBottom: 20, // 아래 텍스트와의 간격
+  },
+  qrDesc: {
+    color: '#999999',
+    fontSize: 14,
+  },
+  // 💡 회원권 팝업 전용 스타일
+  membershipContainer: { width: '100%' },
+  memCard: { backgroundColor: '#2A2A2A', borderRadius: 16, padding: 22, marginBottom: 15, width: '100%' },
+  memCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  memCardTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
+  memCardBadge: { color: '#999999', fontSize: 14, fontWeight: '500' },
+  progressBarBg: { height: 8, backgroundColor: '#444444', borderRadius: 4, marginBottom: 10 },
+  progressBarFill: { height: '100%', backgroundColor: '#A1BE44', borderRadius: 4, width: '77%' }, // 💡 77% 만큼 채워짐
+  memCardDates: { flexDirection: 'row', justifyContent: 'space-between' },
+  memDateText: { color: '#999999', fontSize: 13 },
+  
+  memRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%' },
+  memHalfCard: { backgroundColor: '#2A2A2A', borderRadius: 16, paddingVertical: 25, width: '48%', alignItems: 'center', justifyContent: 'center' },
+  memHalfTitle: { color: '#ffffff', fontSize: 15, fontWeight: '600', marginBottom: 12 },
+  memHalfValueGreen: { color: '#A1BE44', fontSize: 24, fontWeight: 'bold' },
+  memHalfValueWhite: { color: '#ffffff', fontSize: 24, fontWeight: 'bold' },
 });
 
 export default HomeScreen;

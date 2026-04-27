@@ -78,21 +78,21 @@
 				{
 					"directoryIndex" : 0,
 					"id" : "appmodules::@6890427a1f51a3e7e1df",
-					"jsonFile" : "target-appmodules-Debug-766858b73ece25cd3b68.json",
+					"jsonFile" : "target-appmodules-Debug-1e0b724cac563c340661.json",
 					"name" : "appmodules",
 					"projectIndex" : 0
 				},
 				{
 					"directoryIndex" : 2,
 					"id" : "react_codegen_rnscreens::@25bcbd507e98d3a854ad",
-					"jsonFile" : "target-react_codegen_rnscreens-Debug-551f164750b977644a99.json",
+					"jsonFile" : "target-react_codegen_rnscreens-Debug-4d956a37bdc288946df4.json",
 					"name" : "react_codegen_rnscreens",
 					"projectIndex" : 0
 				},
 				{
 					"directoryIndex" : 1,
 					"id" : "react_codegen_safeareacontext::@7984cd80db47aa7b952a",
-					"jsonFile" : "target-react_codegen_safeareacontext-Debug-7b2b962b3769f444512a.json",
+					"jsonFile" : "target-react_codegen_safeareacontext-Debug-ce74102aecbaec5941e7.json",
 					"name" : "react_codegen_safeareacontext",
 					"projectIndex" : 0
 				}
@@ -102,7 +102,7 @@
 	"kind" : "codemodel",
 	"paths" : 
 	{
-		"build" : "C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/x86",
+		"build" : "C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/arm64-v8a",
 		"source" : "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native/ReactAndroid/cmake-utils/default-app-setup"
 	},
 	"version" : 
