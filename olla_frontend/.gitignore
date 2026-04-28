@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Node modules
 node_modules/
 
@@ -26,3 +27,14 @@ build/
 
 # Tests
 coverage/
+=======
+node_modules/
+android/.gradle/
+android/app/build/
+android/local.properties
+ios/Pods/
+ios/DerivedData/
+ios/build/
+.DS_Store
+.xcode.env.local
+>>>>>>> homescreen
