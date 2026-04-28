@@ -7,7 +7,7 @@ const LoginScreen = ({ navigation }: any) => { // 👈 네비게이션 추가
     <View style={styles.background}>
 
       <Image 
-          source={require('./assets/olla_logo_white.png')} // 파일 이름과 경로를 실제 저장 위치와 맞춰주세요!
+          source={require('./assets/olla_logo_white.png')}
           style={styles.logo} 
         />
 
