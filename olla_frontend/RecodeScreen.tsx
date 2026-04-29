@@ -88,7 +88,7 @@ const RecodeScreen = ({ route, navigation }: any) => {
   const [isTimerModalVisible, setTimerModalVisible] = useState(false);
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(0);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<any>(null);
 
   const openEnduranceModal = () => {
     setEnduranceModalVisible(true);
