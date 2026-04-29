@@ -138,7 +138,7 @@ const HomeScreen = ({ navigation }: any) => {
 
       {/* 💡 하단 네비게이션: '홈'은 밝게(opacity 1), 나머지는 모두 어둡게(opacity: 0.4) 통일 */}
       <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.bottomNavItem}>
+        <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigation.navigate('Home')}>
           <Image source={require('./assets/Home.png')} style={styles.navIcon} />
           <Text style={styles.bottomNavTextActive}>홈</Text>
         </TouchableOpacity>
@@ -154,7 +154,8 @@ const HomeScreen = ({ navigation }: any) => {
           <Image source={require('./assets/community.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
           <Text style={styles.bottomNavText}>커뮤니티</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem}>
+        {/* 💡 마이페이지 이동 추가 */}
+        <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigation.navigate('MY')}>
           <Image source={require('./assets/mypage.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
           <Text style={styles.bottomNavText}>마이페이지</Text>
         </TouchableOpacity>

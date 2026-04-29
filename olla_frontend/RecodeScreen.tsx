@@ -394,11 +394,27 @@ const RecodeScreen = ({ route, navigation }: any) => {
 
       {/* 하단 네비게이션 */}
       <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigation.navigate('Home')}><Image source={require('./assets/Home.png')} style={[styles.navIcon, { opacity: 0.4 }]} /><Text style={styles.bottomNavText}>홈</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem}><Image source={require('./assets/recode.png')} style={styles.navIcon} /><Text style={styles.bottomNavTextActive}>기록</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem}><Image source={require('./assets/ranking.png')} style={[styles.navIcon, { opacity: 0.4 }]} /><Text style={styles.bottomNavText}>랭킹</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem}><Image source={require('./assets/community.png')} style={[styles.navIcon, { opacity: 0.4 }]} /><Text style={styles.bottomNavText}>커뮤니티</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem}><Image source={require('./assets/mypage.png')} style={[styles.navIcon, { opacity: 0.4 }]} /><Text style={styles.bottomNavText}>마이페이지</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigation.navigate('Home')}>
+          <Image source={require('./assets/Home.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
+          <Text style={styles.bottomNavText}>홈</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigation.navigate('Recode')}>
+          <Image source={require('./assets/recode.png')} style={styles.navIcon} />
+          <Text style={styles.bottomNavTextActive}>기록</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.bottomNavItem}>
+          <Image source={require('./assets/ranking.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
+          <Text style={styles.bottomNavText}>랭킹</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.bottomNavItem}>
+          <Image source={require('./assets/community.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
+          <Text style={styles.bottomNavText}>커뮤니티</Text>
+        </TouchableOpacity>
+        {/* 💡 마이페이지 이동 추가 */}
+        <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigation.navigate('MY')}>
+          <Image source={require('./assets/mypage.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
+          <Text style={styles.bottomNavText}>마이페이지</Text>
+        </TouchableOpacity>
       </View>
 
       {/* 삭제 확인 팝업 */}
