@@ -30,7 +30,7 @@ const LoginScreen = ({ navigation }: any) => { // 👈 네비게이션 추가
         
         // 서버에서 준 TokenResponse(accessToken 등) 처리 로직이 여기에 들어감
         // 홈 화면으로 이동
-        navigation.navigate('Loading');
+        navigation.navigate('Home');
       }
     } catch (error: any) {
       // 로그인 실패 처리
