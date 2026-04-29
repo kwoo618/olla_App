@@ -179,7 +179,7 @@ const HomeScreen = ({ navigation }: any) => {
       {/* 3. 하단 네비게이션 바 */}
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.bottomNavItem}><Image source={require('./assets/Home.png')} style={styles.navIcon} /><Text style={styles.bottomNavTextActive}>홈</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem}><Image source={require('./assets/recode.png')} style={styles.navIcon} /><Text style={styles.bottomNavText}>기록</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigation.navigate('Recode')}><Image source={require('./assets/recode.png')} style={styles.navIcon} /><Text style={styles.bottomNavText}>기록</Text></TouchableOpacity>
         <TouchableOpacity style={styles.bottomNavItem}><Image source={require('./assets/ranking.png')} style={styles.navIcon} /><Text style={styles.bottomNavText}>랭킹</Text></TouchableOpacity>
         <TouchableOpacity style={styles.bottomNavItem}><Image source={require('./assets/community.png')} style={styles.navIcon} /><Text style={styles.bottomNavText}>커뮤니티</Text></TouchableOpacity>
         <TouchableOpacity style={styles.bottomNavItem}><Image source={require('./assets/mypage.png')} style={styles.navIcon} /><Text style={styles.bottomNavText}>마이페이지</Text></TouchableOpacity>
@@ -234,7 +234,7 @@ const HomeScreen = ({ navigation }: any) => {
                     
                     {/* 기간 텍스트 */}
                     <View style={styles.memCardDates}>
-                      <Text style={styles.memDateText}>2026-03-01</Text>
+                      <Text style={styles.memDateText}>2026-02-01</Text>
                       <Text style={styles.memDateText}>2026-04-01</Text>
                     </View>
                   </View>
@@ -243,7 +243,7 @@ const HomeScreen = ({ navigation }: any) => {
                   <View style={styles.memRow}>
                     <View style={styles.memHalfCard}>
                       <Text style={styles.memHalfTitle}>남은 기간</Text>
-                      <Text style={styles.memHalfValueGreen}>13일</Text>
+                      <Text style={styles.memHalfValueGreen}>15일</Text>
                     </View>
                     
                     <View style={styles.memHalfCard}>
