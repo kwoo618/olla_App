@@ -19,6 +19,12 @@ public class MemberService {
 
     private final MemberRepository memberRepository;
 
+    // 회원가입 화면에서 DB 아이디 중복 확인 로직 (동철 수정)
+    @Transactional(readOnly = true)
+    public boolean existsByLoginId(String loginId) {
+        return memberRepository.findByLoginId(loginId).isPresent();
+    }
+
     // Transactional(readOnly = true) -> 데이터 조회 시 성능 최적화, 트랜잭션 관리
     @Transactional(readOnly = true)
     public MemberResponse getMyInfo(String loginId) {

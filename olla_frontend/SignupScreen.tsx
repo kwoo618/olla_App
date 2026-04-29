@@ -1,8 +1,19 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import axios from 'axios';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TextInput, 
+  TouchableOpacity, 
+  Alert, 
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform
+} from 'react-native';
 
-const SignupScreen = ({ navigation }: any) => { // 👈 네비게이션 추가
-  // 1️⃣ 각 항목별로 사용자가 입력하는 값을 저장할 공간
+const SignupScreen = ({ navigation }: any) => {
+  // 1️⃣ 데이터 저장 상태
   const [id, setId] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
@@ -10,162 +21,260 @@ const SignupScreen = ({ navigation }: any) => { // 👈 네비게이션 추가
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
 
-  // 2️⃣ 각 항목별로 에러 메시지를 띄울 스위치(상태) 공간
+  // 2️⃣ 에러 메시지 상태
   const [idError, setIdError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [passwordConfirmError, setPasswordConfirmError] = useState('');
   const [emailError, setEmailError] = useState('');
   const [phoneError, setPhoneError] = useState('');
 
-  // 👇 나중에 백엔드 서버가 보내주는 결과에 따라 작동할 임시 함수입니다.
-  const handleTestButton = () => {
-    // 버튼을 누르면 올려주신 이미지처럼 모든 에러 멘트가 동시에 나타납니다!
-    setIdError('중복된 아이디입니다.');
-    setPasswordError('비밀번호는 영문, 숫자, 특수기호를 포함한 6자리 이상이어야 합니다.');
-    setPasswordConfirmError('비밀번호가 일치하지 않습니다.');
-    setEmailError('이메일 형식이 올바르지 않습니다.');
-    setPhoneError("전화번호는 '-'를 제외하고 입력해주십시오.");
+  // 3️⃣ 중복 확인 상태
+  const [isIdChecked, setIsIdChecked] = useState(false);
+
+  // 📞 전화번호 자동 하이픈 포맷터
+  const formatPhone = (text: string) => {
+    const cleaned = text.replace(/[^0-9]/g, '');
+    let formatted = cleaned;
+    if (cleaned.length > 3 && cleaned.length <= 7) {
+      formatted = `${cleaned.slice(0, 3)}-${cleaned.slice(3)}`;
+    } else if (cleaned.length > 7) {
+      formatted = `${cleaned.slice(0, 3)}-${cleaned.slice(3, 7)}-${cleaned.slice(7, 11)}`;
+    }
+    setPhone(formatted);
+    if (formatted.length >= 12) setPhoneError('');
+  };
+
+  // 🔍 아이디 중복 확인 연동 (백엔드 GetMapping("/check-id") 연결)
+const checkDuplicateId = async () => {
+  if (!id) {
+    setIdError('아이디를 먼저 입력해주세요.');
+    return;
+  }
+  try {
+    const response = await axios.get(`http://172.29.151.129:8080/api/v1/auth/check-id`, {
+      params: { loginId: id }
+    });
+
+    console.log("서버 전체 응답:", response.data);
+
+    // 💡 백엔드 공통 규격(ApiResponse)을 사용할 경우 데이터는 response.data.data에 들어있습니다.
+    const isDuplicate = response.data?.data?.isDuplicate ?? response.data?.isDuplicate;
+
+    if (isDuplicate === undefined) {
+      // 만약 여전히 undefined라면 데이터 구조 자체가 예상과 다른 것입니다.
+      Alert.alert('오류', '데이터 형식이 맞지 않습니다. 콘솔을 확인하세요.');
+      return;
+    }
+
+    if (isDuplicate) {
+        setIdError('이미 사용 중인 아이디입니다.');
+        setIsIdChecked(false);
+        Alert.alert('알림', '이미 사용 중인 아이디입니다.');
+      } else {
+        Alert.alert('확인', '사용 가능한 아이디입니다.');
+        setIdError('');
+        setIsIdChecked(true);
+      }
+    } catch (error: any) {
+      // 💡 500 에러가 나면 콘솔에 상세 내용을 찍어 원인을 파악합니다.
+      console.error("중복확인 에러 상세:", error.response?.data);
+      Alert.alert('오류', '서버 내부 오류가 발생했습니다. 백엔드 로그를 확인하세요.');
+    }
+  };
+
+  // 🚀 회원가입 최종 제출
+  const handleSignup = async () => {
+    // 필수 유효성 검사
+    if (!isIdChecked) {
+      Alert.alert('알림', '아이디 중복 확인을 해주세요.');
+      return;
+    }
+    if (password !== passwordConfirm) {
+      setPasswordConfirmError('비밀번호가 일치하지 않습니다.');
+      return;
+    }
+    if (!name || !email || !phone) {
+      Alert.alert('알림', '모든 정보를 입력해주세요.');
+      return;
+    }
+
+    try {
+      const response = await axios.post('http://172.29.151.129:8080/api/v1/auth/signup', {
+        loginId: id,
+        password: password,
+        name: name,
+        phone: phone, 
+        email: email,
+        role: 'USER'
+      });
+
+      if (response.status === 200 || response.status === 201) {
+        Alert.alert('성공', '회원가입이 완료되었습니다!', [
+          { text: '확인', onPress: () => navigation.replace('Loading') }
+        ]);
+      }
+        } catch (error: any) {
+      console.error("가입 에러 상세:", error.response?.data);
+
+      // 백엔드에서 @Valid 에러가 나면 보통 error.response.data에 에러 목록이 담깁니다.
+      const backendError = error.response?.data;
+      
+      let finalMessage = '입력 형식을 확인하세요.';
+
+      if (typeof backendError === 'object' && backendError.message) {
+        // 백엔드 공통 응답 규격이 있는 경우
+        finalMessage = backendError.message;
+      } else if (typeof backendError === 'string') {
+        // 문자열로 에러가 오는 경우
+        finalMessage = backendError;
+      }
+
+      Alert.alert('가입 실패', finalMessage);
+    }
   };
 
   return (
-    <View style={styles.background}>
-      <View style={styles.container}>
-        <Text style={styles.title}>회원가입</Text>
+    <KeyboardAvoidingView 
+      style={{ flex: 1 }} 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView contentContainerStyle={styles.background}>
+        <View style={styles.container}>
+          <Text style={styles.title}>회원가입</Text>
 
-        <Text style={styles.middleText}>아이디</Text>
-        {/* 💡 수정됨: 아이디 입력창과 중복확인 버튼을 한 줄(row)에 배치하기 위한 박스 */}
-        <View style={styles.inputRow}>
+          {/* 아이디 영역 */}
+          <Text style={styles.middleText}>아이디</Text>
+          <View style={styles.inputRow}>
+            <TextInput 
+              style={styles.inputFlex} 
+              placeholder="아이디를 입력하세요" 
+              placeholderTextColor="#ffffff80"
+              value={id}
+              onChangeText={(text) => {
+                setId(text);
+                setIdError('');
+                setIsIdChecked(false);
+              }}
+            />
+            <TouchableOpacity style={styles.duplicateCheckButton} onPress={checkDuplicateId}>
+              <Text style={styles.duplicateCheckText}>중복확인</Text>
+            </TouchableOpacity>
+          </View>
+          {idError !== '' && <Text style={styles.errorText}>{idError}</Text>}
+
+          {/* 비밀번호 영역 */}
+          <Text style={styles.middleText}>비밀번호</Text>
           <TextInput 
-            style={styles.inputFlex} 
-            placeholder="아이디를 입력하세요" 
+            style={styles.input} 
+            placeholder="영문+숫자 포함 6자 이상" 
             placeholderTextColor="#ffffff80"
-            value={id}
+            secureTextEntry={true}
+            textContentType="oneTimeCode" // iOS 자동 암호 제안 방지
+            autoComplete="off"
+            value={password}
             onChangeText={(text) => {
-              setId(text);
-              setIdError(''); // 글자를 다시 치면 에러 숨김
+              setPassword(text);
+              setPasswordError('');
             }}
           />
-          <TouchableOpacity style={styles.duplicateCheckButton}>
-            <Text style={styles.duplicateCheckText}>중복확인</Text>
+          {passwordError !== '' && <Text style={styles.errorText}>{passwordError}</Text>}
+
+          <Text style={styles.middleText}>비밀번호 재입력</Text>
+          <TextInput 
+            style={styles.input} 
+            placeholder="비밀번호를 다시 입력하세요" 
+            placeholderTextColor="#ffffff80"
+            secureTextEntry={true}
+            textContentType="oneTimeCode" // iOS 자동 암호 제안 방지
+            value={passwordConfirm}
+            onChangeText={(text) => {
+              setPasswordConfirm(text);
+              setPasswordConfirmError('');
+            }}
+          />
+          {passwordConfirmError !== '' && <Text style={styles.errorText}>{passwordConfirmError}</Text>}
+          
+          {/* 사용자 정보 영역 */}
+          <Text style={styles.middleText}>이름</Text>
+          <TextInput 
+            style={styles.input} 
+            placeholder="이름을 입력하세요" 
+            placeholderTextColor="#ffffff80"
+            value={name}
+            onChangeText={setName}
+          />
+          
+          <Text style={styles.middleText}>이메일</Text>
+          <TextInput 
+            style={styles.input} 
+            placeholder="example@email.com" 
+            placeholderTextColor="#ffffff80"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            value={email}
+            onChangeText={(text) => {
+              setEmail(text);
+              setEmailError('');
+            }}
+          />
+          {emailError !== '' && <Text style={styles.errorText}>{emailError}</Text>}
+          
+          <Text style={styles.middleText}>전화번호</Text>
+          <TextInput 
+            style={styles.input} 
+            placeholder="010-0000-0000" 
+            placeholderTextColor="#ffffff80"
+            keyboardType="phone-pad"
+            maxLength={13}
+            value={phone}
+            onChangeText={formatPhone}
+          />
+          {phoneError !== '' && <Text style={styles.errorText}>{phoneError}</Text>}
+
+          <TouchableOpacity onPress={handleSignup} style={styles.button}>
+            <Text style={styles.buttonText}>가입 완료</Text>
           </TouchableOpacity>
         </View>
-        {/* 아이디 에러 메시지 */}
-        {idError !== '' && <Text style={styles.errorText}>{idError}</Text>}
-
-        <Text style={styles.middleText}>비밀번호</Text>
-        <TextInput 
-          style={styles.input} 
-          placeholder="비밀번호를 입력하세요" 
-          placeholderTextColor="#ffffff80"
-          secureTextEntry={true}
-          value={password}
-          onChangeText={(text) => {
-            setPassword(text);
-            setPasswordError('');
-          }}
-        />
-        {/* 비밀번호 에러 메시지 */}
-        {passwordError !== '' && <Text style={styles.errorText}>{passwordError}</Text>}
-
-        <Text style={styles.middleText}>비밀번호 재입력</Text>
-        <TextInput 
-          style={styles.input} 
-          placeholder="비밀번호를 다시 입력하세요" 
-          placeholderTextColor="#ffffff80"
-          secureTextEntry={true}
-          value={passwordConfirm}
-          onChangeText={(text) => {
-            setPasswordConfirm(text);
-            setPasswordConfirmError('');
-          }}
-        />
-        {/* 비밀번호 재입력 에러 메시지 */}
-        {passwordConfirmError !== '' && <Text style={styles.errorText}>{passwordConfirmError}</Text>}
-        
-        <Text style={styles.middleText}>이름</Text>
-        <TextInput 
-          style={styles.input} 
-          placeholder="이름을 입력하세요" 
-          placeholderTextColor="#ffffff80"
-          value={name}
-          onChangeText={setName}
-        />
-        {/* 이름은 에러 화면이 없으므로 생략 */}
-        
-        <Text style={styles.middleText}>이메일</Text>
-        <TextInput 
-          style={styles.input} 
-          placeholder="이메일을 입력하세요" 
-          placeholderTextColor="#ffffff80"
-          value={email}
-          onChangeText={(text) => {
-            setEmail(text);
-            setEmailError('');
-          }}
-        />
-        {/* 이메일 에러 메시지 */}
-        {emailError !== '' && <Text style={styles.errorText}>{emailError}</Text>}
-        
-        <Text style={styles.middleText}>전화번호</Text>
-        <TextInput 
-          style={styles.input} 
-          placeholder="전화번호를 입력하세요" 
-          placeholderTextColor="#ffffff80"
-          value={phone}
-          onChangeText={(text) => {
-            setPhone(text);
-            setPhoneError('');
-          }}
-        />
-        {/* 전화번호 에러 메시지 */}
-        {phoneError !== '' && <Text style={styles.errorText}>{phoneError}</Text>}
-
-        {/* 찐 회원가입 진행 버튼 */}
-        <TouchableOpacity onPress={() => navigation.navigate('PersonalInfo')} style={styles.button}>
-          <Text style={styles.buttonText}>다음으로</Text>
-        </TouchableOpacity>
-
-        {/* 테스트용 버튼 (나중에 지우시면 됩니다) */}
-        <TouchableOpacity style={[styles.button, { backgroundColor: '#333', marginTop: 10 }]} onPress={handleTestButton}>
-          <Text style={[styles.buttonText, { color: '#fff' }]}>[테스트] 에러 메시지 띄우기</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
-// 화면을 예쁘게 꾸미는 설정 (Style)
 const styles = StyleSheet.create({
   background: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#1A1A1A',
-    padding: 20,
+    paddingVertical: 50,
+    paddingHorizontal: 20,
   },
   container: {
     width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
     backgroundColor: '#212121',
     padding: 20,
     borderRadius: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
   },
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    marginBottom: 10,
+    marginBottom: 20,
     color: '#ffffff',
+    textAlign: 'center',
   },
   middleText: {
     color: '#ffffff',
     fontSize: 14,
     alignSelf: 'flex-start',
-    marginBottom: 10,
+    marginBottom: 8,
     marginLeft: 5,
+    marginTop: 10,
   },
-  // 기본 입력창 스타일
   input: {
     width: '100%',
     height: 50,
@@ -174,22 +283,21 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     borderRadius: 10,
     paddingHorizontal: 15,
-    marginBottom: 10,
+    marginBottom: 5,
   },
-  // 👇 아이디 입력창 전용 스타일 (중복확인 버튼 포함)
   inputRow: {
-    flexDirection: 'row', // 가로로 배치
+    flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
     height: 50,
     borderWidth: 1,
     borderColor: '#A1BE44',
     borderRadius: 10,
-    marginBottom: 10,
-    paddingRight: 5, // 버튼이 들어갈 오른쪽 여백 확보
+    marginBottom: 5,
+    paddingRight: 5,
   },
   inputFlex: {
-    flex: 1, // 남은 공간을 입력창이 모두 차지하게 함
+    flex: 1,
     height: '100%',
     color: '#ffffff',
     paddingHorizontal: 15,
@@ -205,23 +313,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
-  // 에러 메시지 글씨 스타일
   errorText: {
     color: '#ff4d4d', 
     fontSize: 12,
     alignSelf: 'flex-start',
     marginLeft: 5,
-    marginTop: -5,    
     marginBottom: 10, 
   },
   button: {
     width: '100%',
-    height: 50,
+    height: 55,
     backgroundColor: '#A1BE44',
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 10,
-    marginTop: 20,
+    marginTop: 30,
   },
   buttonText: {
     color: '#000000',
