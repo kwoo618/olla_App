@@ -2,18 +2,14 @@ import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-// 💡 홈에서 보낸 정보(route)를 받아올 수 있도록 파라미터 추가
 const RecodeScreen = ({ route, navigation }: any) => {
-  
-  // 💡 넘어온 데이터(openSection)가 있다면 처음부터 그 섹션을 열어둡니다!
-  const [expandedSection, setExpandedSection] = useState<string | null>(route.params?.openSection || null);
+  const [expandedSection, setExpandedSection] = useState<string | null>(route?.params?.openSection || null);
 
-  // 화면이 이미 열려있을 때 홈에서 다시 넘어오는 경우를 대비한 동기화
   useEffect(() => {
-    if (route.params?.openSection) {
+    if (route?.params?.openSection) {
       setExpandedSection(route.params.openSection);
     }
-  }, [route.params?.openSection]);
+  }, [route?.params?.openSection]);
 
   const toggleSection = (section: string) => {
     setExpandedSection(expandedSection === section ? null : section);
@@ -42,8 +38,28 @@ const RecodeScreen = ({ route, navigation }: any) => {
     { id: 1, colors: ['#EAEAEA', '#F4D03F', '#58D68D', '#5DADE2'] },
   ]);
 
-  const deleteConsecutiveRecord = (id: number) => {
-    setConsecutiveData(consecutiveData.filter(item => item.id !== id));
+  const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<{ id: number, type: 'endurance' | 'consecutive' } | null>(null);
+
+  const confirmDelete = (type: 'endurance' | 'consecutive', id: number) => {
+    setItemToDelete({ id, type });
+    setDeleteModalVisible(true);
+  };
+
+  const executeDelete = () => {
+    if (!itemToDelete) return;
+    if (itemToDelete.type === 'endurance') {
+      setEnduranceData(enduranceData.filter(item => item.id !== itemToDelete.id));
+    } else if (itemToDelete.type === 'consecutive') {
+      setConsecutiveData(consecutiveData.filter(item => item.id !== itemToDelete.id));
+    }
+    setDeleteModalVisible(false);
+    setItemToDelete(null);
+  };
+
+  const cancelDelete = () => {
+    setDeleteModalVisible(false);
+    setItemToDelete(null);
   };
 
   // --- 초보벽 기록 저장 팝업 ---
@@ -83,12 +99,15 @@ const RecodeScreen = ({ route, navigation }: any) => {
 
   const [enduranceLaps, setEnduranceLaps] = useState<number>(0);
   const [selectedMapNode, setSelectedMapNode] = useState<string | null>(null);
-  const [enduranceTime, setEnduranceTime] = useState<string>('00:00');
+  
+  const [enduranceMin, setEnduranceMin] = useState<string>('');
+  const [enduranceSec, setEnduranceSec] = useState<string>('');
+  const secInputRef = useRef<TextInput>(null);
 
   const [isTimerModalVisible, setTimerModalVisible] = useState(false);
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(0);
-  const timerRef = useRef<any>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const openEnduranceModal = () => {
     setEnduranceModalVisible(true);
@@ -97,13 +116,28 @@ const RecodeScreen = ({ route, navigation }: any) => {
   const closeEnduranceModal = () => {
     Animated.timing(enduranceSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => {
       setEnduranceModalVisible(false);
-      setEnduranceLaps(0); setSelectedMapNode(null); setEnduranceTime('00:00');
+      setEnduranceLaps(0); setSelectedMapNode(null); 
+      setEnduranceMin(''); setEnduranceSec('');
     });
   };
 
+  // 💡 지구력 기록 저장 (홀수/짝수 판별하여 화살표 적용)
   const handleSaveEnduranceRecord = () => {
     if (!selectedMapNode) return;
-    const newRecord = { id: Date.now(), type: '편도', arrow: '->', laps: String(enduranceLaps), time: enduranceTime, section: selectedMapNode };
+    const finalMin = enduranceMin.padStart(2, '0') || '00';
+    const finalSec = enduranceSec.padStart(2, '0') || '00';
+
+    // 💡 홀수 바퀴는 오른쪽(->), 짝수 바퀴는 왼쪽(<-) 화살표를 적용합니다!
+    const directionArrow = enduranceLaps % 2 !== 0 ? '->' : '<-';
+
+    const newRecord = { 
+      id: Date.now(), 
+      type: '편도', 
+      arrow: directionArrow, 
+      laps: String(enduranceLaps), 
+      time: `${finalMin}:${finalSec}`, 
+      section: selectedMapNode 
+    };
     setEnduranceData([...enduranceData, newRecord]);
     closeEnduranceModal();
   };
@@ -127,7 +161,12 @@ const RecodeScreen = ({ route, navigation }: any) => {
   const stopTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     setTimerRunning(false);
-    setEnduranceTime(formatTime(timerSeconds));
+    
+    const formatted = formatTime(timerSeconds);
+    const [m, s] = formatted.split(':');
+    setEnduranceMin(m);
+    setEnduranceSec(s);
+
     setTimerModalVisible(false);
   };
 
@@ -200,7 +239,6 @@ const RecodeScreen = ({ route, navigation }: any) => {
   // --- 초보벽 완등 연속 기록 팝업 State ---
   const [isConsecutiveModalVisible, setConsecutiveModalVisible] = useState(false);
   const consecutiveSlideAnim = useRef(new Animated.Value(800)).current;
-  
   const [selectedConsecutiveList, setSelectedConsecutiveList] = useState<any[]>([]);
   const [showDetails, setShowDetails] = useState(false); 
 
@@ -240,7 +278,7 @@ const RecodeScreen = ({ route, navigation }: any) => {
         <View style={styles.summaryContainer}>
           <TouchableOpacity style={styles.summaryItemVertical} onPress={openRecordModal} activeOpacity={0.8}>
             <View style={styles.summaryLeft}>
-              <Image source={require('./assets/ArrowUpRight.png')} style={styles.summaryIconVertical} />
+              <Image source={require('./assets/ArrowUpRight.png')} style={styles.summaryIconVertical1} />
               <View style={styles.summaryTextColumn}>
                 <Text style={styles.summaryLabelVertical}>초보벽</Text>
                 <Text style={styles.summarySubLabelVertical}>난이도별 등반 기록 (터치하여 기록하기)</Text>
@@ -251,7 +289,7 @@ const RecodeScreen = ({ route, navigation }: any) => {
 
           <TouchableOpacity style={styles.summaryItemVertical} onPress={openEnduranceModal} activeOpacity={0.8}>
             <View style={styles.summaryLeft}>
-              <Image source={require('./assets/Timer.png')} style={styles.summaryIconVertical} />
+              <Image source={require('./assets/Timer.png')} style={styles.summaryIconVertical2} />
               <View style={styles.summaryTextColumn}>
                 <Text style={styles.summaryLabelVertical}>지구력</Text>
                 <Text style={styles.summarySubLabelVertical}>바퀴 수와 시간 기록 (터치하여 기록하기)</Text>
@@ -262,7 +300,7 @@ const RecodeScreen = ({ route, navigation }: any) => {
 
           <TouchableOpacity style={styles.summaryItemVertical} onPress={openConsecutiveModal} activeOpacity={0.8}>
             <View style={styles.summaryLeft}>
-              <Image source={require('./assets/ArrowsClockwise.png')} style={styles.summaryIconVertical} />
+              <Image source={require('./assets/ArrowsClockwise.png')} style={styles.summaryIconVertical3} />
               <View style={styles.summaryTextColumn}>
                 <Text style={styles.summaryLabelVertical}>초보벽 완등 연속</Text>
                 <Text style={styles.summarySubLabelVertical}>연속 완등 기록 (터치하여 기록하기)</Text>
@@ -315,7 +353,8 @@ const RecodeScreen = ({ route, navigation }: any) => {
                     <View style={styles.enduranceCol}><Text style={styles.enduranceTopText}>{item.time}</Text><Text style={styles.enduranceBottomText}>시간</Text></View>
                     <View style={styles.verticalDivider} />
                     <View style={styles.enduranceCol}><Text style={styles.enduranceTopText}>{item.section}</Text><Text style={styles.enduranceBottomText}>구간</Text></View>
-                    <TouchableOpacity style={styles.trashButton} onPress={() => deleteEnduranceRecord(item.id)}>
+                    
+                    <TouchableOpacity style={styles.trashButton} onPress={() => confirmDelete('endurance', item.id)}>
                       <Image source={require('./assets/trash.png')} style={styles.trashIcon} />
                     </TouchableOpacity>
                   </View>
@@ -340,7 +379,8 @@ const RecodeScreen = ({ route, navigation }: any) => {
                     <View style={styles.circleContainer}>
                       {item.colors.map((color, index) => (<View key={index} style={[styles.colorCircle, { backgroundColor: color }]} />))}
                     </View>
-                    <TouchableOpacity style={styles.trashButton} onPress={() => deleteConsecutiveRecord(item.id)}>
+                    
+                    <TouchableOpacity style={styles.trashButton} onPress={() => confirmDelete('consecutive', item.id)}>
                       <Image source={require('./assets/trash.png')} style={styles.trashIcon} />
                     </TouchableOpacity>
                   </View>
@@ -352,29 +392,31 @@ const RecodeScreen = ({ route, navigation }: any) => {
 
       </ScrollView>
 
-      {/* 하단 네비게이션: '기록' 아이콘만 밝고 나머지는 어둡게 처리 */}
+      {/* 하단 네비게이션 */}
       <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigation.navigate('Home')}>
-          <Image source={require('./assets/Home.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
-          <Text style={styles.bottomNavText}>홈</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem}>
-          <Image source={require('./assets/recode.png')} style={styles.navIcon} />
-          <Text style={styles.bottomNavTextActive}>기록</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem}>
-          <Image source={require('./assets/ranking.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
-          <Text style={styles.bottomNavText}>랭킹</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem}>
-          <Image source={require('./assets/community.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
-          <Text style={styles.bottomNavText}>커뮤니티</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem}>
-          <Image source={require('./assets/mypage.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
-          <Text style={styles.bottomNavText}>마이페이지</Text>
-        </TouchableOpacity>
+        <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigation.navigate('Home')}><Image source={require('./assets/Home.png')} style={[styles.navIcon, { opacity: 0.4 }]} /><Text style={styles.bottomNavText}>홈</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.bottomNavItem}><Image source={require('./assets/recode.png')} style={styles.navIcon} /><Text style={styles.bottomNavTextActive}>기록</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.bottomNavItem}><Image source={require('./assets/ranking.png')} style={[styles.navIcon, { opacity: 0.4 }]} /><Text style={styles.bottomNavText}>랭킹</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.bottomNavItem}><Image source={require('./assets/community.png')} style={[styles.navIcon, { opacity: 0.4 }]} /><Text style={styles.bottomNavText}>커뮤니티</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.bottomNavItem}><Image source={require('./assets/mypage.png')} style={[styles.navIcon, { opacity: 0.4 }]} /><Text style={styles.bottomNavText}>마이페이지</Text></TouchableOpacity>
       </View>
+
+      {/* 삭제 확인 팝업 */}
+      <Modal visible={isDeleteModalVisible} animationType="fade" transparent={true} onRequestClose={cancelDelete}>
+        <View style={styles.deleteModalOverlay}>
+          <View style={styles.deleteModalBox}>
+            <Text style={styles.deleteModalText}>삭제하시겠습니까?</Text>
+            <View style={styles.deleteBtnRow}>
+              <TouchableOpacity style={styles.deleteBtnYes} onPress={executeDelete}>
+                <Text style={styles.deleteBtnYesText}>예</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.deleteBtnNo} onPress={cancelDelete}>
+                <Text style={styles.deleteBtnNoText}>아니오</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* 초보벽 팝업 */}
       <Modal visible={isRecordModalVisible} animationType="fade" transparent={true} onRequestClose={closeRecordModal}>
@@ -514,15 +556,39 @@ const RecodeScreen = ({ route, navigation }: any) => {
                   <TouchableOpacity onPress={openTimerModal} style={styles.timerPlayBtn}>
                     <Text style={styles.timerPlayIcon}>▶</Text>
                   </TouchableOpacity>
+                  
                   <View style={styles.timerTextInputWrapper}>
                     <TextInput
                       style={styles.timerTextInput}
-                      value={enduranceTime}
-                      onChangeText={setEnduranceTime}
-                      placeholder="00:00"
+                      value={enduranceMin}
+                      onChangeText={(text) => {
+                        const numeric = text.replace(/[^0-9]/g, '');
+                        setEnduranceMin(numeric);
+                        if (numeric.length >= 2) {
+                          secInputRef.current?.focus();
+                        }
+                      }}
+                      placeholder="00"
                       placeholderTextColor="#666666"
+                      keyboardType="numeric"
+                      maxLength={2}
                     />
-                    <Text style={styles.timerLabel}>시간</Text>
+                    <Text style={styles.timerLabel}>분</Text>
+
+                    <TextInput
+                      ref={secInputRef}
+                      style={[styles.timerTextInput, { marginLeft: 5 }]}
+                      value={enduranceSec}
+                      onChangeText={(text) => {
+                        const numeric = text.replace(/[^0-9]/g, '');
+                        setEnduranceSec(numeric);
+                      }}
+                      placeholder="00"
+                      placeholderTextColor="#666666"
+                      keyboardType="numeric"
+                      maxLength={2}
+                    />
+                    <Text style={styles.timerLabel}>초</Text>
                   </View>
                 </View>
 
@@ -536,7 +602,7 @@ const RecodeScreen = ({ route, navigation }: any) => {
         </TouchableOpacity>
       </Modal>
 
-      {/* 💡 초보벽 완등 연속 기록 팝업 */}
+      {/* 초보벽 완등 연속 기록 팝업 */}
       <Modal visible={isConsecutiveModalVisible} animationType="fade" transparent={true} onRequestClose={closeConsecutiveModal}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeConsecutiveModal}>
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: consecutiveSlideAnim }] }]}>
@@ -552,7 +618,6 @@ const RecodeScreen = ({ route, navigation }: any) => {
             <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%' }}>
               <TouchableOpacity activeOpacity={1} style={{ width: '100%', paddingBottom: 20 }}>
                 
-                {/* 1. 난이도 입력 영역 */}
                 <Text style={styles.sectionTitle}>난이도 입력</Text>
                 
                 <View style={styles.consecutiveInputBox}>
@@ -580,10 +645,8 @@ const RecodeScreen = ({ route, navigation }: any) => {
                   </View>
                 </View>
 
-                {/* 2. 회색 가로 구분선 */}
                 <View style={styles.horizontalDivider} />
 
-                {/* 3. 총 점 및 상세보기 */}
                 <View style={styles.scoreHeaderRow}>
                   <Text style={styles.scoreTitle}>총 점</Text>
                   <TouchableOpacity style={styles.detailButton} onPress={() => setShowDetails(!showDetails)}>
@@ -593,7 +656,6 @@ const RecodeScreen = ({ route, navigation }: any) => {
 
                 <Text style={styles.totalScoreText}>{totalConsecutiveScore} 점</Text>
 
-                {/* 상세보기 열릴 때 나오는 상세 점수 박스 */}
                 {showDetails && (
                   <View style={[styles.consecutiveInputBox, { marginTop: 15 }]}>
                     {selectedConsecutiveList.map((item, index) => (
@@ -607,7 +669,6 @@ const RecodeScreen = ({ route, navigation }: any) => {
                   </View>
                 )}
 
-                {/* 4. 기록 저장하기 */}
                 <TouchableOpacity style={styles.saveRecordButton} onPress={handleSaveConsecutiveRecord}>
                   <Text style={styles.saveRecordButtonText}>기록 저장하기</Text>
                 </TouchableOpacity>
@@ -655,7 +716,9 @@ const styles = StyleSheet.create({
   summaryContainer: { marginBottom: 15 },
   summaryItemVertical: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#2A2A2A', borderRadius: 16, paddingVertical: 20, paddingHorizontal: 20, marginBottom: 12 },
   summaryLeft: { flexDirection: 'row', alignItems: 'center' },
-  summaryIconVertical: { width: 32, height: 32, tintColor: '#A1BE44', marginRight: 15 },
+  summaryIconVertical1: { width: 32, height: 32, tintColor: '#0084FF', marginRight: 15 },
+  summaryIconVertical2: { width: 32, height: 32, tintColor: '#2CDA00', marginRight: 15 },
+  summaryIconVertical3: { width: 32, height: 32, tintColor: '#FFCC00', marginRight: 15 },
   summaryTextColumn: { flexDirection: 'column', justifyContent: 'center' },
   summaryLabelVertical: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
   summarySubLabelVertical: { color: '#999999', fontSize: 13, fontWeight: '500', marginTop: 4 },
@@ -737,12 +800,13 @@ const styles = StyleSheet.create({
   selectedSectionBox: { backgroundColor: '#2A2A2A', padding: 15, borderRadius: 12, alignItems: 'center', marginBottom: 10 },
   selectedSectionText: { color: '#A1BE44', fontSize: 16, fontWeight: 'bold' },
 
+  // 💡 분, 초 입력창 스타일
   timerInputRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   timerPlayBtn: { width: 45, height: 45, backgroundColor: '#333333', borderRadius: 22.5, alignItems: 'center', justifyContent: 'center', marginRight: 15 },
   timerPlayIcon: { color: '#A1BE44', fontSize: 18, marginLeft: 4 },
   timerTextInputWrapper: { flexDirection: 'row', alignItems: 'flex-end', borderBottomWidth: 2, borderBottomColor: '#A1BE44', paddingBottom: 5 },
-  timerTextInput: { color: '#ffffff', fontSize: 24, fontWeight: 'bold', padding: 0, minWidth: 80, textAlign: 'center' },
-  timerLabel: { color: '#999999', fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
+  timerTextInput: { color: '#ffffff', fontSize: 24, fontWeight: 'bold', padding: 0, minWidth: 40, textAlign: 'center' },
+  timerLabel: { color: '#999999', fontSize: 16, fontWeight: 'bold', marginBottom: 4, marginRight: 8 },
 
   timerModalBackground: { flex: 1, backgroundColor: '#1A1A1A', padding: 20 },
   timerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20 },
@@ -753,9 +817,6 @@ const styles = StyleSheet.create({
   timerCircleBtn: { width: 100, height: 100, borderRadius: 50, justifyContent: 'center', alignItems: 'center' },
   timerCircleBtnText: { color: '#1A1A1A', fontSize: 18, fontWeight: 'bold' },
 
-  // =====================================
-  // 💡 초보벽 연속 기록 팝업 전용 스타일
-  // =====================================
   consecutiveInputBox: {
     backgroundColor: '#111111', 
     minHeight: 60,
@@ -820,6 +881,57 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: 'bold',
     marginBottom: 10,
+  },
+
+  deleteModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteModalBox: {
+    width: 300,
+    backgroundColor: '#212121', 
+    borderRadius: 16,
+    padding: 25,
+    alignItems: 'center',
+  },
+  deleteModalText: {
+    color: '#ffffff', 
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 25,
+  },
+  deleteBtnRow: {
+    flexDirection: 'row',
+    width: '100%',
+    justifyContent: 'space-between',
+  },
+  deleteBtnYes: {
+    flex: 1,
+    backgroundColor: '#A1BE44', 
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginRight: 5,
+  },
+  deleteBtnYesText: {
+    color: '#ffffff', 
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  deleteBtnNo: {
+    flex: 1,
+    backgroundColor: '#262626', 
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginLeft: 5,
+  },
+  deleteBtnNoText: {
+    color: '#ffffff', 
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 
