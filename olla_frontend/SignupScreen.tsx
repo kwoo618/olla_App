@@ -99,7 +99,7 @@ const checkDuplicateId = async () => {
     }
 
     try {
-      const response = await axios.post('http://172.29.151.129:8080/api/v1/auth/signup', {
+      const response = await axios.post('http://192.168.0.8:8080/api/v1/auth/signup', {
         loginId: id,
         password: password,
         name: name,

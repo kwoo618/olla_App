@@ -1,20 +1,13 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const HomeScreen = ({ navigation }: any) => {
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // --- 팝업 관련 State ---
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const slideAnim = useRef(new Animated.Value(500)).current;
 
-  // --- 💡 달력 관련 State ---
-  const today = new Date(); // 진짜 오늘 날짜 (기준점)
-  const [viewDate, setViewDate] = useState(new Date()); // 현재 달력에 보여지는 년/월
-  const [selectedFullDate, setSelectedFullDate] = useState(new Date()); // 선택된 날짜 (초록색 원)
-
-  // 팝업 함수들
   const openModal = (type: string) => {
     setActiveModal(type); 
     setTimeout(() => {
@@ -35,38 +28,33 @@ const HomeScreen = ({ navigation }: any) => {
     else if (title === '이번달 방문') scrollViewRef.current?.scrollToEnd({ animated: true });
   };
 
-  // --- 💡 달력 조작 함수 ---
+  // 달력 관련
+  const today = new Date();
+  const [viewDate, setViewDate] = useState(new Date());
+  const [selectedFullDate, setSelectedFullDate] = useState(new Date());
+
   const changeMonth = (offset: number) => {
     const newDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + offset, 1);
-    const newYear = newDate.getFullYear();
-    // 2020년 ~ 2120년 제한
-    if (newYear >= 2020 && newYear <= 2120) {
-      setViewDate(newDate);
-    }
+    if (newDate.getFullYear() >= 2020 && newDate.getFullYear() <= 2120) setViewDate(newDate);
   };
 
   const onDateClick = (day: number) => {
-    // 선택한 년, 월, 일을 결합한 새로운 Date 객체 저장
     const newSelected = new Date(viewDate.getFullYear(), viewDate.getMonth(), day);
     setSelectedFullDate(newSelected);
     handlePopupPress(`${day}일`);
   };
 
-  // --- 달력 데이터 계산 ---
   const currentYear = viewDate.getFullYear();
   const currentMonth = viewDate.getMonth();
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
-
   const days = [];
   for (let i = 0; i < firstDayOfMonth; i++) days.push(null);
   for (let i = 1; i <= daysInMonth; i++) days.push(i);
-
   const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
 
   return (
     <SafeAreaView style={styles.background}>
-      
       <View style={styles.topNav}>
         <Text style={styles.logoText}>olla</Text>
         <TouchableOpacity onPress={() => handlePopupPress('알림')}>
@@ -90,9 +78,7 @@ const HomeScreen = ({ navigation }: any) => {
             </TouchableOpacity>
             
             <TouchableOpacity style={styles.UserCardCentered} onPress={() => handlePopupPress('회원권')}>
-              <View style={styles.circleGraphDummy}>
-                <Text style={styles.circleGraphText}>D-15</Text>
-              </View>
+              <View style={styles.circleGraphDummy}><Text style={styles.circleGraphText}>D-15</Text></View>
               <Text style={styles.cardTitleCentered}>내 회원권</Text>
             </TouchableOpacity>
           </View>
@@ -103,69 +89,44 @@ const HomeScreen = ({ navigation }: any) => {
               <Text style={styles.microValue}>12<Text style={styles.microUnit}>회</Text></Text>
             </TouchableOpacity>
             <View style={styles.verticalDivider} />
-            <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => handlePopupPress('초보벽 최고 난이도')}>
+            
+            {/* 💡 초보벽 난이도 클릭 시 기록창(Recode)으로 이동하면서 'difficulty' 아코디언을 열라고 파라미터 전달! */}
+            <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => navigation.navigate('Recode', { openSection: 'difficulty' })}>
               <Text style={styles.microSubTitle}>초보벽 난이도</Text>
               <Text style={[styles.microValuecolor, { color: '#000000' }]}>검정</Text>
-              <Text style={[styles.microUnit, { color: '#ff0404' }]}>편도 <Text style={[styles.microUnit, { color: '#999999' }]}> 진행중</Text></Text>
+              <Text style={[styles.microUnit, { color: '#ff0404' }]}>편도  <Text style={[styles.microUnit, { color: '#999999' }]}>  진행중</Text></Text>
             </TouchableOpacity>
             <View style={styles.verticalDivider} />
+
             <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => handlePopupPress('지구력 랭킹')}>
               <Text style={styles.microSubTitle}>지구력 랭킹</Text>
               <Text style={styles.microValue}>15<Text style={styles.microUnit}>위</Text></Text>
             </TouchableOpacity>
             <View style={styles.verticalDivider} />
-            <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => handlePopupPress('지구력 최고기록')}>
+
+            {/* 💡 지구력 기록 클릭 시 기록창(Recode)으로 이동하면서 'endurance' 아코디언을 열라고 파라미터 전달! */}
+            <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => navigation.navigate('Recode', { openSection: 'endurance' })}>
               <Text style={styles.microSubTitle}>지구력 기록</Text>
               <Text style={styles.microValue}>8<Text style={styles.microUnit}>분</Text>30<Text style={styles.microUnit}>초</Text></Text>
             </TouchableOpacity>
           </View>
 
-          {/* 💡 업그레이드된 달력 영역 */}
+          {/* 달력 영역 */}
           <View style={styles.calendarCard}>
             <View style={styles.calendarHeader}>
-              <TouchableOpacity onPress={() => changeMonth(-1)} style={styles.monthArrow}>
-                <Text style={styles.arrowText}>{"<"}</Text>
-              </TouchableOpacity>
+              <TouchableOpacity onPress={() => changeMonth(-1)} style={styles.monthArrow}><Text style={styles.arrowText}>{"<"}</Text></TouchableOpacity>
               <Text style={styles.calendarMonthText}>{currentYear}년 {currentMonth + 1}월</Text>
-              <TouchableOpacity onPress={() => changeMonth(1)} style={styles.monthArrow}>
-                <Text style={styles.arrowText}>{">"}</Text>
-              </TouchableOpacity>
+              <TouchableOpacity onPress={() => changeMonth(1)} style={styles.monthArrow}><Text style={styles.arrowText}>{">"}</Text></TouchableOpacity>
             </View>
-
             <View style={styles.weekRow}>
-              {weekDays.map((day, index) => (
-                <Text key={index} style={[styles.weekDayText, index === 0 && { color: '#FF6B6B' }]}>
-                  {day}
-                </Text>
-              ))}
+              {weekDays.map((day, index) => (<Text key={index} style={[styles.weekDayText, index === 0 && { color: '#FF6B6B' }]}>{day}</Text>))}
             </View>
-
             <View style={styles.daysGrid}>
               {days.map((day, index) => {
-                // 현재 날짜가 선택된 날짜와 같은지 체크
-                const isSelected = day !== null && 
-                  selectedFullDate.getDate() === day &&
-                  selectedFullDate.getMonth() === currentMonth &&
-                  selectedFullDate.getFullYear() === currentYear;
-
+                const isSelected = day !== null && selectedFullDate.getDate() === day && selectedFullDate.getMonth() === currentMonth && selectedFullDate.getFullYear() === currentYear;
                 return (
-                  <TouchableOpacity 
-                    key={index} 
-                    style={styles.dayCell} 
-                    disabled={!day} 
-                    onPress={() => day && onDateClick(day)}
-                  >
-                    {day ? (
-                      <View style={[styles.dayCircle, isSelected && styles.todayCircle]}>
-                        <Text style={[
-                          styles.dayText, 
-                          isSelected && styles.todayText, 
-                          index % 7 === 0 && styles.sundayText
-                        ]}>
-                          {day}
-                        </Text>
-                      </View>
-                    ) : null}
+                  <TouchableOpacity key={index} style={styles.dayCell} disabled={!day} onPress={() => day && onDateClick(day)}>
+                    {day ? (<View style={[styles.dayCircle, isSelected && styles.todayCircle]}><Text style={[styles.dayText, isSelected && styles.todayText, index % 7 === 0 && styles.sundayText]}>{day}</Text></View>) : null}
                   </TouchableOpacity>
                 );
               })}
@@ -175,15 +136,30 @@ const HomeScreen = ({ navigation }: any) => {
         </View>
       </ScrollView>
 
+      {/* 💡 하단 네비게이션: '홈'은 밝게(opacity 1), 나머지는 모두 어둡게(opacity: 0.4) 통일 */}
       <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.bottomNavItem}><Image source={require('./assets/Home.png')} style={styles.navIcon} /><Text style={styles.bottomNavTextActive}>홈</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigation.navigate('Recode')}><Image source={require('./assets/recode.png')} style={styles.navIcon} /><Text style={styles.bottomNavText}>기록</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem}><Image source={require('./assets/ranking.png')} style={styles.navIcon} /><Text style={styles.bottomNavText}>랭킹</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem}><Image source={require('./assets/community.png')} style={styles.navIcon} /><Text style={styles.bottomNavText}>커뮤니티</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem}><Image source={require('./assets/mypage.png')} style={styles.navIcon} /><Text style={styles.bottomNavText}>마이페이지</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.bottomNavItem}>
+          <Image source={require('./assets/Home.png')} style={styles.navIcon} />
+          <Text style={styles.bottomNavTextActive}>홈</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigation.navigate('Recode')}>
+          <Image source={require('./assets/recode.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
+          <Text style={styles.bottomNavText}>기록</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.bottomNavItem}>
+          <Image source={require('./assets/ranking.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
+          <Text style={styles.bottomNavText}>랭킹</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.bottomNavItem}>
+          <Image source={require('./assets/community.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
+          <Text style={styles.bottomNavText}>커뮤니티</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.bottomNavItem}>
+          <Image source={require('./assets/mypage.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
+          <Text style={styles.bottomNavText}>마이페이지</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* 팝업 모달 */}
       <Modal visible={activeModal !== null} animationType="fade" transparent={true} onRequestClose={closeModal}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeModal}>
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: slideAnim }] }]}>
@@ -201,25 +177,13 @@ const HomeScreen = ({ navigation }: any) => {
               ) : (
                 <View style={styles.membershipContainer}>
                   <View style={styles.memCard}>
-                    <View style={styles.memCardHeader}>
-                      <Text style={styles.memCardTitle}>남은 이용 기간</Text>
-                      <Text style={styles.memCardBadge}>1개월권</Text>
-                    </View>
+                    <View style={styles.memCardHeader}><Text style={styles.memCardTitle}>남은 이용 기간</Text><Text style={styles.memCardBadge}>1개월권</Text></View>
                     <View style={styles.progressBarBg}><View style={styles.progressBarFill} /></View>
-                    <View style={styles.memCardDates}>
-                      <Text style={styles.memDateText}>2026-02-01</Text>
-                      <Text style={styles.memDateText}>2026-04-01</Text>
-                    </View>
+                    <View style={styles.memCardDates}><Text style={styles.memDateText}>2026-02-01</Text><Text style={styles.memDateText}>2026-04-01</Text></View>
                   </View>
                   <View style={styles.memRow}>
-                    <View style={styles.memHalfCard}>
-                      <Text style={styles.memHalfTitle}>남은 기간</Text>
-                      <Text style={styles.memHalfValueGreen}>15일</Text>
-                    </View>
-                    <View style={styles.memHalfCard}>
-                      <Text style={styles.memHalfTitle}>최근 이용</Text>
-                      <Text style={styles.memHalfValueWhite}>3월 17일</Text>
-                    </View>
+                    <View style={styles.memHalfCard}><Text style={styles.memHalfTitle}>남은 기간</Text><Text style={styles.memHalfValueGreen}>15일</Text></View>
+                    <View style={styles.memHalfCard}><Text style={styles.memHalfTitle}>최근 이용</Text><Text style={styles.memHalfValueWhite}>3월 17일</Text></View>
                   </View>
                 </View>
               )}
@@ -232,7 +196,6 @@ const HomeScreen = ({ navigation }: any) => {
   );
 };
 
-// --- 스타일링 (추가된 부분 위주) ---
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
   topNav: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, height: 60 },
@@ -256,8 +219,6 @@ const styles = StyleSheet.create({
   microValue: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', textAlign: 'center' },
   microValuecolor: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', textAlign: 'center', textShadowColor: '#ffffff', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 15 },
   microUnit: { fontSize: 11, color: '#999999' },
-
-  // 달력 스타일
   calendarCard: { width: '100%', backgroundColor: '#2A2A2A', borderRadius: 16, padding: 20, marginBottom: 20 },
   calendarHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   monthArrow: { padding: 10 },
@@ -272,7 +233,6 @@ const styles = StyleSheet.create({
   sundayText: { color: '#FF6B6B' },
   todayCircle: { backgroundColor: '#A1BE44' },
   todayText: { color: '#1A1A1A', fontWeight: 'bold' },
-
   bottomNav: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', backgroundColor: '#111111', paddingTop: 12, paddingBottom: 25, borderTopWidth: 1, borderTopColor: '#222222' },
   bottomNavItem: { alignItems: 'center', justifyContent: 'center', flex: 1 },
   navIcon: { width: 24, height: 24, marginBottom: 4, resizeMode: 'contain' },
