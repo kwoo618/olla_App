@@ -3,6 +3,8 @@ package com.olla.olla_climbing.domain.auth.service;
 // 회원 가입 비즈니스 로직
 // 중복 검사 -> 비밀번호 암호화 -> DB 저장
 
+import lombok.*; // (동철 수정) 프론트에서 토큰정보 받아오려면 필요 (Getter, Builder)
+
 import com.olla.olla_climbing.domain.auth.dto.request.LoginRequest;
 import com.olla.olla_climbing.domain.auth.dto.request.LogoutRequest;
 import com.olla.olla_climbing.domain.auth.dto.request.SignupRequest;
@@ -20,6 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
 // @Service를 붙이지 않으면 스프링이 인식 못함(일반 자바 파일 취급) -> 의존성 주입 불가
 @Service    // 스프링이 해당 클래스를 서비스 빈으로 등록
 @RequiredArgsConstructor    // final로 선언된 필드를 매개변수로 받는 생성자를 자동 생성
+@Getter // (동철 수정) 프론트에 토큰 정보를 넘기려면 Getter 어노테이션 필요 
+@Builder // (동철 수정) 프론트에 토큰 정보를 넘기려면 Builder 어노테이션 필요
 public class AuthService {
 
     private final MemberRepository memberRepository;    // 회원 저장소
@@ -47,7 +51,7 @@ public class AuthService {
         memberRepository.save(newMember);
     }
 
-    // 로그인 비즈니스 로직 (최신 버전 하나만 남김!)
+    // 로그인 비즈니스 로직 (최신 버전 하나만 남김!) 
     @Transactional
     public TokenResponse login(LoginRequest request) {
         // 1. 회원 확인 및 비밀번호 검증

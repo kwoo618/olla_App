@@ -13,6 +13,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+
 @Configuration
 @EnableWebSecurity // "이제부터 스프링 시큐리티가 웹 보안을 담당!"라고 선언합니다.
 @RequiredArgsConstructor

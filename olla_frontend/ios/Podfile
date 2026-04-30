@@ -12,7 +12,7 @@ prepare_react_native_project!
 ENV['FORCE_XCODE_VERSION'] = '16.1' 
 
 target 'olla_react' do
-  # Xcode 16.1 체크 우회 설정
+  # Xcode 15.1 체크 우회 설정
   ENV['RCT_NO_LAUNCH_PACKAGER'] = '1'
 
   config = use_native_modules!

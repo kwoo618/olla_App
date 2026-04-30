@@ -31,6 +31,48 @@ const SignupScreen = ({ navigation }: any) => {
   // 3️⃣ 중복 확인 상태
   const [isIdChecked, setIsIdChecked] = useState(false);
 
+  // 🔐 비밀번호 유효성 검증 함수 (영문, 숫자 포함 6자 이상)
+  const validatePassword = (pw: string) => {
+    setPassword(pw);
+    const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/;
+    
+    if (!pw) {
+      setPasswordError('비밀번호를 입력해주세요.');
+    } else if (!passwordRegex.test(pw)) {
+      setPasswordError('영문+숫자 포함 6자 이상이어야 합니다.');
+    } else {
+      setPasswordError('');
+    }
+
+    // 비밀번호가 바뀔 때 재입력 칸과 다시 비교
+    if (passwordConfirm && pw !== passwordConfirm) {
+      setPasswordConfirmError('비밀번호가 일치하지 않습니다.');
+    } else if (passwordConfirm && pw === passwordConfirm) {
+      setPasswordConfirmError('');
+    }
+  };
+
+  // 🔐 비밀번호 재입력 검증 함수
+  const validatePasswordConfirm = (cf: string) => {
+    setPasswordConfirm(cf);
+    if (cf !== password) {
+      setPasswordConfirmError('비밀번호가 일치하지 않습니다.');
+    } else {
+      setPasswordConfirmError('');
+    }
+  };
+
+  // 📧 이메일 유효성 검증 함수
+  const validateEmail = (text: string) => {
+    setEmail(text);
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (text && !emailRegex.test(text)) {
+      setEmailError('올바른 이메일 형식이 아닙니다.');
+    } else {
+      setEmailError('');
+    }
+  };
+
   // 📞 전화번호 자동 하이픈 포맷터
   const formatPhone = (text: string) => {
     const cleaned = text.replace(/[^0-9]/g, '');
@@ -41,60 +83,58 @@ const SignupScreen = ({ navigation }: any) => {
       formatted = `${cleaned.slice(0, 3)}-${cleaned.slice(3, 7)}-${cleaned.slice(7, 11)}`;
     }
     setPhone(formatted);
-    if (formatted.length >= 12) setPhoneError('');
+    
+    if (cleaned.length < 10) {
+      setPhoneError('전화번호를 정확히 입력해주세요.');
+    } else {
+      setPhoneError('');
+    }
   };
 
-  // 🔍 아이디 중복 확인 연동 (백엔드 GetMapping("/check-id") 연결)
-const checkDuplicateId = async () => {
-  if (!id) {
-    setIdError('아이디를 먼저 입력해주세요.');
-    return;
-  }
-  try {
-    const response = await axios.get(`http://172.29.151.129:8080/api/v1/auth/check-id`, {
-      params: { loginId: id }
-    });
-
-    console.log("서버 전체 응답:", response.data);
-
-    // 💡 백엔드 공통 규격(ApiResponse)을 사용할 경우 데이터는 response.data.data에 들어있습니다.
-    const isDuplicate = response.data?.data?.isDuplicate ?? response.data?.isDuplicate;
-
-    if (isDuplicate === undefined) {
-      // 만약 여전히 undefined라면 데이터 구조 자체가 예상과 다른 것입니다.
-      Alert.alert('오류', '데이터 형식이 맞지 않습니다. 콘솔을 확인하세요.');
+  // 🔍 아이디 중복 확인 연동
+  const checkDuplicateId = async () => {
+    if (!id) {
+      setIdError('아이디를 먼저 입력해주세요.');
       return;
     }
+    try {
+      const response = await axios.get(`http://172.29.151.129:8080/api/v1/auth/check-id`, {
+        params: { loginId: id }
+      });
 
-    if (isDuplicate) {
+      const isDuplicate = response.data?.data?.isDuplicate ?? response.data?.isDuplicate;
+
+      if (isDuplicate) {
         setIdError('이미 사용 중인 아이디입니다.');
         setIsIdChecked(false);
-        Alert.alert('알림', '이미 사용 중인 아이디입니다.');
       } else {
         Alert.alert('확인', '사용 가능한 아이디입니다.');
         setIdError('');
         setIsIdChecked(true);
       }
     } catch (error: any) {
-      // 💡 500 에러가 나면 콘솔에 상세 내용을 찍어 원인을 파악합니다.
-      console.error("중복확인 에러 상세:", error.response?.data);
-      Alert.alert('오류', '서버 내부 오류가 발생했습니다. 백엔드 로그를 확인하세요.');
+      console.error("중복확인 에러:", error.response?.data);
+      Alert.alert('오류', '중복 확인 중 서버 오류가 발생했습니다.');
     }
   };
 
   // 🚀 회원가입 최종 제출
   const handleSignup = async () => {
-    // 필수 유효성 검사
+    // 최종 방어 로직
     if (!isIdChecked) {
       Alert.alert('알림', '아이디 중복 확인을 해주세요.');
       return;
     }
-    if (password !== passwordConfirm) {
-      setPasswordConfirmError('비밀번호가 일치하지 않습니다.');
+    if (passwordError || !password) {
+      Alert.alert('알림', '비밀번호 양식을 확인해주세요.');
       return;
     }
-    if (!name || !email || !phone) {
-      Alert.alert('알림', '모든 정보를 입력해주세요.');
+    if (password !== passwordConfirm) {
+      Alert.alert('알림', '비밀번호가 일치하지 않습니다.');
+      return;
+    }
+    if (!name || emailError || !email || phoneError || !phone) {
+      Alert.alert('알림', '모든 정보를 올바르게 입력해주세요.');
       return;
     }
 
@@ -113,22 +153,9 @@ const checkDuplicateId = async () => {
           { text: '확인', onPress: () => navigation.replace('Loading') }
         ]);
       }
-        } catch (error: any) {
-      console.error("가입 에러 상세:", error.response?.data);
-
-      // 백엔드에서 @Valid 에러가 나면 보통 error.response.data에 에러 목록이 담깁니다.
+    } catch (error: any) {
       const backendError = error.response?.data;
-      
-      let finalMessage = '입력 형식을 확인하세요.';
-
-      if (typeof backendError === 'object' && backendError.message) {
-        // 백엔드 공통 응답 규격이 있는 경우
-        finalMessage = backendError.message;
-      } else if (typeof backendError === 'string') {
-        // 문자열로 에러가 오는 경우
-        finalMessage = backendError;
-      }
-
+      const finalMessage = backendError?.message || '가입 처리 중 오류가 발생했습니다.';
       Alert.alert('가입 실패', finalMessage);
     }
   };
@@ -138,7 +165,7 @@ const checkDuplicateId = async () => {
       style={{ flex: 1 }} 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.background}>
+      <ScrollView contentContainerStyle={styles.background} keyboardShouldPersistTaps="handled">
         <View style={styles.container}>
           <Text style={styles.title}>회원가입</Text>
 
@@ -165,32 +192,26 @@ const checkDuplicateId = async () => {
           {/* 비밀번호 영역 */}
           <Text style={styles.middleText}>비밀번호</Text>
           <TextInput 
-            style={styles.input} 
+            style={[styles.input, passwordError ? styles.inputError : null]} 
             placeholder="영문+숫자 포함 6자 이상" 
             placeholderTextColor="#ffffff80"
             secureTextEntry={true}
-            textContentType="oneTimeCode" // iOS 자동 암호 제안 방지
+            textContentType="oneTimeCode"
             autoComplete="off"
             value={password}
-            onChangeText={(text) => {
-              setPassword(text);
-              setPasswordError('');
-            }}
+            onChangeText={validatePassword}
           />
           {passwordError !== '' && <Text style={styles.errorText}>{passwordError}</Text>}
 
           <Text style={styles.middleText}>비밀번호 재입력</Text>
           <TextInput 
-            style={styles.input} 
+            style={[styles.input, passwordConfirmError ? styles.inputError : null]} 
             placeholder="비밀번호를 다시 입력하세요" 
             placeholderTextColor="#ffffff80"
             secureTextEntry={true}
-            textContentType="oneTimeCode" // iOS 자동 암호 제안 방지
+            textContentType="oneTimeCode"
             value={passwordConfirm}
-            onChangeText={(text) => {
-              setPasswordConfirm(text);
-              setPasswordConfirmError('');
-            }}
+            onChangeText={validatePasswordConfirm}
           />
           {passwordConfirmError !== '' && <Text style={styles.errorText}>{passwordConfirmError}</Text>}
           
@@ -206,22 +227,19 @@ const checkDuplicateId = async () => {
           
           <Text style={styles.middleText}>이메일</Text>
           <TextInput 
-            style={styles.input} 
+            style={[styles.input, emailError ? styles.inputError : null]} 
             placeholder="example@email.com" 
             placeholderTextColor="#ffffff80"
             keyboardType="email-address"
             autoCapitalize="none"
             value={email}
-            onChangeText={(text) => {
-              setEmail(text);
-              setEmailError('');
-            }}
+            onChangeText={validateEmail}
           />
           {emailError !== '' && <Text style={styles.errorText}>{emailError}</Text>}
           
           <Text style={styles.middleText}>전화번호</Text>
           <TextInput 
-            style={styles.input} 
+            style={[styles.input, phoneError ? styles.inputError : null]} 
             placeholder="010-0000-0000" 
             placeholderTextColor="#ffffff80"
             keyboardType="phone-pad"
@@ -254,10 +272,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#212121',
     padding: 20,
     borderRadius: 25,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
     elevation: 10,
   },
   title: {
@@ -270,7 +284,6 @@ const styles = StyleSheet.create({
   middleText: {
     color: '#ffffff',
     fontSize: 14,
-    alignSelf: 'flex-start',
     marginBottom: 8,
     marginLeft: 5,
     marginTop: 10,
@@ -284,6 +297,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 15,
     marginBottom: 5,
+  },
+  inputError: {
+    borderColor: '#ff4d4d', // 에러 발생 시 테두리 색상 변경
   },
   inputRow: {
     flexDirection: 'row',
@@ -316,9 +332,8 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#ff4d4d', 
     fontSize: 12,
-    alignSelf: 'flex-start',
     marginLeft: 5,
-    marginBottom: 10, 
+    marginBottom: 5, 
   },
   button: {
     width: '100%',
