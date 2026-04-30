@@ -19,4 +19,7 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     // 페이징? Pageable 인터페이스를 사용하여 페이지 번호, 페이지 크기, 정렬 등을 지정할 수 있음
     // SQL: select * from member where name like '%?%' limit ?, ?
     Page<Member> findByNameContaining(String name, Pageable pageable);
+
+    // 전화번호로 회원 찾기 (O2O 병합용)
+    Optional<Member> findByPhone(String phone);
 }

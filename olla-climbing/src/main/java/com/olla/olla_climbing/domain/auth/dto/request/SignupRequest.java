@@ -4,9 +4,12 @@ import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.enums.Role;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+
+import java.time.LocalDate;
 
 @Getter
 @NoArgsConstructor  // 기본 생성자 자동 생성, new Member()로 텅 빈 객체를 만들지 말고, Member.builder()...build()를 통해서만 완전한 객체를 만들라는 뜻
@@ -26,9 +29,15 @@ public class SignupRequest {
     @Pattern(regexp = "^\\d{3}-\\d{3,4}-\\d{4}$", message = "전화번호는 000-0000-0000 형식이어야 합니다.")
     private String phone;
 
-    @NotBlank(message = "이메일은 필수 입력입니다.")
     @Email(message = "유효한 이메일 주소를 입력해주세요.")
     private String email;
+
+    @NotBlank(message = "성별은 필수 입력입니다.")
+    private String gender;
+
+    // 생년월일 필수 입력 (유지)
+    @NotNull(message = "생년월일은 필수 입력입니다.")
+    private LocalDate birthDate;
 
     private Role role;
 
@@ -39,8 +48,10 @@ public class SignupRequest {
                 .password(encodedPassword)
                 .name(this.name)
                 .phone(this.phone)
-                .email(this.email != null ? this.email : null)
-                .role(this.role != null ? this.role : Role.USER) // role이 null이면 기본값 USER로 설정
+                .email(this.email)
+                .gender(this.gender)
+                .birthDate(this.birthDate)
+                .role(this.role != null ? this.role : Role.USER)
                 .build();
     }
 }

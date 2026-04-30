@@ -37,6 +37,7 @@ public class Membership extends BaseTimeEntity {
     // 횟수권 전용 필드 (기간권일 경우 null 허용)
     private Integer remainingCount;
 
+    // 이용권 일시정지 필드
     private LocalDate holdStartDate;
 
     @Enumerated(EnumType.STRING)

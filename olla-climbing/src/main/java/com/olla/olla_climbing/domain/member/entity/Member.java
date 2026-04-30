@@ -6,6 +6,8 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDate;
+
 @Entity // 1. JPA에게 "이건 DB 테이블이랑 짝꿍이야"라고 알려줌
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)  // 파라미터가 없는 기본 생성자(public Member() {}), 아무나 못 쓰게 protected
@@ -16,19 +18,25 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
     @GeneratedValue(strategy = GenerationType.IDENTITY) // 5. Auto Increment (1, 2, 3... 번호 자동 증가)
     private Long id;
 
-    @Column(nullable = false, unique = true) // 6. 필수 입력(Not Null) + 중복 금지(Unique)
+    @Column(unique = true)
     private String loginId;
 
-    @Column(nullable = false)
+    @Column
     private String password;
 
     @Column(nullable = false)
     private String name;
 
-    @Column(nullable = false)
+    @Column(nullable = false, unique = true, length = 20)
     private String phone;
 
-    @Column(nullable = false) // 이메일은 필수
+    @Column(length = 10)
+    private String gender;
+
+    @Column
+    private LocalDate birthDate;
+
+    @Column
     private String email;
 
     @Enumerated(EnumType.STRING) // 7. Enum을 DB에 저장할 때 숫자가 아니라 문자("USER")로 저장해라
@@ -40,11 +48,11 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
     // 기록 공개 여부 (기본값 false)
     private boolean isRecordPublic;
 
-    // [추가] 프로필 이미지 URL 저장용 컬럼
+    // 프로필 이미지 URL 저장용 컬럼
     @Column(name = "profile_image_url", length = 1000)
     private String profileImageUrl;
 
-    // [추가] 프로필 이미지 수정 메서드 (더티 체킹용)
+    // 프로필 이미지 수정 메서드 (더티 체킹용)
     public void updateProfileImage(String profileImageUrl) {
         this.profileImageUrl = profileImageUrl;
     }
@@ -77,17 +85,31 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
         this.notificationSetting = notificationSetting;
     }
 
+    // 회원 탈퇴 여부를 나타내는 필드, 실제로 DB에서 회원 데이터를 삭제하는 대신 이 필드를 true로 바꿔서 탈퇴 처리
+    private boolean isDeleted = false; // 기본값은 false(활동 중)
+
     // 생성자 (회원가입 할 때 씀)
-    @Builder // 8. 객체를 만들 때 헷갈리지 않게 도와주는 도구
-    public Member(String loginId, String password, String name, String phone, String email, Role role) {
+    @Builder //
+    public Member(String loginId, String password, String name, String phone, String email, Role role, String gender, LocalDate birthDate) {
         this.loginId = loginId;
         this.password = password;
         this.name = name;
         this.phone = phone;
         this.email = email;
         this.role = role;
-        this.isProfilePublic = false; // 가입 시 기본 비공개
+        this.gender = gender;
+        this.birthDate = birthDate;
+        this.isProfilePublic = false;
         this.isRecordPublic = false;
+    }
+
+    public void upgradeToOnlineMember(String loginId, String encodedPassword, String email, String gender, LocalDate birthDate) {
+        this.loginId = loginId;
+        this.password = encodedPassword;
+        // 기존에 없던 부가 정보도 업데이트
+        if (email != null) this.email = email;
+        if (gender != null) this.gender = gender;
+        if (birthDate != null) this.birthDate = birthDate;
     }
 
     // 회원의 기본 정보(이름, 전화번호) 업데이트 메서드
@@ -101,9 +123,6 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
             this.phone = phone;
         }
     }
-
-    // 회원 탈퇴 여부를 나타내는 필드, 실제로 DB에서 회원 데이터를 삭제하는 대신 이 필드를 true로 바꿔서 탈퇴 처리
-    private boolean isDeleted = false; // 기본값은 false(활동 중)
 
     // 탈퇴 처리 메서드
     public void withdraw() {
