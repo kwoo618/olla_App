@@ -9,6 +9,8 @@ import PersonalScreen from './PersonalScreen';
 import LoadingScreen from './LoadingScreen';
 import HomeScreen from './HomeScreen';
 import NoticeScreen from './NoticeScreen';
+import RecodeScreen from './RecodeScreen';
+import MYScreen from './MYScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -17,13 +19,15 @@ const App = () => {
     <NavigationContainer>
       {/* initialRouteName="Login" -> 앱을 켜면 무조건 로그인 화면부터 띄움 */}
       {/* headerShown: false -> 기본으로 생기는 상단 제목 표시줄(헤더) 숨기기 */}
-      <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
+      <Stack.Navigator initialRouteName="MY" screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Signup" component={SignupScreen} />
         <Stack.Screen name="PersonalInfo" component={PersonalScreen} />
         <Stack.Screen name="Loading" component={LoadingScreen} />
         <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="Notice" component={NoticeScreen} />
+        <Stack.Screen name="Recode" component={RecodeScreen} />
+        <Stack.Screen name="MY" component={MYScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
