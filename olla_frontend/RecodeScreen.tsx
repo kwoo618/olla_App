@@ -2,7 +2,17 @@ import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const RecodeScreen = ({ route, navigation }: any) => {
+// 💡 App.tsx에서 전달받은 props들을 정의합니다.
+const RecodeScreen = ({ 
+  route, 
+  navigation, 
+  difficultyData, 
+  setDifficultyData, 
+  enduranceData, 
+  setEnduranceData, 
+  consecutiveData, 
+  setConsecutiveData 
+}: any) => {
   const [expandedSection, setExpandedSection] = useState<string | null>(route?.params?.openSection || null);
 
   useEffect(() => {
@@ -15,28 +25,7 @@ const RecodeScreen = ({ route, navigation }: any) => {
     setExpandedSection(expandedSection === section ? null : section);
   };
 
-  const [difficultyData, setDifficultyData] = useState([
-    { id: 1, color: '흰색', hex: '#EAEAEA', type: '왕복', current: 26, total: 26, status: '완료', score: 10 },
-    { id: 2, color: '노랑', hex: '#F4D03F', type: '왕복', current: 33, total: 33, status: '완료', score: 20 },
-    { id: 3, color: '초록', hex: '#58D68D', type: '왕복', current: 28, total: 28, status: '완료', score: 30 },
-    { id: 4, color: '파랑', hex: '#5DADE2', type: '왕복', current: 26, total: 26, status: '완료', score: 40 },
-    { id: 5, color: '빨강', hex: '#EC7063', type: '왕복', current: 26, total: 26, status: '완료', score: 50 },
-    { id: 6, color: '보라', hex: '#AF7AC5', type: '왕복', current: 25, total: 25, status: '완료', score: 60 },
-    { id: 7, color: '주황', hex: '#F0B27A', type: '왕복', current: 28, total: 28, status: '완료', score: 70 },
-    { id: 8, color: '검정', hex: '#000000', type: '편도', current: 15, total: 30, status: '진행중', score: 80 },
-  ]);
-
-  const [enduranceData, setEnduranceData] = useState([
-    { id: 1, type: '편도', arrow: '->', laps: '5', time: '12:30', section: '3-2' },
-  ]);
-
-  const deleteEnduranceRecord = (id: number) => {
-    setEnduranceData(enduranceData.filter(item => item.id !== id));
-  };
-
-  const [consecutiveData, setConsecutiveData] = useState([
-    { id: 1, colors: ['#EAEAEA', '#F4D03F', '#58D68D', '#5DADE2'] },
-  ]);
+  // 💡 기존에 있던 useState(difficultyData, enduranceData, consecutiveData)는 삭제되었습니다! (App.tsx에서 관리)
 
   const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ id: number, type: 'endurance' | 'consecutive' } | null>(null);
@@ -48,11 +37,9 @@ const RecodeScreen = ({ route, navigation }: any) => {
 
   const executeDelete = () => {
     if (!itemToDelete) return;
-    if (itemToDelete.type === 'endurance') {
-      setEnduranceData(enduranceData.filter(item => item.id !== itemToDelete.id));
-    } else if (itemToDelete.type === 'consecutive') {
-      setConsecutiveData(consecutiveData.filter(item => item.id !== itemToDelete.id));
-    }
+    // 💡 item: any 로 타입 에러 해결
+    if (itemToDelete.type === 'endurance') setEnduranceData(enduranceData.filter((item: any) => item.id !== itemToDelete.id));
+    else if (itemToDelete.type === 'consecutive') setConsecutiveData(consecutiveData.filter((item: any) => item.id !== itemToDelete.id));
     setDeleteModalVisible(false);
     setItemToDelete(null);
   };
@@ -84,12 +71,15 @@ const RecodeScreen = ({ route, navigation }: any) => {
     });
   };
 
-  const currentMaxHolds = difficultyData.find(d => d.id === selectedDifficulty)?.total || 0;
+  // 💡 d: any 로 타입 에러 해결
+  const currentMaxHolds = difficultyData.find((d: any) => d.id === selectedDifficulty)?.total || 0;
+  
   const handleSaveBeginnerRecord = () => {
     if (!selectedType || !selectedResult) return;
     const finalHoldCount = selectedResult === '완등' ? currentMaxHolds : holdCount;
     const finalStatus = selectedResult === '완등' ? '완료' : '진행중';
-    setDifficultyData(prev => prev.map(item => item.id === selectedDifficulty ? { ...item, type: selectedType, current: finalHoldCount, status: finalStatus } : item));
+    // 💡 prev: any[], item: any 로 타입 에러 해결
+    setDifficultyData((prev: any[]) => prev.map((item: any) => item.id === selectedDifficulty ? { ...item, type: selectedType, current: finalHoldCount, status: finalStatus } : item));
     closeRecordModal();
   };
 
@@ -99,7 +89,6 @@ const RecodeScreen = ({ route, navigation }: any) => {
 
   const [enduranceLaps, setEnduranceLaps] = useState<number>(0);
   const [selectedMapNode, setSelectedMapNode] = useState<string | null>(null);
-  
   const [enduranceMin, setEnduranceMin] = useState<string>('');
   const [enduranceSec, setEnduranceSec] = useState<string>('');
   const secInputRef = useRef<TextInput>(null);
@@ -121,23 +110,13 @@ const RecodeScreen = ({ route, navigation }: any) => {
     });
   };
 
-  // 💡 지구력 기록 저장 (홀수/짝수 판별하여 화살표 적용)
   const handleSaveEnduranceRecord = () => {
     if (!selectedMapNode) return;
     const finalMin = enduranceMin.padStart(2, '0') || '00';
     const finalSec = enduranceSec.padStart(2, '0') || '00';
-
-    // 💡 홀수 바퀴는 오른쪽(->), 짝수 바퀴는 왼쪽(<-) 화살표를 적용합니다!
     const directionArrow = enduranceLaps % 2 !== 0 ? '->' : '<-';
 
-    const newRecord = { 
-      id: Date.now(), 
-      type: '편도', 
-      arrow: directionArrow, 
-      laps: String(enduranceLaps), 
-      time: `${finalMin}:${finalSec}`, 
-      section: selectedMapNode 
-    };
+    const newRecord = { id: Date.now(), type: '편도', arrow: directionArrow, laps: String(enduranceLaps), time: `${finalMin}:${finalSec}`, section: selectedMapNode };
     setEnduranceData([...enduranceData, newRecord]);
     closeEnduranceModal();
   };
@@ -161,12 +140,9 @@ const RecodeScreen = ({ route, navigation }: any) => {
   const stopTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     setTimerRunning(false);
-    
     const formatted = formatTime(timerSeconds);
     const [m, s] = formatted.split(':');
-    setEnduranceMin(m);
-    setEnduranceSec(s);
-
+    setEnduranceMin(m); setEnduranceSec(s);
     setTimerModalVisible(false);
   };
 
@@ -180,11 +156,7 @@ const RecodeScreen = ({ route, navigation }: any) => {
 
   // --- 지구력 지도 데이터 로직 ---
   const mapElements: any[] = [];
-  const SPACING = 24; 
-  const GAP = 10; 
-  const BASE_X = 30; 
-  const BASE_Y = 40; 
-  const TEXT_OFFSET = 24; 
+  const SPACING = 24; const GAP = 10; const BASE_X = 30; const BASE_Y = 40; const TEXT_OFFSET = 24; 
 
   for (let i = 0; i <= 12; i++) {
     let x = BASE_X + i * SPACING; let y = BASE_Y;
@@ -222,9 +194,7 @@ const RecodeScreen = ({ route, navigation }: any) => {
 
   const renderMapNode = (item: any) => {
     if (item.type === 'text') {
-      return (
-        <Text key={item.id} style={[styles.mapAbsText, { left: item.x - 15, top: item.y - 8 }]}>{item.val}</Text>
-      );
+      return (<Text key={item.id} style={[styles.mapAbsText, { left: item.x - 15, top: item.y - 8 }]}>{item.val}</Text>);
     } else {
       const isSelected = selectedMapNode === item.id;
       return (
@@ -255,24 +225,23 @@ const RecodeScreen = ({ route, navigation }: any) => {
     });
   };
 
-  const totalConsecutiveScore = selectedConsecutiveList.reduce((acc, curr) => acc + curr.score, 0);
+  const removeConsecutiveItem = (indexToRemove: number) => {
+    setSelectedConsecutiveList(prev => prev.filter((_, index) => index !== indexToRemove));
+  };
+
+  // 💡 acc: number, curr: any 로 타입 에러 해결
+  const totalConsecutiveScore = selectedConsecutiveList.reduce((acc: number, curr: any) => acc + curr.score, 0);
 
   const handleSaveConsecutiveRecord = () => {
     if (selectedConsecutiveList.length === 0) return;
-    const newRecord = { id: Date.now(), colors: selectedConsecutiveList.map(item => item.hex) };
+    // 💡 item: any 로 타입 에러 해결
+    const newRecord = { id: Date.now(), colors: selectedConsecutiveList.map((item: any) => item.hex) };
     setConsecutiveData([...consecutiveData, newRecord]);
     closeConsecutiveModal();
   };
 
   return (
     <SafeAreaView style={styles.background}>
-      <View style={styles.topNav}>
-        <Text style={styles.logoText}>olla</Text>
-        <TouchableOpacity>
-          <Image source={require('./assets/Vector.png')} style={styles.topIcon} />
-        </TouchableOpacity>
-      </View>
-
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         
         <View style={styles.summaryContainer}>
@@ -317,7 +286,8 @@ const RecodeScreen = ({ route, navigation }: any) => {
           </TouchableOpacity>
           {expandedSection === 'difficulty' && (
             <View style={styles.outerContainer}>
-              {difficultyData.map((item) => (
+              {/* 💡 item: any 로 타입 에러 해결 */}
+              {difficultyData.map((item: any) => (
                 <View key={item.id} style={styles.recordItemCard}>
                   <Text style={styles.recordIdLarge}>{item.id}</Text>
                   <View style={styles.colorAndTypeColumn}>
@@ -344,7 +314,8 @@ const RecodeScreen = ({ route, navigation }: any) => {
               {enduranceData.length === 0 ? (
                 <View style={styles.recordItemCard}><Text style={styles.emptyText}>오늘의 지구력 기록이 없습니다.</Text></View>
               ) : (
-                enduranceData.map((item) => (
+                /* 💡 item: any 로 타입 에러 해결 */
+                enduranceData.map((item: any) => (
                   <View key={item.id} style={styles.rowCardWithTrash}>
                     <View style={styles.enduranceCol}><Text style={styles.enduranceTopText}>{item.type}</Text><Text style={styles.enduranceBottomText}>{item.arrow}</Text></View>
                     <View style={styles.verticalDivider} />
@@ -374,10 +345,12 @@ const RecodeScreen = ({ route, navigation }: any) => {
               {consecutiveData.length === 0 ? (
                 <View style={styles.recordItemCard}><Text style={styles.emptyText}>오늘의 초보벽 연속 기록이 없습니다.</Text></View>
               ) : (
-                consecutiveData.map((item) => (
+                /* 💡 item: any 로 타입 에러 해결 */
+                consecutiveData.map((item: any) => (
                   <View key={item.id} style={styles.rowCardWithTrash}>
                     <View style={styles.circleContainer}>
-                      {item.colors.map((color, index) => (<View key={index} style={[styles.colorCircle, { backgroundColor: color }]} />))}
+                      {/* 💡 color: string, index: number 로 타입 에러 해결 */}
+                      {item.colors.map((color: string, index: number) => (<View key={index} style={[styles.colorCircle, { backgroundColor: color }]} />))}
                     </View>
                     
                     <TouchableOpacity style={styles.trashButton} onPress={() => confirmDelete('consecutive', item.id)}>
@@ -391,31 +364,6 @@ const RecodeScreen = ({ route, navigation }: any) => {
         </View>
 
       </ScrollView>
-
-      {/* 하단 네비게이션 */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigation.navigate('Home')}>
-          <Image source={require('./assets/Home.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
-          <Text style={styles.bottomNavText}>홈</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigation.navigate('Recode')}>
-          <Image source={require('./assets/recode.png')} style={styles.navIcon} />
-          <Text style={styles.bottomNavTextActive}>기록</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem}>
-          <Image source={require('./assets/ranking.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
-          <Text style={styles.bottomNavText}>랭킹</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem}>
-          <Image source={require('./assets/community.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
-          <Text style={styles.bottomNavText}>커뮤니티</Text>
-        </TouchableOpacity>
-        {/* 💡 마이페이지 이동 추가 */}
-        <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigation.navigate('MY')}>
-          <Image source={require('./assets/mypage.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
-          <Text style={styles.bottomNavText}>마이페이지</Text>
-        </TouchableOpacity>
-      </View>
 
       {/* 삭제 확인 팝업 */}
       <Modal visible={isDeleteModalVisible} animationType="fade" transparent={true} onRequestClose={cancelDelete}>
@@ -451,7 +399,8 @@ const RecodeScreen = ({ route, navigation }: any) => {
                 <Text style={styles.sectionTitle}>난이도 선택</Text>
                 <View style={styles.colorButtonContainer}>
                   <View style={styles.colorButtonRow}>
-                    {difficultyData.map((item) => {
+                    {/* 💡 item: any 로 타입 에러 해결 */}
+                    {difficultyData.map((item: any) => {
                       const isSelected = selectedDifficulty === item.id;
                       return (
                         <TouchableOpacity key={item.id} onPress={() => setSelectedDifficulty(item.id)}
@@ -572,7 +521,6 @@ const RecodeScreen = ({ route, navigation }: any) => {
                   <TouchableOpacity onPress={openTimerModal} style={styles.timerPlayBtn}>
                     <Text style={styles.timerPlayIcon}>▶</Text>
                   </TouchableOpacity>
-                  
                   <View style={styles.timerTextInputWrapper}>
                     <TextInput
                       style={styles.timerTextInput}
@@ -580,9 +528,7 @@ const RecodeScreen = ({ route, navigation }: any) => {
                       onChangeText={(text) => {
                         const numeric = text.replace(/[^0-9]/g, '');
                         setEnduranceMin(numeric);
-                        if (numeric.length >= 2) {
-                          secInputRef.current?.focus();
-                        }
+                        if (numeric.length >= 2) secInputRef.current?.focus();
                       }}
                       placeholder="00"
                       placeholderTextColor="#666666"
@@ -637,10 +583,15 @@ const RecodeScreen = ({ route, navigation }: any) => {
                 <Text style={styles.sectionTitle}>난이도 입력</Text>
                 
                 <View style={styles.consecutiveInputBox}>
-                  {selectedConsecutiveList.map((item, index) => (
-                    <View key={index} style={[styles.filledDiffBox, { backgroundColor: item.hex }]}>
+                  {/* 💡 item: any, index: number 로 타입 에러 해결 */}
+                  {selectedConsecutiveList.map((item: any, index: number) => (
+                    <TouchableOpacity 
+                      key={index} 
+                      onPress={() => removeConsecutiveItem(index)}
+                      style={[styles.filledDiffBox, { backgroundColor: item.hex }]}
+                    >
                       <Text style={styles.filledDiffText}>{item.color}</Text>
-                    </View>
+                    </TouchableOpacity>
                   ))}
                   {selectedConsecutiveList.length === 0 && (
                     <Text style={styles.consecutiveEmptyText}>아래에서 난이도를 순서대로 탭해주세요</Text>
@@ -649,7 +600,8 @@ const RecodeScreen = ({ route, navigation }: any) => {
 
                 <View style={styles.colorButtonContainer}>
                   <View style={styles.colorButtonRow}>
-                    {difficultyData.map((item) => (
+                    {/* 💡 item: any 로 타입 에러 해결 */}
+                    {difficultyData.map((item: any) => (
                       <TouchableOpacity 
                         key={item.id} 
                         onPress={() => setSelectedConsecutiveList([...selectedConsecutiveList, item])}
@@ -674,7 +626,8 @@ const RecodeScreen = ({ route, navigation }: any) => {
 
                 {showDetails && (
                   <View style={[styles.consecutiveInputBox, { marginTop: 15 }]}>
-                    {selectedConsecutiveList.map((item, index) => (
+                    {/* 💡 item: any, index: number 로 타입 에러 해결 */}
+                    {selectedConsecutiveList.map((item: any, index: number) => (
                       <View key={index} style={[styles.filledDiffBox, { backgroundColor: item.hex }]}>
                         <Text style={styles.filledDiffText}>{item.score}</Text>
                       </View>
@@ -727,7 +680,7 @@ const styles = StyleSheet.create({
   topNav: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, height: 60 },
   logoText: { fontSize: 28, fontWeight: '900', color: '#A1BE44' },
   topIcon: { width: 24, height: 24, resizeMode: 'contain' },
-  scrollContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 100 },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 20 },
 
   summaryContainer: { marginBottom: 15 },
   summaryItemVertical: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#2A2A2A', borderRadius: 16, paddingVertical: 20, paddingHorizontal: 20, marginBottom: 12 },
@@ -816,7 +769,6 @@ const styles = StyleSheet.create({
   selectedSectionBox: { backgroundColor: '#2A2A2A', padding: 15, borderRadius: 12, alignItems: 'center', marginBottom: 10 },
   selectedSectionText: { color: '#A1BE44', fontSize: 16, fontWeight: 'bold' },
 
-  // 💡 분, 초 입력창 스타일
   timerInputRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   timerPlayBtn: { width: 45, height: 45, backgroundColor: '#333333', borderRadius: 22.5, alignItems: 'center', justifyContent: 'center', marginRight: 15 },
   timerPlayIcon: { color: '#A1BE44', fontSize: 18, marginLeft: 4 },
@@ -833,122 +785,25 @@ const styles = StyleSheet.create({
   timerCircleBtn: { width: 100, height: 100, borderRadius: 50, justifyContent: 'center', alignItems: 'center' },
   timerCircleBtnText: { color: '#1A1A1A', fontSize: 18, fontWeight: 'bold' },
 
-  consecutiveInputBox: {
-    backgroundColor: '#111111', 
-    minHeight: 60,
-    borderRadius: 12,
-    padding: 10,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 15,
-  },
-  consecutiveEmptyText: {
-    color: '#666666',
-    fontSize: 14,
-    alignSelf: 'center',
-    marginLeft: 5,
-  },
-  filledDiffBox: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    margin: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  filledDiffText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: 'bold',
-    textShadowColor: 'rgba(0, 0, 0, 0.7)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  horizontalDivider: {
-    height: 1,
-    backgroundColor: '#333333',
-    marginVertical: 20, 
-  },
-  scoreHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  scoreTitle: {
-    color: '#ffffff',
-    fontSize: 20, 
-    fontWeight: 'bold',
-    marginRight: 15,
-  },
-  detailButton: {
-    borderWidth: 1,
-    borderColor: '#A1BE44',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  detailButtonText: {
-    color: '#999999',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  totalScoreText: {
-    color: '#A1BE44',
-    fontSize: 36,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
+  consecutiveInputBox: { backgroundColor: '#111111', minHeight: 60, borderRadius: 12, padding: 10, flexDirection: 'row', flexWrap: 'wrap', marginBottom: 15 },
+  consecutiveEmptyText: { color: '#666666', fontSize: 14, alignSelf: 'center', marginLeft: 5 },
+  filledDiffBox: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, margin: 4, alignItems: 'center', justifyContent: 'center' },
+  filledDiffText: { color: '#ffffff', fontSize: 13, fontWeight: 'bold', textShadowColor: 'rgba(0, 0, 0, 0.7)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
+  horizontalDivider: { height: 1, backgroundColor: '#333333', marginVertical: 20 },
+  scoreHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  scoreTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginRight: 15 },
+  detailButton: { borderWidth: 1, borderColor: '#A1BE44', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  detailButtonText: { color: '#999999', fontSize: 13, fontWeight: '600' },
+  totalScoreText: { color: '#A1BE44', fontSize: 36, fontWeight: 'bold', marginBottom: 10 },
 
-  deleteModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  deleteModalBox: {
-    width: 300,
-    backgroundColor: '#212121', 
-    borderRadius: 16,
-    padding: 25,
-    alignItems: 'center',
-  },
-  deleteModalText: {
-    color: '#ffffff', 
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 25,
-  },
-  deleteBtnRow: {
-    flexDirection: 'row',
-    width: '100%',
-    justifyContent: 'space-between',
-  },
-  deleteBtnYes: {
-    flex: 1,
-    backgroundColor: '#A1BE44', 
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginRight: 5,
-  },
-  deleteBtnYesText: {
-    color: '#ffffff', 
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  deleteBtnNo: {
-    flex: 1,
-    backgroundColor: '#262626', 
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginLeft: 5,
-  },
-  deleteBtnNoText: {
-    color: '#ffffff', 
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
+  deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  deleteModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
+  deleteModalText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 25 },
+  deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  deleteBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
+  deleteBtnYesText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
+  deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
+  deleteBtnNoText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
 });
 
 export default RecodeScreen;
