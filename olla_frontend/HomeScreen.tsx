@@ -1,9 +1,52 @@
-import React, { useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated } from 'react-native';
+import React, { useRef, useState, useEffect } from 'react';
+import axios from 'axios';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  ScrollView, 
+  Image, 
+  Modal, 
+  Animated 
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const HomeScreen = ({ navigation }: any) => {
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // 1️⃣ 공지사항 상태 관리
+  const [notice, setNotice] = useState({ title: '공지사항을 불러오는 중...', content: '' });
+
+  // 2️⃣ 최신 공지사항 조회 API 호출
+  useEffect(() => {
+    const fetchLatestNotice = async () => {
+      try {
+        // 백엔드 엔드포인트: 공지사항 리스트를 가져와서 첫 번째(최신) 것 사용
+        const response = await axios.get('http://172.29.151.129:8080/api/v1/admin/notices');
+        const noticeList = response.data?.data?.content;
+
+        if (noticeList && noticeList.length > 0) {
+        // 최신순으로 보여주기 위해 배열의 마지막 요소를 선택하거나, 
+        // 백엔드 정렬 기준에 따라 첫 번째 요소를 선택합니다.
+        // 현재 데이터에서는 2번 ID(5월 공지사항)가 최신이므로 noticeList[noticeList.length - 1] 또는 인덱스 조절
+          const latestNotice = noticeList[noticeList.length - 1]; 
+
+          setNotice({
+            title: latestNotice.title,
+            content: latestNotice.content
+          });
+        } else {
+          setNotice({ title: '현재 등록된 공지가 없습니다.', content: '' });
+        }
+      } catch (error) {
+        console.error("공지사항 로드 실패:", error);
+        setNotice({ title: '공지사항 로드 실패', content: '서버 연결 상태를 확인하세요.' });
+      }
+    };
+
+    fetchLatestNotice();
+  }, []);
 
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const slideAnim = useRef(new Animated.Value(500)).current;
@@ -28,7 +71,7 @@ const HomeScreen = ({ navigation }: any) => {
     else if (title === '이번달 방문') scrollViewRef.current?.scrollToEnd({ animated: true });
   };
 
-  // 달력 관련
+  // 달력 관련 로직
   const today = new Date();
   const [viewDate, setViewDate] = useState(new Date());
   const [selectedFullDate, setSelectedFullDate] = useState(new Date());
@@ -41,7 +84,6 @@ const HomeScreen = ({ navigation }: any) => {
   const onDateClick = (day: number) => {
     const newSelected = new Date(viewDate.getFullYear(), viewDate.getMonth(), day);
     setSelectedFullDate(newSelected);
-    handlePopupPress(`${day}일`);
   };
 
   const currentYear = viewDate.getFullYear();
@@ -55,6 +97,7 @@ const HomeScreen = ({ navigation }: any) => {
 
   return (
     <SafeAreaView style={styles.background}>
+      {/* 상단 로고 및 알림 */}
       <View style={styles.topNav}>
         <Text style={styles.logoText}>olla</Text>
         <TouchableOpacity onPress={() => handlePopupPress('알림')}>
@@ -62,14 +105,24 @@ const HomeScreen = ({ navigation }: any) => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView ref={scrollViewRef} showsVerticalScrollIndicator={false}>
+      {/* 💡 contentContainerStyle에 패딩을 주어 하단 네비게이션 가림 방지 */}
+      <ScrollView 
+        ref={scrollViewRef} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 120 }}
+      >
         <View style={styles.scrollContent}>
           
+          {/* 3️⃣ 실시간 공지사항 카드 */}
           <TouchableOpacity style={styles.noticeCard} onPress={() => handlePopupPress('공지사항')}>
-            <Text style={styles.noticeHeadline}>5월 OLLA 클라이밍장 세팅 일정 안내</Text>
-            <Text style={styles.noticeBody}>오늘은 초보벽 ~ 월 금요일 세팅입니다.</Text>
+            <View style={styles.noticeHeaderRow}>
+               <View style={styles.noticeBadge}><Text style={styles.noticeBadgeText}>중요</Text></View>
+               <Text style={styles.noticeHeadline} numberOfLines={1}>{notice.title}</Text>
+            </View>
+            <Text style={styles.noticeBody} numberOfLines={1}>{notice.content}</Text>
           </TouchableOpacity>
 
+          {/* QR 및 회원권 영역 */}
           <View style={styles.row}>
             <TouchableOpacity style={styles.QRCardCentered} onPress={() => handlePopupPress('QR')}>
               <Image source={require('./assets/QR.png')} style={styles.largeIcon} />
@@ -83,6 +136,7 @@ const HomeScreen = ({ navigation }: any) => {
             </TouchableOpacity>
           </View>
 
+          {/* 통합 데이터 프레임 */}
           <View style={styles.unifiedDataFrame}>
             <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => handlePopupPress('이번달 방문')}>
               <Text style={styles.microSubTitle}>이번달 방문</Text>
@@ -90,7 +144,6 @@ const HomeScreen = ({ navigation }: any) => {
             </TouchableOpacity>
             <View style={styles.verticalDivider} />
             
-            {/* 💡 초보벽 난이도 클릭 시 기록창(Recode)으로 이동하면서 'difficulty' 아코디언을 열라고 파라미터 전달! */}
             <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => navigation.navigate('Recode', { openSection: 'difficulty' })}>
               <Text style={styles.microSubTitle}>초보벽 난이도</Text>
               <Text style={[styles.microValuecolor, { color: '#000000' }]}>검정</Text>
@@ -104,7 +157,6 @@ const HomeScreen = ({ navigation }: any) => {
             </TouchableOpacity>
             <View style={styles.verticalDivider} />
 
-            {/* 💡 지구력 기록 클릭 시 기록창(Recode)으로 이동하면서 'endurance' 아코디언을 열라고 파라미터 전달! */}
             <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => navigation.navigate('Recode', { openSection: 'endurance' })}>
               <Text style={styles.microSubTitle}>지구력 기록</Text>
               <Text style={styles.microValue}>8<Text style={styles.microUnit}>분</Text>30<Text style={styles.microUnit}>초</Text></Text>
@@ -136,7 +188,7 @@ const HomeScreen = ({ navigation }: any) => {
         </View>
       </ScrollView>
 
-      {/* 💡 하단 네비게이션: '홈'은 밝게(opacity 1), 나머지는 모두 어둡게(opacity: 0.4) 통일 */}
+      {/* 하단 네비게이션 */}
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigation.navigate('Home')}>
           <Image source={require('./assets/Home.png')} style={styles.navIcon} />
@@ -154,13 +206,13 @@ const HomeScreen = ({ navigation }: any) => {
           <Image source={require('./assets/community.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
           <Text style={styles.bottomNavText}>커뮤니티</Text>
         </TouchableOpacity>
-        {/* 💡 마이페이지 이동 추가 */}
         <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigation.navigate('MY')}>
           <Image source={require('./assets/mypage.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
           <Text style={styles.bottomNavText}>마이페이지</Text>
         </TouchableOpacity>
       </View>
 
+      {/* 모달(QR/회원권) 영역 */}
       <Modal visible={activeModal !== null} animationType="fade" transparent={true} onRequestClose={closeModal}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeModal}>
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: slideAnim }] }]}>
@@ -202,10 +254,25 @@ const styles = StyleSheet.create({
   topNav: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, height: 60 },
   logoText: { fontSize: 28, fontWeight: '900', color: '#A1BE44' },
   topIcon: { width: 24, height: 24, resizeMode: 'contain' },
-  scrollContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 40 },
-  noticeCard: { width: '100%', backgroundColor: '#2A2A2A', paddingVertical: 18, paddingHorizontal: 20, borderRadius: 12, marginBottom: 20 },
-  noticeHeadline: { color: '#ffffff', fontSize: 16, fontWeight: '600', marginBottom: 6 },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 10 },
+  
+  // 공지사항 카드 스타일 개선
+  noticeCard: { 
+    width: '100%', 
+    backgroundColor: '#2A2A2A', 
+    paddingVertical: 18, 
+    paddingHorizontal: 20, 
+    borderRadius: 12, 
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#A1BE44' 
+  },
+  noticeHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  noticeBadge: { backgroundColor: '#FF6B6B', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 8 },
+  noticeBadgeText: { color: '#ffffff', fontSize: 10, fontWeight: 'bold' },
+  noticeHeadline: { color: '#ffffff', fontSize: 16, fontWeight: '600', flex: 1 },
   noticeBody: { color: '#999999', fontSize: 13, fontWeight: '400' },
+
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
   QRCardCentered: { width: '60%', backgroundColor: '#2A2A2A', padding: 20, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   UserCardCentered: { width: '38%', backgroundColor: '#2A2A2A', padding: 20, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
@@ -234,11 +301,25 @@ const styles = StyleSheet.create({
   sundayText: { color: '#FF6B6B' },
   todayCircle: { backgroundColor: '#A1BE44' },
   todayText: { color: '#1A1A1A', fontWeight: 'bold' },
-  bottomNav: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', backgroundColor: '#111111', paddingTop: 12, paddingBottom: 25, borderTopWidth: 1, borderTopColor: '#222222' },
+  
+  bottomNav: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-around', 
+    alignItems: 'center', 
+    backgroundColor: '#111111', 
+    paddingTop: 12, 
+    paddingBottom: 35, // 하단 여백 추가 (Safe Area 대응)
+    borderTopWidth: 1, 
+    borderTopColor: '#222222',
+    position: 'absolute',
+    bottom: 0,
+    width: '100%'
+  },
   bottomNavItem: { alignItems: 'center', justifyContent: 'center', flex: 1 },
   navIcon: { width: 24, height: 24, marginBottom: 4, resizeMode: 'contain' },
   bottomNavText: { color: '#666666', fontSize: 11, fontWeight: '500' },
   bottomNavTextActive: { color: '#A1BE44', fontSize: 11, fontWeight: 'bold' },
+  
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 50, alignItems: 'center' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
