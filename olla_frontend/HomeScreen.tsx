@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage'; 
 import { 
   View, 
   Text, 
@@ -15,37 +16,71 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 const HomeScreen = ({ navigation }: any) => {
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // 1️⃣ 공지사항 상태 관리
+  // 1️⃣ 공지사항 및 회원권 상태 관리
   const [notice, setNotice] = useState({ title: '공지사항을 불러오는 중...', content: '' });
+  const [membership, setMembership] = useState({
+    membershipType: '-',
+    remainingDays: 0,
+    startDate: '',
+    endDate: '',
+    status: '',
+    isLoading: true
+  });
 
-  // 2️⃣ 최신 공지사항 조회 API 호출
+  // 2️⃣ 데이터 로드 통합 API 호출 (토큰 기반)
   useEffect(() => {
-    const fetchLatestNotice = async () => {
+    const fetchData = async () => {
       try {
-        // 백엔드 엔드포인트: 공지사항 리스트를 가져와서 첫 번째(최신) 것 사용
-        const response = await axios.get('http://192.168.45.12:8080/api/v1/admin/notices');
-        const noticeList = response.data?.data?.content;
+        const userToken = await AsyncStorage.getItem('userToken');
+        
+        // 📢 공지사항 로드
+        const noticeResponse = await axios.get('http://192.168.45.12:8080/api/v1/admin/notices');
+        const noticeList = noticeResponse.data?.data?.content;
 
         if (noticeList && noticeList.length > 0) {
-        // 최신순으로 보여주기 위해 배열의 마지막 요소를 선택하거나, 
-        // 백엔드 정렬 기준에 따라 첫 번째 요소를 선택합니다.
-        // 현재 데이터에서는 2번 ID(5월 공지사항)가 최신이므로 noticeList[noticeList.length - 1] 또는 인덱스 조절
           const latestNotice = noticeList[noticeList.length - 1]; 
-
-          setNotice({
-            title: latestNotice.title,
-            content: latestNotice.content
-          });
+          setNotice({ title: latestNotice.title, content: latestNotice.content });
         } else {
           setNotice({ title: '현재 등록된 공지가 없습니다.', content: '' });
         }
+
+        // 🎫 회원권 정보 로드
+        if (userToken) {
+          const memResponse = await axios.get('http://192.168.45.12:8080/api/v1/memberships/me', {
+            headers: { Authorization: `Bearer ${userToken}` }
+          });
+
+          // 백엔드 응답 구조에 맞춰 데이터 추출
+          const data = memResponse.data?.data || memResponse.data;
+
+          if (data && data.endDate) {
+            // 🔥 D-Day 계산 로직
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // 시간차 제외 일자만 계산
+            const end = new Date(data.endDate);
+            end.setHours(0, 0, 0, 0);
+            
+            const diffTime = end.getTime() - today.getTime();
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+
+            setMembership({
+              // PERIOD -> "기간권", 그 외 -> "횟수권"
+              membershipType: data.membershipType === 'PERIOD' ? '기간권' : '횟수권',
+              remainingDays: diffDays >= 0 ? diffDays : 0, 
+              startDate: data.startDate || '',
+              endDate: data.endDate || '',
+              status: data.status === 'ACTIVE' ? '이용중' : '만료',
+              isLoading: false
+            });
+          }
+        }
       } catch (error) {
-        console.error("공지사항 로드 실패:", error);
-        setNotice({ title: '공지사항 로드 실패', content: '서버 연결 상태를 확인하세요.' });
+        console.error("데이터 로드 실패:", error);
+        setMembership(prev => ({ ...prev, isLoading: false }));
       }
     };
 
-    fetchLatestNotice();
+    fetchData();
   }, []);
 
   const [activeModal, setActiveModal] = useState<string | null>(null);
@@ -72,15 +107,12 @@ const HomeScreen = ({ navigation }: any) => {
   };
 
   // 달력 관련 로직
-  const today = new Date();
   const [viewDate, setViewDate] = useState(new Date());
   const [selectedFullDate, setSelectedFullDate] = useState(new Date());
-
   const changeMonth = (offset: number) => {
     const newDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + offset, 1);
     if (newDate.getFullYear() >= 2020 && newDate.getFullYear() <= 2120) setViewDate(newDate);
   };
-
   const onDateClick = (day: number) => {
     const newSelected = new Date(viewDate.getFullYear(), viewDate.getMonth(), day);
     setSelectedFullDate(newSelected);
@@ -97,7 +129,6 @@ const HomeScreen = ({ navigation }: any) => {
 
   return (
     <SafeAreaView style={styles.background}>
-      {/* 상단 로고 및 알림 */}
       <View style={styles.topNav}>
         <Text style={styles.logoText}>olla</Text>
         <TouchableOpacity onPress={() => handlePopupPress('알림')}>
@@ -105,15 +136,12 @@ const HomeScreen = ({ navigation }: any) => {
         </TouchableOpacity>
       </View>
 
-      {/* 💡 contentContainerStyle에 패딩을 주어 하단 네비게이션 가림 방지 */}
       <ScrollView 
         ref={scrollViewRef} 
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 120 }}
       >
         <View style={styles.scrollContent}>
-          
-          {/* 3️⃣ 실시간 공지사항 카드 */}
           <TouchableOpacity style={styles.noticeCard} onPress={() => handlePopupPress('공지사항')}>
             <View style={styles.noticeHeaderRow}>
                <View style={styles.noticeBadge}><Text style={styles.noticeBadgeText}>중요</Text></View>
@@ -122,7 +150,6 @@ const HomeScreen = ({ navigation }: any) => {
             <Text style={styles.noticeBody} numberOfLines={1}>{notice.content}</Text>
           </TouchableOpacity>
 
-          {/* QR 및 회원권 영역 */}
           <View style={styles.row}>
             <TouchableOpacity style={styles.QRCardCentered} onPress={() => handlePopupPress('QR')}>
               <Image source={require('./assets/QR.png')} style={styles.largeIcon} />
@@ -131,39 +158,38 @@ const HomeScreen = ({ navigation }: any) => {
             </TouchableOpacity>
             
             <TouchableOpacity style={styles.UserCardCentered} onPress={() => handlePopupPress('회원권')}>
-              <View style={styles.circleGraphDummy}><Text style={styles.circleGraphText}>D-15</Text></View>
+              <View style={styles.circleGraphDummy}>
+                <Text style={styles.circleGraphText}>
+                  {membership.isLoading ? '...' : `D-${membership.remainingDays}`}
+                </Text>
+              </View>
               <Text style={styles.cardTitleCentered}>내 회원권</Text>
             </TouchableOpacity>
           </View>
 
-          {/* 통합 데이터 프레임 */}
           <View style={styles.unifiedDataFrame}>
             <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => handlePopupPress('이번달 방문')}>
               <Text style={styles.microSubTitle}>이번달 방문</Text>
               <Text style={styles.microValue}>12<Text style={styles.microUnit}>회</Text></Text>
             </TouchableOpacity>
             <View style={styles.verticalDivider} />
-            
             <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => navigation.navigate('Recode', { openSection: 'difficulty' })}>
               <Text style={styles.microSubTitle}>초보벽 난이도</Text>
-              <Text style={[styles.microValuecolor, { color: '#000000' }]}>검정</Text>
-              <Text style={[styles.microUnit, { color: '#ff0404' }]}>편도  <Text style={[styles.microUnit, { color: '#999999' }]}>  진행중</Text></Text>
+              <Text style={styles.microValuecolor}>검정</Text>
+              <Text style={styles.microUnit}>편도  <Text style={{color: '#999999'}}>진행중</Text></Text>
             </TouchableOpacity>
             <View style={styles.verticalDivider} />
-
             <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => handlePopupPress('지구력 랭킹')}>
               <Text style={styles.microSubTitle}>지구력 랭킹</Text>
               <Text style={styles.microValue}>15<Text style={styles.microUnit}>위</Text></Text>
             </TouchableOpacity>
             <View style={styles.verticalDivider} />
-
             <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => navigation.navigate('Recode', { openSection: 'endurance' })}>
               <Text style={styles.microSubTitle}>지구력 기록</Text>
               <Text style={styles.microValue}>8<Text style={styles.microUnit}>분</Text>30<Text style={styles.microUnit}>초</Text></Text>
             </TouchableOpacity>
           </View>
 
-          {/* 달력 영역 */}
           <View style={styles.calendarCard}>
             <View style={styles.calendarHeader}>
               <TouchableOpacity onPress={() => changeMonth(-1)} style={styles.monthArrow}><Text style={styles.arrowText}>{"<"}</Text></TouchableOpacity>
@@ -184,11 +210,9 @@ const HomeScreen = ({ navigation }: any) => {
               })}
             </View>
           </View>
-          
         </View>
       </ScrollView>
 
-      {/* 하단 네비게이션 */}
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigation.navigate('Home')}>
           <Image source={require('./assets/Home.png')} style={styles.navIcon} />
@@ -198,21 +222,11 @@ const HomeScreen = ({ navigation }: any) => {
           <Image source={require('./assets/recode.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
           <Text style={styles.bottomNavText}>기록</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem}>
-          <Image source={require('./assets/ranking.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
-          <Text style={styles.bottomNavText}>랭킹</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem}>
-          <Image source={require('./assets/community.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
-          <Text style={styles.bottomNavText}>커뮤니티</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigation.navigate('MY')}>
-          <Image source={require('./assets/mypage.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
-          <Text style={styles.bottomNavText}>마이페이지</Text>
-        </TouchableOpacity>
+        <TouchableOpacity style={styles.bottomNavItem}><Image source={require('./assets/ranking.png')} style={[styles.navIcon, { opacity: 0.4 }]} /><Text style={styles.bottomNavText}>랭킹</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.bottomNavItem}><Image source={require('./assets/community.png')} style={[styles.navIcon, { opacity: 0.4 }]} /><Text style={styles.bottomNavText}>커뮤니티</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigation.navigate('MY')}><Image source={require('./assets/mypage.png')} style={[styles.navIcon, { opacity: 0.4 }]} /><Text style={styles.bottomNavText}>마이페이지</Text></TouchableOpacity>
       </View>
 
-      {/* 모달(QR/회원권) 영역 */}
       <Modal visible={activeModal !== null} animationType="fade" transparent={true} onRequestClose={closeModal}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeModal}>
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: slideAnim }] }]}>
@@ -230,13 +244,28 @@ const HomeScreen = ({ navigation }: any) => {
               ) : (
                 <View style={styles.membershipContainer}>
                   <View style={styles.memCard}>
-                    <View style={styles.memCardHeader}><Text style={styles.memCardTitle}>남은 이용 기간</Text><Text style={styles.memCardBadge}>1개월권</Text></View>
-                    <View style={styles.progressBarBg}><View style={styles.progressBarFill} /></View>
-                    <View style={styles.memCardDates}><Text style={styles.memDateText}>2026-02-01</Text><Text style={styles.memDateText}>2026-04-01</Text></View>
+                    <View style={styles.memCardHeader}>
+                      <Text style={styles.memCardTitle}>남은 이용 기간</Text>
+                      <Text style={styles.memCardBadge}>{membership.membershipType}</Text>
+                    </View>
+                    <View style={styles.progressBarBg}>
+                      {/* 30일 기준 프로그레스 바 계산 */}
+                      <View style={[styles.progressBarFill, { width: `${Math.min((membership.remainingDays / 30) * 100, 100)}%` }]} />
+                    </View>
+                    <View style={styles.memCardDates}>
+                      <Text style={styles.memDateText}>{membership.startDate || '-'}</Text>
+                      <Text style={styles.memDateText}>{membership.endDate || '-'}</Text>
+                    </View>
                   </View>
                   <View style={styles.memRow}>
-                    <View style={styles.memHalfCard}><Text style={styles.memHalfTitle}>남은 기간</Text><Text style={styles.memHalfValueGreen}>15일</Text></View>
-                    <View style={styles.memHalfCard}><Text style={styles.memHalfTitle}>최근 이용</Text><Text style={styles.memHalfValueWhite}>3월 17일</Text></View>
+                    <View style={styles.memHalfCard}>
+                      <Text style={styles.memHalfTitle}>남은 기간</Text>
+                      <Text style={styles.memHalfValueGreen}>{membership.remainingDays}일</Text>
+                    </View>
+                    <View style={styles.memHalfCard}>
+                      <Text style={styles.memHalfTitle}>상태</Text>
+                      <Text style={styles.memHalfValueWhite}>{membership.status || '확인불가'}</Text>
+                    </View>
                   </View>
                 </View>
               )}
@@ -244,7 +273,6 @@ const HomeScreen = ({ navigation }: any) => {
           </Animated.View>
         </TouchableOpacity>
       </Modal>
-
     </SafeAreaView>
   );
 };
@@ -255,24 +283,12 @@ const styles = StyleSheet.create({
   logoText: { fontSize: 28, fontWeight: '900', color: '#A1BE44' },
   topIcon: { width: 24, height: 24, resizeMode: 'contain' },
   scrollContent: { paddingHorizontal: 20, paddingTop: 10 },
-  
-  // 공지사항 카드 스타일 개선
-  noticeCard: { 
-    width: '100%', 
-    backgroundColor: '#2A2A2A', 
-    paddingVertical: 18, 
-    paddingHorizontal: 20, 
-    borderRadius: 12, 
-    marginBottom: 20,
-    borderLeftWidth: 4,
-    borderLeftColor: '#A1BE44' 
-  },
+  noticeCard: { width: '100%', backgroundColor: '#2A2A2A', paddingVertical: 18, paddingHorizontal: 20, borderRadius: 12, marginBottom: 20, borderLeftWidth: 4, borderLeftColor: '#A1BE44' },
   noticeHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   noticeBadge: { backgroundColor: '#FF6B6B', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 8 },
   noticeBadgeText: { color: '#ffffff', fontSize: 10, fontWeight: 'bold' },
   noticeHeadline: { color: '#ffffff', fontSize: 16, fontWeight: '600', flex: 1 },
   noticeBody: { color: '#999999', fontSize: 13, fontWeight: '400' },
-
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
   QRCardCentered: { width: '60%', backgroundColor: '#2A2A2A', padding: 20, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   UserCardCentered: { width: '38%', backgroundColor: '#2A2A2A', padding: 20, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
@@ -285,7 +301,7 @@ const styles = StyleSheet.create({
   verticalDivider: { width: 1, backgroundColor: '#3D3D3D', marginVertical: 15 },
   microSubTitle: { color: '#999999', fontSize: 10, fontWeight: '500', marginBottom: 10, textAlign: 'center' },
   microValue: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', textAlign: 'center' },
-  microValuecolor: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', textAlign: 'center', textShadowColor: '#ffffff', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 15 },
+  microValuecolor: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', textAlign: 'center' },
   microUnit: { fontSize: 11, color: '#999999' },
   calendarCard: { width: '100%', backgroundColor: '#2A2A2A', borderRadius: 16, padding: 20, marginBottom: 20 },
   calendarHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
@@ -301,25 +317,11 @@ const styles = StyleSheet.create({
   sundayText: { color: '#FF6B6B' },
   todayCircle: { backgroundColor: '#A1BE44' },
   todayText: { color: '#1A1A1A', fontWeight: 'bold' },
-  
-  bottomNav: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-around', 
-    alignItems: 'center', 
-    backgroundColor: '#111111', 
-    paddingTop: 12, 
-    paddingBottom: 35, // 하단 여백 추가 (Safe Area 대응)
-    borderTopWidth: 1, 
-    borderTopColor: '#222222',
-    position: 'absolute',
-    bottom: 0,
-    width: '100%'
-  },
+  bottomNav: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', backgroundColor: '#111111', paddingTop: 12, paddingBottom: 35, borderTopWidth: 1, borderTopColor: '#222222', position: 'absolute', bottom: 0, width: '100%' },
   bottomNavItem: { alignItems: 'center', justifyContent: 'center', flex: 1 },
   navIcon: { width: 24, height: 24, marginBottom: 4, resizeMode: 'contain' },
   bottomNavText: { color: '#666666', fontSize: 11, fontWeight: '500' },
   bottomNavTextActive: { color: '#A1BE44', fontSize: 11, fontWeight: 'bold' },
-  
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 50, alignItems: 'center' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
@@ -334,7 +336,7 @@ const styles = StyleSheet.create({
   memCardTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
   memCardBadge: { color: '#999999', fontSize: 14, fontWeight: '500' },
   progressBarBg: { height: 8, backgroundColor: '#444444', borderRadius: 4, marginBottom: 10 },
-  progressBarFill: { height: '100%', backgroundColor: '#A1BE44', borderRadius: 4, width: '77%' },
+  progressBarFill: { height: '100%', backgroundColor: '#A1BE44', borderRadius: 4 },
   memCardDates: { flexDirection: 'row', justifyContent: 'space-between' },
   memDateText: { color: '#999999', fontSize: 13 },
   memRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%' },
