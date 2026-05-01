@@ -1,20 +1,76 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import axios from 'axios'; // 💡 axios 라이브러리 추가 필요
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TextInput, 
+  TouchableOpacity, 
+  ScrollView, 
+  Alert 
+} from 'react-native';
 
-const PersonalScreen = ({ navigation }: any) => { // 👈 네비게이션 추가
-  // 1. 데이터 저장소 (모두 선택 사항)
+const PersonalScreen = ({ navigation, route }: any) => {
+  // 1️⃣ 이전 화면(SignupScreen)에서 전달받은 데이터 추출
+  // accountData에는 loginId, password, name, email, phone 등이 들어있어야 합니다.
+  const { accountData } = route.params || {};
+
+  // 2. 데이터 저장소 (신체 정보)
   const [age, setAge] = useState('');
   const [height, setHeight] = useState('');
   const [weight, setWeight] = useState('');
   const [armSpan, setArmSpan] = useState('');
   const [footSize, setFootSize] = useState('');
 
-  // 2. 공개/비공개 스위치 상태 (true: 공개/초록색, false: 비공개/회색)
+  // 3. 공개/비공개 스위치 상태
   const [isAgePublic, setIsAgePublic] = useState(true);
   const [isHeightPublic, setIsHeightPublic] = useState(true);
   const [isWeightPublic, setIsWeightPublic] = useState(true);
   const [isArmPublic, setIsArmPublic] = useState(true);
   const [isFootPublic, setIsFootPublic] = useState(true);
+
+  // 🚀 최종 회원가입 제출 함수
+  const handleFinalSignup = async () => {
+    // 이전 데이터가 없는 경우 방어 로직
+    if (!accountData) {
+      Alert.alert('오류', '계정 정보가 유실되었습니다. 다시 가입해주세요.');
+      navigation.goBack();
+      return;
+    }
+
+    try {
+      // 💡 백엔드 엔티티 구조(MemberResponse 참고)에 맞춰 객체 생성
+      const response = await axios.post('http://192.168.45.12:8080/api/v1/auth/signup', {
+        ...accountData, // 아이디, 비번, 이름, 이메일, 전화번호 등
+        role: 'USER',
+        detail: {
+          age: parseInt(age) || null,
+          height: parseFloat(height) || null,
+          weight: parseFloat(weight) || null,
+          armSpan: parseFloat(armSpan) || null,
+          footSize: parseFloat(footSize) || null
+        },
+        privacy: {
+          isPhonePublic: false, // 연락처는 기본 비공개
+          isEmailPublic: false,
+          isHeightPublic: isHeightPublic,
+          isWeightPublic: isWeightPublic,
+          isArmSpanPublic: isArmPublic,
+          isFootSizePublic: isFootPublic
+        }
+      });
+
+      if (response.status === 200 || response.status === 201) {
+        Alert.alert('성공', '회원가입이 성공적으로 완료되었습니다!', [
+          { text: '확인', onPress: () => navigation.replace('Loading') }
+        ]);
+      }
+    } catch (error: any) {
+      console.error("회원가입 에러:", error.response?.data);
+      const errorMsg = error.response?.data?.message || '서버와의 통신 중 오류가 발생했습니다.';
+      Alert.alert('가입 실패', errorMsg);
+    }
+  };
 
   // 커스텀 스위치 컴포넌트
   const CustomSwitch = ({ isOn, onToggle }: { isOn: boolean, onToggle: () => void }) => (
@@ -32,7 +88,7 @@ const PersonalScreen = ({ navigation }: any) => { // 👈 네비게이션 추가
 
   return (
     <View style={styles.background}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>개인정보</Text>
 
         {/* 나이 */}
@@ -44,34 +100,39 @@ const PersonalScreen = ({ navigation }: any) => { // 👈 네비게이션 추가
 
         {/* 키 */}
         <View style={styles.inputHeader}>
-          <Text style={styles.middleText}>키(선택)</Text>
+          <Text style={styles.middleText}>키(cm)</Text>
           <CustomSwitch isOn={isHeightPublic} onToggle={() => setIsHeightPublic(!isHeightPublic)} />
         </View>
         <TextInput style={styles.input} placeholder="키를 입력하세요" placeholderTextColor="#ffffff80" value={height} onChangeText={setHeight} keyboardType="numeric" />
 
         {/* 몸무게 */}
         <View style={styles.inputHeader}>
-          <Text style={styles.middleText}>몸무게(선택)</Text>
+          <Text style={styles.middleText}>몸무게(kg)</Text>
           <CustomSwitch isOn={isWeightPublic} onToggle={() => setIsWeightPublic(!isWeightPublic)} />
         </View>
         <TextInput style={styles.input} placeholder="몸무게를 입력하세요" placeholderTextColor="#ffffff80" value={weight} onChangeText={setWeight} keyboardType="numeric" />
 
         {/* 팔길이 */}
         <View style={styles.inputHeader}>
-          <Text style={styles.middleText}>팔길이(선택)</Text>
+          <Text style={styles.middleText}>팔길이(윙스팬 cm)</Text>
           <CustomSwitch isOn={isArmPublic} onToggle={() => setIsArmPublic(!isArmPublic)} />
         </View>
         <TextInput style={styles.input} placeholder="팔길이를 입력하세요" placeholderTextColor="#ffffff80" value={armSpan} onChangeText={setArmSpan} keyboardType="numeric" />
 
         {/* 발 사이즈 */}
         <View style={styles.inputHeader}>
-          <Text style={styles.middleText}>발 사이즈(선택)</Text>
+          <Text style={styles.middleText}>발 사이즈(mm)</Text>
           <CustomSwitch isOn={isFootPublic} onToggle={() => setIsFootPublic(!isFootPublic)} />
         </View>
         <TextInput style={styles.input} placeholder="발 사이즈를 입력하세요" placeholderTextColor="#ffffff80" value={footSize} onChangeText={setFootSize} keyboardType="numeric" />
 
-        <TouchableOpacity onPress={() => navigation.navigate('Loading')} style={styles.button}>
-          <Text style={styles.buttonText}>회원가입</Text>
+        {/* 💡 회원가입 제출 함수 연결 */}
+        <TouchableOpacity onPress={handleFinalSignup} style={styles.button}>
+          <Text style={styles.buttonText}>회원가입 완료</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginTop: 15 }}>
+          <Text style={{ color: '#888' }}>이전 단계로</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -116,7 +177,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     marginBottom: 25,
   },
-  // 커스텀 스위치 스타일
   switchWrapper: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -23,7 +23,7 @@ const HomeScreen = ({ navigation }: any) => {
     const fetchLatestNotice = async () => {
       try {
         // 백엔드 엔드포인트: 공지사항 리스트를 가져와서 첫 번째(최신) 것 사용
-        const response = await axios.get('http://172.29.151.129:8080/api/v1/admin/notices');
+        const response = await axios.get('http://192.168.45.12:8080/api/v1/admin/notices');
         const noticeList = response.data?.data?.content;
 
         if (noticeList && noticeList.length > 0) {

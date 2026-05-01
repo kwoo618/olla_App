@@ -14,7 +14,7 @@ const LoginScreen = ({ navigation }: any) => {
     }
 
     try {
-      const response = await axios.post('http://172.29.151.129:8080/api/v1/auth/login', {
+      const response = await axios.post('http://192.168.45.12:8080/api/v1/auth/login', {
         loginId: loginId,
         password: password,
       });

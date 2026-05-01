@@ -58,7 +58,7 @@ public class MemberService {
         }
 
         // 3. 상세 정보 수정 (처음 입력하는 거라면 객체를 새로 만들어줘야 함)
-        if (member.getMemberDetail() == null) {
+        /* if (member.getMemberDetail() == null) {
             MemberDetail newDetail = new MemberDetail(member);
             newDetail.update(request.getAge(), request.getHeight(), request.getWeight(), request.getArmSpan(), request.getFootSize());
             member.setMemberDetail(newDetail);
@@ -77,6 +77,30 @@ public class MemberService {
         } else {
             member.getMemberPrivacy().update(request.getIsPublicPhone(), request.getIsEmailPublic(), request.getIsHeightPublic(), request.getIsWeightPublic(), request.getIsArmSpanPublic(), request.getIsFootSizePublic());
         }
+        */ 
+
+       // (동철 수정) 상세 정보 수정 로직 통합 (수정할때 데이터 꼬일 수 있어서 수정)
+        if (member.getMemberDetail() == null) {
+            member.setMemberDetail(new MemberDetail(member));
+        }
+        member.getMemberDetail().update(
+            request.getAge(), request.getHeight(), request.getWeight(), 
+            request.getArmSpan(), request.getFootSize()
+        );
+
+        // (동철 수정) 공개 설정 수정 - Boolean null 체크 추가 (데이터 유실 방지)
+        if (member.getMemberPrivacy() == null) {
+            member.setMemberPrivacy(new MemberPrivacy(member));
+        }
+        
+        member.getMemberPrivacy().update(
+            request.getIsPublicPhone() != null ? request.getIsPublicPhone() : member.getMemberPrivacy().isPhonePublic(),
+            request.getIsEmailPublic() != null ? request.getIsEmailPublic() : member.getMemberPrivacy().isEmailPublic(),
+            request.getIsHeightPublic() != null ? request.getIsHeightPublic() : member.getMemberPrivacy().isHeightPublic(),
+            request.getIsWeightPublic() != null ? request.getIsWeightPublic() : member.getMemberPrivacy().isWeightPublic(),
+            request.getIsArmSpanPublic() != null ? request.getIsArmSpanPublic() : member.getMemberPrivacy().isArmSpanPublic(),
+            request.getIsFootSizePublic() != null ? request.getIsFootSizePublic() : member.getMemberPrivacy().isFootSizePublic()
+        );
 
         // 5. DB 저장(save) 명령어 없음! @Transactional이 끝나면 알아서 UPDATE 됨 (Dirty Checking)
 

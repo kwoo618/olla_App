@@ -12,6 +12,8 @@ import com.olla.olla_climbing.domain.auth.dto.response.TokenResponse;
 import com.olla.olla_climbing.domain.auth.entity.RefreshToken;
 import com.olla.olla_climbing.domain.auth.repository.RefreshTokenRepository;
 import com.olla.olla_climbing.domain.member.entity.Member;
+import com.olla.olla_climbing.domain.member.entity.MemberDetail; // (동철 수정) 상세 정보 엔티티 임포트
+import com.olla.olla_climbing.domain.member.entity.MemberPrivacy; // (동철 수정) 공개 설정 엔티티 임포트
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
 import com.olla.olla_climbing.global.security.jwt.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +25,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service    // 스프링이 해당 클래스를 서비스 빈으로 등록
 @RequiredArgsConstructor    // final로 선언된 필드를 매개변수로 받는 생성자를 자동 생성
 @Getter // (동철 수정) 프론트에 토큰 정보를 넘기려면 Getter 어노테이션 필요 
-@Builder // (동철 수정) 프론트에 토큰 정보를 넘기려면 Builder 어노테이션 필요
 public class AuthService {
 
     private final MemberRepository memberRepository;    // 회원 저장소
@@ -44,10 +45,39 @@ public class AuthService {
         // 2. 비밀번호 암호화
         String encodedPassword = passwordEncoder.encode(request.getPassword());
 
-        // 3. DB 저장
+        // 3. DB 저장용 엔티티 생성
         Member newMember = request.toEntity(encodedPassword);
 
-        // 4. 저장
+        // 4. (동철 수정) 상세 정보(MemberDetail) 연동 - 선택 입력이므로 빈 객체라도 생성하여 연결
+        MemberDetail detail = new MemberDetail(newMember);
+        if (request.getDetail() != null) {
+            SignupRequest.MemberDetailDto detailDto = request.getDetail();
+            detail.update(
+                detailDto.getAge(),
+                detailDto.getHeight(),
+                detailDto.getWeight(),
+                detailDto.getArmSpan(),
+                detailDto.getFootSize()
+            );
+        }
+        newMember.setMemberDetail(detail); // Member 엔티티에 detail 연결
+
+        // 5. (동철 수정) 개인정보 공개 설정(MemberPrivacy) 연동
+        MemberPrivacy privacy = new MemberPrivacy(newMember);
+        if (request.getPrivacy() != null) {
+            SignupRequest.PrivacyDto privacyDto = request.getPrivacy();
+            privacy.update(
+                privacyDto.isPhonePublic(),
+                privacyDto.isEmailPublic(),
+                privacyDto.isHeightPublic(),
+                privacyDto.isWeightPublic(),
+                privacyDto.isArmSpanPublic(),
+                privacyDto.isFootSizePublic()
+            );
+        }
+        newMember.setMemberPrivacy(privacy); // Member 엔티티에 privacy 연결
+
+        // 6. 저장 (Member에 CascadeType.ALL이 설정되어 있어 Detail과 Privacy도 함께 저장됨)
         memberRepository.save(newMember);
     }
 
