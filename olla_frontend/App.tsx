@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { View, Text, TouchableOpacity, Image } from 'react-native';
 
 import LoginScreen from './LoginScreen';
 import SignupScreen from './SignupScreen';
@@ -15,6 +14,7 @@ import RecodeScreen from './RecodeScreen';
 import RankingScreen from './RankingScreen';
 import CommunityScreen from './CommunityScreen';
 import MYScreen from './MYScreen';
+import ManagerDashboard from './ManagerDashboard'; // 💡 관리자 대시보드 추가
 
 const Stack = createNativeStackNavigator();
 
@@ -22,11 +22,9 @@ const App = () => {
   const navigationRef = useNavigationContainerRef();
   const [routeName, setRouteName] = useState('MY');
 
-  // 💡 [실시간 연동] 프로필 및 기록 데이터 통합 관리
   const [profileData, setProfileData] = useState({ name: '권클라이밍', phone: '010-1234-5678', age: '25', height: '175', weight: '70', arm: '180', shoe: '260' });
   const [profileToggles, setProfileToggles] = useState({ showName: true, showPhone: false, showAge: true, showHeight: true, showWeight: true, showArm: true, showShoe: true });
-
-  // 💡 기록 데이터 (RecodeScreen과 RankingScreen이 공유)
+  
   const [difficultyData, setDifficultyData] = useState([
     { id: 1, color: '흰색', hex: '#EAEAEA', type: '왕복', current: 26, total: 26, status: '완료', score: 10 },
     { id: 2, color: '노랑', hex: '#F4D03F', type: '왕복', current: 33, total: 33, status: '완료', score: 20 },
@@ -43,50 +41,87 @@ const App = () => {
   const hideNavScreens = ['Login', 'Signup', 'PersonalInfo', 'Loading'];
   const shouldShowNav = !hideNavScreens.includes(routeName);
 
+  // 💡 관리자 화면인지 판별하는 로직
+  const adminScreens = ['ManagerDashboard', 'AdminMember', 'AdminTicket', 'AdminNotice', 'AdminCommunity'];
+  const isAdminMode = adminScreens.includes(routeName);
+
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.background} edges={['top', 'bottom']}>
         <NavigationContainer ref={navigationRef} onReady={() => setRouteName(navigationRef.getCurrentRoute()?.name || 'MY')} onStateChange={() => setRouteName(navigationRef.getCurrentRoute()?.name || 'MY')}>
           <View style={styles.globalContainer}>
-            {shouldShowNav && (
+            
+            {/* 💡 상단바: 회원용 vs 관리자용 자동 전환 */}
+            {shouldShowNav && !isAdminMode && (
               <View style={styles.topNav}>
                 <Text style={styles.logoText}>olla</Text>
                 <TouchableOpacity onPress={() => navigationRef.navigate('Notice' as never)}><Image source={require('./assets/Vector.png')} style={styles.topIcon} /></TouchableOpacity>
               </View>
             )}
+            {shouldShowNav && isAdminMode && (
+              <View style={styles.topNav}>
+                <View style={styles.adminLogoContainer}>
+                  <Text style={styles.logoText}>olla</Text>
+                  <Text style={styles.adminSubText}>관리자</Text>
+                </View>
+                <TouchableOpacity style={styles.adminExitBtn} onPress={() => navigationRef.navigate('MY' as never)}>
+                  <Image source={require('./assets/EXIT.png')} style={styles.adminExitIcon} />
+                  <Text style={styles.adminExitText}>관리자 모드 종료</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
             <View style={styles.mainContent}>
-              <Stack.Navigator initialRouteName="MY" screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+              <Stack.Navigator initialRouteName="ManagerDashboard" screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
                 <Stack.Screen name="Login" component={LoginScreen} />
                 <Stack.Screen name="Signup" component={SignupScreen} />
                 <Stack.Screen name="PersonalInfo" component={PersonalScreen} />
                 <Stack.Screen name="Loading" component={LoadingScreen} />
                 <Stack.Screen name="Home" component={HomeScreen} />
                 <Stack.Screen name="Notice" component={NoticeScreen} />
+                <Stack.Screen name="Recode">{(props) => <RecodeScreen {...props} difficultyData={difficultyData} setDifficultyData={setDifficultyData} enduranceData={enduranceData} setEnduranceData={setEnduranceData} consecutiveData={consecutiveData} setConsecutiveData={setConsecutiveData} />}</Stack.Screen>
+                <Stack.Screen name="Ranking">{(props) => <RankingScreen {...props} myProfile={profileData} difficultyData={difficultyData} enduranceData={enduranceData} consecutiveData={consecutiveData} />}</Stack.Screen>
+                <Stack.Screen name="Community">{(props) => <CommunityScreen {...props} myProfile={profileData} myToggles={profileToggles} />}</Stack.Screen>
+                <Stack.Screen name="MY">{(props) => <MYScreen {...props} profileData={profileData} setProfileData={setProfileData} profileToggles={profileToggles} setProfileToggles={setProfileToggles} />}</Stack.Screen>
                 
-                <Stack.Screen name="Recode">
-                  {(props) => <RecodeScreen {...props} difficultyData={difficultyData} setDifficultyData={setDifficultyData} enduranceData={enduranceData} setEnduranceData={setEnduranceData} consecutiveData={consecutiveData} setConsecutiveData={setConsecutiveData} />}
-                </Stack.Screen>
-
-                <Stack.Screen name="Ranking">
-                  {(props) => <RankingScreen {...props} myProfile={profileData} difficultyData={difficultyData} enduranceData={enduranceData} consecutiveData={consecutiveData} />}
-                </Stack.Screen>
-
-                <Stack.Screen name="Community">
-                  {(props) => <CommunityScreen {...props} myProfile={profileData} myToggles={profileToggles} />}
-                </Stack.Screen>
-
-                <Stack.Screen name="MY">
-                  {(props) => <MYScreen {...props} profileData={profileData} setProfileData={setProfileData} profileToggles={profileToggles} setProfileToggles={setProfileToggles} />}
-                </Stack.Screen>
+                {/* 💡 관리자 라우트 추가 */}
+                <Stack.Screen name="ManagerDashboard" component={ManagerDashboard} />
               </Stack.Navigator>
             </View>
-            {shouldShowNav && (
+
+            {/* 💡 하단바: 회원용 vs 관리자용 자동 전환 */}
+            {shouldShowNav && !isAdminMode && (
               <View style={styles.bottomNav}>
                 <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigationRef.navigate('Home' as never)}><Image source={require('./assets/Home.png')} style={[styles.navIcon, routeName !== 'Home' && { opacity: 0.4 }]} /><Text style={routeName === 'Home' ? styles.bottomNavTextActive : styles.bottomNavText}>홈</Text></TouchableOpacity>
                 <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigationRef.navigate('Recode' as never)}><Image source={require('./assets/recode.png')} style={[styles.navIcon, routeName !== 'Recode' && { opacity: 0.4 }]} /><Text style={routeName === 'Recode' ? styles.bottomNavTextActive : styles.bottomNavText}>기록</Text></TouchableOpacity>
                 <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigationRef.navigate('Ranking' as never)}><Image source={require('./assets/ranking.png')} style={[styles.navIcon, routeName !== 'Ranking' && { opacity: 0.4 }]} /><Text style={routeName === 'Ranking' ? styles.bottomNavTextActive : styles.bottomNavText}>랭킹</Text></TouchableOpacity>
                 <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigationRef.navigate('Community' as never)}><Image source={require('./assets/community.png')} style={[styles.navIcon, routeName !== 'Community' && { opacity: 0.4 }]} /><Text style={routeName === 'Community' ? styles.bottomNavTextActive : styles.bottomNavText}>커뮤니티</Text></TouchableOpacity>
                 <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigationRef.navigate('MY' as never)}><Image source={require('./assets/mypage.png')} style={[styles.navIcon, routeName !== 'MY' && { opacity: 0.4 }]} /><Text style={routeName === 'MY' ? styles.bottomNavTextActive : styles.bottomNavText}>마이페이지</Text></TouchableOpacity>
+              </View>
+            )}
+            
+            {shouldShowNav && isAdminMode && (
+              <View style={styles.bottomNav}>
+                <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigationRef.navigate('ManagerDashboard' as never)}>
+                  <Image source={require('./assets/SquaresFour.png')} style={[styles.navIcon, { tintColor: routeName === 'ManagerDashboard' ? '#A1BE44' : '#7D7D7D' }]} />
+                  <Text style={[styles.adminBottomNavText, routeName === 'ManagerDashboard' && { color: '#A1BE44' }]}>대시보드</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.bottomNavItem}>
+                  <Image source={require('./assets/profile.png')} style={[styles.navIcon, { tintColor: routeName === 'AdminMember' ? '#A1BE44' : '#7D7D7D' }]} />
+                  <Text style={[styles.adminBottomNavText, routeName === 'AdminMember' && { color: '#A1BE44' }]}>회원 관리</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.bottomNavItem}>
+                  <Image source={require('./assets/ticket.png')} style={[styles.navIcon, { tintColor: routeName === 'AdminTicket' ? '#A1BE44' : '#7D7D7D' }]} />
+                  <Text style={[styles.adminBottomNavText, routeName === 'AdminTicket' && { color: '#A1BE44' }]}>이용권 관리</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.bottomNavItem}>
+                  <Image source={require('./assets/Loudspeaker.png')} style={[styles.navIcon, { tintColor: routeName === 'AdminNotice' ? '#A1BE44' : '#7D7D7D' }]} />
+                  <Text style={[styles.adminBottomNavText, routeName === 'AdminNotice' && { color: '#A1BE44' }]}>공지사항</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.bottomNavItem}>
+                  <Image source={require('./assets/people.png')} style={[styles.navIcon, { tintColor: routeName === 'AdminCommunity' ? '#A1BE44' : '#7D7D7D' }]} />
+                  <Text style={[styles.adminBottomNavText, routeName === 'AdminCommunity' && { color: '#A1BE44' }]}>커뮤니티</Text>
+                </TouchableOpacity>
               </View>
             )}
           </View>
@@ -100,14 +135,24 @@ const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
   globalContainer: { flex: 1, backgroundColor: '#1A1A1A' },
   mainContent: { flex: 1 },
+  
   topNav: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, height: 60, backgroundColor: '#1A1A1A' },
-  logoText: { fontSize: 28, fontWeight: '900', color: '#A1BE44' },
+  logoText: { fontSize: 28, fontWeight: '900', color: '#A1BE44', lineHeight: 30 },
   topIcon: { width: 24, height: 24, resizeMode: 'contain' },
+  
+  // 💡 관리자 상단 네비게이션 전용 스타일
+  adminLogoContainer: { flexDirection: 'column', justifyContent: 'center' },
+  adminSubText: { color: '#999999', fontSize: 11, fontWeight: 'bold', marginTop: -4, marginLeft: 2 },
+  adminExitBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 0, 0, 0.15)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
+  adminExitIcon: { width: 14, height: 14, tintColor: '#FF4D4D', marginRight: 6, resizeMode: 'contain' },
+  adminExitText: { color: '#FF4D4D', fontSize: 12, fontWeight: 'bold' },
+
   bottomNav: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', backgroundColor: '#111111', paddingTop: 12, paddingBottom: 30, borderTopWidth: 1, borderTopColor: '#222222' },
   bottomNavItem: { alignItems: 'center', justifyContent: 'center', flex: 1 },
   navIcon: { width: 24, height: 24, marginBottom: 4, resizeMode: 'contain' },
   bottomNavText: { color: '#666666', fontSize: 11, fontWeight: '500' },
   bottomNavTextActive: { color: '#A1BE44', fontSize: 11, fontWeight: 'bold' },
+  adminBottomNavText: { color: '#7D7D7D', fontSize: 11, fontWeight: 'bold' }, // 관리자용 비활성 텍스트 색상
 });
 
 export default App;
