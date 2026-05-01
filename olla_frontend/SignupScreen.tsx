@@ -152,7 +152,7 @@ const SignupScreen = ({ navigation }: any) => {
           {phoneError !== '' && <Text style={styles.errorText}>{phoneError}</Text>}
 
           <TouchableOpacity onPress={handleSignup} style={[styles.button, !isFormValid && styles.buttonDisabled]} disabled={!isFormValid}>
-            <Text style={[styles.buttonText, !isFormValid && styles.buttonTextDisabled]}>가입 완료</Text>
+            <Text style={[styles.buttonText, !isFormValid && styles.buttonTextDisabled]}>다음으로</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
