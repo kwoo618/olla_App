@@ -54,7 +54,7 @@ const MyPageScreen = ({ navigation }: any) => {
 
       // [GET] 내 정보 조회
       const userRes = await axios.get('http://172.30.1.54:8080/api/v1/members/me', { headers });
-      const data = userRes.data.data; 
+      const data = userRes.data.data || userRes.data;
       
 
       // ✅ 1. Member 테이블 기본 정보 매핑 (최상단 data에서 추출)
@@ -187,7 +187,7 @@ const MyPageScreen = ({ navigation }: any) => {
       await axios.post(
         'http://172.30.1.54:8080/api/v1/auth/logout', 
         { refreshToken: refreshToken }, // LogoutRequest 규격
-        { headers: { Authorization: `Bearer ${accessToken}` } }
+        { headers: { Authorization: `Bearer ${accessToken}` }, timeout: 3000 }
       );
     }
   } catch (error) {
