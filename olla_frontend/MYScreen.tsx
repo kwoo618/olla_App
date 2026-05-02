@@ -14,9 +14,9 @@ const MYScreen = ({ navigation }: any) => {
   // 1️⃣ 상태 관리
   const [memInfo, setMemInfo] = useState({ type: '-', period: '-', status: '확인 중', remainingDays: 0 });
 
-  // 유저 정보 통합 관리
+  // 💡 유저 정보 통합 관리 (성별, 생년월일 추가)
   const [profileData, setProfileData] = useState<any>({
-    name: '', phone: '', age: '', height: '', weight: '', arm: '', shoe: ''
+    name: '', phone: '', gender: '', birthDate: '', age: '', height: '', weight: '', arm: '', shoe: ''
   });
 
   // 공개 설정 통합 관리
@@ -45,10 +45,12 @@ const MYScreen = ({ navigation }: any) => {
       const userRes = await axios.get('http://192.168.45.12:8080/api/v1/members/me', { headers });
       const data = userRes.data.data || userRes.data;
 
-      // 데이터 매핑
+      // 💡 데이터 매핑 (성별, 생년월일 추가)
       setProfileData({
         name: data.name || '',
         phone: data.phone || '',
+        gender: data.gender || '',
+        birthDate: data.birthDate || '',
         age: data.detail?.age?.toString() || '',
         height: data.detail?.height?.toString() || '',
         weight: data.detail?.weight?.toString() || '',
@@ -101,9 +103,12 @@ const MYScreen = ({ navigation }: any) => {
       const userToken = await AsyncStorage.getItem('userToken');
       const headers = { Authorization: `Bearer ${userToken}` };
 
+      // 💡 저장할 때 성별, 생년월일도 포함해서 백엔드에 넘겨줍니다.
       const requestBody = {
         name: profileData.name,
         phone: profileData.phone,
+        gender: profileData.gender,
+        birthDate: profileData.birthDate,
         profileImageUrl: "",
         age: parseInt(profileData.age) || 0,
         height: parseFloat(profileData.height) || 0,
@@ -246,7 +251,7 @@ const MYScreen = ({ navigation }: any) => {
         <TouchableOpacity style={styles.logoutCard} activeOpacity={0.8} onPress={() => setLogoutModalVisible(true)}><Image source={require('./assets/EXIT.png')} style={styles.logoutIcon} /><Text style={styles.logoutText}>로그아웃</Text></TouchableOpacity>
       </ScrollView>
 
-      {/* 모달창들 (기존 모달 구조 유지) */}
+      {/* 로그아웃 모달창 */}
       <Modal visible={isLogoutModalVisible} transparent={true} animationType="fade">
         <View style={styles.centerModalOverlay}>
           <View style={styles.centerModalBox}>
@@ -271,6 +276,55 @@ const MYScreen = ({ navigation }: any) => {
                 <View style={styles.profileEditContainer}>
                   <TouchableOpacity style={styles.profileImageEditWrapper} activeOpacity={0.7}><Image source={require('./assets/profile.png')} style={styles.profileImageLarge} /><View style={styles.profileImageEditOverlay}><Text style={styles.profileImageEditText}>수정</Text></View></TouchableOpacity>
                   {renderEditField('이름', 'name', '')}
+
+                  {/* 💡 성별 추가 (회원가입 디자인 차용, 공개토글 없음) */}
+                  <View style={styles.editFieldWrapper}>
+                    <View style={styles.editFieldHeader}>
+                      <Text style={styles.editFieldTitle}>성별</Text>
+                    </View>
+                    <View style={styles.genderRow}>
+                      <TouchableOpacity 
+                        style={[styles.genderBtn, profileData.gender === '남자' && styles.genderBtnActive]}
+                        onPress={() => setProfileData({...profileData, gender: '남자'})}
+                      >
+                        <Text style={[styles.genderBtnText, profileData.gender === '남자' && styles.genderBtnTextActive]}>남자</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={[styles.genderBtn, profileData.gender === '여자' && styles.genderBtnActive]}
+                        onPress={() => setProfileData({...profileData, gender: '여자'})}
+                      >
+                        <Text style={[styles.genderBtnText, profileData.gender === '여자' && styles.genderBtnTextActive]}>여자</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* 💡 생년월일 추가 (자동 하이픈 포맷터 적용, 공개토글 없음) */}
+                  <View style={styles.editFieldWrapper}>
+                    <View style={styles.editFieldHeader}>
+                      <Text style={styles.editFieldTitle}>생년월일</Text>
+                    </View>
+                    <View style={styles.editInputBox}>
+                      <TextInput
+                        style={styles.editInput}
+                        value={profileData.birthDate}
+                        onChangeText={(txt) => {
+                          const cleaned = txt.replace(/[^0-9]/g, '');
+                          let formatted = cleaned;
+                          if (cleaned.length > 4 && cleaned.length <= 6) {
+                            formatted = `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`;
+                          } else if (cleaned.length > 6) {
+                            formatted = `${cleaned.slice(0, 4)}-${cleaned.slice(4, 6)}-${cleaned.slice(6, 8)}`;
+                          }
+                          setProfileData({ ...profileData, birthDate: formatted });
+                        }}
+                        placeholder="YYYY-MM-DD"
+                        placeholderTextColor="#666666"
+                        keyboardType="number-pad"
+                        maxLength={10}
+                      />
+                    </View>
+                  </View>
+
                   {renderEditField('전화번호', 'phone', '')}
                   {renderEditField('나이', 'age', '세')}
                   {renderEditField('키', 'height', 'cm')}
@@ -284,13 +338,11 @@ const MYScreen = ({ navigation }: any) => {
           </Animated.View>
         </TouchableOpacity>
       </Modal>
-
-      {/* 일시정지 및 문의 모달은 생략/기존과 동일 */}
     </View>
   );
 };
 
-// 스타일 (App.tsx의 여백을 고려하여 background 유지)
+// 스타일 (기존 디자인 유지 + 성별 버튼 스타일 추가)
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
   scrollContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 100 },
@@ -360,6 +412,13 @@ const styles = StyleSheet.create({
   editUnit: { color: '#999999', fontSize: 16, fontWeight: 'bold', marginLeft: 10 },
   saveProfileButton: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 15 },
   saveProfileButtonText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  
+  // 💡 추가된 성별 버튼 스타일
+  genderRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  genderBtn: { flex: 1, backgroundColor: '#000000', borderWidth: 1, borderColor: '#444444', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginHorizontal: 4 },
+  genderBtnActive: { borderColor: '#A1BE44', backgroundColor: 'rgba(161, 190, 68, 0.1)' },
+  genderBtnText: { color: '#999999', fontSize: 16, fontWeight: 'bold' },
+  genderBtnTextActive: { color: '#A1BE44' },
 });
 
 export default MYScreen;

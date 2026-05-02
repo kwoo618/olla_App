@@ -29,7 +29,9 @@ public class GoogleSheetsService {
      */
     @Async
     public void appendRow(String sheetName, List<Object> rowData) {
+        /* ----- 구글 시트 세팅 완료 전까지 임시 비활성화 -----
         try {
+
             // A열부터 시작하여 데이터가 있는 마지막 행 다음에 추가
             String range = sheetName + "!A1";
 
@@ -45,6 +47,7 @@ public class GoogleSheetsService {
         } catch (IOException e) {
             log.error("Google Sheet API 에러 발생: ", e);
             // 메인 로직에 지장을 주지 않도록 예외를 다시 던지지 않고 로그만 남김
-        }
+        }---------------------------------------------------- */
+        log.info("구글 시트 전송 임시 비활성화 상태입니다. 데이터: {}", rowData);
     }
 }

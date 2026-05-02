@@ -27,6 +27,7 @@ const SignupScreen = ({ navigation }: any) => {
   const [passwordConfirmError, setPasswordConfirmError] = useState('');
   const [emailError, setEmailError] = useState('');
   const [phoneError, setPhoneError] = useState('');
+  const [birthError, setBirthError] = useState('');
 
   const [isIdChecked, setIsIdChecked] = useState(false);
 
@@ -37,6 +38,7 @@ const SignupScreen = ({ navigation }: any) => {
   const passwordRef = useRef<TextInput>(null);
   const confirmRef = useRef<TextInput>(null);
   const nameRef = useRef<TextInput>(null);
+  const birthRef = useRef<TextInput>(null);
   const emailRef = useRef<TextInput>(null);
   const phoneRef = useRef<TextInput>(null);
 
@@ -68,7 +70,7 @@ const SignupScreen = ({ navigation }: any) => {
     }
   };
 
-  // 📧 이메일 유효성 검증 함수
+  // 📧 이메일 유효성 검증 함수 (값이 있을 때만 검사)
   const validateEmail = (text: string) => {
     setEmail(text);
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -76,6 +78,23 @@ const SignupScreen = ({ navigation }: any) => {
       setEmailError('올바른 이메일 형식이 아닙니다.');
     } else {
       setEmailError('');
+    }
+  };
+
+  // 🎂 생년월일 자동 하이픈 포맷터 (YYYY-MM-DD)
+  const formatBirth = (text: string) => {
+    const cleaned = text.replace(/[^0-9]/g, '');
+    let formatted = cleaned;
+    if (cleaned.length > 4 && cleaned.length <= 6) {
+      formatted = `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`;
+    } else if (cleaned.length > 6) {
+      formatted = `${cleaned.slice(0, 4)}-${cleaned.slice(4, 6)}-${cleaned.slice(6, 8)}`;
+    }
+    setBirth(formatted);
+    if (cleaned.length > 0 && cleaned.length < 8) {
+      setBirthError('생년월일 8자리를 모두 입력해주세요.');
+    } else {
+      setBirthError('');
     }
   };
 
@@ -128,16 +147,12 @@ const SignupScreen = ({ navigation }: any) => {
       Alert.alert('알림', '아이디 중복 확인을 해주세요.');
       return;
     }
-    if (passwordError || !password) {
+    if (passwordError || !password || password !== passwordConfirm) {
       Alert.alert('알림', '비밀번호 양식을 확인해주세요.');
       return;
     }
-    if (password !== passwordConfirm) {
-      Alert.alert('알림', '비밀번호가 일치하지 않습니다.');
-      return;
-    }
-    if (!name || emailError || !email || phoneError || !phone) {
-      Alert.alert('알림', '모든 정보를 올바르게 입력해주세요.');
+    if (!name || !gender || birth.length !== 10 || phoneError || !phone || emailError) {
+      Alert.alert('알림', '필수 정보를 모두 올바르게 입력해주세요.');
       return;
     }
 
@@ -147,6 +162,8 @@ const SignupScreen = ({ navigation }: any) => {
         loginId: id,
         password: password,
         name: name,
+        gender: gender,
+        birthDate: birth,
         phone: phone,
         email: email,
         role: 'USER'
@@ -207,7 +224,7 @@ const SignupScreen = ({ navigation }: any) => {
             placeholderTextColor="#ffffff80"
             secureTextEntry={true}
             autoCapitalize="none"
-            textContentType="oneTimeCode" // iOS 강력한 암호 팝업 방지
+            textContentType="oneTimeCode"
             returnKeyType="next"
             onFocus={() => setFocusedField('password')}
             onBlur={() => setFocusedField(null)}
@@ -230,7 +247,7 @@ const SignupScreen = ({ navigation }: any) => {
             placeholderTextColor="#ffffff80"
             secureTextEntry={true}
             autoCapitalize="none"
-            textContentType="oneTimeCode" // iOS 강력한 암호 팝업 방지
+            textContentType="oneTimeCode"
             returnKeyType="next"
             onFocus={() => setFocusedField('confirm')}
             onBlur={() => setFocusedField(null)}
@@ -252,33 +269,48 @@ const SignupScreen = ({ navigation }: any) => {
             returnKeyType="next"
             onFocus={() => setFocusedField('name')}
             onBlur={() => setFocusedField(null)}
-            onSubmitEditing={() => emailRef.current?.focus()}
+            onSubmitEditing={() => birthRef.current?.focus()} 
             value={name}
             onChangeText={setName}
           />
-          
-          <Text style={styles.middleText}>이메일</Text>
+
+          <Text style={styles.middleText}>성별</Text>
+          <View style={styles.genderRow}>
+            <TouchableOpacity 
+              style={[styles.genderBtn, gender === '남자' && styles.genderBtnActive]}
+              onPress={() => setGender('남자')}
+            >
+              <Text style={[styles.genderBtnText, gender === '남자' && styles.genderBtnTextActive]}>남자</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.genderBtn, gender === '여자' && styles.genderBtnActive]}
+              onPress={() => setGender('여자')}
+            >
+              <Text style={[styles.genderBtnText, gender === '여자' && styles.genderBtnTextActive]}>여자</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.middleText}>생년월일</Text>
           <TextInput 
-            ref={emailRef}
+            ref={birthRef}
             style={[
               styles.input, 
-              focusedField === 'email' && styles.focusedInput,
-              emailError ? styles.inputError : null
+              focusedField === 'birth' && styles.focusedInput,
+              birthError ? styles.inputError : null
             ]} 
-            placeholder="example@email.com" 
+            placeholder="YYYY-MM-DD (예: 1999-01-01)" 
             placeholderTextColor="#ffffff80"
-            keyboardType="email-address"
-            autoCapitalize="none"
+            keyboardType="number-pad"
+            maxLength={10}
             returnKeyType="next"
-            onFocus={() => setFocusedField('email')}
+            onFocus={() => setFocusedField('birth')}
             onBlur={() => setFocusedField(null)}
             onSubmitEditing={() => phoneRef.current?.focus()}
-            value={email}
-            onChangeText={validateEmail}
+            value={birth}
+            onChangeText={formatBirth}
           />
-          {emailError !== '' && <Text style={styles.errorText}>{emailError}</Text>}
+          {birthError !== '' && <Text style={styles.errorText}>{birthError}</Text>}
           
-          {/* 8. 전화번호 */}
           <Text style={styles.middleText}>전화번호</Text>
           <TextInput 
             ref={phoneRef}
@@ -291,14 +323,35 @@ const SignupScreen = ({ navigation }: any) => {
             placeholderTextColor="#ffffff80"
             keyboardType="phone-pad"
             maxLength={13}
-            returnKeyType="done"
+            returnKeyType="next"
             onFocus={() => setFocusedField('phone')}
             onBlur={() => setFocusedField(null)}
-            onSubmitEditing={handleNextStep}
+            onSubmitEditing={() => emailRef.current?.focus()}
             value={phone}
             onChangeText={formatPhone}
           />
           {phoneError !== '' && <Text style={styles.errorText}>{phoneError}</Text>}
+
+          <Text style={styles.middleText}>이메일 <Text style={styles.optionalText}>(선택)</Text></Text>
+          <TextInput 
+            ref={emailRef}
+            style={[
+              styles.input, 
+              focusedField === 'email' && styles.focusedInput,
+              emailError ? styles.inputError : null
+            ]} 
+            placeholder="example@email.com" 
+            placeholderTextColor="#ffffff80"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            returnKeyType="done"
+            onFocus={() => setFocusedField('email')}
+            onBlur={() => setFocusedField(null)}
+            onSubmitEditing={handleNextStep}
+            value={email}
+            onChangeText={validateEmail}
+          />
+          {emailError !== '' && <Text style={styles.errorText}>{emailError}</Text>}
 
           <TouchableOpacity 
             onPress={handleNextStep} 
@@ -318,17 +371,21 @@ const styles = StyleSheet.create({
   title: { fontSize: 32, fontWeight: 'bold', marginBottom: 20, color: '#ffffff', textAlign: 'center' },
   middleText: { color: '#ffffff', fontSize: 14, alignSelf: 'flex-start', marginBottom: 8, marginLeft: 5, marginTop: 10 },
   optionalText: { color: '#999999', fontSize: 12, fontWeight: 'normal' },
-  input: { width: '100%', height: 50, borderWidth: 1, borderColor: '#A1BE44', color: '#ffffff', borderRadius: 10, paddingHorizontal: 15, marginBottom: 5 },
-  inputRow: { flexDirection: 'row', alignItems: 'center', width: '100%', height: 50, borderWidth: 1, borderColor: '#A1BE44', borderRadius: 10, marginBottom: 5, paddingRight: 5 },
+  
+  // 💡 수정된 부분: 기본 테두리를 어두운 회색(#444444)으로 변경했습니다.
+  input: { width: '100%', height: 50, borderWidth: 1, borderColor: '#444444', color: '#ffffff', borderRadius: 10, paddingHorizontal: 15, marginBottom: 5 },
+  inputRow: { flexDirection: 'row', alignItems: 'center', width: '100%', height: 50, borderWidth: 1, borderColor: '#444444', borderRadius: 10, marginBottom: 5, paddingRight: 5 },
+  
   inputFlex: { flex: 1, height: '100%', color: '#ffffff', paddingHorizontal: 15 },
   duplicateCheckButton: { backgroundColor: '#A1BE44', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 },
   duplicateCheckText: { color: '#000000', fontSize: 12, fontWeight: 'bold' },
   errorText: { color: '#ff4d4d', fontSize: 12, alignSelf: 'flex-start', marginLeft: 5, marginBottom: 10 },
   divider: { height: 1, backgroundColor: '#333333', marginVertical: 15 },
 
-  focusedInput: { borderColor: '#A1BE44' }, // 포커스 시 테두리 색상 변화
-  inputError: { borderColor: '#ff4d4d' },    // 에러 발생 시 테두리 색상
-  inputRowError: { borderColor: '#ff4d4d' }, // 아이디 줄 에러 시 테두리 색상
+  // 💡 포커스 됐을 때만 초록색 테두리로 변합니다.
+  focusedInput: { borderColor: '#A1BE44' }, 
+  inputError: { borderColor: '#ff4d4d' },    
+  inputRowError: { borderColor: '#ff4d4d' }, 
   
   genderRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
   genderBtn: { flex: 1, backgroundColor: '#2A2A2A', borderWidth: 1, borderColor: '#444444', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginHorizontal: 4 },

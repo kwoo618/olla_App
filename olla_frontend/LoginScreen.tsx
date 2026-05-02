@@ -7,6 +7,9 @@ const LoginScreen = ({ navigation }: any) => {
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
 
+  // 💡 현재 포커스된 필드를 추적하는 상태 추가
+  const [focusedField, setFocusedField] = useState<string | null>(null);
+
   const handleLogin = async () => {
     if (!loginId || !password) {
       Alert.alert('알림', '아이디와 비밀번호를 모두 입력해주세요.');
@@ -56,22 +59,28 @@ const LoginScreen = ({ navigation }: any) => {
 
         <Text style={styles.middleText}>아이디</Text>
         <TextInput 
-          style={styles.input} 
+          // 💡 포커스 여부에 따라 스타일(테두리 색상)을 조건부 적용
+          style={[styles.input, focusedField === 'loginId' && styles.focusedInput]} 
           placeholder="아이디를 입력하세요" 
           placeholderTextColor="#ffffff80"
           value={loginId}
           onChangeText={setLoginId}
           autoCapitalize="none"
+          onFocus={() => setFocusedField('loginId')}
+          onBlur={() => setFocusedField(null)}
         />
       
         <Text style={styles.middleText}>비밀번호</Text>
         <TextInput 
-          style={styles.input} 
+          // 💡 포커스 여부에 따라 스타일(테두리 색상)을 조건부 적용
+          style={[styles.input, focusedField === 'password' && styles.focusedInput]} 
           placeholder="비밀번호를 입력하세요" 
           secureTextEntry={true} 
           placeholderTextColor="#ffffff80"
           value={password}
           onChangeText={setPassword}
+          onFocus={() => setFocusedField('password')}
+          onBlur={() => setFocusedField(null)}
         />
 
         <TouchableOpacity onPress={handleLogin} style={styles.button}>
@@ -127,11 +136,14 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 50,
     borderWidth: 1,
-    borderColor: '#A1BE44',
+    borderColor: '#444444', // 💡 기본 색상을 어두운 회색으로 변경
     color: '#ffffff',
     borderRadius: 10,
     paddingHorizontal: 15,
     marginBottom: 15,
+  },
+  focusedInput: {
+    borderColor: '#A1BE44', // 💡 포커스 됐을 때만 초록색으로 변경
   },
   button: {
     width: '100%',
@@ -143,7 +155,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   buttonText: {
-    color: '#ffffff',
+    color: '#ffffff', // 원래 코드는 #ffffff 였으므로 그대로 유지
     fontSize: 18,
     fontWeight: 'bold',
   },
