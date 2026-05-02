@@ -1,22 +1,26 @@
 # ninja log v5
+50	8288	7994120994005774	rnasyncstorage_autolinked_build/CMakeFiles/react_codegen_rnasyncstorage.dir/react/renderer/components/rnasyncstorage/ComponentDescriptors.cpp.o	a922ff3c2ca88153
 92	14559	7991534188190363	safeareacontext_autolinked_build/CMakeFiles/react_codegen_safeareacontext.dir/c2d234f39789c9e875773636dd7ca763/source/codegen/jni/safeareacontext-generated.cpp.o	60d19cba1825b81f
-2	45	0	C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/arm64-v8a/CMakeFiles/cmake.verify_globs	9148eff8352097d
+74	10451	7994121015636493	rnasyncstorage_autolinked_build/CMakeFiles/react_codegen_rnasyncstorage.dir/react/renderer/components/rnasyncstorage/Props.cpp.o	4cd905bb70b558db
+2	65	0	C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/arm64-v8a/CMakeFiles/cmake.verify_globs	9148eff8352097d
 65	20553	7991534247771622	safeareacontext_autolinked_build/CMakeFiles/react_codegen_safeareacontext.dir/0e7f09bae19934bc5f04b74e838bfb80/components/safeareacontext/ComponentDescriptors.cpp.o	ddeae82c214afcda
 85	13881	7991534181153206	safeareacontext_autolinked_build/CMakeFiles/react_codegen_safeareacontext.dir/be8d33d6188a5dcff5b99819ddb0d408/react/renderer/components/safeareacontext/States.cpp.o	29564ff55837bef0
 47	19504	7991534237513144	safeareacontext_autolinked_build/CMakeFiles/react_codegen_safeareacontext.dir/b6471b8e8d9b8caac3a72117907eacad/components/safeareacontext/RNCSafeAreaViewState.cpp.o	64fdc0840e978dcc
 20502	29473	7991534336960007	rnscreens_autolinked_build/CMakeFiles/react_codegen_rnscreens.dir/356f8b69c331af6fd821de353e556c52/source/codegen/jni/react/renderer/components/rnscreens/Props.cpp.o	3961eebac1bc5a07
 72	14381	7991534186427747	safeareacontext_autolinked_build/CMakeFiles/react_codegen_safeareacontext.dir/a959f0b44dc130eef5feb37224b7c620/renderer/components/safeareacontext/EventEmitters.cpp.o	77a7a901c2f873fe
-29	3103	7993364892915687	CMakeFiles/appmodules.dir/OnLoad.cpp.o	ca5cc26e0a1018f3
+40	7968	7994120990742834	CMakeFiles/appmodules.dir/OnLoad.cpp.o	d1f0fc5dc617d08e
 79	19443	7991534236889547	safeareacontext_autolinked_build/CMakeFiles/react_codegen_safeareacontext.dir/a959f0b44dc130eef5feb37224b7c620/renderer/components/safeareacontext/ShadowNodes.cpp.o	2872b9553d2fc6d
+81	8143	7994120992575121	rnasyncstorage_autolinked_build/CMakeFiles/react_codegen_rnasyncstorage.dir/react/renderer/components/rnasyncstorage/ShadowNodes.cpp.o	d5f61d40ed7dc96b
 41	20424	7991534246555316	safeareacontext_autolinked_build/CMakeFiles/react_codegen_safeareacontext.dir/10c24f9f2d23f23aad40fd9e71b3845b/jni/react/renderer/components/safeareacontext/Props.cpp.o	22571794913f73c2
 14381	20502	7991534247530726	rnscreens_autolinked_build/CMakeFiles/react_codegen_rnscreens.dir/71607caa404f205ff20223ff742fe724/cpp/react/renderer/components/rnscreens/RNSScreenShadowNode.cpp.o	d8d88171328fc4c4
-24	7490	7993364936287129	CMakeFiles/appmodules.dir/C_/Users/82103/olla_App/olla_frontend/android/app/build/generated/autolinking/src/main/jni/autolinking.cpp.o	aa99ce0c408dedd8
+33	15502	7994121065611748	CMakeFiles/appmodules.dir/C_/Users/82103/olla_App/olla_frontend/android/app/build/generated/autolinking/src/main/jni/autolinking.cpp.o	3aa316175808aee9
 53	21701	7991534259484412	safeareacontext_autolinked_build/CMakeFiles/react_codegen_safeareacontext.dir/f7505d85d93c5e4a5b3dade9711d8975/safeareacontext/RNCSafeAreaViewShadowNode.cpp.o	11cd3d1aee246a7c
 19505	25018	7991534292759525	rnscreens_autolinked_build/CMakeFiles/react_codegen_rnscreens.dir/23fbea47d1e23b3fe6557fa7655b8e38/renderer/components/rnscreens/RNSScreenStackHeaderSubviewState.cpp.o	11a404294733fd3c
 21701	22484	7991534266039904	C:/Users/82103/olla_App/olla_frontend/android/app/build/intermediates/cxx/Debug/6zl5m3y2/obj/arm64-v8a/libreact_codegen_safeareacontext.so	4dd2f496cd9e276f
-7490	7687	7993364938739988	C:/Users/82103/olla_App/olla_frontend/android/app/build/intermediates/cxx/Debug/6zl5m3y2/obj/arm64-v8a/libappmodules.so	6906f22d309645b2
+15502	15887	7994121069938394	C:/Users/82103/olla_App/olla_frontend/android/app/build/intermediates/cxx/Debug/6zl5m3y2/obj/arm64-v8a/libappmodules.so	166dbdb3275c1de2
 20285	26657	7991534309139537	rnscreens_autolinked_build/CMakeFiles/react_codegen_rnscreens.dir/23fbea47d1e23b3fe6557fa7655b8e38/renderer/components/rnscreens/RNSTabsBottomAccessoryShadowNode.cpp.o	4be951e84c9cc71f
-82	810	7994046571717038	build.ninja	b957f1ae3cf8351d
+57	6903	7994120980141296	rnasyncstorage_autolinked_build/CMakeFiles/react_codegen_rnasyncstorage.dir/react/renderer/components/rnasyncstorage/EventEmitters.cpp.o	145fae800457b1e7
+40	1286	7994173545363051	build.ninja	b957f1ae3cf8351d
 20193	26571	7991534308260433	rnscreens_autolinked_build/CMakeFiles/react_codegen_rnscreens.dir/23fbea47d1e23b3fe6557fa7655b8e38/renderer/components/rnscreens/RNSSplitViewScreenShadowNode.cpp.o	c93399c22b930bb9
 21909	25065	7991534293268801	rnscreens_autolinked_build/CMakeFiles/react_codegen_rnscreens.dir/356f8b69c331af6fd821de353e556c52/source/codegen/jni/react/renderer/components/rnscreens/States.cpp.o	fab4cd43f8f79f02
 0	20	0	clean	e16d43d6881a04d2
@@ -33,6 +37,7 @@
 78	7605	7993357425219983	RNDateTimePickerCGen_autolinked_build/CMakeFiles/react_codegen_RNDateTimePickerCGen.dir/RNDateTimePickerCGen-generated.cpp.o	dab4a9849e555ea4
 21538	29347	7991534335774208	rnscreens_autolinked_build/CMakeFiles/react_codegen_rnscreens.dir/f7224509d23288e02a7cdc38b2c8a4ff/codegen/jni/react/renderer/components/rnscreens/EventEmitters.cpp.o	d274c4893a216358
 20105	27666	7991534319170019	rnscreens_autolinked_build/CMakeFiles/react_codegen_rnscreens.dir/rnscreens.cpp.o	cb6b0d5e1dc2e1e5
+62	7396	7994120985027920	rnasyncstorage_autolinked_build/CMakeFiles/react_codegen_rnasyncstorage.dir/rnasyncstorage-generated.cpp.o	921d7803e460cd6f
 22484	30111	7991534343400310	rnscreens_autolinked_build/CMakeFiles/react_codegen_rnscreens.dir/31962a14caa2b49cb35b11730603bdcd/jni/react/renderer/components/rnscreens/ComponentDescriptors.cpp.o	f8d1cceab12b6add
 15356	19514	7991534237437867	rnscreens_autolinked_build/CMakeFiles/react_codegen_rnscreens.dir/23fbea47d1e23b3fe6557fa7655b8e38/renderer/components/rnscreens/RNSScreenStackHeaderConfigState.cpp.o	30c273e1831cefc7
 122	20105	7991534243371997	rnscreens_autolinked_build/CMakeFiles/react_codegen_rnscreens.dir/23fbea47d1e23b3fe6557fa7655b8e38/renderer/components/rnscreens/RNSFullWindowOverlayShadowNode.cpp.o	9fbf072cd8cd4483
@@ -42,4 +47,5 @@
 89	8266	7993357431896564	RNDateTimePickerCGen_autolinked_build/CMakeFiles/react_codegen_RNDateTimePickerCGen.dir/react/renderer/components/RNDateTimePickerCGen/ShadowNodes.cpp.o	bda8085b036c8e00
 65	8381	7993357433045838	RNDateTimePickerCGen_autolinked_build/CMakeFiles/react_codegen_RNDateTimePickerCGen.dir/react/renderer/components/RNDateTimePickerCGen/ComponentDescriptors.cpp.o	52fa3c78ae79400c
 59	12002	7993357468994790	RNDateTimePickerCGen_autolinked_build/CMakeFiles/react_codegen_RNDateTimePickerCGen.dir/react/renderer/components/RNDateTimePickerCGen/Props.cpp.o	6c69c6c150c56a64
-2	37	0	C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/arm64-v8a/CMakeFiles/cmake.verify_globs	9148eff8352097d
+68	6774	7994120978838625	rnasyncstorage_autolinked_build/CMakeFiles/react_codegen_rnasyncstorage.dir/react/renderer/components/rnasyncstorage/States.cpp.o	ee6dcc37fdc1dee8
+2	35	0	C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/arm64-v8a/CMakeFiles/cmake.verify_globs	9148eff8352097d

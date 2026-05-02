@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios'; // 💡 axios 라이브러리 추가 필요
+import axios from 'axios';
 import { 
   View, 
   Text, 
@@ -12,7 +12,6 @@ import {
 
 const PersonalScreen = ({ navigation, route }: any) => {
   // 1️⃣ 이전 화면(SignupScreen)에서 전달받은 데이터 추출
-  // accountData에는 loginId, password, name, email, phone 등이 들어있어야 합니다.
   const { accountData } = route.params || {};
 
   // 2. 데이터 저장소 (신체 정보)
@@ -39,8 +38,8 @@ const PersonalScreen = ({ navigation, route }: any) => {
     }
 
     try {
-      // 💡 백엔드 엔티티 구조(MemberResponse 참고)에 맞춰 객체 생성
-      const response = await axios.post('http://172.30.1.54:8080/api/v1/auth/signup', {
+      // 💡 [수정 1] 마법의 주소 10.0.2.2 로 변경!
+      const response = await axios.post('http://10.0.2.2:8080/api/v1/auth/signup', {
         ...accountData, // 아이디, 비번, 이름, 이메일, 전화번호 등
         role: 'USER',
         detail: {
@@ -62,7 +61,8 @@ const PersonalScreen = ({ navigation, route }: any) => {
 
       if (response.status === 200 || response.status === 201) {
         Alert.alert('성공', '회원가입이 성공적으로 완료되었습니다!', [
-          { text: '확인', onPress: () => navigation.replace('Loading') }
+          // 💡 [수정 2] 로딩 스크린에 'signup' 꼬리표를 달아서 보냅니다!
+          { text: '확인', onPress: () => navigation.replace('Loading', { type: 'signup' }) }
         ]);
       }
     } catch (error: any) {
@@ -126,7 +126,6 @@ const PersonalScreen = ({ navigation, route }: any) => {
         </View>
         <TextInput style={styles.input} placeholder="발 사이즈를 입력하세요" placeholderTextColor="#ffffff80" value={footSize} onChangeText={setFootSize} keyboardType="numeric" />
 
-        {/* 💡 회원가입 제출 함수 연결 */}
         <TouchableOpacity onPress={handleFinalSignup} style={styles.button}>
           <Text style={styles.buttonText}>회원가입 완료</Text>
         </TouchableOpacity>

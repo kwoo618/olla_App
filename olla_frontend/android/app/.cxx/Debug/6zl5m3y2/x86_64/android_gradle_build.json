@@ -1,5 +1,6 @@
 {
   "buildFiles": [
+    "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\@react-native-async-storage\\async-storage\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
     "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-safe-area-context\\android\\src\\main\\jni\\CMakeLists.txt",
     "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-screens\\android\\src\\main\\jni\\CMakeLists.txt",
     "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native\\ReactAndroid\\cmake-utils\\default-app-setup\\CMakeLists.txt"
@@ -31,6 +32,11 @@
         "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\427eee61930a909b20cb384104452e26\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\jsi\\libs\\android.x86_64\\libjsi.so",
         "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\427eee61930a909b20cb384104452e26\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\reactnative\\libs\\android.x86_64\\libreactnative.so"
       ]
+    },
+    "react_codegen_rnasyncstorage::@1596841e19ec5b9eeffe": {
+      "toolchain": "toolchain",
+      "abi": "x86_64",
+      "artifactName": "react_codegen_rnasyncstorage"
     },
     "react_codegen_rnscreens::@25bcbd507e98d3a854ad": {
       "toolchain": "toolchain",

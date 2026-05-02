@@ -3,6 +3,31 @@
   "reactNativePath": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native",
   "reactNativeVersion": "0.85",
   "dependencies": {
+    "@react-native-async-storage/async-storage": {
+      "root": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\@react-native-async-storage\\async-storage",
+      "name": "@react-native-async-storage/async-storage",
+      "platforms": {
+        "ios": {
+          "podspecPath": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\@react-native-async-storage\\async-storage\\RNCAsyncStorage.podspec",
+          "version": "1.24.0",
+          "configurations": [],
+          "scriptPhases": []
+        },
+        "android": {
+          "sourceDir": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\@react-native-async-storage\\async-storage\\android",
+          "packageImportPath": "import com.reactnativecommunity.asyncstorage.AsyncStoragePackage;",
+          "packageInstance": "new AsyncStoragePackage()",
+          "buildTypes": [],
+          "libraryName": "rnasyncstorage",
+          "componentDescriptors": [],
+          "cmakeListsPath": "C:/Users/82103/olla_App/olla_frontend/node_modules/@react-native-async-storage/async-storage/android/build/generated/source/codegen/jni/CMakeLists.txt",
+          "cxxModuleCMakeListsModuleName": null,
+          "cxxModuleCMakeListsPath": null,
+          "cxxModuleHeaderName": null,
+          "isPureCxxDependency": false
+        }
+      }
+    },
     "react-native-safe-area-context": {
       "root": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-safe-area-context",
       "name": "react-native-safe-area-context",
