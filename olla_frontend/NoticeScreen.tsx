@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+// SafeAreaView 삭제 (App.tsx에서 관리)
 import AsyncStorage from '@react-native-async-storage/async-storage'; 
 
 interface Notice {
@@ -20,9 +20,8 @@ const NoticeScreen = ({ navigation }: any) => {
   const fetchNotices = async () => {
     try {
       const token = await AsyncStorage.getItem('userToken');
-
       if (!token) {
-        Alert.alert('인증 오류', '로그인 정보가 없습니다. 다시 로그인해주세요.');
+        Alert.alert('인증 오류', '로그인 정보가 없습니다.');
         navigation.navigate('Login');
         return;
       }
@@ -37,28 +36,12 @@ const NoticeScreen = ({ navigation }: any) => {
       });
 
       const result = await response.json();
-      console.log("서버 응답 데이터:", result);
-
-      if (response.ok) {
-        /**
-         * ★ 핵심 수정 부분: 
-         * 백엔드 응답 형식이 { status: 200, data: { content: [...] } } 이므로
-         * result.data.content 를 참조해야 합니다.
-         */
-        if (result.data && result.data.content) {
-          setNotices(result.data.content);
-        } else {
-          setNotices([]);
-        }
+      if (response.ok && result.data?.content) {
+        setNotices(result.data.content);
       } else {
-        if (response.status === 401 || response.status === 403) {
-          Alert.alert('권한 에러', '접근 권한이 없거나 세션이 만료되었습니다.');
-        } else {
-          Alert.alert('에러', result.message || '공지사항을 불러오지 못했습니다.');
-        }
+        setNotices([]);
       }
     } catch (error) {
-      console.error('Fetch Error:', error);
       Alert.alert('오류', '네트워크 연결을 확인해주세요.');
     } finally {
       setLoading(false);
@@ -75,21 +58,20 @@ const NoticeScreen = ({ navigation }: any) => {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.background, styles.center]}>
+      <View style={[styles.background, styles.center]}>
         <ActivityIndicator size="large" color="#A1BE44" />
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.background} edges={['top', 'left', 'right']}>
+    <View style={styles.background}>
       
-      {/* 상단 헤더 */}
+      {/* 상단 헤더: 디자인은 그대로 유지하되 겹침 방지를 위해 높이와 마진만 조정 */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Text style={styles.backBtnText}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.logoText}>olla</Text>
         <Text style={styles.headerTitle}>공지사항</Text>
         <View style={{ width: 30 }} />
       </View>
@@ -99,6 +81,7 @@ const NoticeScreen = ({ navigation }: any) => {
         data={notices}
         keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <Text style={styles.emptyText}>등록된 공지사항이 없습니다.</Text>
         }
@@ -113,7 +96,6 @@ const NoticeScreen = ({ navigation }: any) => {
                 activeOpacity={0.8}
               >
                 <View style={styles.noticeInfo}>
-                  {/* ★ 수정: item.important 사용 */}
                   {item.important && (
                     <View style={styles.badge}>
                       <Text style={styles.badgeText}>중요</Text>
@@ -136,19 +118,26 @@ const NoticeScreen = ({ navigation }: any) => {
           );
         }}
       />
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
   center: { justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, height: 60, borderBottomWidth: 1, borderBottomColor: '#2A2A2A' },
+  header: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingHorizontal: 20, 
+    height: 44, // App.tsx의 툴바 높이와 통일하여 공백 제거
+    borderBottomWidth: 0.5, 
+    borderBottomColor: '#2A2A2A' 
+  },
   backBtn: { padding: 5 },
   backBtnText: { color: '#ffffff', fontSize: 24 },
-  logoText: { fontSize: 20, fontWeight: '900', color: '#A1BE44', position: 'absolute', left: 60 },
   headerTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
-  listContent: { padding: 20 },
+  listContent: { padding: 20, paddingBottom: 30 },
   emptyText: { color: '#999999', textAlign: 'center', marginTop: 50 },
   
   noticeWrapper: {

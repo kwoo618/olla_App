@@ -107,8 +107,11 @@ const HomeScreen = ({ navigation }: any) => {
   };
 
   // 달력 관련 로직
+  const today = new Date();
+
   const [viewDate, setViewDate] = useState(new Date());
-  const [selectedFullDate, setSelectedFullDate] = useState(new Date());
+  const [selectedFullDate, setSelectedFullDate] = useState<Date | null>(null);
+
   const changeMonth = (offset: number) => {
     const newDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + offset, 1);
     if (newDate.getFullYear() >= 2020 && newDate.getFullYear() <= 2120) setViewDate(newDate);
@@ -129,18 +132,7 @@ const HomeScreen = ({ navigation }: any) => {
 
   return (
     <SafeAreaView style={styles.background}>
-      <View style={styles.topNav}>
-        <Text style={styles.logoText}>olla</Text>
-        <TouchableOpacity onPress={() => handlePopupPress('알림')}>
-          <Image source={require('./assets/Vector.png')} style={styles.topIcon} />
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView 
-        ref={scrollViewRef} 
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 120 }}
-      >
+      <ScrollView ref={scrollViewRef} showsVerticalScrollIndicator={false}>
         <View style={styles.scrollContent}>
           <TouchableOpacity style={styles.noticeCard} onPress={() => handlePopupPress('공지사항')}>
             <View style={styles.noticeHeaderRow}>
@@ -201,10 +193,29 @@ const HomeScreen = ({ navigation }: any) => {
             </View>
             <View style={styles.daysGrid}>
               {days.map((day, index) => {
-                const isSelected = day !== null && selectedFullDate.getDate() === day && selectedFullDate.getMonth() === currentMonth && selectedFullDate.getFullYear() === currentYear;
+                // 💡 오늘 날짜인지 확인
+                const isToday = day !== null && today.getDate() === day && today.getMonth() === currentMonth && today.getFullYear() === currentYear;
+                // 💡 사용자가 탭한 선택된 날짜인지 확인
+                const isSelected = selectedFullDate !== null && day !== null && selectedFullDate.getDate() === day && selectedFullDate.getMonth() === currentMonth && selectedFullDate.getFullYear() === currentYear;
+                
                 return (
                   <TouchableOpacity key={index} style={styles.dayCell} disabled={!day} onPress={() => day && onDateClick(day)}>
-                    {day ? (<View style={[styles.dayCircle, isSelected && styles.todayCircle]}><Text style={[styles.dayText, isSelected && styles.todayText, index % 7 === 0 && styles.sundayText]}>{day}</Text></View>) : null}
+                    {day ? (
+                      <View style={[
+                        styles.dayCircle, 
+                        isToday && styles.todayCircle, 
+                        isSelected && !isToday && styles.selectedCircle // 💡 오늘이 아닌데 클릭했을 땐 선택된 색상 적용
+                      ]}>
+                        <Text style={[
+                          styles.dayText, 
+                          isToday && styles.todayText, 
+                          isSelected && !isToday && styles.selectedText, // 💡 텍스트 색상 변경
+                          index % 7 === 0 && !isToday && !isSelected && styles.sundayText
+                        ]}>
+                          {day}
+                        </Text>
+                      </View>
+                    ) : null}
                   </TouchableOpacity>
                 );
               })}
@@ -212,20 +223,6 @@ const HomeScreen = ({ navigation }: any) => {
           </View>
         </View>
       </ScrollView>
-
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigation.navigate('Home')}>
-          <Image source={require('./assets/Home.png')} style={styles.navIcon} />
-          <Text style={styles.bottomNavTextActive}>홈</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigation.navigate('Recode')}>
-          <Image source={require('./assets/recode.png')} style={[styles.navIcon, { opacity: 0.4 }]} />
-          <Text style={styles.bottomNavText}>기록</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem}><Image source={require('./assets/ranking.png')} style={[styles.navIcon, { opacity: 0.4 }]} /><Text style={styles.bottomNavText}>랭킹</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem}><Image source={require('./assets/community.png')} style={[styles.navIcon, { opacity: 0.4 }]} /><Text style={styles.bottomNavText}>커뮤니티</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.bottomNavItem} onPress={() => navigation.navigate('MY')}><Image source={require('./assets/mypage.png')} style={[styles.navIcon, { opacity: 0.4 }]} /><Text style={styles.bottomNavText}>마이페이지</Text></TouchableOpacity>
-      </View>
 
       <Modal visible={activeModal !== null} animationType="fade" transparent={true} onRequestClose={closeModal}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeModal}>
@@ -282,12 +279,9 @@ const styles = StyleSheet.create({
   topNav: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, height: 60 },
   logoText: { fontSize: 28, fontWeight: '900', color: '#A1BE44' },
   topIcon: { width: 24, height: 24, resizeMode: 'contain' },
-  scrollContent: { paddingHorizontal: 20, paddingTop: 10 },
-  noticeCard: { width: '100%', backgroundColor: '#2A2A2A', paddingVertical: 18, paddingHorizontal: 20, borderRadius: 12, marginBottom: 20, borderLeftWidth: 4, borderLeftColor: '#A1BE44' },
-  noticeHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  noticeBadge: { backgroundColor: '#FF6B6B', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 8 },
-  noticeBadgeText: { color: '#ffffff', fontSize: 10, fontWeight: 'bold' },
-  noticeHeadline: { color: '#ffffff', fontSize: 16, fontWeight: '600', flex: 1 },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 20 },
+  noticeCard: { width: '100%', backgroundColor: '#2A2A2A', paddingVertical: 18, paddingHorizontal: 20, borderRadius: 12, marginBottom: 20 },
+  noticeHeadline: { color: '#ffffff', fontSize: 16, fontWeight: '600', marginBottom: 6 },
   noticeBody: { color: '#999999', fontSize: 13, fontWeight: '400' },
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
   QRCardCentered: { width: '60%', backgroundColor: '#2A2A2A', padding: 20, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
@@ -317,7 +311,30 @@ const styles = StyleSheet.create({
   sundayText: { color: '#FF6B6B' },
   todayCircle: { backgroundColor: '#A1BE44' },
   todayText: { color: '#1A1A1A', fontWeight: 'bold' },
-  bottomNav: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', backgroundColor: '#111111', paddingTop: 12, paddingBottom: 35, borderTopWidth: 1, borderTopColor: '#222222', position: 'absolute', bottom: 0, width: '100%' },
+  
+  // 💡 선택된 날짜에 들어가는 스타일 (파란색 계열)
+  selectedCircle: { backgroundColor: '#5DADE2' }, 
+  selectedText: { color: '#000000', fontWeight: 'bold' },
+
+  noticeHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  noticeBadge: {
+    backgroundColor: '#A1BE44',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  noticeBadgeText: {
+    color: '#1A1A1A',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+
+  bottomNav: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', backgroundColor: '#111111', paddingTop: 12, paddingBottom: 25, borderTopWidth: 1, borderTopColor: '#222222' },
   bottomNavItem: { alignItems: 'center', justifyContent: 'center', flex: 1 },
   navIcon: { width: 24, height: 24, marginBottom: 4, resizeMode: 'contain' },
   bottomNavText: { color: '#666666', fontSize: 11, fontWeight: '500' },

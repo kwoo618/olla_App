@@ -13,22 +13,21 @@ import {
 } from 'react-native';
 
 const SignupScreen = ({ navigation }: any) => {
-  // 1️⃣ 데이터 저장 상태
   const [id, setId] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [gender, setGender] = useState<'남자' | '여자' | null>(null);
+  const [birth, setBirth] = useState('');
+  const [email, setEmail] = useState(''); // 선택 사항
   const [phone, setPhone] = useState('');
 
-  // 2️⃣ 에러 메시지 상태
   const [idError, setIdError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [passwordConfirmError, setPasswordConfirmError] = useState('');
   const [emailError, setEmailError] = useState('');
   const [phoneError, setPhoneError] = useState('');
 
-  // 3️⃣ 중복 확인 상태
   const [isIdChecked, setIsIdChecked] = useState(false);
 
   // 4️⃣ 현재 포커스된 필드 추적용 상태 (테두리 색상 변경용)
@@ -164,7 +163,7 @@ const SignupScreen = ({ navigation }: any) => {
         <View style={styles.container}>
           <Text style={styles.title}>회원가입</Text>
 
-          {/* 아이디 영역 */}
+          {/* 1. 아이디 */}
           <Text style={styles.middleText}>아이디</Text>
           <View style={[
             styles.inputRow, 
@@ -195,7 +194,7 @@ const SignupScreen = ({ navigation }: any) => {
           </View>
           {idError !== '' && <Text style={styles.errorText}>{idError}</Text>}
 
-          {/* 비밀번호 영역 */}
+          {/* 2. 비밀번호 */}
           <Text style={styles.middleText}>비밀번호</Text>
           <TextInput 
             ref={passwordRef}
@@ -218,6 +217,7 @@ const SignupScreen = ({ navigation }: any) => {
           />
           {passwordError !== '' && <Text style={styles.errorText}>{passwordError}</Text>}
 
+          {/* 3. 비밀번호 재입력 */}
           <Text style={styles.middleText}>비밀번호 재입력</Text>
           <TextInput 
             ref={confirmRef}
@@ -278,6 +278,7 @@ const SignupScreen = ({ navigation }: any) => {
           />
           {emailError !== '' && <Text style={styles.errorText}>{emailError}</Text>}
           
+          {/* 8. 전화번호 */}
           <Text style={styles.middleText}>전화번호</Text>
           <TextInput 
             ref={phoneRef}
@@ -312,115 +313,33 @@ const SignupScreen = ({ navigation }: any) => {
 };
 
 const styles = StyleSheet.create({
-  background: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#1A1A1A',
-    paddingVertical: 50,
-    paddingHorizontal: 20,
-  },
-  container: {
-    width: '100%',
-    backgroundColor: '#212121',
-    padding: 20,
-    borderRadius: 25,
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    color: '#ffffff',
-    textAlign: 'center',
-  },
-  middleText: {
-    color: '#ffffff',
-    fontSize: 14,
-    marginBottom: 8,
-    marginLeft: 5,
-    marginTop: 10,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#333333',
-    marginVertical: 15,
-  },
-  input: {
-    width: '100%',
-    height: 50,
-    borderWidth: 1,
-    borderColor: '#3D3D3D',
-    color: '#ffffff',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    marginBottom: 5,
-  },
-  focusedInput: {
-    borderColor: '#A1BE44', // 현재 선택한 탭의 테두리색 (원래 포인트 컬러)
-  },
-  inputError: {
-    borderColor: '#ff4d4d',
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-    height: 50,
-    borderWidth: 1,
-    borderColor: '#3D3D3D',
-    borderRadius: 10,
-    marginBottom: 5,
-    paddingRight: 5,
-  },
-  inputRowError: {
-    borderColor: '#ff4d4d',
-  },
-  inputFlex: {
-    flex: 1,
-    height: '100%',
-    color: '#ffffff',
-    paddingHorizontal: 15,
-  },
-  duplicateCheckButton: {
-    backgroundColor: '#A1BE44',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-  },
-  duplicateCheckText: {
-    color: '#000000',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  errorText: {
-    color: '#ff4d4d', 
-    fontSize: 12,
-    marginLeft: 5,
-    marginBottom: 5, 
-  },
-  button: {
-    width: '100%',
-    height: 55,
-    backgroundColor: '#A1BE44',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 10,
-    marginTop: 30,
-  },
-  buttonDisabled: {
-    backgroundColor: '#555555',
-    opacity: 0.7,
-  },
-  buttonText: {
-    color: '#000000',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
+  background: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1A1A1A', paddingVertical: 50, paddingHorizontal: 20 },
+  container: { width: '100%', backgroundColor: '#212121', padding: 20, borderRadius: 25, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 10 },
+  title: { fontSize: 32, fontWeight: 'bold', marginBottom: 20, color: '#ffffff', textAlign: 'center' },
+  middleText: { color: '#ffffff', fontSize: 14, alignSelf: 'flex-start', marginBottom: 8, marginLeft: 5, marginTop: 10 },
+  optionalText: { color: '#999999', fontSize: 12, fontWeight: 'normal' },
+  input: { width: '100%', height: 50, borderWidth: 1, borderColor: '#A1BE44', color: '#ffffff', borderRadius: 10, paddingHorizontal: 15, marginBottom: 5 },
+  inputRow: { flexDirection: 'row', alignItems: 'center', width: '100%', height: 50, borderWidth: 1, borderColor: '#A1BE44', borderRadius: 10, marginBottom: 5, paddingRight: 5 },
+  inputFlex: { flex: 1, height: '100%', color: '#ffffff', paddingHorizontal: 15 },
+  duplicateCheckButton: { backgroundColor: '#A1BE44', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 },
+  duplicateCheckText: { color: '#000000', fontSize: 12, fontWeight: 'bold' },
+  errorText: { color: '#ff4d4d', fontSize: 12, alignSelf: 'flex-start', marginLeft: 5, marginBottom: 10 },
+  divider: { height: 1, backgroundColor: '#333333', marginVertical: 15 },
+
+  focusedInput: { borderColor: '#A1BE44' }, // 포커스 시 테두리 색상 변화
+  inputError: { borderColor: '#ff4d4d' },    // 에러 발생 시 테두리 색상
+  inputRowError: { borderColor: '#ff4d4d' }, // 아이디 줄 에러 시 테두리 색상
+  
+  genderRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
+  genderBtn: { flex: 1, backgroundColor: '#2A2A2A', borderWidth: 1, borderColor: '#444444', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginHorizontal: 4 },
+  genderBtnActive: { borderColor: '#A1BE44', backgroundColor: 'rgba(161, 190, 68, 0.1)' },
+  genderBtnText: { color: '#999999', fontSize: 16, fontWeight: 'bold' },
+  genderBtnTextActive: { color: '#A1BE44' },
+
+  button: { width: '100%', height: 55, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', borderRadius: 10, marginTop: 30 },
+  buttonDisabled: { backgroundColor: '#333333' },
+  buttonText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
+  buttonTextDisabled: { color: '#666666' },
 });
 
 export default SignupScreen;
