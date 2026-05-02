@@ -1,7 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Image, Animated, Easing } from 'react-native';
 
-const LoadingScreen = ({ navigation }: any) => {
+// 💡 route를 props에 추가하여 이전 화면에서 보낸 데이터를 받을 수 있게 합니다.
+const LoadingScreen = ({ route, navigation }: any) => {
+  // 💡 이전 화면에서 보낸 type 값을 확인합니다. (기본값은 'signup')
+  const loadingType = route?.params?.type || 'signup';
+  
+  // 💡 type에 따라 보여줄 메시지를 결정합니다.
+  const descriptionText = loadingType === 'login' 
+    ? '로그인 되었습니다.' 
+    : '회원가입이 완료되었습니다.';
+
   // 1. 로딩 상태 스위치 (true: 로딩 중, false: 로딩 완료)
   const [isLoading, setIsLoading] = useState(true);
 
@@ -49,7 +58,8 @@ const LoadingScreen = ({ navigation }: any) => {
         {/* 환영 메시지 */}
         <View style={styles.textContainer}>
           <Text style={styles.welcomeTitle}>환영합니다!</Text>
-          <Text style={styles.welcomeDescription}>회원가입이 완료되었습니다.</Text>
+          {/* 💡 동적으로 변경된 텍스트를 출력합니다 */}
+          <Text style={styles.welcomeDescription}>{descriptionText}</Text>
         </View>
       </View>
     </Animated.View>
@@ -63,7 +73,6 @@ const LoadingScreen = ({ navigation }: any) => {
         renderLoadingCard()
       ) : (
         // 로딩 완료: 나중에 홈 화면으로 연결할 자리
-        // 💡 여기에 실제 홈 화면 컴포넌트(<HomeScreen />)를 넣거나 네비게이션을 구현하면 됩니다.
         <View style={styles.homePlaceholder}>
           <Text style={styles.homePlaceholderText}>홈 화면 자리 표시자</Text>
           <Text style={styles.homePlaceholderSubText}>(나중에 연결할 예정)</Text>

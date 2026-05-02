@@ -50,7 +50,7 @@ const SignupScreen = ({ navigation }: any) => {
   const checkDuplicateId = async () => {
     if (!id) { setIdError('아이디를 먼저 입력해주세요.'); return; }
     try {
-      const response = await axios.get(`http://172.29.151.129:8080/api/v1/auth/check-id`, { params: { loginId: id } });
+      const response = await axios.get(`http://10.0.2.2:8080/api/v1/auth/check-id`, { params: { loginId: id } });
       const isDuplicate = response.data?.data?.isDuplicate ?? response.data?.isDuplicate;
       
       if (isDuplicate === undefined) { Alert.alert('오류', '데이터 형식이 맞지 않습니다.'); return; }
@@ -72,7 +72,7 @@ const SignupScreen = ({ navigation }: any) => {
     if (!isFormValid) return;
 
     try {
-      const response = await axios.post('http://192.168.0.8:8080/api/v1/auth/signup', {
+      const response = await axios.post('http://10.0.2.2:8080/api/v1/auth/signup', {
         loginId: id,
         password: password,
         name: name,

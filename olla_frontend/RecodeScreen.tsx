@@ -97,7 +97,6 @@ const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, en
     return node ? { x: node.x, y: node.y } : { x: 0, y: 0 };
   };
 
-  // 💡 무지개색 배열 (마커와 라인에 공통으로 사용)
   const rainbowColors = ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0080FF', '#4B0082', '#9400D3'];
 
   const pathSegments = useMemo(() => {
@@ -299,7 +298,21 @@ const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, en
             <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%' }}>
               <TouchableOpacity activeOpacity={1} style={{ width: '100%', paddingBottom: 20 }}>
                 <Text style={styles.sectionTitle}>난이도 선택</Text>
-                <View style={styles.colorButtonContainer}><View style={styles.colorButtonRow}>{difficultyData.map((item: any) => { const isSelected = selectedDifficulty === item.id; return (<TouchableOpacity key={item.id} onPress={() => setSelectedDifficulty(item.id)} style={[styles.diffButton, { borderColor: item.hex }, isSelected && { backgroundColor: item.hex + '20' }]}><Text style={[styles.diffButtonText, isSelected && { fontWeight: 'bold' }]}>{item.color}</Text></TouchableOpacity>); })}</View></View>
+                
+                {/* 💡 8개 버튼이 2줄(4개씩)로 정상 출력됩니다! */}
+                <View style={styles.colorButtonContainer}>
+                  <View style={styles.colorButtonRow}>
+                    {difficultyData.map((item: any) => { 
+                      const isSelected = selectedDifficulty === item.id; 
+                      return (
+                        <TouchableOpacity key={item.id} onPress={() => setSelectedDifficulty(item.id)} style={[styles.diffButton, { borderColor: item.hex }, isSelected && { backgroundColor: item.hex + '20' }]}>
+                          <Text style={[styles.diffButtonText, isSelected && { fontWeight: 'bold' }]}>{item.color}</Text>
+                        </TouchableOpacity>
+                      ); 
+                    })}
+                  </View>
+                </View>
+
                 <Text style={styles.sectionTitle}>등반 유형</Text><View style={styles.choiceRow}>{['편도', '왕복'].map(type => (<TouchableOpacity key={type} onPress={() => setSelectedType(type)} style={[styles.choiceButton, selectedType === type ? { borderColor: '#A1BE44' } : { borderColor: '#555555' }]}><Text style={styles.choiceButtonText}>{type}</Text></TouchableOpacity>))}</View>
                 <Text style={styles.sectionTitle}>결과</Text><View style={styles.choiceRow}><TouchableOpacity onPress={() => setSelectedResult('완등')} style={[styles.choiceButton, selectedResult === '완등' ? { borderColor: '#A1BE44' } : { borderColor: '#555555' }]}><Text style={styles.choiceButtonText}>완등</Text></TouchableOpacity><TouchableOpacity onPress={() => setSelectedResult('실패')} style={[styles.choiceButton, selectedResult === '실패' ? { borderColor: '#FF4D4D' } : { borderColor: '#555555' }]}><Text style={styles.choiceButtonText}>실패</Text></TouchableOpacity></View>
                 {selectedResult === '완등' && (<TouchableOpacity style={styles.saveRecordButton} onPress={handleSaveBeginnerRecord}><Text style={styles.saveRecordButtonText}>기록 저장하기</Text></TouchableOpacity>)}
@@ -324,19 +337,13 @@ const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, en
                   <TouchableOpacity onPress={() => setEnduranceLaps(enduranceLaps + 1)} style={styles.counterBtn}><Text style={styles.counterBtnText}>+</Text></TouchableOpacity>
                 </View>
 
-                {/* 💡 경로 텍스트 UI 완전 삭제됨 */}
-                
                 <Text style={styles.sectionTitle}>지도에서 선택</Text>
                 <View style={styles.mapSuperContainer}>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mapScrollWrapper}>
                     <View style={styles.mapInnerWrapper}>
                       <View style={{ width: 350, height: 235 }}>
                         {mapElements.map(renderMapNode)}
-                        
-                        {/* 경로 라인 */}
                         {pathSegments}
-
-                        {/* 💡 카멜레온 마커: 현재 선과 동일한 색상 적용 */}
                         {selectedMapNode && (
                           <View style={[styles.headMarker, { 
                             backgroundColor: rainbowColors[enduranceLaps % 7], 
@@ -460,10 +467,12 @@ const styles = StyleSheet.create({
   closeBtn: { color: '#999999', fontSize: 24, paddingHorizontal: 10 },
   sectionTitle: { color: '#999999', fontSize: 14, fontWeight: '600', marginTop: 5, marginBottom: 10 },
   
+  // 💡 버튼 컨테이너 (8개가 완벽하게 나열되도록 설정)
   colorButtonContainer: { borderWidth: 1, borderColor: '#444444', borderRadius: 16, paddingHorizontal: 12, paddingTop: 12, paddingBottom: 2, marginBottom: 15 },
   colorButtonRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   diffButton: { width: '23%', borderWidth: 1.5, backgroundColor: 'transparent', borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginBottom: 10 },
   diffButtonText: { color: '#ffffff', fontSize: 13, fontWeight: '500' },
+  
   choiceRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
   choiceButton: { flex: 1, borderWidth: 1.5, backgroundColor: 'transparent', borderRadius: 12, paddingVertical: 14, marginHorizontal: 4, alignItems: 'center' },
   choiceButtonText: { color: '#ffffff', fontSize: 15, fontWeight: '600' },
@@ -490,7 +499,6 @@ const styles = StyleSheet.create({
   mapAbsBoxSelected: { borderWidth: 0 },
   mapAbsText: { position: 'absolute', width: 30, textAlign: 'center', fontSize: 10, color: '#999999', fontWeight: 'bold', zIndex: 1 },
 
-  // 💡 마커 스타일 수정 (backgroundColor 삭제 -> 동적으로 받음)
   headMarker: { position: 'absolute', width: 20, height: 20, borderRadius: 10, borderWidth: 3, borderColor: '#FFFFFF', zIndex: 20 },
 
   selectedSectionBox: { backgroundColor: '#2A2A2A', padding: 15, borderRadius: 12, alignItems: 'center', marginBottom: 10 },

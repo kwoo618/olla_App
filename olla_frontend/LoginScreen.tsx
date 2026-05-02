@@ -19,7 +19,7 @@ const LoginScreen = ({ navigation }: any) => { // 👈 네비게이션 추가
 
     try {
       // 서버 통신
-      const response = await axios.post('http://192.168.0.8:8080/api/v1/auth/login', {
+      const response = await axios.post('http://10.0.2.2:8080/api/v1/auth/login', {
         loginId: loginId, // Java DTO의 private String loginId와 일치해야 함
         password: password, // Java DTO의 private String password와 일치해야 함
       });
