@@ -63,8 +63,12 @@ public class BeginnerRankingService {
         Difficulty difficulty = record.getDifficulty();
         Ranking ranking = rankingRepository.findByMemberAndRankTypeAndDifficulty(member, RankType.BEGINNER, difficulty).orElse(null);
 
+        // (동철 수정) 해당 난이도가 완등일때 만점으로 넣어줘야 되는데 그렇게 안 넣어줘서 500에러 발생 = 수정
+        int safeMaxHoldNo = (record.getMaxHoldNo() != null) ? record.getMaxHoldNo() :
+                            (record.isSuccess() ? difficulty.getHoldCount() : 0);
+
         boolean isNowMaster = record.isSuccess() || record.getMaxHoldNo() >= difficulty.getHoldCount();
-        Double newScore = Double.valueOf(record.getMaxHoldNo());
+        Double newScore = Double.valueOf(safeMaxHoldNo);
         boolean isRankingChanged = false;
 
         if (ranking != null) {
@@ -99,8 +103,12 @@ public class BeginnerRankingService {
             rankingRepository.delete(ranking);
             isRankingChanged = true;
         } else {
+            // (동철 수정) 해당 난이도가 완등일때 만점으로 넣어줘야 되는데 그렇게 안 넣어줘서 500에러 발생 = 수정
+            int safeMaxHoldNo = (bestRemainingRecord.getMaxHoldNo() != null) ? bestRemainingRecord.getMaxHoldNo() :
+                                (bestRemainingRecord.isSuccess() ? difficulty.getHoldCount() : 0);
+
             boolean isStillMaster = bestRemainingRecord.isSuccess() || bestRemainingRecord.getMaxHoldNo() >= difficulty.getHoldCount();
-            Double bestScore = Double.valueOf(bestRemainingRecord.getMaxHoldNo());
+            Double bestScore = Double.valueOf(safeMaxHoldNo);
 
             if (ranking.isMaster() != isStillMaster || !ranking.getScore().equals(bestScore)) {
                 ranking.syncBestRecord(bestScore, isStillMaster);

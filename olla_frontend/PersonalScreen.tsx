@@ -39,7 +39,7 @@ const PersonalScreen = ({ navigation, route }: any) => {
 
     try {
       // 💡 [수정 1] 마법의 주소 10.0.2.2 로 변경!
-      const response = await axios.post('http://10.0.2.2:8080/api/v1/auth/signup', {
+      const response = await axios.post('http://192.168.45.12:8080/api/v1/auth/signup', {
         ...accountData, // 아이디, 비번, 이름, 이메일, 전화번호 등
         role: 'USER',
         detail: {

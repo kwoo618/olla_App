@@ -42,7 +42,7 @@ const MYScreen = ({ navigation }: any) => {
       const headers = { Authorization: `Bearer ${userToken}` };
 
       // [GET] 내 정보 조회
-      const userRes = await axios.get('http://172.30.1.54:8080/api/v1/members/me', { headers });
+      const userRes = await axios.get('http://192.168.45.12:8080/api/v1/members/me', { headers });
       const data = userRes.data.data || userRes.data;
 
       // 데이터 매핑
@@ -70,7 +70,7 @@ const MYScreen = ({ navigation }: any) => {
 
       // [GET] 회원권 정보 조회
       try {
-        const memRes = await axios.get('http://172.30.1.54:8080/api/v1/memberships/me', { headers });
+        const memRes = await axios.get('http://192.168.45.12:8080/api/v1/memberships/me', { headers });
         const memData = memRes.data.data || memRes.data;
         if (memData && memData.endDate) {
           const today = new Date();
@@ -117,7 +117,7 @@ const MYScreen = ({ navigation }: any) => {
         isFootSizePublic: profileToggles.showShoe
       };
 
-      await axios.patch('http://172.30.1.54:8080/api/v1/members/me', requestBody, { headers });
+      await axios.patch('http://192.168.45.12:8080/api/v1/members/me', requestBody, { headers });
       Alert.alert("알림", "정보가 저장되었습니다.");
       fetchMyInfo();
       closeProfileModal();
@@ -133,7 +133,7 @@ const MYScreen = ({ navigation }: any) => {
       const accessToken = await AsyncStorage.getItem('userToken');
       const refreshToken = await AsyncStorage.getItem('refreshToken');
       if (accessToken && refreshToken) {
-        await axios.post('http://172.30.1.54:8080/api/v1/auth/logout', { refreshToken }, {
+        await axios.post('http://192.168.45.12:8080/api/v1/auth/logout', { refreshToken }, {
           headers: { Authorization: `Bearer ${accessToken}` }, timeout: 3000
         });
       }

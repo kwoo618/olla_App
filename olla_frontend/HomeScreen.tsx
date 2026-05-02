@@ -34,7 +34,7 @@ const HomeScreen = ({ navigation }: any) => {
         const userToken = await AsyncStorage.getItem('userToken');
         
         // 📢 공지사항 로드
-        const noticeResponse = await axios.get('http://172.30.1.54:8080/api/v1/admin/notices');
+        const noticeResponse = await axios.get('http://192.168.45.12:8080/api/v1/admin/notices');
         const noticeList = noticeResponse.data?.data?.content;
 
         if (noticeList && noticeList.length > 0) {
@@ -46,7 +46,7 @@ const HomeScreen = ({ navigation }: any) => {
 
         // 🎫 회원권 정보 로드
         if (userToken) {
-          const memResponse = await axios.get('http://172.30.1.54:8080/api/v1/memberships/me', {
+          const memResponse = await axios.get('http://192.168.45.12:8080/api/v1/memberships/me', {
             headers: { Authorization: `Bearer ${userToken}` }
           });
 
