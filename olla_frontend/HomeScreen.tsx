@@ -99,11 +99,13 @@ const HomeScreen = ({ navigation }: any) => {
     });
   };
 
+  // 💡 팝업/이동 핸들러: '지구력 랭킹' 클릭 시 랭킹 스크린의 지구력 탭으로 이동!
   const handlePopupPress = (title: string) => {
     if (title === '공지사항') navigation.navigate('Notice'); 
     else if (title === 'QR') openModal('QR');
     else if (title === '회원권') openModal('Membership');
     else if (title === '이번달 방문') scrollViewRef.current?.scrollToEnd({ animated: true });
+    else if (title === '지구력 랭킹') navigation.navigate('Ranking', { targetTab: '지구력' }); // 💡 딥 링크 추가 완료!
   };
 
   // 달력 관련 로직
@@ -171,6 +173,7 @@ const HomeScreen = ({ navigation }: any) => {
               <Text style={styles.microUnit}>편도  <Text style={{color: '#999999'}}>진행중</Text></Text>
             </TouchableOpacity>
             <View style={styles.verticalDivider} />
+            {/* 💡 이 버튼을 누르면 위 핸들러를 통해 Ranking 화면의 지구력 탭으로 바로 넘어갑니다 */}
             <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => handlePopupPress('지구력 랭킹')}>
               <Text style={styles.microSubTitle}>지구력 랭킹</Text>
               <Text style={styles.microValue}>15<Text style={styles.microUnit}>위</Text></Text>
@@ -193,9 +196,7 @@ const HomeScreen = ({ navigation }: any) => {
             </View>
             <View style={styles.daysGrid}>
               {days.map((day, index) => {
-                // 💡 오늘 날짜인지 확인
                 const isToday = day !== null && today.getDate() === day && today.getMonth() === currentMonth && today.getFullYear() === currentYear;
-                // 💡 사용자가 탭한 선택된 날짜인지 확인
                 const isSelected = selectedFullDate !== null && day !== null && selectedFullDate.getDate() === day && selectedFullDate.getMonth() === currentMonth && selectedFullDate.getFullYear() === currentYear;
                 
                 return (
@@ -204,12 +205,12 @@ const HomeScreen = ({ navigation }: any) => {
                       <View style={[
                         styles.dayCircle, 
                         isToday && styles.todayCircle, 
-                        isSelected && !isToday && styles.selectedCircle // 💡 오늘이 아닌데 클릭했을 땐 선택된 색상 적용
+                        isSelected && !isToday && styles.selectedCircle
                       ]}>
                         <Text style={[
                           styles.dayText, 
                           isToday && styles.todayText, 
-                          isSelected && !isToday && styles.selectedText, // 💡 텍스트 색상 변경
+                          isSelected && !isToday && styles.selectedText,
                           index % 7 === 0 && !isToday && !isSelected && styles.sundayText
                         ]}>
                           {day}
@@ -311,8 +312,6 @@ const styles = StyleSheet.create({
   sundayText: { color: '#FF6B6B' },
   todayCircle: { backgroundColor: '#A1BE44' },
   todayText: { color: '#1A1A1A', fontWeight: 'bold' },
-  
-  // 💡 선택된 날짜에 들어가는 스타일 (파란색 계열)
   selectedCircle: { backgroundColor: '#5DADE2' }, 
   selectedText: { color: '#000000', fontWeight: 'bold' },
 

@@ -1,4 +1,3 @@
-C:\Users\82103\olla_App\olla_frontend\node_modules\@react-native-community\datetimepicker\android\build\generated\source\codegen\jni\CMakeLists.txt
 C:\Users\82103\olla_App\olla_frontend\node_modules\react-native-safe-area-context\android\src\main\jni\CMakeLists.txt
 C:\Users\82103\olla_App\olla_frontend\node_modules\react-native-screens\android\src\main\jni\CMakeLists.txt
 C:\Users\82103\olla_App\olla_frontend\node_modules\react-native\ReactAndroid\cmake-utils\default-app-setup\CMakeLists.txt
