@@ -40,7 +40,7 @@ const PersonalScreen = ({ navigation, route }: any) => {
 
     try {
       // 💡 백엔드 엔티티 구조(MemberResponse 참고)에 맞춰 객체 생성
-      const response = await axios.post('http://192.168.45.12:8080/api/v1/auth/signup', {
+      const response = await axios.post('http://172.30.1.54:8080/api/v1/auth/signup', {
         ...accountData, // 아이디, 비번, 이름, 이메일, 전화번호 등
         role: 'USER',
         detail: {

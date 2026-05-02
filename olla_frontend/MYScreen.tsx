@@ -53,8 +53,9 @@ const MyPageScreen = ({ navigation }: any) => {
       const headers = { Authorization: `Bearer ${userToken}` };
 
       // [GET] 내 정보 조회
-      const userRes = await axios.get('http://192.168.45.12:8080/api/v1/members/me', { headers });
-      const data = userRes.data; 
+      const userRes = await axios.get('http://172.30.1.54:8080/api/v1/members/me', { headers });
+      const data = userRes.data.data; 
+      
 
       // ✅ 1. Member 테이블 기본 정보 매핑 (최상단 data에서 추출)
       setValName(data.name || '');
@@ -71,23 +72,30 @@ const MyPageScreen = ({ navigation }: any) => {
 
       // ✅ 3. PrivacyDto 매핑 (MemberPrivacy 테이블 - 응답 필드명: isPhonePublic 등)
       if (data.privacy) {
-        setShowPhone(data.privacy.isPhonePublic);
-        setShowEmail(data.privacy.isEmailPublic);
-        setShowHeight(data.privacy.isHeightPublic);
-        setShowWeight(data.privacy.isWeightPublic);
-        setShowArm(data.privacy.isArmSpanPublic);
-        setShowShoe(data.privacy.isFootSizePublic);
+        setShowPhone(data.privacy.phonePublic);
+        setShowEmail(data.privacy.emailPublic);
+        setShowHeight(data.privacy.heightPublic);
+        setShowWeight(data.privacy.weightPublic);
+        setShowArm(data.privacy.armSpanPublic);
+        setShowShoe(data.privacy.footSizePublic);
       }
 
       // ✅ 4. AlertDto 매핑
       if (data.alert) {
-        setAlerts({ ...data.alert });
-      }
+        setAlerts({
+          isGlobalAlertOn: data.alert.globalAlertOn,
+          isNoticeAlertOn: data.alert.noticeAlertOn,
+          isMembershipWeekBeforeAlertOn: data.alert.membershipWeekBeforeAlertOn,
+          isMembershipDayBeforeAlertOn: data.alert.membershipDayBeforeAlertOn,
+          isMembershipExpiredAlertOn: data.alert.membershipExpiredAlertOn,
+          isRankingChangeAlertOn: data.alert.rankingChangeAlertOn,
+      });
+    }
 
       // [GET] 회원권 정보 조회
-      try {
-        const memRes = await axios.get('http://192.168.45.12:8080/api/v1/memberships/me', { headers });
-        const memData = memRes.data?.data || memRes.data;
+      try { // 192.168.45.12
+        const memRes = await axios.get('http://172.30.1.54:8080/api/v1/memberships/me', { headers });
+        const memData = memRes.data.data ? memRes.data.data : memRes.data;
         if (memData && memData.endDate) {
           const today = new Date();
           today.setHours(0, 0, 0, 0);
@@ -138,7 +146,7 @@ const MyPageScreen = ({ navigation }: any) => {
         isFootSizePublic: showShoe
       };
 
-      await axios.patch('http://192.168.45.12:8080/api/v1/members/me', requestBody, { headers });
+      await axios.patch('http://172.30.1.54:8080/api/v1/members/me', requestBody, { headers });
       Alert.alert("알림", "정보가 저장되었습니다.");
       fetchMyInfo(); 
       closeProfileModal();
@@ -157,7 +165,7 @@ const MyPageScreen = ({ navigation }: any) => {
       const newAlerts = { ...alerts, [updatedKey]: value };
       setAlerts(newAlerts);
 
-      await axios.patch('http://192.168.45.12:8080/api/v1/members/me/alert', newAlerts, { headers });
+      await axios.patch('http://172.30.1.54:8080/api/v1/members/me/alert', newAlerts, { headers });
     } catch (error) {
       console.error("알림 수정 실패:", error);
     }
@@ -165,11 +173,41 @@ const MyPageScreen = ({ navigation }: any) => {
 
   // --- 기존 UI 제어 로직 (Logout, Pause 등) ---
   const [isLogoutModalVisible, setLogoutModalVisible] = useState(false);
+
+  // 로그아웃 
   const executeLogout = async () => {
-    await AsyncStorage.removeItem('userToken'); 
+  try {
+    // 1. 저장소에서 토큰들 가져오기
+    const accessToken = await AsyncStorage.getItem('userToken');
+    const refreshToken = await AsyncStorage.getItem('refreshToken'); // 리프레시 토큰 키 확인 필요
+
+    if (accessToken && refreshToken) {
+      // 2. 백엔드 규격에 맞춰 로그아웃 API 호출
+      // Body에는 refreshToken을 담고, Header에는 인증을 위한 AccessToken을 담습니다.
+      await axios.post(
+        'http://172.30.1.54:8080/api/v1/auth/logout', 
+        { refreshToken: refreshToken }, // LogoutRequest 규격
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+    }
+  } catch (error) {
+    // 이미 만료된 토큰이거나 서버 에러일 경우에도 로그아웃 처리는 진행해야 하므로 
+    // 에러를 출력만 하고 넘어갑니다.
+    console.log("서버 로그아웃 처리 실패:", error);
+  } finally {
+    // 3. 클라이언트 저장소 비우기 및 화면 이동
+    await AsyncStorage.multiRemove(['userToken', 'refreshToken']); 
     setLogoutModalVisible(false);
-    navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
-  };
+    
+    // 네비게이션 초기화 및 로그인 페이지로 이동
+    navigation.reset({ 
+      index: 0, 
+      routes: [{ name: 'Login' }] 
+    });
+  }
+};
+
+
   const cancelLogout = () => setLogoutModalVisible(false);
 
   const [isPauseModalVisible, setPauseModalVisible] = useState(false);
