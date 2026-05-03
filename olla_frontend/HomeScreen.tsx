@@ -72,7 +72,12 @@ const HomeScreen = ({ navigation }: any) => {
               status: data.status === 'ACTIVE' ? '이용중' : '만료',
               isLoading: false
             });
+          } else {
+            // 회원권 정보가 없을 경우 로딩 상태만 해제
+            setMembership(prev => ({ ...prev, isLoading: false }));
           }
+        } else {
+          setMembership(prev => ({ ...prev, isLoading: false }));
         }
       } catch (error) {
         console.error("데이터 로드 실패:", error);
@@ -99,13 +104,13 @@ const HomeScreen = ({ navigation }: any) => {
     });
   };
 
-  // 💡 팝업/이동 핸들러: '지구력 랭킹' 클릭 시 랭킹 스크린의 지구력 탭으로 이동!
+  // 💡 팝업/이동 핸들러
   const handlePopupPress = (title: string) => {
     if (title === '공지사항') navigation.navigate('Notice'); 
     else if (title === 'QR') openModal('QR');
     else if (title === '회원권') openModal('Membership');
     else if (title === '이번달 방문') scrollViewRef.current?.scrollToEnd({ animated: true });
-    else if (title === '지구력 랭킹') navigation.navigate('Ranking', { targetTab: '지구력' }); // 💡 딥 링크 추가 완료!
+    else if (title === '지구력 랭킹') navigation.navigate('Ranking', { targetTab: '지구력' });
   };
 
   // 달력 관련 로직
@@ -132,6 +137,9 @@ const HomeScreen = ({ navigation }: any) => {
   for (let i = 1; i <= daysInMonth; i++) days.push(i);
   const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
 
+  // 회원권 존재 여부 확인 변수
+  const hasMembership = !!membership.startDate && !!membership.endDate;
+
   return (
     <SafeAreaView style={styles.background}>
       <ScrollView ref={scrollViewRef} showsVerticalScrollIndicator={false}>
@@ -152,12 +160,18 @@ const HomeScreen = ({ navigation }: any) => {
             </TouchableOpacity>
             
             <TouchableOpacity style={styles.UserCardCentered} onPress={() => handlePopupPress('회원권')}>
-              <View style={styles.circleGraphDummy}>
-                <Text style={styles.circleGraphText}>
-                  {membership.isLoading ? '...' : `D-${membership.remainingDays}`}
+              <View style={[
+                styles.circleGraphDummy, 
+                !hasMembership && { borderColor: '#444444' }
+              ]}>
+                <Text style={[
+                  styles.circleGraphText,
+                  !hasMembership && { color: '#999999', fontSize: 13 }
+                ]}>
+                  {membership.isLoading ? '' : (hasMembership ? `D-${membership.remainingDays}` : '없음')}
                 </Text>
               </View>
-              <Text style={styles.cardTitleCentered}>내 회원권</Text>
+              <Text style={styles.cardTitleCentered}>회원권</Text>
             </TouchableOpacity>
           </View>
 
@@ -173,7 +187,6 @@ const HomeScreen = ({ navigation }: any) => {
               <Text style={styles.microUnit}>편도  <Text style={{color: '#999999'}}>진행중</Text></Text>
             </TouchableOpacity>
             <View style={styles.verticalDivider} />
-            {/* 💡 이 버튼을 누르면 위 핸들러를 통해 Ranking 화면의 지구력 탭으로 바로 넘어갑니다 */}
             <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => handlePopupPress('지구력 랭킹')}>
               <Text style={styles.microSubTitle}>지구력 랭킹</Text>
               <Text style={styles.microValue}>15<Text style={styles.microUnit}>위</Text></Text>
@@ -244,25 +257,46 @@ const HomeScreen = ({ navigation }: any) => {
                   <View style={styles.memCard}>
                     <View style={styles.memCardHeader}>
                       <Text style={styles.memCardTitle}>남은 이용 기간</Text>
-                      <Text style={styles.memCardBadge}>{membership.membershipType}</Text>
                     </View>
                     <View style={styles.progressBarBg}>
-                      {/* 30일 기준 프로그레스 바 계산 */}
-                      <View style={[styles.progressBarFill, { width: `${Math.min((membership.remainingDays / 30) * 100, 100)}%` }]} />
+                      <View style={[
+                        styles.progressBarFill, 
+                        { width: `${Math.min((membership.remainingDays / 30) * 100, 100)}%` },
+                        !hasMembership && { backgroundColor: 'transparent' }
+                      ]} />
                     </View>
-                    <View style={styles.memCardDates}>
-                      <Text style={styles.memDateText}>{membership.startDate || '-'}</Text>
-                      <Text style={styles.memDateText}>{membership.endDate || '-'}</Text>
+                    {/* 수정됨: 날짜 표시 부분 */}
+                    <View style={[styles.memCardDates, !hasMembership && { justifyContent: 'center' }]}>
+                      {hasMembership ? (
+                        <>
+                          <Text style={styles.memDateText}>{membership.startDate}</Text>
+                          <Text style={styles.memDateText}>{membership.endDate}</Text>
+                        </>
+                      ) : (
+                        <Text style={styles.memDateText}>구매 필요</Text>
+                      )}
                     </View>
                   </View>
                   <View style={styles.memRow}>
                     <View style={styles.memHalfCard}>
                       <Text style={styles.memHalfTitle}>남은 기간</Text>
-                      <Text style={styles.memHalfValueGreen}>{membership.remainingDays}일</Text>
+                      {/* 수정됨: 남은 기간 텍스트 */}
+                      <Text style={[
+                        styles.memHalfValueGreen,
+                        !hasMembership && { color: '#999999', fontSize: 16 }
+                      ]}>
+                        {hasMembership ? `${membership.remainingDays}일` : '구매 필요'}
+                      </Text>
                     </View>
                     <View style={styles.memHalfCard}>
                       <Text style={styles.memHalfTitle}>상태</Text>
-                      <Text style={styles.memHalfValueWhite}>{membership.status || '확인불가'}</Text>
+                      {/* 수정됨: 상태 텍스트 */}
+                      <Text style={[
+                        styles.memHalfValueWhite, 
+                        !hasMembership && { fontSize: 16, color: '#FF6B6B' }
+                      ]}>
+                        {hasMembership ? membership.status : '구매 필요'}
+                      </Text>
                     </View>
                   </View>
                 </View>

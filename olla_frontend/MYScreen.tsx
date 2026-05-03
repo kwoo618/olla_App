@@ -11,10 +11,9 @@ const MYScreen = ({ navigation }: any) => {
   const isFocused = useIsFocused();
   const [loading, setLoading] = useState(true);
 
-  // 1️⃣ 상태 관리
-  const [memInfo, setMemInfo] = useState({ type: '-', period: '-', status: '확인 중', remainingDays: 0 });
+  // 1️⃣ 상태 관리 (비회원 기본 상태 세팅, remainingDays -1로 구분)
+  const [memInfo, setMemInfo] = useState({ type: '구매 필요', period: '-', status: '비회원', remainingDays: -1 });
 
-  // 💡 유저 정보 통합 관리 (성별, 생년월일 추가)
   const [profileData, setProfileData] = useState<any>({
     name: '', phone: '', gender: '', birthDate: '', age: '', height: '', weight: '', arm: '', shoe: ''
   });
@@ -30,7 +29,7 @@ const MYScreen = ({ navigation }: any) => {
   const [isNoticeEnabled, setIsNoticeEnabled] = useState(true);
   const [isExpireEnabled, setIsExpireEnabled] = useState(true);
 
-  // 2️⃣ 데이터 불러오기 (API 연동 및 D-Day 계산)
+  // 2️⃣ 데이터 불러오기
   const fetchMyInfo = async () => {
     try {
       const userToken = await AsyncStorage.getItem('userToken');
@@ -45,11 +44,10 @@ const MYScreen = ({ navigation }: any) => {
       const userRes = await axios.get('http://192.168.45.12:8080/api/v1/members/me', { headers });
       const data = userRes.data.data || userRes.data;
 
-      // 💡 데이터 매핑 (성별, 생년월일 추가)
       setProfileData({
         name: data.name || '',
         phone: data.phone || '',
-        gender: data.gender || '',
+        gender: data.gender || '',       
         birthDate: data.birthDate || '',
         age: data.detail?.age?.toString() || '',
         height: data.detail?.height?.toString() || '',
@@ -85,8 +83,13 @@ const MYScreen = ({ navigation }: any) => {
             status: memData.status === 'ACTIVE' ? '이용중' : '만료',
             remainingDays: diffDays >= 0 ? diffDays : 0
           });
+        } else {
+          setMemInfo({ type: '구매 필요', period: '-', status: '비회원', remainingDays: -1 });
         }
-      } catch (e) { console.log("이용권 정보 로드 실패"); }
+      } catch (e) { 
+        console.log("이용권 정보 로드 실패"); 
+        setMemInfo({ type: '구매 필요', period: '-', status: '비회원', remainingDays: -1 });
+      }
 
     } catch (error) {
       console.error("데이터 로드 실패:", error);
@@ -103,7 +106,6 @@ const MYScreen = ({ navigation }: any) => {
       const userToken = await AsyncStorage.getItem('userToken');
       const headers = { Authorization: `Bearer ${userToken}` };
 
-      // 💡 저장할 때 성별, 생년월일도 포함해서 백엔드에 넘겨줍니다.
       const requestBody = {
         name: profileData.name,
         phone: profileData.phone,
@@ -153,7 +155,7 @@ const MYScreen = ({ navigation }: any) => {
 
   const cancelLogout = () => setLogoutModalVisible(false);
 
-  // 애니메이션 제어
+  // 🔥 원본 애니메이션 제어 로직 완벽 복구
   const pauseSlideAnim = useRef(new Animated.Value(800)).current;
   const contactSlideAnim = useRef(new Animated.Value(800)).current;
   const profileSlideAnim = useRef(new Animated.Value(800)).current;
@@ -206,6 +208,8 @@ const MYScreen = ({ navigation }: any) => {
     );
   };
 
+  const hasMembership = memInfo.remainingDays >= 0;
+
   if (loading) return <View style={[styles.background, { justifyContent: 'center' }]}><ActivityIndicator size="large" color="#A1BE44" /></View>;
 
   return (
@@ -223,13 +227,28 @@ const MYScreen = ({ navigation }: any) => {
           <Text style={styles.chevronIcon}>＞</Text>
         </TouchableOpacity>
 
-        {/* 멤버십 */}
+        {/* 멤버십 (회원/비회원 UI 분기 적용) */}
         <View style={styles.card}>
           <View style={styles.cardHeader}><Image source={require('./assets/membership.png')} style={styles.cardHeaderIcon} /><Text style={styles.cardHeaderTitle}>멤버십 정보</Text></View>
           <View style={styles.memInfoContainer}>
-            <View style={styles.memInfoRow}><Text style={styles.memInfoLabel}>회원권</Text><Text style={styles.memInfoValue}>{memInfo.type} (D-{memInfo.remainingDays})</Text></View>
-            <View style={styles.memInfoRow}><Text style={styles.memInfoLabel}>기간</Text><Text style={styles.memInfoValue}>{memInfo.period}</Text></View>
-            <View style={styles.memInfoRow}><Text style={styles.memInfoLabel}>상태</Text><View style={styles.activeBadge}><Text style={styles.activeBadgeText}>{memInfo.status}</Text></View></View>
+            <View style={styles.memInfoRow}>
+              <Text style={styles.memInfoLabel}>회원권</Text>
+              <Text style={styles.memInfoValue}>
+                {hasMembership ? `${memInfo.type} (D-${memInfo.remainingDays})` : '구매 필요'}
+              </Text>
+            </View>
+            <View style={styles.memInfoRow}>
+              <Text style={styles.memInfoLabel}>기간</Text>
+              <Text style={styles.memInfoValue}>{memInfo.period}</Text>
+            </View>
+            <View style={styles.memInfoRow}>
+              <Text style={styles.memInfoLabel}>상태</Text>
+              <View style={[styles.activeBadge, !hasMembership && { backgroundColor: '#444444' }]}>
+                <Text style={[styles.activeBadgeText, !hasMembership && { color: '#999999' }]}>
+                  {memInfo.status}
+                </Text>
+              </View>
+            </View>
           </View>
           <TouchableOpacity style={styles.pauseButton} onPress={openPauseModal}><Text style={styles.pauseButtonText}>멤버십 일시정지</Text></TouchableOpacity>
         </View>
@@ -264,6 +283,56 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
+      {/* 🔥 일시정지 모달창 복구 완료 */}
+      <Modal visible={isPauseModalVisible} transparent={true} animationType="fade">
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closePauseModal}>
+          <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: pauseSlideAnim }] }]}>
+            <TouchableOpacity activeOpacity={1}>
+              <View style={styles.dragHandle} />
+              <View style={styles.sheetHeader}>
+                <Text style={styles.sheetTitle}>멤버십 일시정지</Text>
+                <TouchableOpacity onPress={closePauseModal}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity>
+              </View>
+              <View style={styles.pauseInfoBox}>
+                <Text style={styles.pauseInfoText}>
+                  • 잔여 기간 중 1회에 한해 일시정지가 가능합니다.{"\n"}
+                  • 최대 30일까지 정지할 수 있습니다.{"\n"}
+                  • 정지 신청 후에는 취소 및 수정이 불가합니다.
+                </Text>
+              </View>
+              <View style={styles.modalBtnRow}>
+                <TouchableOpacity style={styles.modalBtnCancel} onPress={closePauseModal}>
+                  <Text style={styles.modalBtnCancelText}>취소</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalBtnSubmit} onPress={handleInquireClick}>
+                  <Text style={styles.modalBtnSubmitText}>신청하기</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          </Animated.View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* 🔥 문의하기 모달창 (handleInquireClick 연결) 복구 완료 */}
+      <Modal visible={isContactModalVisible} transparent={true} animationType="fade">
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeContactModal}>
+          <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: contactSlideAnim }] }]}>
+            <TouchableOpacity activeOpacity={1}>
+              <View style={styles.dragHandle} />
+              <View style={styles.sheetHeader}>
+                <Text style={styles.sheetTitle}>문의 안내</Text>
+                <TouchableOpacity onPress={closeContactModal}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity>
+              </View>
+              <View style={[styles.pauseInfoBox, { marginBottom: 40 }]}>
+                <Text style={styles.pauseInfoText}>
+                  일시정지 및 기타 문의는 안내 데스크를 통해 접수해 주시기 바랍니다.
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </Animated.View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* 프로필 수정 모달 */}
       <Modal visible={isProfileModalVisible} transparent={true} animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeProfileModal}>
@@ -277,7 +346,7 @@ const MYScreen = ({ navigation }: any) => {
                   <TouchableOpacity style={styles.profileImageEditWrapper} activeOpacity={0.7}><Image source={require('./assets/profile.png')} style={styles.profileImageLarge} /><View style={styles.profileImageEditOverlay}><Text style={styles.profileImageEditText}>수정</Text></View></TouchableOpacity>
                   {renderEditField('이름', 'name', '')}
 
-                  {/* 💡 성별 추가 (회원가입 디자인 차용, 공개토글 없음) */}
+                  {/* 성별 */}
                   <View style={styles.editFieldWrapper}>
                     <View style={styles.editFieldHeader}>
                       <Text style={styles.editFieldTitle}>성별</Text>
@@ -298,7 +367,7 @@ const MYScreen = ({ navigation }: any) => {
                     </View>
                   </View>
 
-                  {/* 💡 생년월일 추가 (자동 하이픈 포맷터 적용, 공개토글 없음) */}
+                  {/* 생년월일 */}
                   <View style={styles.editFieldWrapper}>
                     <View style={styles.editFieldHeader}>
                       <Text style={styles.editFieldTitle}>생년월일</Text>
@@ -342,7 +411,7 @@ const MYScreen = ({ navigation }: any) => {
   );
 };
 
-// 스타일 (기존 디자인 유지 + 성별 버튼 스타일 추가)
+// 스타일
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
   scrollContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 100 },
@@ -387,7 +456,6 @@ const styles = StyleSheet.create({
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   sheetTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' },
-  sheetTitleCenter: { color: '#ffffff', fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 15 },
   closeBtn: { color: '#999999', fontSize: 24, paddingHorizontal: 10 },
   horizontalDivider: { height: 1, backgroundColor: '#333333', width: '100%', marginBottom: 20 },
   pauseInfoBox: { backgroundColor: '#2C2C2C', borderRadius: 12, padding: 18, marginBottom: 25, width: '100%' },
@@ -413,7 +481,6 @@ const styles = StyleSheet.create({
   saveProfileButton: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 15 },
   saveProfileButtonText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
   
-  // 💡 추가된 성별 버튼 스타일
   genderRow: { flexDirection: 'row', justifyContent: 'space-between' },
   genderBtn: { flex: 1, backgroundColor: '#000000', borderWidth: 1, borderColor: '#444444', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginHorizontal: 4 },
   genderBtnActive: { borderColor: '#A1BE44', backgroundColor: 'rgba(161, 190, 68, 0.1)' },

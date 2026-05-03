@@ -1,12 +1,11 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BASE_URL = 'http://192.168.45.12:8080/api/v1/records/beginner';
 const ENDURANCE_BASE_URL = 'http://192.168.45.12:8080/api/v1/records/endurance';
-// 💡 연속 리드 전용 API URL 추가
 const SERIES_BASE_URL = 'http://192.168.45.12:8080/api/v1/records/series';
 
 // --- [인증 설정] ---
@@ -28,23 +27,19 @@ axios.interceptors.request.use(
 const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, enduranceData, setEnduranceData, consecutiveData, setConsecutiveData }: any) => {
   const [expandedSection, setExpandedSection] = useState<string | null>(route?.params?.openSection || null);
 
-  // 💡 초기 데이터 가져오기 (더미데이터 렌더링 방지 처리)
   useEffect(() => {
-    // 1. 더미 데이터 안 보이게 바로 빈 배열로 세팅
     setEnduranceData([]);
     setConsecutiveData([]);
 
-    // 2. 백엔드에서 진짜 데이터 조회
     fetchBestRecords();
     fetchEnduranceRecords();
-    fetchSeriesRecords(); // 💡 연속 완등 내역 조회 추가
+    fetchSeriesRecords(); 
 
     if (route?.params?.openSection) {
       setExpandedSection(route.params.openSection);
     }
   }, [route?.params?.openSection]);
 
-  // 초보벽 난이도별 최고 기록 조회
   const fetchBestRecords = async () => {
     try {
       const response = await axios.get(`${BASE_URL}/best`);
@@ -79,7 +74,6 @@ const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, en
     }
   };
 
-  // 지구력 기록 상세 내역 조회
   const fetchEnduranceRecords = async () => {
     try {
       const response = await axios.get(`${ENDURANCE_BASE_URL}/history`);
@@ -117,7 +111,6 @@ const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, en
     }
   };
 
-  // 💡 연속 기록 상세 내역 API 조회 추가 (백엔드 스펙 매핑)
   const fetchSeriesRecords = async () => {
     try {
       const response = await axios.get(`${SERIES_BASE_URL}/history`);
@@ -153,7 +146,6 @@ const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, en
 
   const confirmDelete = (type: any, id: number) => { setItemToDelete({ id, type }); setDeleteModalVisible(true); };
 
-  // 삭제 로직 API 통신 연동
   const executeDelete = async () => {
     if (!itemToDelete) return;
     try {
@@ -166,7 +158,6 @@ const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, en
           await axios.delete(`${ENDURANCE_BASE_URL}/${recordId}`);
           await fetchEnduranceRecords();
       } else if (itemToDelete.type === 'consecutive') {
-          // 💡 연속 기록 백엔드 삭제 통신 추가
           await axios.delete(`${SERIES_BASE_URL}/${recordId}`);
           await fetchSeriesRecords();
       }
@@ -189,8 +180,21 @@ const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, en
   const [holdCount, setHoldCount] = useState<number>(0);
   useEffect(() => { setHoldCount(0); }, [selectedDifficulty]);
 
-  const openRecordModal = () => { setRecordModalVisible(true); setTimeout(() => { Animated.timing(beginnerSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(); }, 50); };
-  const closeRecordModal = () => { Animated.timing(beginnerSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => { setRecordModalVisible(false); setSelectedType(null); setSelectedResult(null); setHoldCount(0); }); };
+  const openRecordModal = () => { 
+    setRecordModalVisible(true); 
+    setTimeout(() => { Animated.timing(beginnerSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(); }, 50); 
+  };
+  
+  // 💡 강제 화면 잠김 방지 로직 (setTimeout으로 확실하게 모달 소멸)
+  const closeRecordModal = () => { 
+    Animated.timing(beginnerSlideAnim, { toValue: 800, duration: 200, useNativeDriver: true }).start();
+    setTimeout(() => {
+      setRecordModalVisible(false); 
+      setSelectedType(null); 
+      setSelectedResult(null); 
+      setHoldCount(0); 
+    }, 200);
+  };
   
   const currentMaxHolds = useMemo(() => {
     const colorData = difficultyData.find((d: any) => d.color === selectedDifficulty);
@@ -226,10 +230,9 @@ const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, en
       await axios.post(BASE_URL, recordPayload);
       await fetchBestRecords(); 
       closeRecordModal();
-      Alert.alert("성공", "등반 기록이 저장되었습니다.");
+      setTimeout(() => Alert.alert("성공", "등반 기록이 저장되었습니다."), 300); // 팝업 충돌 방지 딜레이
     } catch (error: any) {
       if (axios.isAxiosError(error)) {
-          console.error("서버 응답 상세:", error.response?.data);
           Alert.alert("오류", error.response?.data?.message || "데이터 저장 실패");
       } else {
           Alert.alert("오류", "네트워크 문제로 저장에 실패했습니다.");
@@ -237,17 +240,35 @@ const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, en
     }
   };
   
-  // --- 지구력 모달 및 지도 로직 ---
+  // --- 지구력 모달 및 지도/타이머 로직 ---
   const [isEnduranceModalVisible, setEnduranceModalVisible] = useState(false);
   const enduranceSlideAnim = useRef(new Animated.Value(800)).current;
   const [enduranceLaps, setEnduranceLaps] = useState<number>(0);
   const [selectedMapNode, setSelectedMapNode] = useState<string | null>(null);
+  
   const [enduranceMin, setEnduranceMin] = useState<string>('');
   const [enduranceSec, setEnduranceSec] = useState<string>('');
-  const secInputRef = useRef<TextInput>(null);
+  
+  // 💡 모달이 여러 개 겹쳐 굳어버리지 않게 타이머 UI 상태를 내부에서 관리
+  const [isTimerActive, setIsTimerActive] = useState(false);
 
-  const openEnduranceModal = () => { setEnduranceModalVisible(true); setTimeout(() => { Animated.timing(enduranceSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(); }, 50); };
-  const closeEnduranceModal = () => { Animated.timing(enduranceSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => { setEnduranceModalVisible(false); setEnduranceLaps(0); setSelectedMapNode(null); setEnduranceMin(''); setEnduranceSec(''); }); };
+  const openEnduranceModal = () => { 
+    setEnduranceModalVisible(true); 
+    setTimeout(() => { Animated.timing(enduranceSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(); }, 50); 
+  };
+  
+  // 💡 강제 화면 잠김 방지 로직
+  const closeEnduranceModal = () => { 
+    Animated.timing(enduranceSlideAnim, { toValue: 800, duration: 200, useNativeDriver: true }).start(); 
+    setTimeout(() => {
+      setEnduranceModalVisible(false); 
+      setEnduranceLaps(0); 
+      setSelectedMapNode(null); 
+      setEnduranceMin(''); 
+      setEnduranceSec(''); 
+      setIsTimerActive(false);
+    }, 200);
+  };
 
   const SPACING = 24; const GAP = 10; const BASE_X = 30; const BASE_Y = 40; const TEXT_OFFSET = 24; 
 
@@ -336,7 +357,6 @@ const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, en
     return segments;
   }, [enduranceLaps, selectedMapNode, mapElements]);
 
-  // 💡 지구력 기록 백엔드 API 연동
   const handleSaveEnduranceRecord = async () => {
     if (!effectiveSection && enduranceLaps === 0) {
       Alert.alert("알림", "기록할 바퀴 수나 지도 구간을 선택해주세요.");
@@ -364,7 +384,7 @@ const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, en
       await axios.post(ENDURANCE_BASE_URL, recordPayload);
       await fetchEnduranceRecords();
       closeEnduranceModal();
-      Alert.alert("성공", "지구력 기록이 저장되었습니다.");
+      setTimeout(() => Alert.alert("성공", "지구력 기록이 저장되었습니다."), 300);
     } catch (error: any) {
       if (axios.isAxiosError(error)) {
           Alert.alert("오류", error.response?.data?.message || "지구력 기록 저장에 실패했습니다.");
@@ -374,16 +394,49 @@ const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, en
     }
   };
 
-  const [isTimerModalVisible, setTimerModalVisible] = useState(false);
+  // 💡 스톱워치 (타이머) 완벽 구동 로직
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const formatTime = (totalSecs: number) => { const m = Math.floor(totalSecs / 60).toString().padStart(2, '0'); const s = (totalSecs % 60).toString().padStart(2, '0'); return `${m}:${s}`; };
-  const toggleTimer = () => { if (timerRunning) { setTimerRunning(false); if (timerRef.current) clearInterval(timerRef.current); } else { setTimerRunning(true); timerRef.current = setInterval(() => { setTimerSeconds(prev => prev + 1); }, 1000); } };
-  const stopTimer = () => { if (timerRef.current) clearInterval(timerRef.current); setTimerRunning(false); const formatted = formatTime(timerSeconds); const [m, s] = formatted.split(':'); setEnduranceMin(m); setEnduranceSec(s); setTimerModalVisible(false); };
-  const openTimerModal = () => { setTimerSeconds(0); setTimerRunning(false); setTimerModalVisible(true); };
-  useEffect(() => { return () => { if (timerRef.current) clearInterval(timerRef.current); }; }, []);
+  const formatTime = (totalSecs: number) => { 
+    const m = Math.floor(totalSecs / 60).toString().padStart(2, '0'); 
+    const s = (totalSecs % 60).toString().padStart(2, '0'); 
+    return `${m}:${s}`; 
+  };
+  
+  const toggleTimer = () => { 
+    if (timerRunning) { 
+      setTimerRunning(false); 
+      if (timerRef.current) clearInterval(timerRef.current); 
+    } else { 
+      setTimerRunning(true); 
+      if (timerRef.current) clearInterval(timerRef.current); 
+      timerRef.current = setInterval(() => { 
+        setTimerSeconds(prev => prev + 1); 
+      }, 1000); 
+    } 
+  };
+  
+  const stopTimer = () => { 
+    if (timerRef.current) clearInterval(timerRef.current); 
+    setTimerRunning(false); 
+    const formatted = formatTime(timerSeconds); 
+    const [m, s] = formatted.split(':'); 
+    setEnduranceMin(m); 
+    setEnduranceSec(s); 
+    setIsTimerActive(false); // 타이머 닫고 다시 지구력 입력 폼으로 복귀
+  };
+  
+  const openTimerModal = () => { 
+    setTimerSeconds(0); 
+    setTimerRunning(false); 
+    setIsTimerActive(true); // 지구력 모달 안에서 화면만 타이머로 싹 변경 (버그 방지)
+  };
+  
+  useEffect(() => { 
+    return () => { if (timerRef.current) clearInterval(timerRef.current); }; 
+  }, []);
 
   const renderMapNode = (item: any) => {
     if (item.type === 'text') return (<Text key={item.id} style={[styles.mapAbsText, { left: item.x - 15, top: item.y - 8 }]}>{item.val}</Text>);
@@ -398,14 +451,25 @@ const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, en
   const [selectedConsecutiveList, setSelectedConsecutiveList] = useState<any[]>([]);
   const [showDetails, setShowDetails] = useState(false); 
 
-  const openConsecutiveModal = () => { setConsecutiveModalVisible(true); setTimeout(() => { Animated.timing(consecutiveSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(); }, 50); };
-  const closeConsecutiveModal = () => { Animated.timing(consecutiveSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => { setConsecutiveModalVisible(false); setSelectedConsecutiveList([]); setShowDetails(false); }); };
+  const openConsecutiveModal = () => { 
+    setConsecutiveModalVisible(true); 
+    setTimeout(() => { Animated.timing(consecutiveSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(); }, 50); 
+  };
+  
+  // 💡 강제 화면 잠김 방지 로직
+  const closeConsecutiveModal = () => { 
+    Animated.timing(consecutiveSlideAnim, { toValue: 800, duration: 200, useNativeDriver: true }).start(); 
+    setTimeout(() => {
+      setConsecutiveModalVisible(false); 
+      setSelectedConsecutiveList([]); 
+      setShowDetails(false); 
+    }, 200);
+  };
+  
   const removeConsecutiveItem = (indexToRemove: number) => { setSelectedConsecutiveList(prev => prev.filter((_, index) => index !== indexToRemove)); };
   
-  // 💡 기존에 요청하셨던 원본 점수(item.score) 그대로 적용
   const totalConsecutiveScore = selectedConsecutiveList.reduce((acc: number, curr: any) => acc + (curr.score || 0), 0);
   
-  // 💡 연속 완등 백엔드 통신 로직 추가
   const handleSaveConsecutiveRecord = async () => {
     if (selectedConsecutiveList.length === 0) {
       Alert.alert("알림", "연속으로 완등한 난이도를 1개 이상 입력해주세요.");
@@ -428,7 +492,7 @@ const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, en
       await axios.post(SERIES_BASE_URL, recordPayload);
       await fetchSeriesRecords(); 
       closeConsecutiveModal();
-      Alert.alert("성공", "연속 완등 기록이 저장되었습니다.");
+      setTimeout(() => Alert.alert("성공", "연속 완등 기록이 저장되었습니다."), 300);
     } catch (error: any) {
       if (axios.isAxiosError(error)) {
         Alert.alert("오류", error.response?.data?.message || "연속 완등 기록 저장에 실패했습니다.");
@@ -514,7 +578,6 @@ const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, en
                 <View style={styles.recordItemCard}><Text style={styles.emptyText}>오늘의 초보벽 연속 기록이 없습니다.</Text></View>
               ) : (
                 consecutiveData.map((item: any, index: number) => (
-                  // 💡 원본 요청대로 UI 디자인 유지 (옆에 뜨던 총점 삭제됨)
                   <View key={item.id || index} style={styles.rowCardWithTrash}>
                     <View style={styles.circleContainer}>{item.colors?.map((color: string, idx: number) => (<View key={idx} style={[styles.colorCircle, { backgroundColor: color }]} />))}</View>
                     <TouchableOpacity style={styles.trashButton} onPress={() => confirmDelete('consecutive', item.id)}><Image source={require('./assets/trash.png')} style={styles.trashIcon} /></TouchableOpacity>
@@ -526,11 +589,12 @@ const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, en
         </View>
       </ScrollView>
 
-      {/* 모달 영역들 */}
+      {/* 삭제 확인 모달 */}
       <Modal visible={isDeleteModalVisible} animationType="fade" transparent={true} onRequestClose={cancelDelete}>
         <View style={styles.deleteModalOverlay}><View style={styles.deleteModalBox}><Text style={styles.deleteModalText}>삭제하시겠습니까?</Text><View style={styles.deleteBtnRow}><TouchableOpacity style={styles.deleteBtnYes} onPress={executeDelete}><Text style={styles.deleteBtnYesText}>예</Text></TouchableOpacity><TouchableOpacity style={styles.deleteBtnNo} onPress={cancelDelete}><Text style={styles.deleteBtnNoText}>아니오</Text></TouchableOpacity></View></View></View>
       </Modal>
 
+      {/* 초보벽 기록 모달 */}
       <Modal visible={isRecordModalVisible} animationType="fade" transparent={true} onRequestClose={closeRecordModal}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeRecordModal}>
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: beginnerSlideAnim }] }]}>
@@ -555,71 +619,101 @@ const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, en
                 <Text style={styles.sectionTitle}>등반 유형</Text><View style={styles.choiceRow}>{['편도', '왕복'].map(type => (<TouchableOpacity key={type} onPress={() => setSelectedType(type)} style={[styles.choiceButton, selectedType === type ? { borderColor: '#A1BE44' } : { borderColor: '#555555' }]}><Text style={styles.choiceButtonText}>{type}</Text></TouchableOpacity>))}</View>
                 <Text style={styles.sectionTitle}>결과</Text><View style={styles.choiceRow}><TouchableOpacity onPress={() => setSelectedResult('완등')} style={[styles.choiceButton, selectedResult === '완등' ? { borderColor: '#A1BE44' } : { borderColor: '#555555' }]}><Text style={styles.choiceButtonText}>완등</Text></TouchableOpacity><TouchableOpacity onPress={() => setSelectedResult('실패')} style={[styles.choiceButton, selectedResult === '실패' ? { borderColor: '#FF4D4D' } : { borderColor: '#555555' }]}><Text style={styles.choiceButtonText}>실패</Text></TouchableOpacity></View>
                 {selectedResult === '완등' && (<TouchableOpacity style={styles.saveRecordButton} onPress={handleSaveBeginnerRecord}><Text style={styles.saveRecordButtonText}>기록 저장하기</Text></TouchableOpacity>)}
-                {selectedResult === '실패' && (<View style={styles.failContainer}><Text style={styles.failLabel}>진행한 홀드 수를 입력하세요</Text><View style={styles.counterRow}><TouchableOpacity onPress={() => setHoldCount(Math.max(0, holdCount - 1))} style={styles.counterBtn}><Text style={styles.counterBtnText}>-</Text></TouchableOpacity><View style={styles.inputWrapper}><TextInput style={styles.holdInput} keyboardType="numeric" value={String(holdCount)} onChangeText={(text) => { const num = parseInt(text, 10); if (!isNaN(num)) setHoldCount(Math.min(currentMaxHolds, Math.max(0, num))); else if (text === '') setHoldCount(0); }} /><Text style={styles.holdMaxText}>/ {currentMaxHolds}</Text></View><TouchableOpacity onPress={() => setHoldCount(Math.min(currentMaxHolds, holdCount + 1))} style={styles.counterBtn}><Text style={styles.counterBtnText}>+</Text></TouchableOpacity></View><TouchableOpacity style={styles.saveRecordButton} onPress={handleSaveBeginnerRecord}><Text style={styles.saveRecordButtonText}>기록 저장하기</Text></TouchableOpacity></View>)}
+                {selectedResult === '실패' && (<View style={styles.failContainer}><Text style={styles.failLabel}>진행한 홀드 수를 입력하세요</Text><View style={styles.counterRow}><TouchableOpacity onPress={() => setHoldCount(Math.max(0, holdCount - 1))} style={styles.counterBtn}><Text style={styles.counterBtnText}>-</Text></TouchableOpacity><View style={styles.inputWrapper}><Text style={styles.holdInput}>{holdCount}</Text><Text style={styles.holdMaxText}>/ {currentMaxHolds}</Text></View><TouchableOpacity onPress={() => setHoldCount(Math.min(currentMaxHolds, holdCount + 1))} style={styles.counterBtn}><Text style={styles.counterBtnText}>+</Text></TouchableOpacity></View><TouchableOpacity style={styles.saveRecordButton} onPress={handleSaveBeginnerRecord}><Text style={styles.saveRecordButtonText}>기록 저장하기</Text></TouchableOpacity></View>)}
               </TouchableOpacity>
             </ScrollView>
           </Animated.View>
         </TouchableOpacity>
       </Modal>
 
+      {/* 💡 지구력 모달 (타이머까지 완벽하게 통합된 버전) */}
       <Modal visible={isEnduranceModalVisible} animationType="fade" transparent={true} onRequestClose={closeEnduranceModal}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeEnduranceModal}>
-          <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: enduranceSlideAnim }] }]}>
-            <TouchableOpacity activeOpacity={1} style={{ width: '100%' }}><View style={styles.dragHandle} /><View style={styles.sheetHeader}><Text style={styles.sheetTitle}>지구력 기록 저장</Text><TouchableOpacity onPress={closeEnduranceModal}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity></View></TouchableOpacity>
-            <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%' }}>
-              <TouchableOpacity activeOpacity={1} style={{ width: '100%', paddingBottom: 20 }}>
-                
-                <Text style={styles.sectionTitle}>편도 횟수</Text>
-                <View style={styles.enduranceCounterRow}>
-                  <TouchableOpacity onPress={() => setEnduranceLaps(Math.max(0, enduranceLaps - 1))} style={styles.counterBtn}><Text style={styles.counterBtnText}>-</Text></TouchableOpacity>
-                  <View style={styles.inputWrapperSmall}><TextInput style={styles.lapsInput} keyboardType="numeric" value={String(enduranceLaps)} onChangeText={(text) => { const num = parseInt(text, 10); if (!isNaN(num)) setEnduranceLaps(Math.max(0, num)); else if (text === '') setEnduranceLaps(0); }} /></View>
-                  <TouchableOpacity onPress={() => setEnduranceLaps(enduranceLaps + 1)} style={styles.counterBtn}><Text style={styles.counterBtnText}>+</Text></TouchableOpacity>
-                </View>
-
-                <Text style={styles.sectionTitle}>지도에서 선택</Text>
-                <View style={styles.mapSuperContainer}>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mapScrollWrapper}>
-                    <View style={styles.mapInnerWrapper}>
-                      <View style={{ width: 350, height: 235 }}>
-                        {mapElements.map(renderMapNode)}
-                        {pathSegments}
-                        {selectedMapNode && (
-                          <View style={[styles.headMarker, { 
-                            backgroundColor: rainbowColors[enduranceLaps % 7], 
-                            left: getBoxCoord(selectedMapNode).x - 10, 
-                            top: getBoxCoord(selectedMapNode).y - 10 
-                          }]} />
-                        )}
-                      </View>
-                    </View>
-                  </ScrollView>
-                </View>
-
-                <Text style={styles.sectionTitle}>선택한 구간 (자동계산)</Text>
-                <View style={styles.selectedSectionBox}>
-                  <Text style={styles.selectedSectionText}>
-                    {effectiveSection ? `${effectiveSection} 구간` : '지도에서 컬러 블록을 선택해주세요'}
-                  </Text>
-                </View>
-
-                <Text style={styles.sectionTitle}>타이머</Text>
-                <View style={styles.timerInputRow}>
-                  <TouchableOpacity onPress={openTimerModal} style={styles.timerPlayBtn}><Text style={styles.timerPlayIcon}>▶</Text></TouchableOpacity>
-                  <View style={styles.timerTextInputWrapper}>
-                    <TextInput style={styles.timerTextInput} value={enduranceMin} onChangeText={(text) => { const numeric = text.replace(/[^0-9]/g, ''); setEnduranceMin(numeric); if (numeric.length >= 2) secInputRef.current?.focus(); }} placeholder="00" placeholderTextColor="#666666" keyboardType="numeric" maxLength={2} />
-                    <Text style={styles.timerLabel}>분</Text>
-                    <TextInput ref={secInputRef} style={[styles.timerTextInput, { marginLeft: 5 }]} value={enduranceSec} onChangeText={(text) => { const numeric = text.replace(/[^0-9]/g, ''); setEnduranceSec(numeric); }} placeholder="00" placeholderTextColor="#666666" keyboardType="numeric" maxLength={2} />
-                    <Text style={styles.timerLabel}>초</Text>
-                  </View>
-                </View>
-
-                <TouchableOpacity style={styles.saveRecordButton} onPress={handleSaveEnduranceRecord}><Text style={styles.saveRecordButtonText}>기록 저장하기</Text></TouchableOpacity>
+        {isTimerActive ? (
+          // 타이머 활성화 시 화면 전체를 스톱워치 뷰로 변경
+          <SafeAreaView style={[StyleSheet.absoluteFill, styles.timerModalBackground, { zIndex: 1000 }]}>
+            <View style={styles.timerHeader}>
+              <Text style={styles.timerHeaderTitle}>지구력 측정 타이머</Text>
+              <TouchableOpacity onPress={() => {
+                if (timerRef.current) clearInterval(timerRef.current);
+                setTimerRunning(false);
+                setIsTimerActive(false); // 타이머 닫고 폼으로 복귀
+              }}>
+                <Text style={styles.closeBtn}>✕</Text>
               </TouchableOpacity>
-            </ScrollView>
-          </Animated.View>
-        </TouchableOpacity>
+            </View>
+            <View style={styles.timerCenterArea}>
+              <Text style={styles.hugeTimerText}>{formatTime(timerSeconds)}</Text>
+            </View>
+            <View style={styles.timerControlRow}>
+              <TouchableOpacity style={[styles.timerCircleBtn, { backgroundColor: timerRunning ? '#FFB74D' : '#A1BE44' }]} onPress={toggleTimer}>
+                <Text style={styles.timerCircleBtnText}>{timerRunning ? '일시정지' : '재생'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.timerCircleBtn, { backgroundColor: '#FF4D4D' }]} onPress={stopTimer}>
+                <Text style={styles.timerCircleBtnText}>완료</Text>
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
+        ) : (
+          // 기본 지구력 폼 UI
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeEnduranceModal}>
+            <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: enduranceSlideAnim }] }]}>
+              <TouchableOpacity activeOpacity={1} style={{ width: '100%' }}><View style={styles.dragHandle} /><View style={styles.sheetHeader}><Text style={styles.sheetTitle}>지구력 기록 저장</Text><TouchableOpacity onPress={closeEnduranceModal}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity></View></TouchableOpacity>
+              <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%' }}>
+                <TouchableOpacity activeOpacity={1} style={{ width: '100%', paddingBottom: 20 }}>
+                  
+                  <Text style={styles.sectionTitle}>편도 횟수</Text>
+                  <View style={styles.enduranceCounterRow}>
+                    <TouchableOpacity onPress={() => setEnduranceLaps(Math.max(0, enduranceLaps - 1))} style={styles.counterBtn}><Text style={styles.counterBtnText}>-</Text></TouchableOpacity>
+                    <View style={styles.inputWrapperSmall}><Text style={styles.lapsInputText}>{enduranceLaps}</Text></View>
+                    <TouchableOpacity onPress={() => setEnduranceLaps(enduranceLaps + 1)} style={styles.counterBtn}><Text style={styles.counterBtnText}>+</Text></TouchableOpacity>
+                  </View>
+
+                  <Text style={styles.sectionTitle}>지도에서 선택</Text>
+                  <View style={styles.mapSuperContainer}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mapScrollWrapper}>
+                      <View style={styles.mapInnerWrapper}>
+                        <View style={{ width: 350, height: 235 }}>
+                          {mapElements.map(renderMapNode)}
+                          {pathSegments}
+                          {selectedMapNode && (
+                            <View style={[styles.headMarker, { 
+                              backgroundColor: rainbowColors[enduranceLaps % 7], 
+                              left: getBoxCoord(selectedMapNode).x - 10, 
+                              top: getBoxCoord(selectedMapNode).y - 10 
+                            }]} />
+                          )}
+                        </View>
+                      </View>
+                    </ScrollView>
+                  </View>
+
+                  <Text style={styles.sectionTitle}>선택한 구간 (자동계산)</Text>
+                  <View style={styles.selectedSectionBox}>
+                    <Text style={styles.selectedSectionText}>
+                      {effectiveSection ? `${effectiveSection} 구간` : '지도에서 컬러 블록을 선택해주세요'}
+                    </Text>
+                  </View>
+
+                  <Text style={styles.sectionTitle}>타이머 기록 (직접 입력 불가)</Text>
+                  <View style={styles.timerInputRow}>
+                    <TouchableOpacity onPress={openTimerModal} style={styles.timerPlayBtn}><Text style={styles.timerPlayIcon}>▶</Text></TouchableOpacity>
+                    <View style={styles.timerDisplayWrapper}>
+                      <Text style={styles.timerDisplayText}>{enduranceMin || '00'}</Text>
+                      <Text style={styles.timerLabel}>분</Text>
+                      <Text style={styles.timerDisplayText}>{enduranceSec || '00'}</Text>
+                      <Text style={styles.timerLabel}>초</Text>
+                    </View>
+                  </View>
+
+                  <TouchableOpacity style={styles.saveRecordButton} onPress={handleSaveEnduranceRecord}><Text style={styles.saveRecordButtonText}>기록 저장하기</Text></TouchableOpacity>
+                </TouchableOpacity>
+              </ScrollView>
+            </Animated.View>
+          </TouchableOpacity>
+        )}
       </Modal>
 
+      {/* 연속 기록 모달 */}
       <Modal visible={isConsecutiveModalVisible} animationType="fade" transparent={true} onRequestClose={closeConsecutiveModal}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeConsecutiveModal}>
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: consecutiveSlideAnim }] }]}>
@@ -635,7 +729,6 @@ const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, en
                   <TouchableOpacity style={styles.detailButton} onPress={() => setShowDetails(!showDetails)}><Text style={styles.detailButtonText}>{showDetails ? '닫기' : '상세보기'}</Text></TouchableOpacity>
                 </View>
                 
-                {/* 💡 요청하신 대로 첫 번째 보내주셨던 코드의 점수 산출 로직(item.score) 그대로 복구됨 */}
                 <Text style={styles.totalScoreText}>{totalConsecutiveScore} 점</Text>
                 {showDetails && (
                   <View style={[styles.consecutiveInputBox, { marginTop: 15 }]}>
@@ -653,14 +746,6 @@ const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, en
             </ScrollView>
           </Animated.View>
         </TouchableOpacity>
-      </Modal>
-
-      <Modal visible={isTimerModalVisible} animationType="slide" transparent={false} onRequestClose={() => setTimerModalVisible(false)}>
-        <SafeAreaView style={styles.timerModalBackground}>
-          <View style={styles.timerHeader}><Text style={styles.timerHeaderTitle}>지구력 측정 타이머</Text><TouchableOpacity onPress={() => setTimerModalVisible(false)}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity></View>
-          <View style={styles.timerCenterArea}><Text style={styles.hugeTimerText}>{formatTime(timerSeconds)}</Text></View>
-          <View style={styles.timerControlRow}><TouchableOpacity style={[styles.timerCircleBtn, { backgroundColor: timerRunning ? '#FFB74D' : '#A1BE44' }]} onPress={toggleTimer}><Text style={styles.timerCircleBtnText}>{timerRunning ? '일시정지' : '재생'}</Text></TouchableOpacity><TouchableOpacity style={[styles.timerCircleBtn, { backgroundColor: '#FF4D4D' }]} onPress={stopTimer}><Text style={styles.timerCircleBtnText}>중단</Text></TouchableOpacity></View>
-        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
@@ -734,7 +819,7 @@ const styles = StyleSheet.create({
   holdMaxText: { color: '#999999', fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
   enduranceCounterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   inputWrapperSmall: { borderBottomWidth: 2, borderBottomColor: '#A1BE44', paddingBottom: 2, marginHorizontal: 20 },
-  lapsInput: { color: '#ffffff', fontSize: 32, fontWeight: 'bold', padding: 0, minWidth: 60, textAlign: 'center' },
+  lapsInputText: { color: '#ffffff', fontSize: 32, fontWeight: 'bold', padding: 0, minWidth: 60, textAlign: 'center' },
   mapSuperContainer: { alignItems: 'flex-start', width: '100%', paddingLeft: 0 }, 
   mapScrollWrapper: { flexGrow: 1, justifyContent: 'flex-start', paddingTop: 5, paddingBottom: 0, paddingHorizontal: 0 }, 
   mapInnerWrapper: { backgroundColor: '#1E1E1E', paddingTop: 20, paddingBottom: 10, paddingLeft: 10, paddingRight: 40, borderRadius: 16, alignSelf: 'flex-start' },
@@ -746,9 +831,9 @@ const styles = StyleSheet.create({
   timerInputRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   timerPlayBtn: { width: 45, height: 45, backgroundColor: '#333333', borderRadius: 22.5, alignItems: 'center', justifyContent: 'center', marginRight: 15 },
   timerPlayIcon: { color: '#A1BE44', fontSize: 18, marginLeft: 4 },
-  timerTextInputWrapper: { flexDirection: 'row', alignItems: 'flex-end', borderBottomWidth: 2, borderBottomColor: '#A1BE44', paddingBottom: 5 },
-  timerTextInput: { color: '#ffffff', fontSize: 24, fontWeight: 'bold', padding: 0, minWidth: 40, textAlign: 'center' },
-  timerLabel: { color: '#999999', fontSize: 16, fontWeight: 'bold', marginBottom: 4, marginRight: 8 },
+  timerDisplayWrapper: { flexDirection: 'row', alignItems: 'flex-end', borderBottomWidth: 2, borderBottomColor: '#A1BE44', paddingBottom: 5, paddingHorizontal: 10 },
+  timerDisplayText: { color: '#ffffff', fontSize: 28, fontWeight: 'bold', minWidth: 40, textAlign: 'center' },
+  timerLabel: { color: '#999999', fontSize: 16, fontWeight: 'bold', marginBottom: 4, marginRight: 8, marginLeft: 4 },
   timerModalBackground: { flex: 1, backgroundColor: '#1A1A1A', padding: 20 },
   timerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20 },
   timerHeaderTitle: { color: '#A1BE44', fontSize: 22, fontWeight: 'bold' },

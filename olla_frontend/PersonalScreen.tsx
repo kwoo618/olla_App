@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // 💡 [추가] 토큰 저장을 위해 import
 import { 
   View, 
   Text, 
@@ -38,7 +39,7 @@ const PersonalScreen = ({ navigation, route }: any) => {
     }
 
     try {
-      // 💡 [수정 1] 마법의 주소 10.0.2.2 로 변경!
+      // 1. 회원가입 요청
       const response = await axios.post('http://192.168.45.12:8080/api/v1/auth/signup', {
         ...accountData, // 아이디, 비번, 이름, 이메일, 전화번호 등
         role: 'USER',
@@ -59,9 +60,34 @@ const PersonalScreen = ({ navigation, route }: any) => {
         }
       });
 
+      // 2. 회원가입 성공 시 자동 로그인 처리
       if (response.status === 200 || response.status === 201) {
+        
+        try {
+          // 💡 [추가] 가입했던 아이디와 비밀번호로 즉시 로그인 요청을 보냅니다.
+          const loginResponse = await axios.post('http://192.168.45.12:8080/api/v1/auth/login', {
+            loginId: accountData.loginId,
+            password: accountData.password
+          });
+
+          // 백엔드 응답 구조에 맞게 토큰 추출 (보통 data 안에 있거나 data.data 안에 있습니다)
+          const accessToken = loginResponse.data?.data?.accessToken || loginResponse.data?.accessToken;
+          const refreshToken = loginResponse.data?.data?.refreshToken || loginResponse.data?.refreshToken;
+
+          // 💡 [추가] 발급받은 토큰을 기기에 안전하게 저장합니다.
+          if (accessToken) {
+            await AsyncStorage.setItem('userToken', accessToken);
+            if (refreshToken) {
+              await AsyncStorage.setItem('refreshToken', refreshToken);
+            }
+          }
+        } catch (loginError) {
+          console.error("자동 로그인 에러:", loginError);
+          // 로그인 실패 시 (거의 발생하지 않지만 대비용)
+        }
+
+        // 3. 모든 과정이 끝나면 화면 이동
         Alert.alert('성공', '회원가입이 성공적으로 완료되었습니다!', [
-          // 💡 [수정 2] 로딩 스크린에 'signup' 꼬리표를 달아서 보냅니다!
           { text: '확인', onPress: () => navigation.replace('Loading', { type: 'signup' }) }
         ]);
       }

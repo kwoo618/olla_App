@@ -124,6 +124,16 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
         }
     }
 
+    // 💡 (동철 추가) 마이페이지에서 성별과 생년월일을 수정할 수 있게 해주는 갱신용 메서드 추가
+    public void updateAdditionalInfo(String gender, LocalDate birthDate) {
+        if (gender != null) {
+            this.gender = gender;
+        }
+        if (birthDate != null) {
+            this.birthDate = birthDate;
+        }
+    }
+
     // 탈퇴 처리 메서드
     public void withdraw() {
         this.isDeleted = true;
