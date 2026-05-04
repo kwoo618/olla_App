@@ -31,8 +31,7 @@ public class AuthService {
     private final MemberRepository memberRepository;    
     private final PasswordEncoder passwordEncoder;      
     private final JwtTokenProvider jwtTokenProvider;    
-    private final RefreshTokenRepository refreshTokenRepository;    
-
+    private final RefreshTokenRepository refreshTokenRepository;
     private final GoogleSheetsService googleSheetsService;
 
     @Transactional

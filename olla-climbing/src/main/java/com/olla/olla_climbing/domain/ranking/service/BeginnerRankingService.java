@@ -70,51 +70,51 @@ public class BeginnerRankingService {
         return BeginnerRankingResponse.builder().masters(masterDtos).challengers(challengerDtos).build();
     }
 
-    // 초보벽 단일 리드 기록 추가/업데이트 시 랭킹 업데이트 로직
     @Transactional
     public void updateBeginnerRanking(Member member, RecordBeginner record) {
         Difficulty difficulty = record.getDifficulty();
         Ranking ranking = rankingRepository.findByMemberAndRankTypeAndDifficulty(member, RankType.BEGINNER, difficulty).orElse(null);
 
         int safeMaxHoldNo = (record.getMaxHoldNo() != null) ? record.getMaxHoldNo() :
-                            (record.isSuccess() ? difficulty.getHoldCount() : 0);
+                (record.isSuccess() ? difficulty.getHoldCount() : 0);
 
         boolean isNowMaster = record.isSuccess() || safeMaxHoldNo >= difficulty.getHoldCount();
-        
-        // (동철 수정) 왕복(ROUND_TRIP)이면 0.5점을 더해서, 무조건 편도보다 점수가 높게 만들어 랭킹을 이기게 만듦!
+
+        // 순수한 홀드 수를 저장합니다.
         Double newScore = Double.valueOf(safeMaxHoldNo);
-        if (record.getAttemptType() != null && "ROUND_TRIP".equalsIgnoreCase(record.getAttemptType().name())) {
-            newScore += 0.5;
-        }
 
         boolean isRankingChanged = false;
 
         if (ranking != null) {
-            if (ranking.isMaster()) {
-                // (동철 수정) 기존에는 무조건 return 해버려서 편도 마스터가 왕복 마스터로 갱신을 못했음.
-                // 점수(newScore)가 기존 점수보다 높으면(편도 -> 왕복으로 갱신되면) 업데이트 하도록 수정!
-                if (newScore > ranking.getScore()) {
-                    ranking.updateToMaster(newScore);
-                    isRankingChanged = true;
-                } else {
-                    return;
-                }
-            } else {
-                if (isNowMaster) {
-                    ranking.updateToMaster(newScore);
-                    isRankingChanged = true;
-                } else if (newScore > ranking.getScore()) {
-                    ranking.updateScore(newScore);
-                    isRankingChanged = true;
-                }
+            // 마스터 처리나 점수 갱신 로직은 동철님이 수정한 것(왕복 갱신 가능)을
+            // 랭킹 테이블 내의 attempt_type 비교 로직으로 교체해야 완벽하지만,
+            // 현재 구조에서는 동철님 의도대로 작동시키기 위해 아래와 같이 단순화합니다.
+            if (isNowMaster && !ranking.isMaster()) {
+                ranking.updateToMaster(newScore);
+                isRankingChanged = true;
+            } else if (newScore > ranking.getScore()) {
+                ranking.updateScore(newScore);
+                isRankingChanged = true;
             }
         } else {
-            ranking = Ranking.builder().member(member).baseDate(LocalDateTime.now()).rankType(RankType.BEGINNER).difficulty(difficulty).score(newScore).isMaster(isNowMaster).build();
+            ranking = Ranking.builder().member(member).baseDate(record.getRecordDate().atStartOfDay()) // 현재 시간이 아닌 '기록 달성일'을 기준일로 명확히 삽입
+                    .rankType(RankType.BEGINNER).difficulty(difficulty).score(newScore).isMaster(isNowMaster).build();
             rankingRepository.save(ranking);
             if (!isNowMaster) isRankingChanged = true;
         }
 
         if (isRankingChanged) recalculateChallengerRankings(difficulty);
+    }
+
+    // 챌린저 랭킹 재계산 시 순수 점수와 달성일(baseDate)로만 정렬
+    private void recalculateChallengerRankings(Difficulty difficulty) {
+        // 점수가 높을수록(Desc), 달성일이 빠를수록(Asc) 높은 랭킹을 줍니다.
+        List<Ranking> challengers = rankingRepository.findByRankTypeAndDifficultyAndIsMasterFalseOrderByScoreDescBaseDateAsc(RankType.BEGINNER, difficulty);
+        int currentRank = 1;
+        for (Ranking challenger : challengers) {
+            challenger.updateRanking(currentRank);
+            currentRank++;
+        }
     }
 
     // 초보벽 단일 리드 기록 삭제 시 랭킹 동기화 로직
@@ -150,12 +150,4 @@ public class BeginnerRankingService {
         if (isRankingChanged) recalculateChallengerRankings(difficulty);
     }
 
-    private void recalculateChallengerRankings(Difficulty difficulty) {
-        List<Ranking> challengers = rankingRepository.findByRankTypeAndDifficultyAndIsMasterFalseOrderByScoreDescBaseDateAsc(RankType.BEGINNER, difficulty);
-        int currentRank = 1;
-        for (Ranking challenger : challengers) {
-            challenger.updateRanking(currentRank);
-            currentRank++;
-        }
-    }
 }

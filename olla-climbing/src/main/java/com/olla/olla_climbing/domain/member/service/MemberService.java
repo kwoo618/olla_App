@@ -32,8 +32,10 @@ public class MemberService {
     // Transactional(readOnly = true) -> 데이터 조회 시 성능 최적화, 트랜잭션 관리
     @Transactional(readOnly = true)
     public MemberResponse getMyInfo(String loginId) {
-        // 1. 로그인 ID로 회원 조회 (없으면 예외 발생)
-        Member member = memberRepository.findByLoginId(loginId)
+        // 1. 회원 조회
+        // N+1 방지를 위해 @EntityGraph가 적용된 쿼리를 사용합니다.
+        // 이제 member, detail, privacy, notification 테이블을 JOIN해서 쿼리 1방에 가져옵니다.
+        Member member = memberRepository.findWithDetailsByLoginId(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
 
         // 2. 엔티티를 DTO로 변환하여 반환

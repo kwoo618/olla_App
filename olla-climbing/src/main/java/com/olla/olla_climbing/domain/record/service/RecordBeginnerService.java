@@ -82,13 +82,11 @@ public class RecordBeginnerService {
         Member member = memberRepository.findByLoginId(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
 
-        // (동철 수정) DB 커스텀 쿼리(findBestRecordsByMemberIdOptimized)가 
-        // 왕복과 편도가 동점일 때 편도를 가져오는 치명적인 맹점이 있었습니다.
-        // 따라서, 왕복(ROUND_TRIP)을 무조건 우선으로 가져오기 위해 
-        // 난이도별로 가장 정확하게 필터링된 쿼리(AttemptTypeDesc 포함)를 던지도록 수정했습니다.
         List<RecordBeginnerResponse> bestRecords = new ArrayList<>();
-        
+
         for (Difficulty difficulty : Difficulty.values()) {
+            // 쿼리 자체에서 AttemptTypeDesc(왕복 Z -> 편도 A 내림차순 정렬)를 걸면
+            // DB가 알아서 동점일 때 왕복을 가장 위로 올려서 반환합니다. 데이터가 오염되지 않습니다.
             recordBeginnerRepository.findTopByMemberAndDifficultyOrderByIsSuccessDescMaxHoldNoDescAttemptTypeDesc(member, difficulty)
                     .ifPresent(record -> bestRecords.add(RecordBeginnerResponse.from(record)));
         }
