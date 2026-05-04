@@ -1,5 +1,7 @@
 package com.olla.olla_climbing.domain.admin.service;
 
+import com.olla.olla_climbing.domain.admin.dto.response.VisitDashboardResponse;
+import com.olla.olla_climbing.domain.admin.dto.response.VisitScanResponse;
 import com.olla.olla_climbing.domain.admin.entity.Membership;
 import com.olla.olla_climbing.domain.admin.entity.VisitLog;
 import com.olla.olla_climbing.domain.admin.enums.MembershipStatus;
@@ -14,7 +16,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -27,32 +33,63 @@ public class VisitService {
     private final GoogleSheetsService googleSheetsService;
 
     @Transactional
-    public void processEntry(String qrToken, String adminLoginId) {
+    public VisitScanResponse processEntry(String qrToken, String adminLoginId, int deductionCount) {
         // 1. QR 토큰 검증 및 회원 식별
         if (!jwtTokenProvider.validateToken(qrToken)) {
-            throw new IllegalArgumentException("유효하지 않거나 만료된 QR 코드입니다.");
+            return VisitScanResponse.builder().statusCode("ERROR").message("유효하지 않거나 만료된 QR 코드입니다.").build();
         }
         String memberLoginId = jwtTokenProvider.getLoginId(qrToken);
 
-        Member member = memberRepository.findByLoginId(memberLoginId)
-                .orElseThrow(() -> new IllegalArgumentException("회원 정보를 찾을 수 없습니다."));
+        Member member = memberRepository.findByLoginId(memberLoginId).orElse(null);
+        Member admin = memberRepository.findByLoginId(adminLoginId).orElse(null);
 
-        Member admin = memberRepository.findByLoginId(adminLoginId)
-                .orElseThrow(() -> new IllegalArgumentException("관리자 정보를 찾을 수 없습니다."));
+        if (member == null) return VisitScanResponse.builder().statusCode("ERROR").message("회원 정보를 찾을 수 없습니다.").build();
+        if (admin == null) return VisitScanResponse.builder().statusCode("ERROR").message("관리자 정보를 찾을 수 없습니다.").build();
 
-        // 2. 해당 회원의 활성화된 이용권 조회
-        Membership membership = membershipRepository.findByMemberIdAndStatus(member.getId(), MembershipStatus.ACTIVE)
-                .orElseThrow(() -> new IllegalStateException("활성화된 이용권이 없습니다. 안내데스크에 문의해주세요."));
+        // 2. [추가] 1분 쿨타임 (중복 스캔 방지)
+        VisitLog lastVisit = visitLogRepository.findTopByMemberIdOrderByCreatedAtDesc(member.getId()).orElse(null);
+        if (lastVisit != null && lastVisit.getCreatedAt().plusMinutes(1).isAfter(LocalDateTime.now())) {
+            return VisitScanResponse.builder()
+                    .statusCode("WARNING")
+                    .memberName(member.getName())
+                    .message("방금(1분 이내) 입장 처리된 회원입니다.")
+                    .build();
+        }
 
-        // 3. 이용권 횟수 차감 및 기간 검증
+        // 3. 해당 회원의 활성화된 이용권 조회
+        Membership membership = membershipRepository.findByMemberIdAndStatus(member.getId(), MembershipStatus.ACTIVE).orElse(null);
+        if (membership == null) {
+            return VisitScanResponse.builder().statusCode("ERROR").memberName(member.getName()).message("활성화된 이용권이 없습니다. 데스크에 문의하세요.").build();
+        }
+
+        String remainingInfo = "";
+        String statusCode = "SUCCESS";
+
+        // 4. 이용권 횟수 차감 및 기간 검증
         if (membership.getMembershipType() == MembershipType.PERIOD) {
             if (LocalDate.now().isAfter(membership.getEndDate())) {
                 membership.expire();
-                throw new IllegalStateException("이용권 기간이 만료되었습니다.");
+                return VisitScanResponse.builder().statusCode("ERROR").memberName(member.getName()).message("이용권 기간이 만료되었습니다.").build();
+            }
+            remainingInfo = membership.getEndDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) + " 까지";
+
+            if (LocalDate.now().plusDays(3).isAfter(membership.getEndDate())) {
+                statusCode = "WARNING"; // 만료 임박
             }
         } else if (membership.getMembershipType() == MembershipType.COUNT) {
-            membership.decreaseCount(); // 횟수 1회 차감 및 0회 시 자동 만료
+            if (membership.getRemainingCount() < deductionCount) {
+                return VisitScanResponse.builder().statusCode("ERROR").memberName(member.getName()).message("잔여 횟수가 부족합니다. (현재: " + membership.getRemainingCount() + "회)").build();
+            }
+            membership.decreaseCount(deductionCount); // 횟수 다중 차감
+            remainingInfo = "잔여 " + membership.getRemainingCount() + "회";
+
+            if (membership.getRemainingCount() <= 2) {
+                statusCode = "WARNING"; // 횟수 소진 임박
+            }
         }
+
+        // [추가] 누적 방문 횟수 증가
+        membership.increaseAccumulatedVisits();
 
         // 5. 입장 기록 저장
         VisitLog visitLog = VisitLog.builder()
@@ -61,9 +98,37 @@ public class VisitService {
                 .build();
         visitLogRepository.save(visitLog);
 
-        // 6. 구글 시트 비동기 업데이트 (Epic 13)
-        // 더티 체킹으로 트랜잭션이 끝나면 DB가 업데이트되지만, 시트는 지금 바로 쏴줍니다.
+        // 6. 구글 시트 비동기 업데이트
         String todayStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy. MM. dd"));
         googleSheetsService.updateVisitData(member.getId(), todayStr, membership.getAccumulatedVisits());
+
+        return VisitScanResponse.builder()
+                .statusCode(statusCode)
+                .memberName(member.getName())
+                .remainingInfo(remainingInfo)
+                .message(member.getName() + " 회원님 반갑습니다!")
+                .build();
+    }
+
+    // [추가] 당일 출석 대시보드 리스트 조회
+    @Transactional(readOnly = true)
+    public VisitDashboardResponse getTodayDashboard() {
+        LocalDateTime startOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MIN);
+        LocalDateTime endOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MAX);
+
+        List<VisitLog> todayLogs = visitLogRepository.findByCreatedAtBetween(startOfDay, endOfDay);
+
+        List<VisitDashboardResponse.VisitLogDto> logDtos = todayLogs.stream()
+                .map(log -> VisitDashboardResponse.VisitLogDto.builder()
+                        .memberName(log.getMember().getName())
+                        .visitTime(log.getCreatedAt())
+                        .adminName(log.getAdmin().getName())
+                        .build())
+                .collect(Collectors.toList());
+
+        return VisitDashboardResponse.builder()
+                .totalVisitsToday(todayLogs.size())
+                .visitLogs(logDtos)
+                .build();
     }
 }
