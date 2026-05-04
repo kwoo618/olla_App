@@ -106,9 +106,10 @@ public class AuthService {
         // 최종 저장
         Member savedMember = memberRepository.save(targetMember);
 
-        // 앱을 통해 처음 가입하는 완전 신규 회원일 때만 시트에 Append
+        // 앱을 통해 처음 가입하는 완전 신규 회원일 때만 시트에 동기화
         if (isBrandNewMember) {
-            googleSheetsService.syncNewMember(savedMember);
+            googleSheetsService.syncNewMember(savedMember); // 시트 1
+            googleSheetsService.syncUnregisteredMember(savedMember); // ✨ 시트 2
         }
     }
 
