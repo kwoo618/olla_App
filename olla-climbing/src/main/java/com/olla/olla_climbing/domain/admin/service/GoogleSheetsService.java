@@ -50,4 +50,51 @@ public class GoogleSheetsService {
         }---------------------------------------------------- */
         log.info("구글 시트 전송 임시 비활성화 상태입니다. 데이터: {}", rowData);
     }
+
+    @Async
+    public void updateVisitData(Long memberId, String visitDateStr, Integer accumulatedVisits) {
+        String tabName = "이용권 관리";
+            /* ----- 구글 시트 세팅 완료 전까지 임시 비활성화 -----
+        try {
+            // 1. 시트 2의 A열(회원 No) 전체를 읽어와서 몇 번째 줄인지 찾습니다.
+            ValueRange response = sheetsClient.spreadsheets().values()
+                    .get(spreadsheetId, tabName + "!A:A")
+                    .execute();
+
+            List<List<Object>> values = response.getValues();
+            int rowIndex = -1;
+
+            if (values != null) {
+                for (int i = 0; i < values.size(); i++) {
+                    List<Object> row = values.get(i);
+                    if (row.isEmpty()) continue;
+
+                    // A열의 값이 memberId와 일치하는지 확인
+                    if (row.get(0).toString().equals(String.valueOf(memberId))) {
+                        rowIndex = i + 1; // 구글 시트는 1번 줄부터 시작하므로 +1
+                        break;
+                    }
+                }
+            }
+
+            // 2. 해당 회원을 찾았다면 I열(최근 방문일)과 J열(누적 방문 횟수)을 업데이트 합니다.
+            if (rowIndex != -1) {
+                String range = tabName + "!I" + rowIndex + ":J" + rowIndex;
+                List<List<Object>> updateData = List.of(
+                        List.of(visitDateStr, accumulatedVisits) // [I열 데이터, J열 데이터]
+                );
+
+                ValueRange body = new ValueRange().setValues(updateData);
+                sheetsClient.spreadsheets().values()
+                        .update(spreadsheetId, range, body)
+                        .setValueInputOption("USER_ENTERED")
+                        .execute();
+
+
+            }
+        } catch (Exception e) {
+            log.error("구글 시트 업데이트 중 에러 발생 (MemberID: {}): ", memberId, e);
+        }
+             */
+    }
 }

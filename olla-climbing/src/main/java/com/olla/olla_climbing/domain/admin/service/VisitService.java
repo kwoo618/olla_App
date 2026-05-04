@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 
 @Service
 @RequiredArgsConstructor
@@ -23,10 +24,11 @@ public class VisitService {
     private final MembershipRepository membershipRepository;
     private final MemberRepository memberRepository;
     private final JwtTokenProvider jwtTokenProvider;
+    private final GoogleSheetsService googleSheetsService;
 
     @Transactional
     public void processEntry(String qrToken, String adminLoginId) {
-        // 1. QR 토큰 검증 및 회원 식별 (실제 구현 시 토큰 파싱 로직에 맞게 조정)
+        // 1. QR 토큰 검증 및 회원 식별
         if (!jwtTokenProvider.validateToken(qrToken)) {
             throw new IllegalArgumentException("유효하지 않거나 만료된 QR 코드입니다.");
         }
@@ -52,11 +54,16 @@ public class VisitService {
             membership.decreaseCount(); // 횟수 1회 차감 및 0회 시 자동 만료
         }
 
-        // 4. 입장 기록 저장
+        // 5. 입장 기록 저장
         VisitLog visitLog = VisitLog.builder()
                 .member(member)
                 .admin(admin)
                 .build();
         visitLogRepository.save(visitLog);
+
+        // 6. 구글 시트 비동기 업데이트 (Epic 13)
+        // 더티 체킹으로 트랜잭션이 끝나면 DB가 업데이트되지만, 시트는 지금 바로 쏴줍니다.
+        String todayStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy. MM. dd"));
+        googleSheetsService.updateVisitData(member.getId(), todayStr, membership.getAccumulatedVisits());
     }
 }

@@ -44,6 +44,15 @@ public class Membership extends BaseTimeEntity {
     @Column(nullable = false)
     private MembershipStatus status;
 
+    // 누적 방문 횟수 (기본값 0)
+    @Column(nullable = false)
+    private Integer accumulatedVisits = 0;
+
+    // 입장 성공 시 누적 횟수 1 증가 메서드
+    public void increaseAccumulatedVisits() {
+        this.accumulatedVisits++;
+    }
+
     @Builder
     public Membership(Member member, MembershipType membershipType, LocalDate startDate, LocalDate endDate, Integer remainingCount, MembershipStatus status) {
         this.member = member;
