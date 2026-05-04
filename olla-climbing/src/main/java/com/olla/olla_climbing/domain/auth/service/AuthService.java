@@ -108,7 +108,7 @@ public class AuthService {
 
         // 앱을 통해 처음 가입하는 완전 신규 회원일 때만 시트에 Append
         if (isBrandNewMember) {
-            sendToGoogleSheets(savedMember);
+            googleSheetsService.syncNewMember(savedMember);
         }
     }
 
@@ -145,21 +145,4 @@ public class AuthService {
                 });
     }
 
-    private void sendToGoogleSheets(Member member) {
-        String birthDateStr = member.getBirthDate() != null ?
-                member.getBirthDate().format(DateTimeFormatter.ofPattern("yyyy. MM. dd")) : "";
-        String createdAtStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy. MM. dd"));
-
-        List<Object> rowData = List.of(
-                member.getId(),
-                member.getName(),
-                member.getGender() != null ? member.getGender() : "",
-                member.getPhone(),
-                birthDateStr,
-                "", 
-                createdAtStr
-        );
-
-        googleSheetsService.appendRow("올라클라이밍 회원정보", rowData);
-    }
 }
