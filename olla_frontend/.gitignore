@@ -1,0 +1,40 @@
+<<<<<<< HEAD
+# Node modules
+node_modules/
+
+# Android
+.gradle
+build/
+local.properties
+*.keystore
+*.bundle
+*.apk
+*.aab
+
+# iOS
+Pods/
+DerivedData/
+build/
+*.xcworkspace
+.xcode.env.local
+
+# MacOS
+.DS_Store
+
+# ENV
+.env
+.env.local
+
+# Tests
+coverage/
+=======
+node_modules/
+android/.gradle/
+android/app/build/
+android/local.properties
+ios/Pods/
+ios/DerivedData/
+ios/build/
+.DS_Store
+.xcode.env.local
+>>>>>>> homescreen

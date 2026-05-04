@@ -88,4 +88,10 @@ public class Ranking extends BaseTimeEntity {
         this.ranking = newRanking;
         this.baseDate = LocalDateTime.now();
     }
+    
+    // (동철 수정) 랭킹 조회시 조회가 안되는 오류 발생하여 수정
+    // 랭킹 재계산 시 모든 유저의 집계 시각을 하나로 맞추기 위한 메서드
+    public void syncBaseDate(LocalDateTime baseDate) {
+        this.baseDate = baseDate;
+    }
 }

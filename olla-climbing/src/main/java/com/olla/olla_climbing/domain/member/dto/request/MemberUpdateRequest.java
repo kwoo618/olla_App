@@ -1,9 +1,11 @@
 package com.olla.olla_climbing.domain.member.dto.request;
 
 import lombok.Getter;
+import lombok.Setter; //(동철 수정) 프론트가 보낸 값 안전하게 받기 위해 추가
 import lombok.NoArgsConstructor;
 
 @Getter
+@Setter //(동철 수정)
 @NoArgsConstructor
 public class MemberUpdateRequest {
     // Member 기본 정보 수정용
@@ -11,6 +13,10 @@ public class MemberUpdateRequest {
     private String phone;
 
     private String profileImageUrl;
+    
+    // (동철 수정)
+    private String gender;
+    private String birthDate;
 
     // MemberDetail 신체 정보 수정용 (PATCH니까 다 null 허용)
     private Integer age;
@@ -27,4 +33,3 @@ public class MemberUpdateRequest {
     private Boolean isArmSpanPublic;
     private Boolean isFootSizePublic;
 }
-

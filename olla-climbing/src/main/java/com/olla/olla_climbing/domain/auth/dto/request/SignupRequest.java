@@ -41,6 +41,30 @@ public class SignupRequest {
 
     private Role role;
 
+    // (동철 수정) 회원가입할때 전달되는 기능이 (팔 길이, 키, 몸무게 등) 없음 
+    private MemberDetailDto detail; 
+    private PrivacyDto privacy;
+
+    @Getter
+    @NoArgsConstructor
+    public static class MemberDetailDto { // 내부 클래스로 정의
+        private Integer age;
+        private Double height;
+        private Double weight;
+        private Double armSpan;
+        private Double footSize;
+    }
+    
+    @Getter @NoArgsConstructor
+    public static class PrivacyDto {
+        private boolean isPhonePublic;
+        private boolean isEmailPublic;
+        private boolean isHeightPublic;
+        private boolean isWeightPublic;
+        private boolean isArmSpanPublic;
+        private boolean isFootSizePublic;
+    }
+
     // DTO -> Entity 변환 메서드
     public Member toEntity(String encodedPassword) {
         return Member.builder()

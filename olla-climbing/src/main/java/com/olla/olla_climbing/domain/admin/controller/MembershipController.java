@@ -9,6 +9,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+// (동철 수정) member 정보에서 디테일 정보 조회 
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import com.olla.olla_climbing.domain.member.entity.Member;
+
 @RestController
 @RequestMapping("/api/v1/memberships")
 @RequiredArgsConstructor
@@ -20,9 +24,10 @@ public class MembershipController {
     // 내 이용권 확인
     @GetMapping("/me")
     @Operation(summary = "내 이용권 조회", description = "현재 로그인한 사용자의 활성화된 이용권 상태를 조회합니다.")
-    public ResponseEntity<MembershipResponse> getMyMembership(@RequestParam("memberId") Long memberId) {
+    //public ResponseEntity<MembershipResponse> getMyMembership(@RequestParam("memberId") Long memberId) 
+    public ResponseEntity<MembershipResponse> getMyMembership(@AuthenticationPrincipal Member member) { // (동철 수정) 로그인한 유저 정보에서 가져오도록 수정
         // 실제 운영 시에는 @RequestParam 대신 JWT 토큰에서 파싱한 @AuthenticationPrincipal 유저 ID를 사용해야 안전합니다.
-        MembershipResponse response = membershipService.getMyMembership(memberId);
+        MembershipResponse response = membershipService.getMyMembership(member.getId());
         return ResponseEntity.ok(response);
     }
 }
