@@ -142,5 +142,18 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
     // 탈퇴 처리 메서드
     public void withdraw() {
         this.isDeleted = true;
+        String now = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd"));
+
+        // 1. 아이디 변조 (재가입 허용 및 식별자 유지)
+        if (this.loginId != null) {
+            this.loginId = "del_" + now + "_" + this.loginId + "_" + this.id;
+        }
+
+        // 2. 전화번호 변조 (Unique 제약 조건 우회)
+        this.phone = "del_" + now + "_" + this.phone + "_" + this.id;
+
+        // 3. 이름 및 개인정보 익명화
+        this.name = "탈퇴회원";
+        this.email = null;
     }
 }

@@ -28,6 +28,7 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     // 전화번호로 회원 찾기 (O2O 병합용)
     Optional<Member> findByPhone(String phone);
 
-    // 아이디 찾기용: 이름과 전화번호로 회원 조회
-    Optional<Member> findByNameAndPhone(String name, String phone);
+    // 삭제되지 않은 회원 중 전화번호로 조회 (중복 가입 방지 및 아이디 찾기용)
+    Optional<Member> findByPhoneAndIsDeletedFalse(String phone);
+
 }
