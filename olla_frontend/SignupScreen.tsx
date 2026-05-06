@@ -122,7 +122,7 @@ const SignupScreen = ({ navigation }: any) => {
       return;
     }
     try {
-      const response = await axios.get(`http://192.168.45.12:8080/api/v1/auth/check-id`, {
+      const response = await axios.get(`http://172.29.151.129:8080/api/v1/auth/check-id`, {
         params: { loginId: id }
       });
       const isDuplicate = response.data?.data?.isDuplicate ?? response.data?.isDuplicate;

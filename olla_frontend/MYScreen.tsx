@@ -11,8 +11,11 @@ const MYScreen = ({ navigation }: any) => {
   const isFocused = useIsFocused();
   const [loading, setLoading] = useState(true);
 
-  // 1️⃣ 상태 관리 (비회원 기본 상태 세팅, remainingDays -1로 구분)
+  // 상태 관리 (비회원 기본 상태 세팅, remainingDays -1로 구분)
   const [memInfo, setMemInfo] = useState({ type: '구매 필요', period: '-', status: '비회원', remainingDays: -1 });
+
+  // 🔥 관리자 여부 상태 추가
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const [profileData, setProfileData] = useState<any>({
     name: '', phone: '', gender: '', birthDate: '', age: '', height: '', weight: '', arm: '', shoe: ''
@@ -29,7 +32,7 @@ const MYScreen = ({ navigation }: any) => {
   const [isNoticeEnabled, setIsNoticeEnabled] = useState(true);
   const [isExpireEnabled, setIsExpireEnabled] = useState(true);
 
-  // 2️⃣ 데이터 불러오기
+  // 데이터 불러오기
   const fetchMyInfo = async () => {
     try {
       const userToken = await AsyncStorage.getItem('userToken');
@@ -41,8 +44,15 @@ const MYScreen = ({ navigation }: any) => {
       const headers = { Authorization: `Bearer ${userToken}` };
 
       // [GET] 내 정보 조회
-      const userRes = await axios.get('http://192.168.45.12:8080/api/v1/members/me', { headers });
+      const userRes = await axios.get('http://172.29.151.129:8080/api/v1/members/me', { headers });
       const data = userRes.data.data || userRes.data;
+
+      // 🔥 관리자 권한 확인 (서버 응답 구조에 맞게 필드명 변경 필요, 예: data.role, data.memberRole 등)
+      if (data.role === 'ADMIN' || data.authority === 'ROLE_ADMIN' || data.memberRole === 'ADMIN') {
+        setIsAdmin(true);
+      } else {
+        setIsAdmin(false);
+      }
 
       setProfileData({
         name: data.name || '',
@@ -70,7 +80,7 @@ const MYScreen = ({ navigation }: any) => {
 
       // [GET] 회원권 정보 조회
       try {
-        const memRes = await axios.get('http://192.168.45.12:8080/api/v1/memberships/me', { headers });
+        const memRes = await axios.get('http://172.29.151.129:8080/api/v1/memberships/me', { headers });
         const memData = memRes.data.data || memRes.data;
         if (memData && memData.endDate) {
           const today = new Date();
@@ -100,7 +110,7 @@ const MYScreen = ({ navigation }: any) => {
 
   useEffect(() => { fetchMyInfo(); }, [isFocused]);
 
-  // 3️⃣ 정보 수정 저장
+  // 정보 수정 저장
   const handleSaveProfile = async () => {
     try {
       const userToken = await AsyncStorage.getItem('userToken');
@@ -124,7 +134,7 @@ const MYScreen = ({ navigation }: any) => {
         isFootSizePublic: profileToggles.showShoe
       };
 
-      await axios.patch('http://192.168.45.12:8080/api/v1/members/me', requestBody, { headers });
+      await axios.patch('http://172.29.151.129:8080/api/v1/members/me', requestBody, { headers });
       Alert.alert("알림", "정보가 저장되었습니다.");
       fetchMyInfo();
       closeProfileModal();
@@ -133,14 +143,14 @@ const MYScreen = ({ navigation }: any) => {
     }
   };
 
-  // 4️⃣ 로그아웃 
+  // 로그아웃 
   const [isLogoutModalVisible, setLogoutModalVisible] = useState(false);
   const executeLogout = async () => {
     try {
       const accessToken = await AsyncStorage.getItem('userToken');
       const refreshToken = await AsyncStorage.getItem('refreshToken');
       if (accessToken && refreshToken) {
-        await axios.post('http://192.168.45.12:8080/api/v1/auth/logout', { refreshToken }, {
+        await axios.post('http://172.29.151.129:8080/api/v1/auth/logout', { refreshToken }, {
           headers: { Authorization: `Bearer ${accessToken}` }, timeout: 3000
         });
       }
@@ -155,7 +165,7 @@ const MYScreen = ({ navigation }: any) => {
 
   const cancelLogout = () => setLogoutModalVisible(false);
 
-  // 🔥 원본 애니메이션 제어 로직 완벽 복구
+  // 원본 애니메이션 제어 로직
   const pauseSlideAnim = useRef(new Animated.Value(800)).current;
   const contactSlideAnim = useRef(new Animated.Value(800)).current;
   const profileSlideAnim = useRef(new Animated.Value(800)).current;
@@ -267,10 +277,27 @@ const MYScreen = ({ navigation }: any) => {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.logoutCard} activeOpacity={0.8} onPress={() => setLogoutModalVisible(true)}><Image source={require('./assets/EXIT.png')} style={styles.logoutIcon} /><Text style={styles.logoutText}>로그아웃</Text></TouchableOpacity>
+        {/* ADMIN 계정일 경우 표시되는 관리자 모드 버튼 */}
+        {isAdmin && (
+          <TouchableOpacity 
+            style={styles.adminCard} 
+            activeOpacity={0.8} 
+            onPress={() => navigation.navigate('ManagerDashboard')}
+          >
+            {/* 앱에 SquaresFour 아이콘이 없다면 다른 아이콘으로 대체 가능합니다 */}
+            <Image source={require('./assets/SquaresFour.png')} style={styles.adminIcon} />
+            <Text style={styles.adminText}>관리자 모드 실행</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* 로그아웃 버튼 */}
+        <TouchableOpacity style={styles.logoutCard} activeOpacity={0.8} onPress={() => setLogoutModalVisible(true)}>
+          <Image source={require('./assets/EXIT.png')} style={styles.logoutIcon} />
+          <Text style={styles.logoutText}>로그아웃</Text>
+        </TouchableOpacity>
       </ScrollView>
 
-      {/* 로그아웃 모달창 */}
+      {/* 모달창들 (로그아웃, 일시정지, 문의, 프로필 수정 등 기존과 동일) */}
       <Modal visible={isLogoutModalVisible} transparent={true} animationType="fade">
         <View style={styles.centerModalOverlay}>
           <View style={styles.centerModalBox}>
@@ -283,7 +310,6 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 🔥 일시정지 모달창 복구 완료 */}
       <Modal visible={isPauseModalVisible} transparent={true} animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closePauseModal}>
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: pauseSlideAnim }] }]}>
@@ -313,7 +339,6 @@ const MYScreen = ({ navigation }: any) => {
         </TouchableOpacity>
       </Modal>
 
-      {/* 🔥 문의하기 모달창 (handleInquireClick 연결) 복구 완료 */}
       <Modal visible={isContactModalVisible} transparent={true} animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeContactModal}>
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: contactSlideAnim }] }]}>
@@ -333,7 +358,6 @@ const MYScreen = ({ navigation }: any) => {
         </TouchableOpacity>
       </Modal>
 
-      {/* 프로필 수정 모달 */}
       <Modal visible={isProfileModalVisible} transparent={true} animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeProfileModal}>
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: profileSlideAnim }], maxHeight: '90%' }]}>
@@ -346,7 +370,6 @@ const MYScreen = ({ navigation }: any) => {
                   <TouchableOpacity style={styles.profileImageEditWrapper} activeOpacity={0.7}><Image source={require('./assets/profile.png')} style={styles.profileImageLarge} /><View style={styles.profileImageEditOverlay}><Text style={styles.profileImageEditText}>수정</Text></View></TouchableOpacity>
                   {renderEditField('이름', 'name', '')}
 
-                  {/* 성별 */}
                   <View style={styles.editFieldWrapper}>
                     <View style={styles.editFieldHeader}>
                       <Text style={styles.editFieldTitle}>성별</Text>
@@ -367,7 +390,6 @@ const MYScreen = ({ navigation }: any) => {
                     </View>
                   </View>
 
-                  {/* 생년월일 */}
                   <View style={styles.editFieldWrapper}>
                     <View style={styles.editFieldHeader}>
                       <Text style={styles.editFieldTitle}>생년월일</Text>
@@ -411,7 +433,7 @@ const MYScreen = ({ navigation }: any) => {
   );
 };
 
-// 스타일
+// 스타일 수정 (관리자 버튼 관련 스타일 추가)
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
   scrollContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 100 },
@@ -440,6 +462,12 @@ const styles = StyleSheet.create({
   settingTitle: { color: '#ffffff', fontSize: 15, fontWeight: 'bold', marginBottom: 4 },
   settingSub: { color: '#999999', fontSize: 12, lineHeight: 18 },
   divider: { height: 1, backgroundColor: '#333333', marginVertical: 8 },
+  
+  // 🔥 관리자 모드 실행 버튼 스타일
+  adminCard: { flexDirection: 'row', backgroundColor: '#212121', borderRadius: 16, paddingVertical: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 15, borderWidth: 1, borderColor: '#A1BE44' },
+  adminIcon: { width: 20, height: 20, tintColor: '#A1BE44', marginRight: 8, resizeMode: 'contain' },
+  adminText: { color: '#A1BE44', fontSize: 16, fontWeight: 'bold' },
+
   logoutCard: { flexDirection: 'row', backgroundColor: '#212121', borderRadius: 16, paddingVertical: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 30 },
   logoutIcon: { width: 20, height: 20, tintColor: '#FF4D4D', marginRight: 8, resizeMode: 'contain' },
   logoutText: { color: '#FF4D4D', fontSize: 16, fontWeight: 'bold' },
@@ -480,7 +508,6 @@ const styles = StyleSheet.create({
   editUnit: { color: '#999999', fontSize: 16, fontWeight: 'bold', marginLeft: 10 },
   saveProfileButton: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 15 },
   saveProfileButtonText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
-  
   genderRow: { flexDirection: 'row', justifyContent: 'space-between' },
   genderBtn: { flex: 1, backgroundColor: '#000000', borderWidth: 1, borderColor: '#444444', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginHorizontal: 4 },
   genderBtnActive: { borderColor: '#A1BE44', backgroundColor: 'rgba(161, 190, 68, 0.1)' },

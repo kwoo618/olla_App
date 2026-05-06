@@ -40,7 +40,7 @@ const PersonalScreen = ({ navigation, route }: any) => {
 
     try {
       // 1. 회원가입 요청
-      const response = await axios.post('http://192.168.45.12:8080/api/v1/auth/signup', {
+      const response = await axios.post('http://172.29.151.129:8080/api/v1/auth/signup', {
         ...accountData, // 아이디, 비번, 이름, 이메일, 전화번호 등
         role: 'USER',
         detail: {
@@ -65,7 +65,7 @@ const PersonalScreen = ({ navigation, route }: any) => {
         
         try {
           // 💡 [추가] 가입했던 아이디와 비밀번호로 즉시 로그인 요청을 보냅니다.
-          const loginResponse = await axios.post('http://192.168.45.12:8080/api/v1/auth/login', {
+          const loginResponse = await axios.post('http://172.29.151.129:8080/api/v1/auth/login', {
             loginId: accountData.loginId,
             password: accountData.password
           });

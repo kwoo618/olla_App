@@ -3,11 +3,11 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image } from 'rea
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// 💡 백엔드 API 엔드포인트
-const RANKING_BEGINNER_URL = 'http://192.168.45.12:8080/api/v1/rankings/beginner';
-const RANKING_ENDURANCE_DISTANCE_URL = 'http://192.168.45.12:8080/api/v1/rankings/endurance/distance';
-const RANKING_SERIES_URL = 'http://192.168.45.12:8080/api/v1/rankings/series';
-const MY_PROFILE_URL = 'http://192.168.45.12:8080/api/v1/members/me'; 
+
+const RANKING_BEGINNER_URL = 'http://172.29.151.129:8080/api/v1/rankings/beginner';
+const RANKING_ENDURANCE_DISTANCE_URL = 'http://172.29.151.129:8080/api/v1/rankings/endurance/distance';
+const RANKING_SERIES_URL = 'http://172.29.151.129:8080/api/v1/rankings/series';
+const MY_PROFILE_URL = 'http://172.29.151.129:8080/api/v1/members/me'; 
 
 axios.interceptors.request.use(
   async (config) => {
