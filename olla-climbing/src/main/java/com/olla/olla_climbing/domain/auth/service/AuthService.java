@@ -23,8 +23,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service    
 @RequiredArgsConstructor    
@@ -37,6 +39,23 @@ public class AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final GoogleSheetsService googleSheetsService;
     private final EmailService emailService;
+
+    private final Map<String, String> verificationStorage = new ConcurrentHashMap<>();
+
+    // 1. 인증번호 발송 요청
+    public void requestEmailVerification(String email) {
+        String code = String.valueOf((int)(Math.random() * 899999) + 100000); // 6자리 난수
+        verificationStorage.put(email, code);
+        emailService.sendVerificationCode(email, code);
+
+        // 5분 뒤 삭제 스케줄링 등을 추가할 수 있음
+    }
+
+    // 2. 인증번호 확인
+    public boolean verifyCode(String email, String code) {
+        String savedCode = verificationStorage.get(email);
+        return savedCode != null && savedCode.equals(code);
+    }
 
     @Transactional
     public void signup(SignupRequest request) {
@@ -83,7 +102,6 @@ public class AuthService {
         if (request.getDetail() != null) {
             SignupRequest.MemberDetailDto detailDto = request.getDetail();
             detail.update(
-                detailDto.getAge(),
                 detailDto.getHeight(),
                 detailDto.getWeight(),
                 detailDto.getArmSpan(),
@@ -120,13 +138,22 @@ public class AuthService {
     // [Epic 14] 아이디 찾기 (마스킹 처리)
     @Transactional(readOnly = true)
     public String findMaskedLoginId(String name, String phone) {
-        Member member = memberRepository.findByNameAndPhone(name, phone)
-                .orElseThrow(() -> new IllegalArgumentException("일치하는 회원 정보가 없습니다."));
+        // 1. 삭제되지 않은 회원 중 전화번호로 검색
+        // 검색할때 -(하이픈) 붙여야 함
+        Member member = memberRepository.findByPhoneAndIsDeletedFalse(phone)
+                .orElseThrow(() -> new IllegalArgumentException("일치하는 정보가 없습니다."));
 
-        String loginId = member.getLoginId();
-        // 앞 3자리만 보여주고 나머지는 * 처리 (예: oll****)
-        if (loginId.length() <= 3) return loginId;
-        return loginId.substring(0, 3) + "*".repeat(loginId.length() - 3);
+        // 2. 이름 검증
+        if (!member.getName().equals(name)) {
+            throw new IllegalArgumentException("이름과 전화번호 정보가 일치하지 않습니다.");
+        }
+
+        String id = member.getLoginId();
+        if (id == null) throw new IllegalArgumentException("앱 가입 이력이 없는 오프라인 회원입니다.");
+
+        // 3. 마스킹 (아이디 끝 2자리만 **)
+        if (id.length() < 2) return "**"; // 방어 코드
+        return id.substring(0, id.length() - 2) + "**";
     }
 
     // [Epic 14] 비밀번호 찾기 (임시 비밀번호 이메일 발송)

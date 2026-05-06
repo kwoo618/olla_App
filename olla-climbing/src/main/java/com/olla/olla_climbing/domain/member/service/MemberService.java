@@ -77,34 +77,12 @@ public class MemberService {
             member.updateProfileImage(requestImageUrl);
         }
 
-        // 3. 상세 정보 수정 (처음 입력하는 거라면 객체를 새로 만들어줘야 함)
-        /* if (member.getMemberDetail() == null) {
-            MemberDetail newDetail = new MemberDetail(member);
-            newDetail.update(request.getAge(), request.getHeight(), request.getWeight(), request.getArmSpan(), request.getFootSize());
-            member.setMemberDetail(newDetail);
-            // 연관관계 편의 메서드나 양방향 매핑 설정에 따라 다를 수 있지만,
-            // CascadeType.ALL이 걸려있으므로 이렇게만 둬도 저장이 됨 (나중에 보완)
-            // cascade 옵션이 없으면, memberRepository.save(member)로 저장할 때, memberDetail도 같이 저장되도록 설정해야 함 (save 호출 필요)
-        } else {
-            member.getMemberDetail().update(request.getAge(), request.getHeight(), request.getWeight(), request.getArmSpan(), request.getFootSize());
-        }
-
-        // 4. 공개 설정 수정
-        if (member.getMemberPrivacy() == null) {
-            MemberPrivacy newPrivacy = new MemberPrivacy(member);
-            newPrivacy.update(request.getIsPublicPhone(), request.getIsEmailPublic(), request.getIsHeightPublic(), request.getIsWeightPublic(), request.getIsArmSpanPublic(), request.getIsFootSizePublic());
-            member.setMemberPrivacy(newPrivacy);
-        } else {
-            member.getMemberPrivacy().update(request.getIsPublicPhone(), request.getIsEmailPublic(), request.getIsHeightPublic(), request.getIsWeightPublic(), request.getIsArmSpanPublic(), request.getIsFootSizePublic());
-        }
-        */ 
-
        //  상세 정보 수정 로직 통합 (수정할때 데이터 꼬일 수 있어서 수정)
         if (member.getMemberDetail() == null) {
             member.setMemberDetail(new MemberDetail(member));
         }
         member.getMemberDetail().update(
-            request.getAge(), request.getHeight(), request.getWeight(), 
+                request.getHeight(), request.getWeight(),
             request.getArmSpan(), request.getFootSize()
         );
 

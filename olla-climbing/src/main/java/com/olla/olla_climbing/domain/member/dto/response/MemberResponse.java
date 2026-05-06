@@ -16,7 +16,7 @@ public class MemberResponse {
     private String email;
     private String phone;
     private String profileImageUrl;
-    // (동철 수정) 성별, 생년월일 필수
+    private String role;
     private String gender;    
     private String birthDate;
 
@@ -77,14 +77,14 @@ public class MemberResponse {
                 .id(member.getId())
                 .loginId(member.getLoginId())
                 .name(member.getName())
-                // (동철 수정) 성별, 생년월일 추가
                 .gender(member.getGender())
                 .birthDate(member.getBirthDate() != null ? member.getBirthDate().toString() : null)
                 .email(member.getEmail())
                 .phone(member.getPhone())
                 .profileImageUrl(member.getProfileImageUrl())
+                .role(member.getRole() != null ? member.getRole().name() : "USER")
                 .detail(detail != null ? DetailDto.builder()
-                        .age(detail.getAge())
+                        .age(member.getMemberDetail().getAge()) // age는 MemberDetail에서 계산된 값이므로, MemberResponse에서 직접 계산하지 않고, MemberDetail에서 가져옴
                         .height(detail.getHeight())
                         .weight(detail.getWeight())
                         .armSpan(detail.getArmSpan())
