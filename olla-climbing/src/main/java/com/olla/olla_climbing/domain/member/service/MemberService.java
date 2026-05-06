@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.olla.olla_climbing.domain.member.dto.request.MemberUpdateRequest;
 import com.olla.olla_climbing.domain.member.entity.MemberDetail;
 import com.olla.olla_climbing.domain.member.entity.MemberPrivacy;
+import org.springframework.util.StringUtils;
 
 // 💡 (동철 수정) 날짜 처리에 필요한 클래스 임포트 추가
 import java.time.LocalDate;
@@ -98,7 +99,7 @@ public class MemberService {
         }
         */ 
 
-       // (동철 수정) 상세 정보 수정 로직 통합 (수정할때 데이터 꼬일 수 있어서 수정)
+       //  상세 정보 수정 로직 통합 (수정할때 데이터 꼬일 수 있어서 수정)
         if (member.getMemberDetail() == null) {
             member.setMemberDetail(new MemberDetail(member));
         }
@@ -107,7 +108,7 @@ public class MemberService {
             request.getArmSpan(), request.getFootSize()
         );
 
-        // (동철 수정) 공개 설정 수정 - Boolean null 체크 추가 (데이터 유실 방지)
+        //  공개 설정 수정 - Boolean null 체크 추가 (데이터 유실 방지)
         if (member.getMemberPrivacy() == null) {
             member.setMemberPrivacy(new MemberPrivacy(member));
         }
@@ -160,5 +161,29 @@ public class MemberService {
 
         // 업데이트된 결과를 DTO로 변환하여 반환
         return AlertResponse.from(member.getNotificationSetting());
+    }
+
+    // 관리자 페이지에서 회원 정보 수정 로직 추가 - 이름, 전화번호, 성별, 생년월일 자유롭게 수정 가능
+    @Transactional
+    public void updateMemberByAdmin(Long memberId, MemberUpdateRequest request) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
+
+        // 관리자는 이름, 전화번호, 성별, 생년월일을 자유롭게 수정 가능해야 함
+        member.updateBasicInfo(request.getName(), request.getPhone());
+
+        // 생년월일 파싱 및 추가 정보 업데이트
+        LocalDate parsedBirthDate = null;
+        if (StringUtils.hasText(request.getBirthDate())) {
+            try {
+                parsedBirthDate = LocalDate.parse(request.getBirthDate().trim());
+            } catch (Exception e) {
+                // 파싱 실패 시 기존 값 유지
+                parsedBirthDate = member.getBirthDate();
+            }
+        }
+        member.updateAdditionalInfo(request.getGender(), parsedBirthDate);
+
+        // Dirty Checking에 의해 별도의 save 없이 트랜잭션 종료 시 업데이트됨
     }
 }

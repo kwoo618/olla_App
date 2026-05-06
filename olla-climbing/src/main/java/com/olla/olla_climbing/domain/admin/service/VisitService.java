@@ -136,18 +136,15 @@ public class VisitService {
     // 특정 회원의 월별 출석 날짜 조회 (중복 제거)
     @Transactional(readOnly = true)
     public List<LocalDate> getMonthlyVisitDates(Long memberId, String yearMonth) {
-        // yearMonth 예: "2026-05"
-        YearMonth ym = YearMonth.parse(yearMonth);
-        LocalDateTime start = ym.atDay(1).atStartOfDay();
-        LocalDateTime end = ym.atEndOfMonth().atTime(23, 59, 59);
+        java.time.YearMonth ym = java.time.YearMonth.parse(yearMonth);
+        java.time.LocalDateTime start = ym.atDay(1).atStartOfDay();
+        java.time.LocalDateTime end = ym.atEndOfMonth().atTime(23, 59, 59);
 
-        List<VisitLog> logs = visitLogRepository.findAllByMemberIdAndCreatedAtBetween(memberId, start, end);
-
-        // 중복 제거하여 날짜만 반환
-        return logs.stream()
+        return visitLogRepository.findAllByMemberIdAndCreatedAtBetween(memberId, start, end)
+                .stream()
                 .map(log -> log.getCreatedAt().toLocalDate())
-                .distinct()
-                .sorted()
-                .collect(Collectors.toList());
+                .distinct() // 중복 날짜 제거
+                .sorted()   // 날짜순 정렬
+                .collect(java.util.stream.Collectors.toList());
     }
 }
