@@ -47,15 +47,9 @@ public class PostService {
     }
 
     @Transactional(readOnly = true)
-    public Page<PostResponse> getPostList(String category, Pageable pageable) {
-        Page<Post> posts;
-        // 카테고리가 "ALL"이거나 없으면 전체 조회, 있으면 카테고리 조회
-        if (category != null && !category.isEmpty() && !category.equals("ALL")) {
-            posts = postRepository.findByCategoryAndIsDeletedFalseOrderByCreatedAtDesc(category, pageable);
-        } else {
-            posts = postRepository.findByIsDeletedFalseOrderByCreatedAtDesc(pageable);
-        }
-        return posts.map(PostResponse::from);
+    public Page<PostResponse> getPostList(Pageable pageable) {
+        return postRepository.findByIsDeletedFalseOrderByCreatedAtDesc(pageable)
+                .map(PostResponse::from);
     }
 
     @Transactional(readOnly = true)

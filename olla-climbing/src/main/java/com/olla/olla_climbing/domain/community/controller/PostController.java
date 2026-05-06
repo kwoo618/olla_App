@@ -38,12 +38,11 @@ public class PostController {
     }
 
     @GetMapping
-    @Operation(summary = "게시글 목록 조회", description = "카테고리별로 게시글 목록을 페이징 조회합니다.")
+    @Operation(summary = "게시글 목록 조회", description = "모든 사용자가 최신순으로 페이징된 게시글 목록을 조회합니다.")
     public ResponseEntity<Page<PostResponse>> getPostList(
-            @RequestParam(value = "category", required = false) String category, // 카테고리 필터 추가
             @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
 
-        return ResponseEntity.ok(postService.getPostList(category, pageable));
+        return ResponseEntity.ok(postService.getPostList(pageable));
     }
 
     @GetMapping("/{id}")
