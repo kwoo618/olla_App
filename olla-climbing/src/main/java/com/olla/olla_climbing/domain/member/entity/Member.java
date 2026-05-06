@@ -134,6 +134,11 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
         }
     }
 
+    // 비밀번호 업데이트 메서드 (임시 비밀번호 발급 시 사용)
+    public void updatePassword(String encodedPassword) {
+        this.password = encodedPassword; // 임시 비밀번호 암호화본 저장용
+    }
+
     // 탈퇴 처리 메서드
     public void withdraw() {
         this.isDeleted = true;

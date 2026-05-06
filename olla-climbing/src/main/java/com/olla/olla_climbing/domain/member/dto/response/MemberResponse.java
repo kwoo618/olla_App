@@ -16,9 +16,11 @@ public class MemberResponse {
     private String email;
     private String phone;
     private String profileImageUrl;
-    // (동철 수정) 성별, 생년월일 필수 
+    // (동철 수정) 성별, 생년월일 필수
     private String gender;    
     private String birthDate;
+
+
     private DetailDto detail;
     private PrivacyDto privacy;
     private AlertDto alert;

@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -110,7 +111,7 @@ public class VisitService {
                 .build();
     }
 
-    // [추가] 당일 출석 대시보드 리스트 조회
+    // 당일 출석 대시보드 리스트 조회
     @Transactional(readOnly = true)
     public VisitDashboardResponse getTodayDashboard() {
         LocalDateTime startOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MIN);
@@ -130,5 +131,23 @@ public class VisitService {
                 .totalVisitsToday(todayLogs.size())
                 .visitLogs(logDtos)
                 .build();
+    }
+
+    // 특정 회원의 월별 출석 날짜 조회 (중복 제거)
+    @Transactional(readOnly = true)
+    public List<LocalDate> getMonthlyVisitDates(Long memberId, String yearMonth) {
+        // yearMonth 예: "2026-05"
+        YearMonth ym = YearMonth.parse(yearMonth);
+        LocalDateTime start = ym.atDay(1).atStartOfDay();
+        LocalDateTime end = ym.atEndOfMonth().atTime(23, 59, 59);
+
+        List<VisitLog> logs = visitLogRepository.findAllByMemberIdAndCreatedAtBetween(memberId, start, end);
+
+        // 중복 제거하여 날짜만 반환
+        return logs.stream()
+                .map(log -> log.getCreatedAt().toLocalDate())
+                .distinct()
+                .sorted()
+                .collect(Collectors.toList());
     }
 }

@@ -1,6 +1,8 @@
 package com.olla.olla_climbing.domain.auth.service;
 
-import lombok.Getter; // (동철 수정) 프론트에서 토큰정보 받아오려면 필요
+import com.olla.olla_climbing.global.util.EmailService;
+import lombok.Builder;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import com.olla.olla_climbing.domain.admin.service.GoogleSheetsService;
 import com.olla.olla_climbing.domain.auth.dto.request.LoginRequest;
@@ -22,6 +24,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service    
 @RequiredArgsConstructor    
@@ -33,6 +36,7 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;    
     private final RefreshTokenRepository refreshTokenRepository;
     private final GoogleSheetsService googleSheetsService;
+    private final EmailService emailService;
 
     @Transactional
     public void signup(SignupRequest request) {
@@ -113,6 +117,38 @@ public class AuthService {
         }
     }
 
+    // [Epic 14] 아이디 찾기 (마스킹 처리)
+    @Transactional(readOnly = true)
+    public String findMaskedLoginId(String name, String phone) {
+        Member member = memberRepository.findByNameAndPhone(name, phone)
+                .orElseThrow(() -> new IllegalArgumentException("일치하는 회원 정보가 없습니다."));
+
+        String loginId = member.getLoginId();
+        // 앞 3자리만 보여주고 나머지는 * 처리 (예: oll****)
+        if (loginId.length() <= 3) return loginId;
+        return loginId.substring(0, 3) + "*".repeat(loginId.length() - 3);
+    }
+
+    // [Epic 14] 비밀번호 찾기 (임시 비밀번호 이메일 발송)
+    @Transactional
+    public void sendTempPassword(String name, String phone, String loginId) {
+        Member member = memberRepository.findByLoginId(loginId)
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
+
+        if (!member.getName().equals(name) || !member.getPhone().equals(phone)) {
+            throw new IllegalArgumentException("입력하신 정보가 일치하지 않습니다.");
+        }
+
+        // 8자리 무작위 임시 비밀번호 생성
+        String tempPassword = UUID.randomUUID().toString().substring(0, 8);
+
+        // DB에 암호화하여 저장
+        member.updatePassword(passwordEncoder.encode(tempPassword));
+
+        // 이메일 발송
+        emailService.sendTemporaryPassword(member.getEmail(), tempPassword);
+    }
+
     @Transactional
     public TokenResponse login(LoginRequest request) {
         Member member = memberRepository.findByLoginId(request.getLoginId())
@@ -135,6 +171,8 @@ public class AuthService {
                 .grantType("Bearer")
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
+                .role(member.getRole().name()) // 추가[cite: 27]
+                .name(member.getName())
                 .build();
     }
 

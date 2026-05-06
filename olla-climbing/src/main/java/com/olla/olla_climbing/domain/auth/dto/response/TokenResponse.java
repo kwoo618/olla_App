@@ -13,4 +13,6 @@ public class TokenResponse {
     private String grantType;       // 토큰 타입
     private String accessToken;     // 액세스 토큰
     private String refreshToken;    // 리프레시 토큰 추가
+    private String role;
+    private String name;
 }
