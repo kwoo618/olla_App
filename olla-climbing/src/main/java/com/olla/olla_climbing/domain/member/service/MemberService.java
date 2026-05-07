@@ -1,5 +1,6 @@
 package com.olla.olla_climbing.domain.member.service;
 
+import com.olla.olla_climbing.domain.admin.service.GoogleSheetsService;
 import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.entity.NotificationSetting;
 import com.olla.olla_climbing.domain.member.dto.request.AlertUpdateRequest;
@@ -7,6 +8,7 @@ import com.olla.olla_climbing.domain.member.dto.response.AlertResponse;
 import com.olla.olla_climbing.domain.member.dto.response.MemberResponse;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.olla.olla_climbing.domain.member.dto.request.MemberUpdateRequest;
@@ -14,22 +16,22 @@ import com.olla.olla_climbing.domain.member.entity.MemberDetail;
 import com.olla.olla_climbing.domain.member.entity.MemberPrivacy;
 import org.springframework.util.StringUtils;
 
-// 💡 (동철 수정) 날짜 처리에 필요한 클래스 임포트 추가
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class MemberService {
 
     private final MemberRepository memberRepository;
+    private final GoogleSheetsService googleSheetsService;
 
     // 회원가입 화면에서 DB 아이디 중복 확인 로직 (동철 수정)
     @Transactional(readOnly = true)
     public boolean existsByLoginId(String loginId) {
-        return memberRepository.findByLoginId(loginId).isPresent();
-    }
-
+        return memberRepository.findByLoginIdAndIsDeletedFalse(loginId).isPresent();
+        }
     // Transactional(readOnly = true) -> 데이터 조회 시 성능 최적화, 트랜잭션 관리
     @Transactional(readOnly = true)
     public MemberResponse getMyInfo(String loginId) {
@@ -55,14 +57,10 @@ public class MemberService {
 
         LocalDate parsedBirthDate = member.getBirthDate();
         // 날짜 파싱 로직
-        if (request.getBirthDate() != null && !request.getBirthDate().trim().isEmpty()) {
-            try {
-                parsedBirthDate = LocalDate.parse(request.getBirthDate().trim());
-            } catch (DateTimeParseException e) {
-                // 에러 시 로그만 남기고 기존 값을 유지하거나 적절한 처리를 함
-                System.out.println("날짜 파싱 에러: " + request.getBirthDate());
-            }
+        if (request.getBirthDate() != null) {
+            parsedBirthDate = request.getBirthDate();
         }
+        member.updateAdditionalInfo(request.getGender(), parsedBirthDate);
 
         member.updateAdditionalInfo(request.getGender(), parsedBirthDate);
 
@@ -90,7 +88,7 @@ public class MemberService {
         if (member.getMemberPrivacy() == null) {
             member.setMemberPrivacy(new MemberPrivacy(member));
         }
-        
+
         member.getMemberPrivacy().update(
             request.getIsPublicPhone() != null ? request.getIsPublicPhone() : member.getMemberPrivacy().isPhonePublic(),
             request.getIsEmailPublic() != null ? request.getIsEmailPublic() : member.getMemberPrivacy().isEmailPublic(),
@@ -106,6 +104,8 @@ public class MemberService {
         // 6. 수정된 결과를 다시 DTO로 만들어서 반환
         return MemberResponse.from(member);
     }
+
+
 
     // 알림 설정 업데이트 비즈니스 로직
     @Transactional
@@ -141,27 +141,19 @@ public class MemberService {
         return AlertResponse.from(member.getNotificationSetting());
     }
 
-    // 관리자 페이지에서 회원 정보 수정 로직 추가 - 이름, 전화번호, 성별, 생년월일 자유롭게 수정 가능
     @Transactional
     public void updateMemberByAdmin(Long memberId, MemberUpdateRequest request) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
 
-        // 관리자는 이름, 전화번호, 성별, 생년월일을 자유롭게 수정 가능해야 함
         member.updateBasicInfo(request.getName(), request.getPhone());
 
-        // 생년월일 파싱 및 추가 정보 업데이트
-        LocalDate parsedBirthDate = null;
-        if (StringUtils.hasText(request.getBirthDate())) {
-            try {
-                parsedBirthDate = LocalDate.parse(request.getBirthDate().trim());
-            } catch (Exception e) {
-                // 파싱 실패 시 기존 값 유지
-                parsedBirthDate = member.getBirthDate();
-            }
-        }
+        LocalDate parsedBirthDate = request.getBirthDate() != null ? request.getBirthDate() : member.getBirthDate();
         member.updateAdditionalInfo(request.getGender(), parsedBirthDate);
 
-        // Dirty Checking에 의해 별도의 save 없이 트랜잭션 종료 시 업데이트됨
+        log.info("관리자가 회원 정보 수정 완료: {}", member.getId());
+
+        // googleSheetsService.updateMemberRow(member);
     }
+
 }

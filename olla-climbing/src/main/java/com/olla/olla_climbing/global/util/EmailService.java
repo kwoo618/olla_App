@@ -28,16 +28,16 @@ public class EmailService {
         mailSender.send(message);
     }
 
-    // 💡 추가된 메서드: 임시 비밀번호 발송
+    // 임시 비밀번호 발송
     public void sendTemporaryPassword(String toEmail, String tempPassword) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setTo(toEmail);
         message.setFrom(fromEmail);
         message.setSubject("[올라가자] 임시 비밀번호 안내");
         message.setText("안녕하세요. 올라가자입니다.\n\n" +
-                "회원가입시 등록하신 임시 비밀번호는 [" + tempPassword + "] 입니다.\n" +
-                "로그인 후 마이페이지에서 반드시 비밀번호를 변경해주세요.");
+                "고객님의 임시 비밀번호는 [" + tempPassword + "] 입니다.\n" +
+                "로그인 후 반드시 비밀번호를 변경해 주세요.");
 
         mailSender.send(message);
     }
-} 
+}

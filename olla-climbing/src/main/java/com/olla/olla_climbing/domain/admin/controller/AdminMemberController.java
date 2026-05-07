@@ -26,14 +26,13 @@ public class AdminMemberController {
         return "오프라인 회원 등록 및 시트 연동 성공";
     }
 
-    // AdminMemberController.java 에 추가
-    @PatchMapping("/{memberId}")
-    @Operation(summary = "오프라인 회원 정보 수정", description = "관리자가 회원의 이름, 전화번호 등 기본 정보를 수정합니다.")
-    public ResponseEntity<ApiResponse<Void>> updateMemberInfo(
-            @PathVariable Long memberId,
+    @Operation(summary = "오프라인 회원 정보 수정 (관리자)", description = "관리자가 특정 회원의 기본 정보를 수정합니다.")
+    @PatchMapping("/{memberId}/info")
+    public ResponseEntity<String> updateMemberInfo(
+            @PathVariable("memberId") Long memberId,
             @RequestBody MemberUpdateRequest request) {
 
         memberService.updateMemberByAdmin(memberId, request);
-        return ResponseEntity.ok(ApiResponse.success(null));
+        return ResponseEntity.ok("회원 정보가 성공적으로 수정되었습니다.");
     }
 }

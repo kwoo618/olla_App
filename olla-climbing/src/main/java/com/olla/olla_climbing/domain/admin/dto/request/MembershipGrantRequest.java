@@ -1,6 +1,5 @@
 package com.olla.olla_climbing.domain.admin.dto.request;
 
-import com.olla.olla_climbing.domain.admin.enums.MembershipType;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -13,12 +12,8 @@ public class MembershipGrantRequest {
     @NotNull(message = "회원 ID는 필수입니다.")
     private Long memberId;
 
-    @NotNull(message = "이용권 타입은 필수입니다.")
-    private MembershipType type;
+    private Integer addMonths;  // 개월 수 (기간권용)
+    private Integer addCount;   // 횟수 (횟수권용)
 
-    private Integer addMonths;
-    private Integer addCount;
-
-    // 과거 회원 이관 및 시작일 수동 지정용 필드
-    private LocalDate startDate;
+    private LocalDate startDate; // 시작일 수동 지정용
 }
