@@ -169,4 +169,13 @@ public class MemberService {
         return OtherMemberProfileResponse.of(member);
     }
 
+    @Transactional
+    public void withdrawMember(String loginId) {
+        Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않거나 이미 탈퇴한 회원입니다."));
+
+        // 엔티티 내부의 withdraw() 호출 (isDeleted = true, loginId/phone 변조 수행)
+        member.withdraw();
+        log.info("회원 탈퇴 완료: {}", member.getId());
+    }
 }

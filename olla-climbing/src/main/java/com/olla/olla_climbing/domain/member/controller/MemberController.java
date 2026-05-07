@@ -85,4 +85,16 @@ public class MemberController {
         OtherMemberProfileResponse response = memberService.getOtherMemberProfile(memberId);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
+
+    @DeleteMapping("/me")
+    @Operation(summary = "회원 탈퇴", description = "로그인한 회원을 탈퇴 처리(Soft Delete)합니다.", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<ApiResponse<String>> withdrawMember(@AuthenticationPrincipal Member member) {
+
+        if (member == null) {
+            throw new IllegalArgumentException("로그인 인증 정보가 없습니다.");
+        }
+
+        memberService.withdrawMember(member.getLoginId());
+        return ResponseEntity.ok(ApiResponse.success("회원 탈퇴가 정상적으로 처리되었습니다."));
+    }
 }

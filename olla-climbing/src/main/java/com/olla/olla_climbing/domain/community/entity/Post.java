@@ -49,6 +49,12 @@ public class Post extends BaseTimeEntity {
     @Column(nullable = false)
     private boolean isDeleted; // 삭제 여부 (Soft Delete 방식 적용)
 
+    private int viewCount = 0;
+
+    public void increaseViewCount() {
+        this.viewCount++;
+    }
+
     @Builder
     public Post(Member member, String title, String content, boolean isDifferentGym,
                 String gymPlace, LocalDateTime meetDateTime, Integer maxMember) {

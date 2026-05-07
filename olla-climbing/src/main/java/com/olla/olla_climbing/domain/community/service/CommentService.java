@@ -1,0 +1,69 @@
+package com.olla.olla_climbing.domain.community.service;
+
+import com.olla.olla_climbing.domain.community.dto.request.CommentRequest;
+import com.olla.olla_climbing.domain.community.dto.response.CommentResponse;
+import com.olla.olla_climbing.domain.community.entity.Comment;
+import com.olla.olla_climbing.domain.community.entity.Post;
+import com.olla.olla_climbing.domain.community.repository.CommentRepository;
+import com.olla.olla_climbing.domain.community.repository.PostRepository;
+import com.olla.olla_climbing.domain.member.entity.Member;
+import com.olla.olla_climbing.domain.member.repository.MemberRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@RequiredArgsConstructor
+public class CommentService {
+
+    private final CommentRepository commentRepository;
+    private final PostRepository postRepository;
+    private final MemberRepository memberRepository;
+
+    @Transactional
+    public void createComment(Long postId, String loginId, CommentRequest request) {
+        Post post = postRepository.findById(postId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 게시글입니다."));
+        Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
+                .orElseThrow(() -> new IllegalArgumentException("사용자 정보가 없습니다."));
+
+        Comment parent = null;
+        if (request.getParentId() != null) {
+            parent = commentRepository.findById(request.getParentId())
+                    .orElseThrow(() -> new IllegalArgumentException("부모 댓글이 존재하지 않습니다."));
+            if (!parent.getPost().getId().equals(postId)) {
+                throw new IllegalArgumentException("게시글 정보가 일치하지 않는 대댓글입니다.");
+            }
+        }
+
+        Comment comment = Comment.builder()
+                .content(request.getContent())
+                .post(post)
+                .member(member)
+                .parent(parent)
+                .build();
+
+        commentRepository.save(comment);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CommentResponse> getComments(Long postId, Pageable pageable) {
+        return commentRepository.findByPostIdAndParentIsNull(postId, pageable)
+                .map(CommentResponse::from);
+    }
+
+    @Transactional
+    public void deleteComment(Long commentId, String loginId) {
+        Comment comment = commentRepository.findById(commentId)
+                .orElseThrow(() -> new IllegalArgumentException("댓글이 존재하지 않습니다."));
+
+        if (!comment.getMember().getLoginId().equals(loginId)) {
+            throw new IllegalArgumentException("자신의 댓글만 삭제할/ 수 있습니다.");
+        }
+
+        // 실무 팁: 대댓글이 있는 댓글을 완전히 삭제하면 구조가 깨지므로 markAsDeleted 처리
+        comment.markAsDeleted();
+    }
+}

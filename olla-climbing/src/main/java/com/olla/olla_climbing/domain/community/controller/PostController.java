@@ -88,4 +88,42 @@ public class PostController {
         postService.deletePost(postId, member.getLoginId());
         return ResponseEntity.ok("게시글이 성공적으로 삭제되었습니다.");
     }
+
+    @GetMapping("/search")
+    @Operation(summary = "게시글 키워드 검색", description = "제목 또는 내용에 키워드가 포함된 글을 검색합니다.")
+    public ResponseEntity<ApiResponse<Page<PostResponse>>> searchPosts(
+            @RequestParam("keyword") String keyword,
+            @PageableDefault(size = 10) Pageable pageable,
+            @AuthenticationPrincipal Member member) {
+
+        return ResponseEntity.ok(ApiResponse.success(postService.searchPosts(keyword, pageable, member.getLoginId())));
+    }
+
+    @GetMapping("/me")
+    @Operation(summary = "내가 쓴 게시글 조회", description = "마이페이지용: 내가 작성한 모집글 목록을 가져옵니다.")
+    public ResponseEntity<ApiResponse<Page<PostResponse>>> getMyPosts(
+            @PageableDefault(size = 10) Pageable pageable,
+            @AuthenticationPrincipal Member member) {
+
+        return ResponseEntity.ok(ApiResponse.success(postService.getMyPosts(member.getLoginId(), pageable)));
+    }
+
+    @GetMapping("/me/applied")
+    @Operation(summary = "내가 참여한 게시글 조회", description = "마이페이지용: 내가 참여 신청한 모집글 목록을 가져옵니다.")
+    public ResponseEntity<ApiResponse<Page<PostResponse>>> getMyAppliedPosts(
+            @PageableDefault(size = 10) Pageable pageable,
+            @AuthenticationPrincipal Member member) {
+
+        return ResponseEntity.ok(ApiResponse.success(postService.getMyAppliedPosts(member.getLoginId(), pageable)));
+    }
+
+    @PostMapping("/{id}/like")
+    @Operation(summary = "게시글 좋아요 토글", description = "좋아요를 누릅니다. 이미 눌렀다면 취소됩니다.", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<ApiResponse<Boolean>> toggleLike(
+            @PathVariable("id") Long postId,
+            @AuthenticationPrincipal Member member) {
+
+        boolean result = postService.toggleLike(postId, member.getLoginId());
+        return ResponseEntity.ok(ApiResponse.success(result));
+    }
 }
