@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ActivityIndicator } from 'react-native';
-// SafeAreaView 삭제 (App.tsx에서 관리)
 import AsyncStorage from '@react-native-async-storage/async-storage'; 
+
+const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
 
 interface Notice {
   id: number;
@@ -26,7 +27,7 @@ const NoticeScreen = ({ navigation }: any) => {
         return;
       }
 
-      const response = await fetch('http://172.29.151.129:8080/api/v1/admin/notices', {
+      const response = await fetch(`${API_BASE_URL}/admin/notices`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',

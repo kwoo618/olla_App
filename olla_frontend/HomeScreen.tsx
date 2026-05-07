@@ -10,9 +10,12 @@ import {
   ScrollView, 
   Image, 
   Modal, 
+  Alert,
   Animated 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
 
 const HomeScreen = ({ navigation }: any) => {
   const scrollViewRef = useRef<ScrollView>(null);
@@ -50,7 +53,7 @@ const HomeScreen = ({ navigation }: any) => {
       const userToken = await AsyncStorage.getItem('userToken');
       if (!userToken) return;
 
-      const response = await axios.get('http://172.29.151.129:8080/api/v1/visit/qr', {
+      const response = await axios.get(`${API_BASE_URL}/visit/qr`, {
         headers: { Authorization: `Bearer ${userToken}` }
       });
       
@@ -109,7 +112,7 @@ const HomeScreen = ({ navigation }: any) => {
         // [1] 내 프로필
         let nickname = '';
         try {
-          const profileRes = await axios.get('http://172.29.151.129:8080/api/v1/members/me', config);
+          const profileRes = await axios.get(`${API_BASE_URL}/members/me`, config);
           const pData = profileRes.data?.data || profileRes.data;
           nickname = pData.nickname || pData.name || '';
           setMyNickname(nickname);
@@ -117,7 +120,7 @@ const HomeScreen = ({ navigation }: any) => {
 
         // [2] 공지사항
         try {
-          const noticeResponse = await axios.get('http://172.29.151.129:8080/api/v1/admin/notices');
+          const noticeResponse = await axios.get(`${API_BASE_URL}/admin/notices`);
           const noticeList = noticeResponse.data?.data?.content;
           if (noticeList && noticeList.length > 0) {
             const latestNotice = noticeList[noticeList.length - 1]; 
@@ -129,20 +132,34 @@ const HomeScreen = ({ navigation }: any) => {
 
         // [3] 회원권
         try {
-          const memResponse = await axios.get('http://172.29.151.129:8080/api/v1/memberships/me', config);
+          const memResponse = await axios.get(`${API_BASE_URL}/memberships/me`, config);
           const data = memResponse.data?.data || memResponse.data;
 
           if (data && data.endDate) {
             const today = new Date();
             today.setHours(0, 0, 0, 0); 
+            
+            const start = new Date(data.startDate);
+            start.setHours(0, 0, 0, 0);
+
             const end = new Date(data.endDate);
             end.setHours(0, 0, 0, 0);
             
             const diffTime = end.getTime() - today.getTime();
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
 
+            // 💡 기간 차이 계산을 통해 일일권 여부 판별 로직 추가
+            const durationDiff = end.getTime() - start.getTime();
+            const totalDurationDays = Math.round(durationDiff / (1000 * 60 * 60 * 24));
+
+            let displayType = data.membershipType === 'PERIOD' ? '기간권' : '횟수권';
+            // 시작일과 종료일 차이가 1일 이하라면 '일일권'으로 표시
+            if (data.membershipType === 'PERIOD' && totalDurationDays <= 1) {
+              displayType = '일일권';
+            }
+
             setMembership({
-              membershipType: data.membershipType === 'PERIOD' ? '기간권' : '횟수권',
+              membershipType: displayType,
               remainingDays: diffDays >= 0 ? diffDays : 0, 
               startDate: data.startDate || '',
               endDate: data.endDate || '',
@@ -163,7 +180,7 @@ const HomeScreen = ({ navigation }: any) => {
           let myEndSec = 0;
 
           try {
-            const endRes = await axios.get('http://172.29.151.129:8080/api/v1/rankings/endurance/distance', config);
+            const endRes = await axios.get(`${API_BASE_URL}/rankings/endurance/distance`, config);
             const endList = extractList(endRes.data?.data || endRes.data);
             const myEndRecord = endList.find((item: any) => (item.name === nickname || item.nickname === nickname));
             
@@ -188,7 +205,7 @@ const HomeScreen = ({ navigation }: any) => {
             ];
 
             for (const c of reverseColors) {
-              const bRes = await axios.get(`http://172.29.151.129:8080/api/v1/rankings/beginner?difficulty=${c.enum}`, config);
+              const bRes = await axios.get(`${API_BASE_URL}/rankings/beginner?difficulty=${c.enum}`, config);
               const bList = extractList(bRes.data?.data || bRes.data);
               const myBRecord = bList.find((item: any) => (item.name === nickname || item.nickname === nickname));
               
@@ -234,7 +251,7 @@ const HomeScreen = ({ navigation }: any) => {
         const month = String(viewDate.getMonth() + 1).padStart(2, '0');
         const yearMonth = `${year}-${month}`; 
 
-        const response = await axios.get(`http://172.29.151.129:8080/api/v1/visit/my-history?yearMonth=${yearMonth}`, {
+        const response = await axios.get(`${API_BASE_URL}/visit/my-history?yearMonth=${yearMonth}`, {
           headers: { Authorization: `Bearer ${userToken}` }
         });
         
@@ -297,11 +314,25 @@ const HomeScreen = ({ navigation }: any) => {
   const hasMembership = !!membership.startDate && !!membership.endDate;
 
   const handlePopupPress = (title: string) => {
-    if (title === '공지사항') navigation.navigate('Notice'); 
-    else if (title === 'QR') openModal('QR');
-    else if (title === '회원권') openModal('Membership');
-    else if (title === '이번달 방문') scrollViewRef.current?.scrollToEnd({ animated: true });
-    else if (title === '지구력 랭킹') navigation.navigate('Ranking', { targetTab: '지구력' });
+    if (title === '공지사항') {
+      navigation.navigate('Notice');
+    } else if (title === 'QR') {
+      if (!hasMembership) {
+        Alert.alert(
+          "입장 불가",
+          "현재 활성화된 회원권이 없습니다. 이용권을 먼저 구매해주세요.",
+          [{ text: "확인" }]
+        );
+        return;
+      }
+      openModal('QR');
+    } else if (title === '회원권') {
+      openModal('Membership');
+    } else if (title === '이번달 방문') {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    } else if (title === '지구력 랭킹') {
+      navigation.navigate('Ranking', { targetTab: '지구력' });
+    }
   };
 
   return (
@@ -327,21 +358,70 @@ const HomeScreen = ({ navigation }: any) => {
             <Text style={styles.cardTitleCentered} numberOfLines={1} adjustsFontSizeToFit>QR 입장</Text>
             <Text style={styles.microSubTitle}>탭하여 입장</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.UserCardCentered} onPress={() => handlePopupPress('회원권')}>
-            <View style={[
-              styles.circleGraphDummy, 
-              !hasMembership && { borderColor: '#444444' }
-            ]}>
-              <Text style={[
-                styles.circleGraphText,
-                !hasMembership && { color: '#999999', fontSize: 13 }
-              ]} numberOfLines={1} adjustsFontSizeToFit>
-                {membership.isLoading ? '' : (hasMembership ? `D-${membership.remainingDays}` : '없음')}
+
+          <View style={styles.row}>
+            <TouchableOpacity style={styles.QRCardCentered} onPress={() => handlePopupPress('QR')}>
+              <Image source={require('./assets/QR.png')} style={styles.largeIcon} />
+              <Text style={styles.cardTitleCentered}>QR 입장</Text>
+              <Text style={styles.microSubTitle}>탭하여 입장</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.UserCardCentered} onPress={() => handlePopupPress('회원권')}>
+              <View style={[
+                styles.circleGraphDummy, 
+                !hasMembership && { borderColor: '#444444' }
+              ]}>
+                <Text style={[
+                  styles.circleGraphText,
+                  !hasMembership && { color: '#999999', fontSize: 13 }
+                ]}>
+                  {membership.isLoading ? '' : (hasMembership ? `D-${membership.remainingDays}` : '없음')}
+                </Text>
+              </View>
+              {/* 💡 회원권 종류가 일일권이면 '일일권', 아니면 해당 텍스트 출력되게 수정 */}
+              <Text style={styles.cardTitleCentered}>
+                {hasMembership ? membership.membershipType : '회원권'}
               </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.unifiedDataFrame}>
+            <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => handlePopupPress('이번달 방문')}>
+              <Text style={styles.microSubTitle}>이번달 방문</Text>
+              <Text style={styles.microValue}>{userStats.monthlyVisits}<Text style={styles.microUnit}>회</Text></Text>
+            </TouchableOpacity>
+            <View style={styles.verticalDivider} />
+            <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => navigation.navigate('Recode', { openSection: 'difficulty' })}>
+              <Text style={styles.microSubTitle}>초보벽 {'\n'}최고 난이도</Text>
+              {userStats.difficultyColor === '없음' ? (
+                <Text style={styles.microValuecolor}>미기록</Text>
+              ) : (
+                <>
+                  <Text style={styles.microValuecolor}>{userStats.difficultyColor}</Text>
+                  <Text style={styles.microUnit}>{userStats.difficultyType} <Text style={{color: '#999999'}}>완료</Text></Text>
+                </>
+              )}
+            </TouchableOpacity>
+            <View style={styles.verticalDivider} />
+            <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => handlePopupPress('지구력 랭킹')}>
+              <Text style={styles.microSubTitle}>지구력 랭킹</Text>
+              <Text style={styles.microValue}>{userStats.enduranceRank === 0 ? '-' : userStats.enduranceRank}<Text style={styles.microUnit}>위</Text></Text>
+            </TouchableOpacity>
+            <View style={styles.verticalDivider} />
+            <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => navigation.navigate('Recode', { openSection: 'endurance' })}>
+              <Text style={styles.microSubTitle}>지구력 {'\n'}최고 기록</Text>
+              <Text style={styles.microValue}>{userStats.enduranceMinutes}<Text style={styles.microUnit}>분 </Text>{userStats.enduranceSeconds}<Text style={styles.microUnit}>초</Text></Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.calendarCard}>
+            <View style={styles.calendarHeader}>
+              <TouchableOpacity onPress={() => changeMonth(-1)} style={styles.monthArrow}><Text style={styles.arrowText}>{"<"}</Text></TouchableOpacity>
+              <Text style={styles.calendarMonthText}>{currentYear}년 {currentMonth + 1}월</Text>
+              <TouchableOpacity onPress={() => changeMonth(1)} style={styles.monthArrow}><Text style={styles.arrowText}>{">"}</Text></TouchableOpacity>
             </View>
             <Text style={styles.cardTitleCentered} numberOfLines={1} adjustsFontSizeToFit>회원권</Text>
-          </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.unifiedDataFrame}>
@@ -416,14 +496,16 @@ const HomeScreen = ({ navigation }: any) => {
         </View>
       </ScrollView>
 
-      {/* 모달 부분 */}
       <Modal visible={activeModal !== null} animationType="fade" transparent={true} onRequestClose={closeModal}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeModal}>
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: slideAnim }] }]}>
             <TouchableOpacity activeOpacity={1} style={{ width: '100%', alignItems: 'center' }}>
               <View style={styles.dragHandle} />
               <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle}>{activeModal === 'QR' ? 'QR 체크인' : '회원권'}</Text>
+                {/* 💡 모달 타이틀에도 일일권 여부 반영 */}
+                <Text style={styles.sheetTitle}>
+                  {activeModal === 'QR' ? 'QR 체크인' : (hasMembership ? membership.membershipType : '회원권')}
+                </Text>
                 <TouchableOpacity onPress={closeModal}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity>
               </View>
               

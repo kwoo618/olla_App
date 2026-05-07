@@ -1,26 +1,134 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  View, Text, StyleSheet, TextInput, TouchableOpacity, 
-  ScrollView, Image, Modal, KeyboardAvoidingView, Platform 
+  View, 
+  Text, 
+  StyleSheet, 
+  TextInput, 
+  TouchableOpacity, 
+  ScrollView, 
+  Image, 
+  Modal, 
+  KeyboardAvoidingView, 
+  Platform,
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// 💡 API URL 세팅
+const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
+const MEMBER_LIST_API = `${API_BASE_URL}/admin/memberships/members`; 
+const OFFLINE_REGISTER_API = `${API_BASE_URL}/admin/members/offline`; 
+const MEMBER_DELETE_API = `${API_BASE_URL}/admin/members`; 
 
 // 💡 App.tsx에서 users와 setUsers를 받아옵니다.
-const ManagerUser = ({ users, setUsers }: any) => {
+const ManagerUser = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
-
+  const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState<any[]>([]); 
   const [searchQuery, setSearchQuery] = useState('');
   
   const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<number | null>(null);
+  const [userToDelete, setUserToDelete] = useState<number | string | null>(null);
   const [isAddModalVisible, setAddModalVisible] = useState(false);
 
   const [newName, setNewName] = useState('');
   const [newGender, setNewGender] = useState<'남자' | '여자' | null>(null);
   const [newBirth, setNewBirth] = useState('');
-  const [newEmail, setNewEmail] = useState('');
   const [newPhone, setNewPhone] = useState('');
 
+  // 1. 화면 로드 시 권한 체크 및 데이터 패치
+  useEffect(() => {
+    checkAdminAndFetchUsers();
+  }, []);
+
+  const checkAdminAndFetchUsers = async () => {
+    try {
+      const role = await AsyncStorage.getItem('userRole');
+      const token = await AsyncStorage.getItem('userToken');
+
+      if (!token || role !== 'ADMIN') {
+        Alert.alert("권한 오류", "관리자만 접근할 수 있는 페이지입니다.");
+        navigation.goBack();
+        return;
+      }
+
+      await fetchUsers(token);
+    } catch (error) {
+      console.error("인증 확인 실패:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 2. 회원 목록 조회 연동
+  const fetchUsers = async (token: string) => {
+    try {
+      const response = await axios.get(MEMBER_LIST_API, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { size: 1000, sort: 'id,desc' } 
+      });
+      const memberList = response.data?.data?.content || response.data?.data || [];
+      setUsers(memberList);
+    } catch (error) {
+      console.error("회원 목록 로드 실패:", error);
+      Alert.alert("오류", "회원 목록을 불러오는데 실패했습니다.");
+    }
+  };
+
+  // 3. 신규 오프라인 회원 등록 연동
+  const handleRegister = async () => {
+    if (!newName || !newGender || newBirth.length < 10 || newPhone.length < 12) return;
+    
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      
+      const requestBody = {
+        name: newName,
+        phone: newPhone,
+        gender: newGender,
+        birthDate: newBirth
+      };
+
+      await axios.post(OFFLINE_REGISTER_API, requestBody, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      Alert.alert("성공", "신규 회원이 등록되었습니다.");
+      closeAddModal();
+      fetchUsers(token!); 
+    } catch (error: any) {
+      console.error("회원 등록 실패:", error);
+      const errorMsg = error.response?.data?.message || "회원 등록에 실패했습니다.";
+      Alert.alert("오류", errorMsg);
+    }
+  };
+
+  // 4. 회원 삭제 연동 (ID값 정확히 전달)
+  const executeDelete = async () => {
+    if (userToDelete !== null && userToDelete !== undefined) {
+      try {
+        const token = await AsyncStorage.getItem('userToken');
+        await axios.delete(`${MEMBER_DELETE_API}/${userToDelete}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        Alert.alert("알림", "회원이 삭제되었습니다.");
+        fetchUsers(token!); 
+      } catch (error: any) {
+        console.error("회원 삭제 실패:", error.response?.data || error.message);
+        Alert.alert("오류", "회원 삭제에 실패했습니다.");
+      }
+    } else {
+      Alert.alert("오류", "삭제할 회원을 식별할 수 없습니다.");
+    }
+    setDeleteModalVisible(false); 
+    setUserToDelete(null);
+  };
+
+  // 폼 입력 포맷터
   const formatPhone = (text: string) => {
     const cleaned = text.replace(/[^0-9]/g, '');
     let formatted = cleaned;
@@ -36,67 +144,75 @@ const ManagerUser = ({ users, setUsers }: any) => {
     const numeric = text.replace(/[^0-9]/g, '');
     let formatted = numeric;
     if (numeric.length > 4 && numeric.length <= 6) {
-      formatted = `${numeric.slice(0, 4)}/${numeric.slice(4)}`;
+      formatted = `${numeric.slice(0, 4)}-${numeric.slice(4)}`;
     } else if (numeric.length > 6) {
-      formatted = `${numeric.slice(0, 4)}/${numeric.slice(4, 6)}/${numeric.slice(6, 8)}`;
+      formatted = `${numeric.slice(0, 4)}-${numeric.slice(4, 6)}-${numeric.slice(6, 8)}`;
     }
     setNewBirth(formatted);
   };
 
-  const handleRegister = () => {
-    if (!newName || !newGender || newBirth.length < 10 || newPhone.length < 12) return;
-    const newUser = {
-      id: Date.now(),
-      name: newName,
-      phone: newPhone,
-      status: '미출석', // 💡 새로 추가된 회원은 기본적으로 '미출석' 상태
-      ticket: null // 새로 추가된 회원은 티켓이 없음
-    };
-    setUsers([...users, newUser]);
-    closeAddModal();
-  };
-
   const closeAddModal = () => {
     setAddModalVisible(false);
-    setNewName(''); setNewGender(null); setNewBirth(''); 
-    setNewEmail(''); setNewPhone('');
+    setNewName(''); setNewGender(null); setNewBirth(''); setNewPhone('');
   };
 
-  const confirmDelete = (id: number) => { setUserToDelete(id); setDeleteModalVisible(true); };
-  const executeDelete = () => {
-    if (userToDelete !== null) setUsers(users.filter((user: any) => user.id !== userToDelete));
-    setDeleteModalVisible(false); setUserToDelete(null);
+  const confirmDelete = (id: number | string) => { 
+    if (id) {
+      setUserToDelete(id); 
+      setDeleteModalVisible(true); 
+    } else {
+      Alert.alert("오류", "회원 식별자(ID)가 없습니다.");
+    }
   };
 
+  // 검색 및 정렬
   const filteredAndSortedUsers = useMemo(() => {
-    const filtered = users.filter((user: any) => 
-      user.name.includes(searchQuery) || user.phone.includes(searchQuery)
-    );
+    const filtered = users.filter((user: any) => {
+      const targetName = user.member?.name || user.name || '';
+      const targetPhone = user.member?.phone || user.phone || '';
+      return targetName.includes(searchQuery) || targetPhone.includes(searchQuery);
+    });
+
     return filtered.sort((a: any, b: any) => {
-      const isKoreanA = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(a.name);
-      const isKoreanB = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(b.name);
+      const nameA = a.member?.name || a.name || '';
+      const nameB = b.member?.name || b.name || '';
+      const isKoreanA = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(nameA);
+      const isKoreanB = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(nameB);
       if (isKoreanA && !isKoreanB) return -1; 
       if (!isKoreanA && isKoreanB) return 1;  
-      return a.name.localeCompare(b.name);
+      return nameA.localeCompare(nameB);
     });
   }, [users, searchQuery]);
 
   const isFormValid = newName && newGender && newBirth.length === 10 && newPhone.length >= 12;
+
+  if (loading) {
+    return (
+      <View style={[styles.background, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#A1BE44" />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.background} edges={['top', 'left', 'right']}>
       <View style={styles.searchContainer}>
         <View style={styles.searchBox}>
           <Text style={styles.searchIcon}>🔎</Text>
-          <TextInput style={styles.searchInput} placeholder="이름, 연락처 등으로 검색" placeholderTextColor="#666" value={searchQuery} onChangeText={setSearchQuery} />
+          <TextInput 
+            style={styles.searchInput} 
+            placeholder="이름, 연락처 등으로 검색" 
+            placeholderTextColor="#666" 
+            value={searchQuery} 
+            onChangeText={setSearchQuery} 
+          />
         </View>
       </View>
 
       <View style={styles.tableHeader}>
         <Text style={[styles.headerText, styles.colName]}>회원 정보</Text>
         <Text style={[styles.headerText, styles.colPhone, { textAlign: 'center' }]}>연락처</Text>
-        {/* 💡 헤더 텍스트 변경: 현재 상태 -> 당일 출석 */}
-        <Text style={[styles.headerText, styles.colStatus, { textAlign: 'center' }]}>당일 출석</Text>
+        <Text style={[styles.headerText, styles.colStatus, { textAlign: 'center' }]}>이용권 종류</Text>
         <Text style={[styles.headerText, styles.colAction, { textAlign: 'center' }]}>삭제</Text>
       </View>
       <View style={styles.headerDivider} />
@@ -108,25 +224,54 @@ const ManagerUser = ({ users, setUsers }: any) => {
         {filteredAndSortedUsers.length === 0 ? (
           <Text style={styles.emptyText}>검색 결과가 없습니다.</Text>
         ) : (
-          filteredAndSortedUsers.map((user: any) => (
-            <View key={user.id} style={styles.tableRow}>
-              <Text style={[styles.rowTextBold, styles.colName]} numberOfLines={1}>{user.name}</Text>
-              <Text style={[styles.rowText, styles.colPhone, { textAlign: 'center' }]}>{user.phone}</Text>
-              <View style={[styles.colStatus, styles.centerAlign]}>
-                {/* 💡 활동중 -> 출석으로 판단 기준 변경 */}
-                <View style={[styles.badge, user.status === '출석' || user.status === '활동중' ? styles.badgeActive : styles.badgeInactive]}>
-                  <Text style={user.status === '출석' || user.status === '활동중' ? styles.badgeTextActive : styles.badgeTextInactive}>
-                    {user.status === '활동중' ? '출석' : (user.status === '비활중' ? '미출석' : user.status)}
-                  </Text>
+          filteredAndSortedUsers.map((user: any, index: number) => {
+            // 💡 1. 회원 ID 확실히 추출하기 (응답 구조별 대응)
+            const memberInfo = user.member || user;
+            const memberId = memberInfo.id || user.id || user.memberId;
+
+            // 💡 2. 이용권 정보 추출하기
+            const membershipInfo = user.activeMembership || user.membership || user;
+            const memType = membershipInfo?.membershipType || membershipInfo?.type || user.membershipType;
+
+            let displayType = '없음';
+            let badgeStyle = styles.badgeInactive;
+            let badgeTextStyle = styles.badgeTextInactive;
+
+            if (memType === 'PERIOD') {
+              displayType = '기간권';
+              badgeStyle = styles.badgePeriod;
+              badgeTextStyle = styles.badgeTextPeriod;
+            } else if (memType === 'COUNT') {
+              displayType = '횟수권';
+              badgeStyle = styles.badgeCount;
+              badgeTextStyle = styles.badgeTextCount;
+            }
+
+            return (
+              // 💡 3. 고유한 Key 값 적용 (memberId가 없으면 index로 방어)
+              <View key={`user-${memberId || index}`} style={styles.tableRow}>
+                <Text style={[styles.rowTextBold, styles.colName]} numberOfLines={1}>
+                  {memberInfo.name || '이름 없음'}
+                </Text>
+                <Text style={[styles.rowText, styles.colPhone, { textAlign: 'center' }]}>
+                  {memberInfo.phone || '연락처 없음'}
+                </Text>
+                
+                <View style={[styles.colStatus, styles.centerAlign]}>
+                  <View style={[styles.badge, badgeStyle]}>
+                    <Text style={badgeTextStyle}>{displayType}</Text>
+                  </View>
+                </View>
+                
+                <View style={[styles.colAction, styles.centerAlign]}>
+                  {/* 💡 4. 삭제 버튼에 추출한 정확한 ID 전달 */}
+                  <TouchableOpacity style={styles.trashBtn} onPress={() => confirmDelete(memberId)}>
+                    <Image source={require('./assets/trash.png')} style={styles.trashIcon} />
+                  </TouchableOpacity>
                 </View>
               </View>
-              <View style={[styles.colAction, styles.centerAlign]}>
-                <TouchableOpacity style={styles.trashBtn} onPress={() => confirmDelete(user.id)}>
-                  <Image source={require('./assets/trash.png')} style={styles.trashIcon} />
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))
+            );
+          })
         )}
       </ScrollView>
 
@@ -138,19 +283,24 @@ const ManagerUser = ({ users, setUsers }: any) => {
         <Text style={styles.fabText}>+ 등록</Text>
       </TouchableOpacity>
 
-      {/* 모달 영역 */}
+      {/* 회원 삭제 확인 모달 */}
       <Modal visible={isDeleteModalVisible} animationType="fade" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.deleteModalBox}>
-            <Text style={styles.modalTitle}>삭제하시겠습니까?</Text>
+            <Text style={styles.modalTitle}>해당 회원을 삭제하시겠습니까?</Text>
             <View style={styles.modalBtnRow}>
-              <TouchableOpacity style={styles.btnYes} onPress={executeDelete}><Text style={styles.btnTextBlack}>예</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.btnNo} onPress={() => setDeleteModalVisible(false)}><Text style={styles.btnTextWhite}>아니오</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.btnYes} onPress={executeDelete}>
+                <Text style={styles.btnTextBlack}>예</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.btnNo} onPress={() => setDeleteModalVisible(false)}>
+                <Text style={styles.btnTextWhite}>아니오</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
+      {/* 신규 회원 등록 모달 */}
       <Modal visible={isAddModalVisible} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.addModalBox}>
@@ -159,22 +309,30 @@ const ManagerUser = ({ users, setUsers }: any) => {
               <TouchableOpacity onPress={closeAddModal}><Text style={styles.closeIcon}>✕</Text></TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
+              
               <Text style={styles.inputLabel}>이름</Text>
               <TextInput style={styles.modalInput} placeholder="이름 입력" placeholderTextColor="#666" value={newName} onChangeText={setNewName} />
+              
               <Text style={styles.inputLabel}>성별</Text>
               <View style={styles.genderRow}>
-                <TouchableOpacity style={[styles.genderBtn, newGender === '남자' && styles.genderBtnActive]} onPress={() => setNewGender('남자')}><Text style={[styles.genderBtnText, newGender === '남자' && styles.genderBtnTextActive]}>남자</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.genderBtn, newGender === '여자' && styles.genderBtnActive]} onPress={() => setNewGender('여자')}><Text style={[styles.genderBtnText, newGender === '여자' && styles.genderBtnTextActive]}>여자</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.genderBtn, newGender === '남자' && styles.genderBtnActive]} onPress={() => setNewGender('남자')}>
+                  <Text style={[styles.genderBtnText, newGender === '남자' && styles.genderBtnTextActive]}>남자</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.genderBtn, newGender === '여자' && styles.genderBtnActive]} onPress={() => setNewGender('여자')}>
+                  <Text style={[styles.genderBtnText, newGender === '여자' && styles.genderBtnTextActive]}>여자</Text>
+                </TouchableOpacity>
               </View>
+              
               <Text style={styles.inputLabel}>생년월일</Text>
-              <TextInput style={styles.modalInput} placeholder="YYYY/MM/DD" placeholderTextColor="#666" keyboardType="numeric" maxLength={10} value={newBirth} onChangeText={formatBirth} />
-              <Text style={styles.inputLabel}>이메일 (선택)</Text>
-              <TextInput style={styles.modalInput} placeholder="example@email.com" placeholderTextColor="#666" value={newEmail} onChangeText={setNewEmail} />
+              <TextInput style={styles.modalInput} placeholder="YYYY-MM-DD" placeholderTextColor="#666" keyboardType="numeric" maxLength={10} value={newBirth} onChangeText={formatBirth} />
+              
               <Text style={styles.inputLabel}>전화번호</Text>
               <TextInput style={styles.modalInput} placeholder="010-0000-0000" placeholderTextColor="#666" keyboardType="phone-pad" maxLength={13} value={newPhone} onChangeText={formatPhone} />
+              
               <TouchableOpacity style={[styles.submitBtn, !isFormValid && { backgroundColor: '#444' }]} disabled={!isFormValid} onPress={handleRegister}>
                 <Text style={[styles.submitBtnText, !isFormValid && { color: '#888' }]}>등록 완료</Text>
               </TouchableOpacity>
+              
               <View style={{ height: 20 }} />
             </ScrollView>
           </KeyboardAvoidingView>
@@ -204,14 +362,13 @@ const styles = StyleSheet.create({
   colPhone: { flex: 3 },
   colStatus: { flex: 2 },
   colAction: { flex: 1 },
-  
-  // 💡 배지 너비 고정(width: 65) 및 가운데 정렬로 통일
   badge: { width: 65, paddingVertical: 6, borderRadius: 20, alignItems: 'center' },
-  badgeActive: { backgroundColor: 'rgba(161, 190, 68, 0.2)' },
+  badgePeriod: { backgroundColor: 'rgba(161, 190, 68, 0.2)' },
+  badgeCount: { backgroundColor: 'rgba(0, 157, 255, 0.2)' },
   badgeInactive: { backgroundColor: 'rgba(142, 142, 142, 0.2)' },
-  badgeTextActive: { color: '#A1BE44', fontSize: 12, fontWeight: 'bold', textAlign: 'center' },
-  badgeTextInactive: { color: '#8E8E8E', fontSize: 12, fontWeight: 'bold', textAlign: 'center' },
-  
+  badgeTextPeriod: { color: '#A1BE44', fontSize: 12, fontWeight: 'bold' },
+  badgeTextCount: { color: '#009DFF', fontSize: 12, fontWeight: 'bold' },
+  badgeTextInactive: { color: '#8E8E8E', fontSize: 12, fontWeight: 'bold' },
   trashBtn: { padding: 8 },
   trashIcon: { width: 20, height: 20, tintColor: '#FF4D4D', resizeMode: 'contain' },
   fab: { position: 'absolute', bottom: 30, right: 20, backgroundColor: '#A1BE44', paddingHorizontal: 20, paddingVertical: 15, borderRadius: 30, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4 },

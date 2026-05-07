@@ -4,9 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BASE_URL = 'http://172.29.151.129:8080/api/v1/records/beginner';
-const ENDURANCE_BASE_URL = 'http://172.29.151.129:8080/api/v1/records/endurance';
-const SERIES_BASE_URL = 'http://172.29.151.129:8080/api/v1/records/series';
+const BASE_URL = 'http://192.168.0.23:8080/api/v1/records/beginner';
+const ENDURANCE_BASE_URL = 'http://192.168.0.23:8080/api/v1/records/endurance';
+const SERIES_BASE_URL = 'http://192.168.0.23:8080/api/v1/records/series';
 
 // --- [인증 설정] ---
 axios.interceptors.request.use(
