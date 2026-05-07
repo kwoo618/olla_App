@@ -49,40 +49,8 @@ public class PostService {
         // 방장 자동 참여
         participantRepository.save(new PostParticipant(post, member));
 
-        return PostResponse.of(post, true);
-    }
-
-    @Transactional(readOnly = true)
-    public Page<PostResponse> getPostList(Pageable pageable, String loginId) {
-        Member currentMember = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
-                .orElseThrow(() -> new IllegalArgumentException("사용자 정보가 없습니다."));
-
-        return postRepository.findByIsDeletedFalseOrderByCreatedAtDesc(pageable)
-                .map(post -> {
-                    // 목록의 각 게시글마다 내가 참여했는지 확인
-                    boolean isApplied = participantRepository.existsByPostAndMember(post, currentMember);
-                    return PostResponse.of(post, isApplied);
-                });
-    }
-
-    @Transactional(readOnly = true)
-    public PostResponse getPostDetail(Long postId, String currentLoginId) {
-        Post post = postRepository.findById(postId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 게시글입니다."));
-
-        if (post.isDeleted()) {
-            throw new IllegalArgumentException("삭제된 게시글입니다.");
-        }
-
-        // 현재 로그인한 유저
-        Member currentMember = memberRepository.findByLoginIdAndIsDeletedFalse(currentLoginId)
-                .orElseThrow(() -> new IllegalArgumentException("사용자 정보가 없습니다."));
-
-        // 로그인한 유저가 이 게시글에 '참여 신청'을 했는지 여부 확인
-        boolean isApplied = participantRepository.existsByPostAndMember(post, currentMember);
-
-        // 새롭게 만든 PostResponse의 of 팩토리 메서드 사용
-        return PostResponse.of(post, isApplied);
+        // 방금 만든 글이므로 isLiked = false, likeCount = 0L 로 고정
+        return PostResponse.of(post, true, false, 0L);
     }
 
     @Transactional
@@ -97,8 +65,51 @@ public class PostService {
         post.updatePost(request.getTitle(), request.getContent(), request.getIsDifferentGym(),
                 request.getGymPlace(), request.getMeetDateTime(), request.getMaxMember());
 
-        // 💡 [수정] 작성자 본인의 수정이므로 isApplied = true
-        return PostResponse.of(post, true);
+        Member member = post.getMember();
+        boolean isLiked = postLikeRepository.existsByPostAndMember(post, member);
+        long likeCount = postLikeRepository.countByPostId(post.getId());
+
+        // 작성자 본인의 수정이므로 isApplied = true
+        return PostResponse.of(post, true, isLiked, likeCount);
+    }
+
+    @Transactional
+    public PostResponse getPostDetail(Long postId, String loginId) {
+        Post post = postRepository.findById(postId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 게시글입니다."));
+
+        if (post.isDeleted()) throw new IllegalArgumentException("삭제된 게시글입니다.");
+
+        // 1. 조회수 증가
+        post.increaseViewCount();
+
+        // 2. 로그인 유저 정보 및 상태 확인
+        Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
+                .orElseThrow(() -> new IllegalArgumentException("사용자 정보가 없습니다."));
+
+        boolean isApplied = participantRepository.existsByPostAndMember(post, member);
+        boolean isLiked = postLikeRepository.existsByPostAndMember(post, member);
+        long likeCount = postLikeRepository.countByPostId(postId);
+
+        // 3. 통합 DTO 반환
+        return PostResponse.of(post, isApplied, isLiked, likeCount);
+    }
+
+    /**
+     * [목록 조회] 목록에서도 좋아요 수와 내 상태를 보여줌
+     */
+    @Transactional(readOnly = true)
+    public Page<PostResponse> getPostList(Pageable pageable, String loginId) {
+        Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
+                .orElseThrow(() -> new IllegalArgumentException("사용자 정보가 없습니다."));
+
+        return postRepository.findByIsDeletedFalseOrderByCreatedAtDesc(pageable)
+                .map(post -> {
+                    boolean isApplied = participantRepository.existsByPostAndMember(post, member);
+                    boolean isLiked = postLikeRepository.existsByPostAndMember(post, member);
+                    long likeCount = postLikeRepository.countByPostId(post.getId());
+                    return PostResponse.of(post, isApplied, isLiked, likeCount);
+                });
     }
 
     @Transactional
@@ -120,10 +131,14 @@ public class PostService {
         Member currentMember = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("사용자 정보가 없습니다."));
 
-        // Repository에 추가했던 검색 메서드 호출
         return postRepository.findByTitleContainingOrContentContainingAndIsDeletedFalseOrderByCreatedAtDesc(
                         keyword, keyword, pageable)
-                .map(post -> PostResponse.of(post, participantRepository.existsByPostAndMember(post, currentMember)));
+                .map(post -> {
+                    boolean isApplied = participantRepository.existsByPostAndMember(post, currentMember);
+                    boolean isLiked = postLikeRepository.existsByPostAndMember(post, currentMember);
+                    long likeCount = postLikeRepository.countByPostId(post.getId());
+                    return PostResponse.of(post, isApplied, isLiked, likeCount);
+                });
     }
 
     // [Epic 19] 내가 작성한 게시글 목록 조회
@@ -133,7 +148,11 @@ public class PostService {
                 .orElseThrow(() -> new IllegalArgumentException("사용자 정보가 없습니다."));
 
         return postRepository.findByMemberIdAndIsDeletedFalseOrderByCreatedAtDesc(member.getId(), pageable)
-                .map(post -> PostResponse.of(post, true)); // 내가 쓴 글은 무조건 참여 중
+                .map(post -> {
+                    boolean isLiked = postLikeRepository.existsByPostAndMember(post, member);
+                    long likeCount = postLikeRepository.countByPostId(post.getId());
+                    return PostResponse.of(post, true, isLiked, likeCount); // 내가 쓴 글은 무조건 참여 중
+                });
     }
 
     // [Epic 19] 내가 참여 신청한 게시글 목록 조회
@@ -142,9 +161,13 @@ public class PostService {
         Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("사용자 정보가 없습니다."));
 
-        // 참여자 테이블(PostParticipant)에서 내 기록을 먼저 찾고, 거기서 Post를 꺼내옵니다.
         return participantRepository.findByMemberIdOrderByCreatedAtDesc(member.getId(), pageable)
-                .map(participant -> PostResponse.of(participant.getPost(), true));
+                .map(participant -> {
+                    Post post = participant.getPost();
+                    boolean isLiked = postLikeRepository.existsByPostAndMember(post, member);
+                    long likeCount = postLikeRepository.countByPostId(post.getId());
+                    return PostResponse.of(post, true, isLiked, likeCount); // 참여 내역이 있으므로 무조건 true
+                });
     }
 
     @Transactional

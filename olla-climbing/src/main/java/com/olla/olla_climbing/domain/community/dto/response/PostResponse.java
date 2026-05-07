@@ -5,7 +5,6 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Getter
 @Builder
@@ -20,13 +19,14 @@ public class PostResponse {
     private LocalDateTime meetDateTime;
     private int maxMember;
     private int memberCount;
-    private boolean isApplied;
     private LocalDateTime createdAt;
 
-    private List<ParticipantDto> participants;
+    private int viewCount;    // 조회수
+    private long likeCount;   // 좋아요 총 개수
+    private boolean isApplied; // 내가 참여 신청했는지 여부
+    private boolean isLiked;   // 내가 좋아요 눌렀는지 여부
 
-    // 상세 조회 시 참여자 정보까지 포함하여 반환
-    public static PostResponse of(Post post, boolean isApplied) {
+    public static PostResponse of(Post post, boolean isApplied, boolean isLiked, long likeCount) {
         return PostResponse.builder()
                 .id(post.getId())
                 .writerId(post.getMember().getId())
@@ -38,8 +38,11 @@ public class PostResponse {
                 .meetDateTime(post.getMeetDateTime())
                 .maxMember(post.getMaxMember())
                 .memberCount(post.getMemberCount())
-                .isApplied(isApplied)
                 .createdAt(post.getCreatedAt())
+                .viewCount(post.getViewCount())
+                .likeCount(likeCount)
+                .isApplied(isApplied)
+                .isLiked(isLiked)
                 .build();
     }
 }
