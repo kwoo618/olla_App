@@ -19,7 +19,7 @@ const SignupScreen = ({ navigation }: any) => {
   const [name, setName] = useState('');
   const [gender, setGender] = useState<'남자' | '여자' | null>(null);
   const [birth, setBirth] = useState('');
-  const [email, setEmail] = useState(''); // 선택 사항
+  const [email, setEmail] = useState(''); // 필수 사항으로 변경됨
   const [phone, setPhone] = useState('');
 
   const [idError, setIdError] = useState('');
@@ -31,10 +31,10 @@ const SignupScreen = ({ navigation }: any) => {
 
   const [isIdChecked, setIsIdChecked] = useState(false);
 
-  // 4️⃣ 현재 포커스된 필드 추적용 상태 (테두리 색상 변경용)
+  // 현재 포커스된 필드 추적용 상태
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
-  // 5️⃣ 포커스 이동을 위한 Ref
+  // 포커스 이동을 위한 Ref
   const passwordRef = useRef<TextInput>(null);
   const confirmRef = useRef<TextInput>(null);
   const nameRef = useRef<TextInput>(null);
@@ -70,31 +70,73 @@ const SignupScreen = ({ navigation }: any) => {
     }
   };
 
-  // 📧 이메일 유효성 검증 함수 (값이 있을 때만 검사)
+  // 📧 이메일 유효성 검증 함수 (필수)
   const validateEmail = (text: string) => {
     setEmail(text);
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (text && !emailRegex.test(text)) {
+    if (!text) {
+      setEmailError('이메일을 입력해주세요.');
+    } else if (!emailRegex.test(text)) {
       setEmailError('올바른 이메일 형식이 아닙니다.');
     } else {
       setEmailError('');
     }
   };
 
-  // 🎂 생년월일 자동 하이픈 포맷터 (YYYY-MM-DD)
+  // 🎂 생년월일 자동 하이픈 포맷터 및 날짜 유효성 검증 (YYYY-MM-DD)
   const formatBirth = (text: string) => {
+    // 1. 숫자만 추출
     const cleaned = text.replace(/[^0-9]/g, '');
     let formatted = cleaned;
+
+    // 2. 하이픈 추가
     if (cleaned.length > 4 && cleaned.length <= 6) {
       formatted = `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`;
     } else if (cleaned.length > 6) {
       formatted = `${cleaned.slice(0, 4)}-${cleaned.slice(4, 6)}-${cleaned.slice(6, 8)}`;
     }
+    
     setBirth(formatted);
+
+    // 3. 길이 검증
     if (cleaned.length > 0 && cleaned.length < 8) {
       setBirthError('생년월일 8자리를 모두 입력해주세요.');
-    } else {
+      return;
+    }
+
+    // 4. 날짜 유효성 검증 로직 (길이가 8자리 일 때)
+    if (cleaned.length === 8) {
+      const year = parseInt(cleaned.slice(0, 4), 10);
+      const month = parseInt(cleaned.slice(4, 6), 10);
+      const day = parseInt(cleaned.slice(6, 8), 10);
+
+      // 연도 검증 (예: 1900년 ~ 현재 연도)
+      const currentYear = new Date().getFullYear();
+      if (year < 1900 || year > currentYear) {
+        setBirthError('유효한 연도를 입력해주세요.');
+        return;
+      }
+
+      // 월 검증 (1 ~ 12)
+      if (month < 1 || month > 12) {
+        setBirthError('유효한 월(1~12)을 입력해주세요.');
+        return;
+      }
+
+      // 일 검증 (1 ~ 해당 월의 마지막 일)
+      const daysInMonth = new Date(year, month, 0).getDate(); // 해당 연도/월의 마지막 날짜
+      if (day < 1 || day > daysInMonth) {
+        setBirthError(`유효한 일(1~${daysInMonth})을 입력해주세요.`);
+        return;
+      }
+
+      // 모든 검증 통과 시 에러 초기화
       setBirthError('');
+    } else {
+      // 8자리가 아닐 때 (입력 중이거나 다 지웠을 때) 오류 메시지 초기화
+      if (cleaned.length === 0) {
+        setBirthError('');
+      }
     }
   };
 
@@ -115,12 +157,17 @@ const SignupScreen = ({ navigation }: any) => {
     }
   };
 
-  // 🔍 아이디 중복 확인 연동
+  // 🔍 아이디 중복 확인 연동 (4~15자 제한)
   const checkDuplicateId = async () => {
     if (!id) {
       setIdError('아이디를 먼저 입력해주세요.');
       return;
     }
+    if (id.length < 4 || id.length > 15) {
+      setIdError('아이디는 4~15자로 입력해주세요.');
+      return;
+    }
+
     try {
       const response = await axios.get(`http://172.29.151.129:8080/api/v1/auth/check-id`, {
         params: { loginId: id }
@@ -151,12 +198,25 @@ const SignupScreen = ({ navigation }: any) => {
       Alert.alert('알림', '비밀번호 양식을 확인해주세요.');
       return;
     }
-    if (!name || !gender || birth.length !== 10 || phoneError || !phone || emailError) {
+    
+    // 이메일 유효성 체크 
+    if (!email || emailError) {
+      Alert.alert('알림', '이메일을 올바르게 입력해주세요.');
+      return;
+    }
+
+    // 💡 생년월일 에러(birthError)가 있거나 형식이 맞지 않으면 팝업을 띄우고 차단
+    if (birthError || birth.length !== 10) {
+      Alert.alert('알림', '올바른 생년월일을 입력해주세요. (예: 1999-01-01)');
+      return;
+    }
+
+    if (!name || !gender || phoneError || !phone) {
       Alert.alert('알림', '필수 정보를 모두 올바르게 입력해주세요.');
       return;
     }
 
-    // PersonalScreen으로 데이터 전달하며 이동
+    // Role은 USER로 고정해서 전송
     navigation.navigate('PersonalInfo', {
       accountData: {
         loginId: id,
@@ -189,7 +249,7 @@ const SignupScreen = ({ navigation }: any) => {
           ]}>
             <TextInput 
               style={styles.inputFlex} 
-              placeholder="아이디를 입력하세요" 
+              placeholder="4~15자로 입력하세요" 
               placeholderTextColor="#ffffff80"
               value={id}
               autoCapitalize="none"
@@ -201,7 +261,11 @@ const SignupScreen = ({ navigation }: any) => {
               onSubmitEditing={checkDuplicateId}
               onChangeText={(text) => {
                 setId(text);
-                setIdError('');
+                if (text.length > 0 && (text.length < 4 || text.length > 15)) {
+                  setIdError('아이디는 4~15자로 입력해주세요.');
+                } else {
+                  setIdError('');
+                }
                 setIsIdChecked(false);
               }}
             />
@@ -290,6 +354,7 @@ const SignupScreen = ({ navigation }: any) => {
             </TouchableOpacity>
           </View>
 
+          {/* 💡 생년월일 입력 필드 */}
           <Text style={styles.middleText}>생년월일</Text>
           <TextInput 
             ref={birthRef}
@@ -332,7 +397,8 @@ const SignupScreen = ({ navigation }: any) => {
           />
           {phoneError !== '' && <Text style={styles.errorText}>{phoneError}</Text>}
 
-          <Text style={styles.middleText}>이메일 <Text style={styles.optionalText}>(선택)</Text></Text>
+          {/* 이메일 (필수 입력화) */}
+          <Text style={styles.middleText}>이메일</Text>
           <TextInput 
             ref={emailRef}
             style={[
@@ -370,9 +436,7 @@ const styles = StyleSheet.create({
   container: { width: '100%', backgroundColor: '#212121', padding: 20, borderRadius: 25, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 10 },
   title: { fontSize: 32, fontWeight: 'bold', marginBottom: 20, color: '#ffffff', textAlign: 'center' },
   middleText: { color: '#ffffff', fontSize: 14, alignSelf: 'flex-start', marginBottom: 8, marginLeft: 5, marginTop: 10 },
-  optionalText: { color: '#999999', fontSize: 12, fontWeight: 'normal' },
   
-  // 💡 수정된 부분: 기본 테두리를 어두운 회색(#444444)으로 변경했습니다.
   input: { width: '100%', height: 50, borderWidth: 1, borderColor: '#444444', color: '#ffffff', borderRadius: 10, paddingHorizontal: 15, marginBottom: 5 },
   inputRow: { flexDirection: 'row', alignItems: 'center', width: '100%', height: 50, borderWidth: 1, borderColor: '#444444', borderRadius: 10, marginBottom: 5, paddingRight: 5 },
   
@@ -382,7 +446,6 @@ const styles = StyleSheet.create({
   errorText: { color: '#ff4d4d', fontSize: 12, alignSelf: 'flex-start', marginLeft: 5, marginBottom: 10 },
   divider: { height: 1, backgroundColor: '#333333', marginVertical: 15 },
 
-  // 💡 포커스 됐을 때만 초록색 테두리로 변합니다.
   focusedInput: { borderColor: '#A1BE44' }, 
   inputError: { borderColor: '#ff4d4d' },    
   inputRowError: { borderColor: '#ff4d4d' }, 
@@ -396,7 +459,6 @@ const styles = StyleSheet.create({
   button: { width: '100%', height: 55, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', borderRadius: 10, marginTop: 30 },
   buttonDisabled: { backgroundColor: '#333333' },
   buttonText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
-  buttonTextDisabled: { color: '#666666' },
 });
 
 export default SignupScreen;

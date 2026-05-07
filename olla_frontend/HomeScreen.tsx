@@ -20,15 +20,14 @@ const HomeScreen = ({ navigation }: any) => {
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const slideAnim = useRef(new Animated.Value(500)).current;
 
-  // 1. QR 상태
   const [qrToken, setQrToken] = useState<string | null>(null);
 
-  // 2. 사용자 프로필 및 통계 상태
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [myNickname, setMyNickname] = useState('');
   const [userStats, setUserStats] = useState({
     monthlyVisits: 0,        
     difficultyColor: '없음', 
-    difficultyType: '없음',  // 왕복/편도 여부
+    difficultyType: '', // 💡 초기 타입을 빈 문자열로 변경
     enduranceRank: 0,        
     enduranceMinutes: 0,     
     enduranceSeconds: 0,     
@@ -44,7 +43,8 @@ const HomeScreen = ({ navigation }: any) => {
     isLoading: true
   });
 
-  // QR 발급
+  const [attendedDates, setAttendedDates] = useState<number[]>([]);
+
   const fetchQrToken = async () => {
     try {
       const userToken = await AsyncStorage.getItem('userToken');
@@ -79,7 +79,6 @@ const HomeScreen = ({ navigation }: any) => {
     });
   };
 
-  // RankingScreen과 동일한 리스트 추출 함수
   const extractList = (serverData: any) => {
     if (!serverData) return [];
     if (Array.isArray(serverData)) return serverData;
@@ -102,9 +101,12 @@ const HomeScreen = ({ navigation }: any) => {
           return;
         }
 
+        const storedRole = await AsyncStorage.getItem('userRole');
+        setUserRole(storedRole);
+
         const config = { headers: { Authorization: `Bearer ${userToken}` } };
 
-        // [1] 내 프로필 가져오기 (닉네임 확인용)
+        // [1] 내 프로필
         let nickname = '';
         try {
           const profileRes = await axios.get('http://172.29.151.129:8080/api/v1/members/me', config);
@@ -113,7 +115,7 @@ const HomeScreen = ({ navigation }: any) => {
           setMyNickname(nickname);
         } catch (e) { console.error("프로필 로드 실패"); }
 
-        // [2] 공지사항 로드
+        // [2] 공지사항
         try {
           const noticeResponse = await axios.get('http://172.29.151.129:8080/api/v1/admin/notices');
           const noticeList = noticeResponse.data?.data?.content;
@@ -125,7 +127,7 @@ const HomeScreen = ({ navigation }: any) => {
           }
         } catch (e) { console.log("공지사항 실패"); }
 
-        // [3] 회원권 정보 로드
+        // [3] 회원권
         try {
           const memResponse = await axios.get('http://172.29.151.129:8080/api/v1/memberships/me', config);
           const data = memResponse.data?.data || memResponse.data;
@@ -152,39 +154,32 @@ const HomeScreen = ({ navigation }: any) => {
           }
         } catch (e) { setMembership(prev => ({ ...prev, isLoading: false })); }
 
-        // [4] 랭킹 정보 바탕으로 내 최고 기록 뽑아내기
+        // [4] 기록
         if (nickname) {
           let bestColor = '없음';
-          let bestType = '없음';
+          let bestType = '';
           let myEndRank = 0;
           let myEndMin = 0;
           let myEndSec = 0;
 
-          // 지구력 랭킹 내 기록 찾기
           try {
             const endRes = await axios.get('http://172.29.151.129:8080/api/v1/rankings/endurance/distance', config);
             const endList = extractList(endRes.data?.data || endRes.data);
-            
-            // 내 기록 찾기
             const myEndRecord = endList.find((item: any) => (item.name === nickname || item.nickname === nickname));
             
             if (myEndRecord) {
-              // 전체 리스트 정렬하여 내 랭킹 계산 (동철님 RankingScreen 로직과 동일)
               endList.sort((a: any, b: any) => {
                  if(a.ranking && b.ranking) return a.ranking - b.ranking;
                  return (b.oneWayCount || 0) - (a.oneWayCount || 0); 
               });
-              
               const myRankIndex = endList.findIndex((item: any) => (item.name === nickname || item.nickname === nickname));
               myEndRank = myRankIndex !== -1 ? myRankIndex + 1 : 0;
-              
               const totalSec = myEndRecord.timeSeconds || 0;
               myEndMin = Math.floor(totalSec / 60);
               myEndSec = totalSec % 60;
             }
           } catch (e) { console.log("지구력 기록 로드 실패", e); }
 
-          // 초보벽 난이도(최고 기록) 찾기 - "검정"부터 순차 조회해서 내 기록이 나오면 중단
           try {
             const reverseColors = [
               { name: '검정', enum: 'BLACK' }, { name: '주황', enum: 'ORANGE' }, { name: '보라', enum: 'PURPLE' },
@@ -202,14 +197,13 @@ const HomeScreen = ({ navigation }: any) => {
                 const attemptType = myBRecord.attemptType || myBRecord.attempt_type || myBRecord.type || '';
                 const isRoundTrip = String(attemptType).toUpperCase() === 'ROUND_TRIP' || attemptType === '왕복';
                 bestType = isRoundTrip ? '왕복' : '편도';
-                break; // 가장 높은 난이도를 찾았으므로 반복문 종료
+                break;
               }
             }
           } catch (e) { console.log("초보벽 기록 로드 실패", e); }
 
           setUserStats(prev => ({
             ...prev,
-            monthlyVisits: 12, // TODO: 이번달 방문 횟수 API가 백엔드에 있다면 연결 필요 (현재는 하드코딩)
             difficultyColor: bestColor,
             difficultyType: bestType,
             enduranceRank: myEndRank,
@@ -226,17 +220,61 @@ const HomeScreen = ({ navigation }: any) => {
     fetchData();
   }, []);
 
-  const handlePopupPress = (title: string) => {
-    if (title === '공지사항') navigation.navigate('Notice'); 
-    else if (title === 'QR') openModal('QR');
-    else if (title === '회원권') openModal('Membership');
-    else if (title === '이번달 방문') scrollViewRef.current?.scrollToEnd({ animated: true });
-    else if (title === '지구력 랭킹') navigation.navigate('Ranking', { targetTab: '지구력' });
-  };
-
   const today = new Date();
   const [viewDate, setViewDate] = useState(new Date());
   const [selectedFullDate, setSelectedFullDate] = useState<Date | null>(null);
+
+  useEffect(() => {
+    const fetchVisitHistory = async () => {
+      try {
+        const userToken = await AsyncStorage.getItem('userToken');
+        if (!userToken) return;
+
+        const year = viewDate.getFullYear();
+        const month = String(viewDate.getMonth() + 1).padStart(2, '0');
+        const yearMonth = `${year}-${month}`; 
+
+        const response = await axios.get(`http://172.29.151.129:8080/api/v1/visit/my-history?yearMonth=${yearMonth}`, {
+          headers: { Authorization: `Bearer ${userToken}` }
+        });
+        
+        let rawData = response.data?.data;
+        if (rawData && !Array.isArray(rawData) && rawData.data) {
+          rawData = rawData.data;
+        }
+
+        let daysAttended: number[] = [];
+
+        if (Array.isArray(rawData)) {
+          daysAttended = rawData.map((item: any) => {
+            if (typeof item === 'string') {
+              const parts = item.split('-');
+              if (parts.length >= 3) return parseInt(parts[2], 10);
+            } 
+            else if (Array.isArray(item) && item.length >= 3) {
+              return parseInt(item[2], 10);
+            }
+            return -1; 
+          }).filter((day: number) => day > 0 && !isNaN(day)); 
+        }
+
+        setAttendedDates(daysAttended || []);
+
+        if (year === today.getFullYear() && viewDate.getMonth() === today.getMonth()) {
+          setUserStats(prev => ({
+            ...prev,
+            monthlyVisits: daysAttended.length
+          }));
+        }
+
+      } catch (error) {
+        console.error("출석 내역 로드 실패:", error);
+        setAttendedDates([]);
+      }
+    };
+
+    fetchVisitHistory();
+  }, [viewDate.getFullYear(), viewDate.getMonth()]);
 
   const changeMonth = (offset: number) => {
     const newDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + offset, 1);
@@ -257,6 +295,14 @@ const HomeScreen = ({ navigation }: any) => {
   const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
 
   const hasMembership = !!membership.startDate && !!membership.endDate;
+
+  const handlePopupPress = (title: string) => {
+    if (title === '공지사항') navigation.navigate('Notice'); 
+    else if (title === 'QR') openModal('QR');
+    else if (title === '회원권') openModal('Membership');
+    else if (title === '이번달 방문') scrollViewRef.current?.scrollToEnd({ animated: true });
+    else if (title === '지구력 랭킹') navigation.navigate('Ranking', { targetTab: '지구력' });
+  };
 
   return (
     <SafeAreaView style={styles.background}>
@@ -294,30 +340,30 @@ const HomeScreen = ({ navigation }: any) => {
             </TouchableOpacity>
           </View>
 
-          {/* 🟢 통계/기록 연동 영역 (State 반영 완료) */}
           <View style={styles.unifiedDataFrame}>
             <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => handlePopupPress('이번달 방문')}>
               <Text style={styles.microSubTitle}>이번달 방문</Text>
               <Text style={styles.microValue}>{userStats.monthlyVisits}<Text style={styles.microUnit}>회</Text></Text>
             </TouchableOpacity>
-            
             <View style={styles.verticalDivider} />
-            
             <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => navigation.navigate('Recode', { openSection: 'difficulty' })}>
               <Text style={styles.microSubTitle}>초보벽 {'\n'}최고 난이도</Text>
-              <Text style={styles.microValuecolor}>{userStats.difficultyColor}</Text>
-              <Text style={styles.microUnit}>{userStats.difficultyType} <Text style={{color: '#999999'}}>완료</Text></Text>
+              {/* 💡 텍스트 조건부 렌더링 수정 */}
+              {userStats.difficultyColor === '없음' ? (
+                <Text style={styles.microValuecolor}>미기록</Text>
+              ) : (
+                <>
+                  <Text style={styles.microValuecolor}>{userStats.difficultyColor}</Text>
+                  <Text style={styles.microUnit}>{userStats.difficultyType} <Text style={{color: '#999999'}}>완료</Text></Text>
+                </>
+              )}
             </TouchableOpacity>
-            
             <View style={styles.verticalDivider} />
-            
             <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => handlePopupPress('지구력 랭킹')}>
               <Text style={styles.microSubTitle}>지구력 랭킹</Text>
               <Text style={styles.microValue}>{userStats.enduranceRank === 0 ? '-' : userStats.enduranceRank}<Text style={styles.microUnit}>위</Text></Text>
             </TouchableOpacity>
-            
             <View style={styles.verticalDivider} />
-            
             <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => navigation.navigate('Recode', { openSection: 'endurance' })}>
               <Text style={styles.microSubTitle}>지구력 {'\n'}최고 기록</Text>
               <Text style={styles.microValue}>{userStats.enduranceMinutes}<Text style={styles.microUnit}>분 </Text>{userStats.enduranceSeconds}<Text style={styles.microUnit}>초</Text></Text>
@@ -338,19 +384,23 @@ const HomeScreen = ({ navigation }: any) => {
                 const isToday = day !== null && today.getDate() === day && today.getMonth() === currentMonth && today.getFullYear() === currentYear;
                 const isSelected = selectedFullDate !== null && day !== null && selectedFullDate.getDate() === day && selectedFullDate.getMonth() === currentMonth && selectedFullDate.getFullYear() === currentYear;
                 
+                const isAttended = day !== null && (attendedDates || []).includes(day);
+                
                 return (
                   <TouchableOpacity key={index} style={styles.dayCell} disabled={!day} onPress={() => day && onDateClick(day)}>
                     {day ? (
                       <View style={[
                         styles.dayCircle, 
                         isToday && styles.todayCircle, 
-                        isSelected && !isToday && styles.selectedCircle
+                        isSelected && !isToday && styles.selectedCircle,
+                        isAttended && !isToday && !isSelected && styles.attendedCircle
                       ]}>
                         <Text style={[
                           styles.dayText, 
                           isToday && styles.todayText, 
                           isSelected && !isToday && styles.selectedText,
-                          index % 7 === 0 && !isToday && !isSelected && styles.sundayText
+                          isAttended && !isToday && !isSelected && styles.attendedText, 
+                          index % 7 === 0 && !isToday && !isSelected && !isAttended && styles.sundayText
                         ]}>
                           {day}
                         </Text>
@@ -364,6 +414,7 @@ const HomeScreen = ({ navigation }: any) => {
         </View>
       </ScrollView>
 
+      {/* 모달 부분은 동일하므로 생략 */}
       <Modal visible={activeModal !== null} animationType="fade" transparent={true} onRequestClose={closeModal}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeModal}>
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: slideAnim }] }]}>
@@ -486,6 +537,10 @@ const styles = StyleSheet.create({
   todayText: { color: '#1A1A1A', fontWeight: 'bold' },
   selectedCircle: { backgroundColor: '#5DADE2' }, 
   selectedText: { color: '#000000', fontWeight: 'bold' },
+  
+  attendedCircle: { backgroundColor: '#3A3A3A', borderWidth: 1.5, borderColor: '#A1BE44' },
+  attendedText: { color: '#A1BE44', fontWeight: 'bold' },
+
   noticeHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   noticeBadge: { backgroundColor: '#A1BE44', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 8 },
   noticeBadgeText: { color: '#1A1A1A', fontSize: 10, fontWeight: 'bold' },

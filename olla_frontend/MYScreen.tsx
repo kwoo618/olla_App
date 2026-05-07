@@ -11,26 +11,22 @@ const MYScreen = ({ navigation }: any) => {
   const isFocused = useIsFocused();
   const [loading, setLoading] = useState(true);
 
-  // 상태 관리 (비회원 기본 상태 세팅, remainingDays -1로 구분)
+  // 상태 관리
   const [memInfo, setMemInfo] = useState({ type: '구매 필요', period: '-', status: '비회원', remainingDays: -1 });
 
-  // 🔥 관리자 여부 상태 추가
+  // 🔥 관리자 여부 상태
   const [isAdmin, setIsAdmin] = useState(false);
 
   const [profileData, setProfileData] = useState<any>({
     name: '', phone: '', gender: '', birthDate: '', age: '', height: '', weight: '', arm: '', shoe: ''
   });
 
-  // 공개 설정 통합 관리
   const [profileToggles, setProfileToggles] = useState<any>({
     showName: true, showPhone: true, showAge: true, showHeight: true, showWeight: true, showArm: true, showShoe: true,
   });
 
-  // 알림 스위치 상태
   const [isPushEnabled, setIsPushEnabled] = useState(true);
   const [isActivityEnabled, setIsActivityEnabled] = useState(true);
-  const [isNoticeEnabled, setIsNoticeEnabled] = useState(true);
-  const [isExpireEnabled, setIsExpireEnabled] = useState(true);
 
   // 데이터 불러오기
   const fetchMyInfo = async () => {
@@ -41,14 +37,23 @@ const MYScreen = ({ navigation }: any) => {
         navigation.replace('Login');
         return;
       }
+      
+      // 💡 AsyncStorage에 저장된 권한 가져오기
+      const storedRole = await AsyncStorage.getItem('userRole');
+
       const headers = { Authorization: `Bearer ${userToken}` };
 
       // [GET] 내 정보 조회
       const userRes = await axios.get('http://172.29.151.129:8080/api/v1/members/me', { headers });
       const data = userRes.data.data || userRes.data;
 
-      // 🔥 관리자 권한 확인 (서버 응답 구조에 맞게 필드명 변경 필요, 예: data.role, data.memberRole 등)
-      if (data.role === 'ADMIN' || data.authority === 'ROLE_ADMIN' || data.memberRole === 'ADMIN') {
+      // 🔥 관리자 권한 확인 (AsyncStorage 저장값 + 서버 응답 교차 검증)
+      if (
+        storedRole === 'ADMIN' || 
+        data.role === 'ADMIN' || 
+        data.authority === 'ROLE_ADMIN' || 
+        data.memberRole === 'ADMIN'
+      ) {
         setIsAdmin(true);
       } else {
         setIsAdmin(false);
@@ -110,7 +115,6 @@ const MYScreen = ({ navigation }: any) => {
 
   useEffect(() => { fetchMyInfo(); }, [isFocused]);
 
-  // 정보 수정 저장
   const handleSaveProfile = async () => {
     try {
       const userToken = await AsyncStorage.getItem('userToken');
@@ -143,7 +147,6 @@ const MYScreen = ({ navigation }: any) => {
     }
   };
 
-  // 로그아웃 
   const [isLogoutModalVisible, setLogoutModalVisible] = useState(false);
   const executeLogout = async () => {
     try {
@@ -157,7 +160,8 @@ const MYScreen = ({ navigation }: any) => {
     } catch (error) {
       console.log("서버 로그아웃 실패:", error);
     } finally {
-      await AsyncStorage.multiRemove(['userToken', 'refreshToken']);
+      // 💡 로그아웃 시 권한(userRole) 상태도 함께 삭제
+      await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole']);
       setLogoutModalVisible(false);
       navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
     }
@@ -165,7 +169,6 @@ const MYScreen = ({ navigation }: any) => {
 
   const cancelLogout = () => setLogoutModalVisible(false);
 
-  // 원본 애니메이션 제어 로직
   const pauseSlideAnim = useRef(new Animated.Value(800)).current;
   const contactSlideAnim = useRef(new Animated.Value(800)).current;
   const profileSlideAnim = useRef(new Animated.Value(800)).current;
@@ -187,7 +190,6 @@ const MYScreen = ({ navigation }: any) => {
   };
   const closeContactModal = () => { Animated.timing(contactSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => setContactModalVisible(false)); };
 
-  // 필드 렌더링 함수
   const renderEditField = (title: string, fieldKey: string, unit: string) => {
     const toggleKey = `show${fieldKey.charAt(0).toUpperCase() + fieldKey.slice(1)}`;
     return (
@@ -237,7 +239,7 @@ const MYScreen = ({ navigation }: any) => {
           <Text style={styles.chevronIcon}>＞</Text>
         </TouchableOpacity>
 
-        {/* 멤버십 (회원/비회원 UI 분기 적용) */}
+        {/* 멤버십 */}
         <View style={styles.card}>
           <View style={styles.cardHeader}><Image source={require('./assets/membership.png')} style={styles.cardHeaderIcon} /><Text style={styles.cardHeaderTitle}>멤버십 정보</Text></View>
           <View style={styles.memInfoContainer}>
@@ -277,27 +279,26 @@ const MYScreen = ({ navigation }: any) => {
           </View>
         </View>
 
-        {/* ADMIN 계정일 경우 표시되는 관리자 모드 버튼 */}
+        {/* 💡 ADMIN 계정일 경우에만 표시되는 관리자 모드 버튼 */}
         {isAdmin && (
           <TouchableOpacity 
             style={styles.adminCard} 
             activeOpacity={0.8} 
             onPress={() => navigation.navigate('ManagerDashboard')}
           >
-            {/* 앱에 SquaresFour 아이콘이 없다면 다른 아이콘으로 대체 가능합니다 */}
             <Image source={require('./assets/SquaresFour.png')} style={styles.adminIcon} />
             <Text style={styles.adminText}>관리자 모드 실행</Text>
           </TouchableOpacity>
         )}
 
-        {/* 로그아웃 버튼 */}
+        {/* 로그아웃 버튼 (모든 사용자 공통) */}
         <TouchableOpacity style={styles.logoutCard} activeOpacity={0.8} onPress={() => setLogoutModalVisible(true)}>
           <Image source={require('./assets/EXIT.png')} style={styles.logoutIcon} />
           <Text style={styles.logoutText}>로그아웃</Text>
         </TouchableOpacity>
       </ScrollView>
 
-      {/* 모달창들 (로그아웃, 일시정지, 문의, 프로필 수정 등 기존과 동일) */}
+      {/* 모달창 영역 */}
       <Modal visible={isLogoutModalVisible} transparent={true} animationType="fade">
         <View style={styles.centerModalOverlay}>
           <View style={styles.centerModalBox}>
@@ -433,7 +434,6 @@ const MYScreen = ({ navigation }: any) => {
   );
 };
 
-// 스타일 수정 (관리자 버튼 관련 스타일 추가)
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
   scrollContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 100 },
@@ -462,12 +462,9 @@ const styles = StyleSheet.create({
   settingTitle: { color: '#ffffff', fontSize: 15, fontWeight: 'bold', marginBottom: 4 },
   settingSub: { color: '#999999', fontSize: 12, lineHeight: 18 },
   divider: { height: 1, backgroundColor: '#333333', marginVertical: 8 },
-  
-  // 🔥 관리자 모드 실행 버튼 스타일
   adminCard: { flexDirection: 'row', backgroundColor: '#212121', borderRadius: 16, paddingVertical: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 15, borderWidth: 1, borderColor: '#A1BE44' },
   adminIcon: { width: 20, height: 20, tintColor: '#A1BE44', marginRight: 8, resizeMode: 'contain' },
   adminText: { color: '#A1BE44', fontSize: 16, fontWeight: 'bold' },
-
   logoutCard: { flexDirection: 'row', backgroundColor: '#212121', borderRadius: 16, paddingVertical: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 30 },
   logoutIcon: { width: 20, height: 20, tintColor: '#FF4D4D', marginRight: 8, resizeMode: 'contain' },
   logoutText: { color: '#FF4D4D', fontSize: 16, fontWeight: 'bold' },

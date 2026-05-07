@@ -3,9 +3,10 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Ani
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const POST_API_URL = 'http://172.29.151.129:8080/api/vi/posts';
-
-const MEMBER_API_URL = 'http://172.29.151.129:8080/api/v1/members'; 
+// 💡 API URL (참고: vi/posts가 오타일 수 있어 확인이 필요합니다. v1이 맞다면 v1으로 변경해주세요)
+const POST_API_URL = 'http://172.29.151.129:8080/api/vi/posts'; // 게시글 조회/작성/삭제 (vi)
+const PARTICIPANT_API_URL = 'http://172.29.151.129:8080/api/v1/posts'; // 참가/취소 (v1)
+const MEMBER_API_URL = 'http://172.29.151.129:8080/api/v1/members'; // 멤버 정보
 
 const CommunityScreen = ({ myProfile, myToggles }: any) => {
   const [selectedTab, setSelectedTab] = useState('전체');
@@ -14,9 +15,10 @@ const CommunityScreen = ({ myProfile, myToggles }: any) => {
   const [posts, setPosts] = useState<any[]>([]);
   const [myNickname, setMyNickname] = useState('');
 
-  // 1. 초기 데이터 로드 (내 정보 확인 후 게시글 목록 불러오기)
+  // 1. 초기 데이터 로드 (내 닉네임을 확실히 가져온 뒤 게시글 호출)
   useEffect(() => {
     const initData = async () => {
+      let currentNickname = '';
       try {
         const token = await AsyncStorage.getItem('userToken');
         if (token) {
@@ -24,20 +26,20 @@ const CommunityScreen = ({ myProfile, myToggles }: any) => {
             headers: { Authorization: `Bearer ${token}` }
           });
           const pData = profileRes.data?.data || profileRes.data;
-          setMyNickname(pData.nickname || pData.name || '');
+          currentNickname = pData.nickname || pData.name || '';
+          setMyNickname(currentNickname); 
         }
-        fetchPosts();
       } catch (error: any) {
         console.error("초기 데이터 로드 실패 (내 프로필):", error?.response?.data || error);
-        // 프로필을 못 불러오더라도 게시글은 불러오도록 강제 실행
-        fetchPosts();
+      } finally {
+        fetchPosts(currentNickname);
       }
     };
     initData();
   }, []);
 
   // 2. 게시글 목록 불러오기
-  const fetchPosts = async () => {
+  const fetchPosts = async (nicknameToUse = myNickname) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
       const response = await axios.get(POST_API_URL, {
@@ -59,7 +61,15 @@ const CommunityScreen = ({ myProfile, myToggles }: any) => {
           ? item.createdAt 
           : `${createdDate.getFullYear()}.${String(createdDate.getMonth() + 1).padStart(2, '0')}.${String(createdDate.getDate()).padStart(2, '0')}`;
 
-        const isJoined = item.participants?.some((p: any) => p.name === myNickname || p.nickname === myNickname) || false;
+        // 🚨 [핵심 수정 부분] 참여 여부 판단 조건 대폭 강화
+        // 백엔드에서 내려주는 필드명이 다를 수 있으므로 여러 가능성을 모두 체크합니다.
+        const isJoined = 
+          item.isParticipant === true || 
+          item.isParticipated === true || 
+          item.participated === true || 
+          (Array.isArray(item.participants) && item.participants.some((p: any) => 
+            typeof p === 'string' ? p === nicknameToUse : (p?.name === nicknameToUse || p?.nickname === nicknameToUse || p?.memberName === nicknameToUse)
+          )) || false;
 
         return {
           id: item.id,
@@ -68,16 +78,16 @@ const CommunityScreen = ({ myProfile, myToggles }: any) => {
           desc: item.content,
           location: item.differentGym ? (item.gymPlace || '장소 미정') : 'olla 클라이밍 센터',
           date: formattedMeetDate,
-          people: `${item.memberCount || 1}/${item.maxMember}명`,
+          people: `${item.memberCount || item.participants?.length || 1}/${item.maxMember}명`,
           postDate: formattedCreated,
           author: item.writerName,
-          isMine: item.writerName === myNickname,
+          isMine: item.writerName === nicknameToUse, 
           isJoined: isJoined
         };
       });
 
       // 최신순 정렬
-      setPosts(mappedPosts.sort((a, b) => b.id - a.id));
+      setPosts(mappedPosts.sort((a: any, b: any) => b.id - a.id));
     } catch (error: any) {
       console.error("게시글 목록 로드 실패:", error?.response?.data || error.message);
       if (error?.response?.status === 500) {
@@ -89,7 +99,7 @@ const CommunityScreen = ({ myProfile, myToggles }: any) => {
   const filteredPosts = posts.filter(post => selectedTab === '전체' || post.type === selectedTab);
 
   // ==========================================
-  // 💡 게시글 삭제 로직 (API 연동)
+  // 💡 게시글 삭제 로직
   // ==========================================
   const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
@@ -116,7 +126,7 @@ const CommunityScreen = ({ myProfile, myToggles }: any) => {
   const cancelDelete = () => { setDeleteModalVisible(false); setItemToDelete(null); };
 
   // ==========================================
-  // 💡 프로필 보기 팝업 로직 (API 연동)
+  // 💡 프로필 보기 팝업 로직 
   // ==========================================
   const [isDetailVisible, setDetailVisible] = useState(false);
   const detailSlideAnim = useRef(new Animated.Value(800)).current;
@@ -141,18 +151,14 @@ const CommunityScreen = ({ myProfile, myToggles }: any) => {
         toggles: userData.privacy || { showName: true, showAge: true, showPhone: true, showHeight: true, showWeight: true, showArm: true, showShoe: true },
         isMe: isMine
       });
-    } catch (error: any) {
-      console.error("회원 프로필 조회 실패 (백엔드 미구현일 수 있음):", error?.response?.data || error.message);
-      // 실패 시 기본 이름만 표시
-      setSelectedUser({
-        name: authorName, phone: '-', age: '-', height: '-', weight: '-', arm: '-', shoe: '-',
-        toggles: { showName: true, showAge: false, showPhone: false, showHeight: false, showWeight: false, showArm: false, showShoe: false },
-        isMe: isMine
-      });
-    }
 
-    setDetailVisible(true);
-    setTimeout(() => { Animated.timing(detailSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(); }, 50);
+      setDetailVisible(true);
+      setTimeout(() => { Animated.timing(detailSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(); }, 50);
+
+    } catch (error: any) {
+      console.error("회원 프로필 조회 실패:", error?.response?.data || error.message);
+      Alert.alert("프로필 조회 불가", "해당 사용자의 프로필 정보를 불러올 수 없습니다.");
+    }
   };
   
   const closeDetailModal = () => {
@@ -165,7 +171,7 @@ const CommunityScreen = ({ myProfile, myToggles }: any) => {
   };
 
   // ==========================================
-  // 💡 모집 글 작성 팝업 및 등록 로직 (API 연동)
+  // 💡 모집 글 작성 로직
   // ==========================================
   const [isCreateVisible, setCreateVisible] = useState(false);
   const createSlideAnim = useRef(new Animated.Value(800)).current;
@@ -234,15 +240,46 @@ const CommunityScreen = ({ myProfile, myToggles }: any) => {
       return;
     }
 
+    if (createDate.length !== 10 || createTime.length !== 5) {
+      Alert.alert("알림", "날짜(YYYY/MM/DD)와 시간(HH:MM)을 끝까지 올바르게 입력해주세요.");
+      return;
+    }
+
+    const [year, month, day] = createDate.split('/').map(Number);
+    const [hours, minutes] = createTime.split(':').map(Number);
+
+    if (month < 1 || month > 12) {
+      Alert.alert("알림", "올바른 월(1~12월)을 입력해주세요.");
+      return;
+    }
+    const daysInMonth = new Date(year, month, 0).getDate(); 
+    if (day < 1 || day > daysInMonth) {
+      Alert.alert("알림", `${month}월은 ${daysInMonth}일까지 있습니다. 올바른 일자를 입력해주세요.`);
+      return;
+    }
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+      Alert.alert("알림", "올바른 시간을 입력해주세요. (00:00 ~ 23:59)");
+      return;
+    }
+
+    const inputDateObj = new Date(year, month - 1, day, hours, minutes);
+    const now = new Date();
+
+    if (inputDateObj < now) {
+      Alert.alert("알림", "과거의 시간으로 모집글을 등록할 수 없습니다.");
+      return;
+    }
+
+    const maxDate = new Date();
+    maxDate.setMonth(maxDate.getMonth() + 3); 
+    if (inputDateObj > maxDate) {
+      Alert.alert("알림", "일정은 오늘로부터 최대 3개월 이내의 날짜만 등록 가능합니다.");
+      return;
+    }
+
     try {
       const token = await AsyncStorage.getItem('userToken');
-      
-      // 🟢 500 에러 방지를 위한 날짜 ISO 변환 (예: 2026-05-07T08:43:00.000Z)
-      const [year, month, day] = createDate.split('/');
-      const [hours, minutes] = createTime.split(':');
-      // 자바스크립트 Date 객체에서 Month는 0부터 시작하므로 -1 해줍니다.
-      const meetDateObj = new Date(Number(year), Number(month) - 1, Number(day), Number(hours), Number(minutes));
-      const dateTimeString = meetDateObj.toISOString(); 
+      const dateTimeString = inputDateObj.toISOString(); 
       
       const payload = {
         title: createTitle,
@@ -261,35 +298,76 @@ const CommunityScreen = ({ myProfile, myToggles }: any) => {
       closeCreateModal();
       fetchPosts(); 
     } catch (error: any) {
-      console.error("게시글 작성 실패 500 상세 정보:", error?.response?.data || error.message);
+      console.error("게시글 작성 실패:", error?.response?.data || error.message);
       Alert.alert("작성 실패", error.response?.data?.message || "게시글 작성에 실패했습니다.");
     }
   };
 
   // ==========================================
-  // 💡 참여하기 / 취소하기 토글 함수
+  // 💡 참여하기 / 취소하기 토글 함수 
   // ==========================================
   const toggleJoin = async (postId: number, isCurrentlyJoined: boolean) => {
+    // 1. 낙관적 UI 업데이트 (버튼 상태와 인원수를 즉각적으로 변경)
+    setPosts(prevPosts => 
+      prevPosts.map(post => {
+        if (post.id === postId) {
+          // "1/4명" 형태에서 숫자 추출
+          const [currentStr, maxStr] = post.people.replace('명', '').split('/');
+          let currentCount = parseInt(currentStr, 10);
+          const maxCount = parseInt(maxStr, 10);
+
+          // 참여하는 거면 +1, 취소하는 거면 -1
+          if (!isCurrentlyJoined) {
+            currentCount = Math.min(currentCount + 1, maxCount); // 최대인원 초과 방지
+          } else {
+            currentCount = Math.max(currentCount - 1, 1); // 1명 밑으로 내려가지 않게 방지
+          }
+
+          return { 
+            ...post, 
+            isJoined: !isCurrentlyJoined, // 버튼 취소/참여 변경
+            people: `${currentCount}/${maxCount}명` // 변경된 인원수 텍스트 반영
+          };
+        }
+        return post;
+      })
+    );
+
     try {
       const token = await AsyncStorage.getItem('userToken');
-      const url = `${POST_API_URL}/${postId}/participants`;
+      const url = `${PARTICIPANT_API_URL}/${postId}/participants`;
 
       if (isCurrentlyJoined) {
         await axios.delete(url, { headers: { Authorization: `Bearer ${token}` } });
-        Alert.alert("알림", "참여가 취소되었습니다.");
       } else {
         await axios.post(url, {}, { headers: { Authorization: `Bearer ${token}` } });
-        Alert.alert("알림", "성공적으로 참여했습니다!");
       }
-      
-      fetchPosts(); 
+
     } catch (error: any) {
       console.error("참여/취소 실패:", error?.response?.data || error.message);
-      const errorMsg = error.response?.data?.message || "요청을 처리할 수 없습니다.";
+      
+      // 2. 실패 시 롤백 (원래 버튼과 인원수로 복구)
+      setPosts(prevPosts => 
+        prevPosts.map(post => {
+          if (post.id === postId) {
+             const [currentStr, maxStr] = post.people.replace('명', '').split('/');
+             let currentCount = parseInt(currentStr, 10);
+             const maxCount = parseInt(maxStr, 10);
+             // 롤백 계산
+             if (isCurrentlyJoined) currentCount = Math.min(currentCount + 1, maxCount);
+             else currentCount = Math.max(currentCount - 1, 1);
+
+             return { ...post, isJoined: isCurrentlyJoined, people: `${currentCount}/${maxCount}명` };
+          }
+          return post;
+        })
+      );
+
+      const errorMsg = error.response?.data?.message || error.response?.data?.data || "참여 요청을 처리할 수 없습니다.";
       Alert.alert("알림", errorMsg);
     }
   };
-
+  
   return (
     <View style={styles.background}>
       
@@ -341,6 +419,7 @@ const CommunityScreen = ({ myProfile, myToggles }: any) => {
                   <Text style={styles.authorText}>{post.author}</Text>
                 </TouchableOpacity>
 
+                {/* 💡 참여하기 버튼 */}
                 {!post.isMine && (
                   <TouchableOpacity 
                     style={[styles.joinButton, post.isJoined && styles.cancelButton]} 
