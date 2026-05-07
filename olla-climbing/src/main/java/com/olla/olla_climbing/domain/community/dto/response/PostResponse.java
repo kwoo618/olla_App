@@ -11,7 +11,8 @@ import java.util.List;
 @Builder
 public class PostResponse {
     private Long id;
-    private String writerName; // 작성자 닉네임/이름
+    private Long writerId;
+    private String writerName;
     private String title;
     private String content;
     private boolean isDifferentGym;
@@ -19,30 +20,16 @@ public class PostResponse {
     private LocalDateTime meetDateTime;
     private int maxMember;
     private int memberCount;
+    private boolean isApplied;
     private LocalDateTime createdAt;
 
     private List<ParticipantDto> participants;
 
-    // 목록 조회나 작성 직후에 사용
-    public static PostResponse from(Post post) {
-        return PostResponse.builder()
-                .id(post.getId())
-                .writerName(post.getMember().getName())
-                .title(post.getTitle())
-                .content(post.getContent())
-                .isDifferentGym(post.isDifferentGym())
-                .gymPlace(post.getGymPlace())
-                .meetDateTime(post.getMeetDateTime())
-                .maxMember(post.getMaxMember())
-                .memberCount(post.getMemberCount())
-                .createdAt(post.getCreatedAt())
-                .build();
-    }
-
     // 상세 조회 시 참여자 정보까지 포함하여 반환
-    public static PostResponse of(Post post, List<ParticipantDto> participants) {
+    public static PostResponse of(Post post, boolean isApplied) {
         return PostResponse.builder()
                 .id(post.getId())
+                .writerId(post.getMember().getId())
                 .writerName(post.getMember().getName())
                 .title(post.getTitle())
                 .content(post.getContent())
@@ -51,8 +38,8 @@ public class PostResponse {
                 .meetDateTime(post.getMeetDateTime())
                 .maxMember(post.getMaxMember())
                 .memberCount(post.getMemberCount())
+                .isApplied(isApplied)
                 .createdAt(post.getCreatedAt())
-                .participants(participants) // 리스트 주입
                 .build();
     }
 }

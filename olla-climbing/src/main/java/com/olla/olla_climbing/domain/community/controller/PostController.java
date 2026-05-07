@@ -27,32 +27,41 @@ public class PostController {
 
     @PostMapping
     @Operation(summary = "게시글 작성", description = "새로운 게시글을 작성합니다.", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<PostResponse> createPost(@AuthenticationPrincipal Member member, @Valid @RequestBody PostCreateRequest request){
+    // 💡 수정: 반환 타입을 ResponseEntity<ApiResponse<PostResponse>> 로 변경
+    public ResponseEntity<ApiResponse<PostResponse>> createPost(@AuthenticationPrincipal Member member, @Valid @RequestBody PostCreateRequest request){
 
         if (member ==null) {
             throw new IllegalArgumentException("인증 정보가 없습니다.");
         }
 
-        PostResponse response = postService.createPost(member.getLoginId(), request);
-        return ResponseEntity.ok(response);
+        PostResponse response = postService.createPost(request, member.getLoginId());
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @GetMapping
-    @Operation(summary = "게시글 목록 조회", description = "모든 사용자가 최신순으로 페이징된 게시글 목록을 조회합니다.")
-    public ResponseEntity<Page<PostResponse>> getPostList(
-            @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+    @Operation(summary = "게시글 목록 조회", description = "게시글 목록을 최신순으로 페이징하여 조회합니다.", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<ApiResponse<Page<PostResponse>>> getPostList(
+            @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
+            @AuthenticationPrincipal Member member) { // 💡 로그인 유저 정보 받기
 
-        return ResponseEntity.ok(postService.getPostList(pageable));
+        if (member == null) throw new IllegalArgumentException("로그인이 필요합니다.");
+
+        // 서비스로 로그인 아이디 전달
+        Page<PostResponse> response = postService.getPostList(pageable, member.getLoginId());
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "게시글 상세 조회", description = "게시글 ID로 게시글 상세 정보를 조회합니다.")
-    public ResponseEntity<PostResponse> getPostDetail(@PathVariable("id") Long postId) {
+    @Operation(summary = "게시글 상세 조회", description = "게시글 ID로 상세 정보를 조회합니다.", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<ApiResponse<PostResponse>> getPostDetail(
+            @PathVariable("id") Long postId,
+            @AuthenticationPrincipal Member member) { // 로그인 정보 파라미터 추가
 
-        // PathVariable: URL 경로에서 {id} 부분을 postId 변수에 매핑
+        if (member == null) throw new IllegalArgumentException("로그인이 필요합니다.");
 
-        PostResponse response = postService.getPostDetail(postId);
-        return ResponseEntity.ok(response);
+        // 로그인 아이디를 서비스로 전달
+        PostResponse response = postService.getPostDetail(postId, member.getLoginId());
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @PatchMapping("/{id}")

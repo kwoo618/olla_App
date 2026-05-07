@@ -1,6 +1,7 @@
 package com.olla.olla_climbing.domain.member.service;
 
 import com.olla.olla_climbing.domain.admin.service.GoogleSheetsService;
+import com.olla.olla_climbing.domain.member.dto.response.OtherMemberProfileResponse;
 import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.entity.NotificationSetting;
 import com.olla.olla_climbing.domain.member.dto.request.AlertUpdateRequest;
@@ -154,6 +155,18 @@ public class MemberService {
         log.info("관리자가 회원 정보 수정 완료: {}", member.getId());
 
         // googleSheetsService.updateMemberRow(member);
+    }
+
+    @Transactional(readOnly = true)
+    public OtherMemberProfileResponse getOtherMemberProfile(Long memberId) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
+
+        if (member.isDeleted()) {
+            throw new IllegalArgumentException("탈퇴한 회원의 정보는 조회할 수 없습니다.");
+        }
+
+        return OtherMemberProfileResponse.of(member);
     }
 
 }

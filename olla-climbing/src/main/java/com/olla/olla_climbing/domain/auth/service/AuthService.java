@@ -1,5 +1,6 @@
 package com.olla.olla_climbing.domain.auth.service;
 
+import com.olla.olla_climbing.domain.auth.dto.request.ChangePasswordRequest;
 import com.olla.olla_climbing.domain.auth.entity.EmailVerification;
 import com.olla.olla_climbing.domain.auth.repository.EmailVerificationRepository;
 import com.olla.olla_climbing.global.util.EmailService;
@@ -220,8 +221,6 @@ public class AuthService {
                 .ifPresent(refreshTokenRepository::delete);
     }
 
-
-
     private TokenResponse createTokenResponse(Member member) {
         String accessToken = jwtTokenProvider.createAccessToken(member.getLoginId(), member.getRole().name());
         String refreshToken = jwtTokenProvider.createRefreshToken(member.getLoginId());
@@ -239,5 +238,25 @@ public class AuthService {
                 .role(member.getRole().name())
                 .name(member.getName())
                 .build();
+    }
+
+    @Transactional
+    public void changePassword(String loginId, ChangePasswordRequest request) {
+        Member member = memberRepository.findByLoginId(loginId)
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
+
+        // 1. 기존 비밀번호가 맞는지 확인
+        if (!passwordEncoder.matches(request.getOldPassword(), member.getPassword())) {
+            throw new IllegalArgumentException("기존 비밀번호가 일치하지 않습니다.");
+        }
+
+        // 2. 새 비밀번호가 기존과 똑같은지 확인
+        if (passwordEncoder.matches(request.getNewPassword(), member.getPassword())) {
+            throw new IllegalArgumentException("새 비밀번호는 기존 비밀번호와 다르게 설정해야 합니다.");
+        }
+
+        // 3. 변경 및 암호화 저장
+        member.updatePassword(passwordEncoder.encode(request.getNewPassword()));
+        log.info("비밀번호 변경 완료: {}", loginId);
     }
 }

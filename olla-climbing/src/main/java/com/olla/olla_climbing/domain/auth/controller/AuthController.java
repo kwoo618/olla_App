@@ -1,23 +1,22 @@
 package com.olla.olla_climbing.domain.auth.controller;
 
+import com.olla.olla_climbing.domain.auth.dto.request.ChangePasswordRequest;
 import com.olla.olla_climbing.domain.auth.dto.request.LoginRequest;
 import com.olla.olla_climbing.domain.auth.dto.request.LogoutRequest;
 import com.olla.olla_climbing.domain.auth.dto.request.SignupRequest;
 import com.olla.olla_climbing.domain.auth.dto.response.TokenResponse;
 import com.olla.olla_climbing.domain.auth.service.AuthService;
+import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.service.MemberService; // 아이디 중복확인 코드 추가 (동철 수정)
 import com.olla.olla_climbing.global.common.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
 // 회원가입에서 아이디 중복 확인 코드 추가 (동철 수정)
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import java.util.Map;
 import java.util.HashMap;
 
@@ -93,5 +92,17 @@ public class AuthController {
     public ResponseEntity<ApiResponse<String>> verifyEmailCode(@RequestParam String email, @RequestParam String code) {
         authService.verifyEmailCode(email, code);
         return ResponseEntity.ok(ApiResponse.success("이메일 인증이 완료되었습니다."));
+    }
+
+    @PatchMapping("/password")
+    @Operation(summary = "비밀번호 변경", description = "로그인한 유저가 자신의 비밀번호를 변경합니다.", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<ApiResponse<String>> changePassword(
+            @AuthenticationPrincipal Member member,
+            @Valid @RequestBody ChangePasswordRequest request) {
+
+        if (member == null) throw new IllegalArgumentException("로그인이 필요합니다.");
+
+        authService.changePassword(member.getLoginId(), request);
+        return ResponseEntity.ok(ApiResponse.success("비밀번호가 성공적으로 변경되었습니다."));
     }
 }

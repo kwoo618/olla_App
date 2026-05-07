@@ -1,9 +1,11 @@
 package com.olla.olla_climbing.domain.member.controller;
 
+import com.olla.olla_climbing.domain.member.dto.response.OtherMemberProfileResponse;
 import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.dto.request.MemberUpdateRequest;
 import com.olla.olla_climbing.domain.member.dto.response.MemberResponse;
 import com.olla.olla_climbing.domain.member.service.MemberService;
+import com.olla.olla_climbing.global.common.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import lombok.RequiredArgsConstructor;
@@ -73,5 +75,14 @@ public class MemberController {
         AlertResponse response = memberService.updateAlertSettings(member.getLoginId(), request);
 
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{memberId}/profile")
+    @Operation(summary = "타 회원 프로필 조회", description = "특정 회원의 공개된 정보를 조회합니다.", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<ApiResponse<OtherMemberProfileResponse>> getOtherMemberProfile(
+            @PathVariable("memberId") Long memberId) {
+
+        OtherMemberProfileResponse response = memberService.getOtherMemberProfile(memberId);
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 }
