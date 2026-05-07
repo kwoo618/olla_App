@@ -12,6 +12,8 @@ import {
   Platform,
 } from 'react-native';
 
+const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
+
 const SignupScreen = ({ navigation }: any) => {
   const [id, setId] = useState('');
   const [password, setPassword] = useState('');
@@ -169,7 +171,7 @@ const SignupScreen = ({ navigation }: any) => {
     }
 
     try {
-      const response = await axios.get(`http://172.29.151.129:8080/api/v1/auth/check-id`, {
+      const response = await axios.get(`${API_BASE_URL}/auth/check-id`, {
         params: { loginId: id }
       });
       const isDuplicate = response.data?.data?.isDuplicate ?? response.data?.isDuplicate;

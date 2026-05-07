@@ -4,8 +4,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Image, Switch, Modal, Animated, TextInput, Alert, ActivityIndicator
+  Image, Switch, Modal, Animated, TextInput, Alert, ActivityIndicator, Linking
 } from 'react-native';
+
+const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
 
 const MYScreen = ({ navigation }: any) => {
   const isFocused = useIsFocused();
@@ -38,16 +40,13 @@ const MYScreen = ({ navigation }: any) => {
         return;
       }
       
-      // 💡 AsyncStorage에 저장된 권한 가져오기
       const storedRole = await AsyncStorage.getItem('userRole');
-
       const headers = { Authorization: `Bearer ${userToken}` };
 
       // [GET] 내 정보 조회
-      const userRes = await axios.get('http://172.29.151.129:8080/api/v1/members/me', { headers });
+      const userRes = await axios.get(`${API_BASE_URL}/members/me`, { headers });
       const data = userRes.data.data || userRes.data;
 
-      // 🔥 관리자 권한 확인 (AsyncStorage 저장값 + 서버 응답 교차 검증)
       if (
         storedRole === 'ADMIN' || 
         data.role === 'ADMIN' || 
@@ -85,15 +84,31 @@ const MYScreen = ({ navigation }: any) => {
 
       // [GET] 회원권 정보 조회
       try {
-        const memRes = await axios.get('http://172.29.151.129:8080/api/v1/memberships/me', { headers });
+        const memRes = await axios.get(`${API_BASE_URL}/memberships/me`, { headers });
         const memData = memRes.data.data || memRes.data;
         if (memData && memData.endDate) {
           const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          
+          const start = new Date(memData.startDate);
+          start.setHours(0, 0, 0, 0);
+
           const end = new Date(memData.endDate);
+          end.setHours(0, 0, 0, 0);
+          
           const diffDays = Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
+          // 💡 일일권 판별 로직 추가
+          const durationDiff = end.getTime() - start.getTime();
+          const totalDurationDays = Math.round(durationDiff / (1000 * 60 * 60 * 24));
+
+          let displayType = memData.membershipType === 'PERIOD' ? '기간권' : '횟수권';
+          if (memData.membershipType === 'PERIOD' && totalDurationDays <= 1) {
+            displayType = '일일권';
+          }
+
           setMemInfo({
-            type: memData.membershipType === 'PERIOD' ? '기간권' : '횟수권',
+            type: displayType, // 💡 판별된 타입 적용
             period: `${memData.startDate} ~ ${memData.endDate}`,
             status: memData.status === 'ACTIVE' ? '이용중' : '만료',
             remainingDays: diffDays >= 0 ? diffDays : 0
@@ -138,7 +153,7 @@ const MYScreen = ({ navigation }: any) => {
         isFootSizePublic: profileToggles.showShoe
       };
 
-      await axios.patch('http://172.29.151.129:8080/api/v1/members/me', requestBody, { headers });
+      await axios.patch(`${API_BASE_URL}/members/me`, requestBody, { headers });
       Alert.alert("알림", "정보가 저장되었습니다.");
       fetchMyInfo();
       closeProfileModal();
@@ -153,14 +168,13 @@ const MYScreen = ({ navigation }: any) => {
       const accessToken = await AsyncStorage.getItem('userToken');
       const refreshToken = await AsyncStorage.getItem('refreshToken');
       if (accessToken && refreshToken) {
-        await axios.post('http://172.29.151.129:8080/api/v1/auth/logout', { refreshToken }, {
+        await axios.post(`${API_BASE_URL}/auth/logout`, { refreshToken }, {
           headers: { Authorization: `Bearer ${accessToken}` }, timeout: 3000
         });
       }
     } catch (error) {
       console.log("서버 로그아웃 실패:", error);
     } finally {
-      // 💡 로그아웃 시 권한(userRole) 상태도 함께 삭제
       await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole']);
       setLogoutModalVisible(false);
       navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
@@ -184,11 +198,36 @@ const MYScreen = ({ navigation }: any) => {
   const closeProfileModal = () => { Animated.timing(profileSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => setProfileModalVisible(false)); };
 
   const handleInquireClick = () => {
-    setContactModalVisible(true);
-    setTimeout(() => { Animated.timing(contactSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(); }, 50);
-    setPauseModalVisible(false);
+    Animated.timing(pauseSlideAnim, { 
+      toValue: 800, 
+      duration: 250, 
+      useNativeDriver: true 
+    }).start(() => {
+      setPauseModalVisible(false);
+      setTimeout(() => {
+        setContactModalVisible(true);
+        setTimeout(() => { 
+          Animated.timing(contactSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(); 
+        }, 50);
+      }, 100);
+    });
   };
+
   const closeContactModal = () => { Animated.timing(contactSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => setContactModalVisible(false)); };
+
+  // 💡 수정된 전화 연결 로직: 시뮬레이터에서도 죽지 않게 try-catch로 바로 연결 시도
+  const handlePhoneCall = async () => {
+    const phoneNumber = 'tel:053-851-3322';
+    
+    try {
+      await Linking.openURL(phoneNumber);
+    } catch (err) {
+      console.log('전화 연결 에러 (에뮬레이터 환경일 수 있습니다):', err);
+      Alert.alert('알림', '이 기기에서는 전화 연결을 지원하지 않습니다. (실제 폰에서 테스트해주세요)');
+    }
+    
+    closeContactModal();
+  };
 
   const renderEditField = (title: string, fieldKey: string, unit: string) => {
     const toggleKey = `show${fieldKey.charAt(0).toUpperCase() + fieldKey.slice(1)}`;
@@ -245,6 +284,7 @@ const MYScreen = ({ navigation }: any) => {
           <View style={styles.memInfoContainer}>
             <View style={styles.memInfoRow}>
               <Text style={styles.memInfoLabel}>회원권</Text>
+              {/* 💡 memInfo.type 에 담긴 값(일일권, 기간권, 구매 필요)이 자동으로 출력됨 */}
               <Text style={styles.memInfoValue}>
                 {hasMembership ? `${memInfo.type} (D-${memInfo.remainingDays})` : '구매 필요'}
               </Text>
@@ -279,7 +319,7 @@ const MYScreen = ({ navigation }: any) => {
           </View>
         </View>
 
-        {/* 💡 ADMIN 계정일 경우에만 표시되는 관리자 모드 버튼 */}
+        {/* ADMIN 계정일 경우에만 표시되는 관리자 모드 버튼 */}
         {isAdmin && (
           <TouchableOpacity 
             style={styles.adminCard} 
@@ -298,7 +338,7 @@ const MYScreen = ({ navigation }: any) => {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* 모달창 영역 */}
+      {/* 로그아웃 모달 */}
       <Modal visible={isLogoutModalVisible} transparent={true} animationType="fade">
         <View style={styles.centerModalOverlay}>
           <View style={styles.centerModalBox}>
@@ -311,28 +351,23 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
+      {/* 멤버십 일시정지 모달 */}
       <Modal visible={isPauseModalVisible} transparent={true} animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closePauseModal}>
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: pauseSlideAnim }] }]}>
-            <TouchableOpacity activeOpacity={1}>
+            <TouchableOpacity activeOpacity={1} style={{ width: '100%' }}>
               <View style={styles.dragHandle} />
-              <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle}>멤버십 일시정지</Text>
-                <TouchableOpacity onPress={closePauseModal}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity>
-              </View>
+              <Text style={styles.sheetTitleCenter}>멤버십 일시정지</Text>
+              <View style={styles.horizontalDivider} />
               <View style={styles.pauseInfoBox}>
-                <Text style={styles.pauseInfoText}>
-                  • 잔여 기간 중 1회에 한해 일시정지가 가능합니다.{"\n"}
-                  • 최대 30일까지 정지할 수 있습니다.{"\n"}
-                  • 정지 신청 후에는 취소 및 수정이 불가합니다.
-                </Text>
+                <Text style={styles.pauseInfoText}>멤버십 일시정지는 관리자 승인이 필요합니다.{"\n"}프론트 데스크에 문의하시겠습니까?</Text>
               </View>
               <View style={styles.modalBtnRow}>
                 <TouchableOpacity style={styles.modalBtnCancel} onPress={closePauseModal}>
                   <Text style={styles.modalBtnCancelText}>취소</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.modalBtnSubmit} onPress={handleInquireClick}>
-                  <Text style={styles.modalBtnSubmitText}>신청하기</Text>
+                  <Text style={styles.modalBtnSubmitText}>문의하기</Text>
                 </TouchableOpacity>
               </View>
             </TouchableOpacity>
@@ -340,25 +375,36 @@ const MYScreen = ({ navigation }: any) => {
         </TouchableOpacity>
       </Modal>
 
+      {/* 문의하기(전화 연결) 모달 */}
       <Modal visible={isContactModalVisible} transparent={true} animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeContactModal}>
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: contactSlideAnim }] }]}>
-            <TouchableOpacity activeOpacity={1}>
+            <TouchableOpacity activeOpacity={1} style={{ width: '100%', alignItems: 'center' }}>
               <View style={styles.dragHandle} />
-              <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle}>문의 안내</Text>
-                <TouchableOpacity onPress={closeContactModal}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity>
+              <Text style={styles.sheetTitleCenter}>프론트 데스크 문의</Text>
+              <View style={styles.horizontalDivider} />
+              <View style={styles.contactContentBox}>
+                <Image source={require('./assets/PhoneCall.png')} style={styles.phoneIcon} />
+                <Text style={styles.contactLabel}>연락처</Text>
+                <Text style={styles.contactNumber}>053-851-3322</Text>
+                {/* 🔥 운영 시간 수정 부분 */}
+                <Text style={styles.contactTime}>운영시간: 평일 13:00 ~ 22:00 / 토 13:00 ~ 19:00</Text>
+                <Text style={[styles.contactTime, { marginTop: 4 }]}>매주 일요일 정기휴무</Text>
               </View>
-              <View style={[styles.pauseInfoBox, { marginBottom: 40 }]}>
-                <Text style={styles.pauseInfoText}>
-                  일시정지 및 기타 문의는 안내 데스크를 통해 접수해 주시기 바랍니다.
-                </Text>
+              <View style={styles.modalBtnRow}>
+                <TouchableOpacity style={styles.modalBtnCancel} onPress={closeContactModal}>
+                  <Text style={styles.modalBtnCancelText}>닫기</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalBtnSubmit} onPress={handlePhoneCall}>
+                  <Text style={styles.modalBtnSubmitText}>전화하기</Text>
+                </TouchableOpacity>
               </View>
             </TouchableOpacity>
           </Animated.View>
         </TouchableOpacity>
       </Modal>
 
+      {/* 프로필 수정 모달 */}
       <Modal visible={isProfileModalVisible} transparent={true} animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeProfileModal}>
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: profileSlideAnim }], maxHeight: '90%' }]}>
@@ -481,9 +527,15 @@ const styles = StyleSheet.create({
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   sheetTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' },
+  sheetTitleCenter: { color: '#ffffff', fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 15 },
+  contactContentBox: { alignItems: 'center', marginBottom: 30, width: '100%' },
+  phoneIcon: { width: 80, height: 80, resizeMode: 'contain', marginBottom: 20 },
+  contactLabel: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 8 },
+  contactNumber: { color: '#A1BE44', fontSize: 32, fontWeight: '900', marginBottom: 12 },
+  contactTime: { color: '#999999', fontSize: 14, fontWeight: '500' },
   closeBtn: { color: '#999999', fontSize: 24, paddingHorizontal: 10 },
   horizontalDivider: { height: 1, backgroundColor: '#333333', width: '100%', marginBottom: 20 },
-  pauseInfoBox: { backgroundColor: '#2C2C2C', borderRadius: 12, padding: 18, marginBottom: 25, width: '100%' },
+  pauseInfoBox: { backgroundColor: '#2C2C2C', borderWidth: 1, borderColor: '#555555', borderRadius: 12, padding: 18, marginBottom: 25, width: '100%' }, 
   pauseInfoText: { color: '#ffffff', fontSize: 15, lineHeight: 24, fontWeight: '500' },
   modalBtnRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%' },
   modalBtnCancel: { flex: 1, backgroundColor: 'transparent', borderWidth: 1, borderColor: '#555555', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginRight: 6 },

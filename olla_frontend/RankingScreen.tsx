@@ -4,10 +4,10 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
-const RANKING_BEGINNER_URL = 'http://172.29.151.129:8080/api/v1/rankings/beginner';
-const RANKING_ENDURANCE_DISTANCE_URL = 'http://172.29.151.129:8080/api/v1/rankings/endurance/distance';
-const RANKING_SERIES_URL = 'http://172.29.151.129:8080/api/v1/rankings/series';
-const MY_PROFILE_URL = 'http://172.29.151.129:8080/api/v1/members/me'; 
+const RANKING_BEGINNER_URL = 'http://192.168.0.23:8080/api/v1/rankings/beginner';
+const RANKING_ENDURANCE_DISTANCE_URL = 'http://192.168.0.23:8080/api/v1/rankings/endurance/distance';
+const RANKING_SERIES_URL = 'http://192.168.0.23:8080/api/v1/rankings/series';
+const MY_PROFILE_URL = 'http://192.168.0.23:8080/api/v1/members/me'; 
 
 axios.interceptors.request.use(
   async (config) => {
