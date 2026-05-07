@@ -16,6 +16,7 @@ import java.time.LocalDate;
 public class SignupRequest {
 
     @NotBlank(message = "아이디는 필수 입력입니다.")
+    @jakarta.validation.constraints.Size(min = 4, max = 15, message = "아이디는 4자에서 15자 사이여야 합니다.") // 추가
     private String loginId;
 
     @NotBlank
@@ -29,6 +30,7 @@ public class SignupRequest {
     @Pattern(regexp = "^\\d{3}-\\d{3,4}-\\d{4}$", message = "전화번호는 000-0000-0000 형식이어야 합니다.")
     private String phone;
 
+    @NotBlank(message = "이메일은 필수 입력입니다.") // 필수값으로 변경
     @Email(message = "유효한 이메일 주소를 입력해주세요.")
     private String email;
 

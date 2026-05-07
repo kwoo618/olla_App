@@ -48,6 +48,13 @@ public class Membership extends BaseTimeEntity {
     @Column(nullable = false)
     private Integer accumulatedVisits = 0;
 
+    @Column(nullable = false)
+    private boolean isDeleted = false; // 기본값 false
+
+    public void markAsDeleted() {
+        this.isDeleted = true;
+    }
+
     // 입장 성공 시 누적 횟수 1 증가 메서드
     public void increaseAccumulatedVisits() {
         this.accumulatedVisits++;
