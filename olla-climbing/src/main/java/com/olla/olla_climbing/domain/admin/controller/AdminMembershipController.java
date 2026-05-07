@@ -25,8 +25,8 @@ public class AdminMembershipController {
 
     private final MembershipAdminService membershipAdminService;
 
-    @PostMapping("/grant")
     @Operation(summary = "이용권 부여/연장", description = "관리자 권한으로 특정 회원에게 기간권이나 횟수권을 부여합니다.", security = @SecurityRequirement(name = "bearerAuth"))
+    @PostMapping("/grant")
     public ResponseEntity<String> grantMembership(
             @AuthenticationPrincipal Member admin,
             @Valid @RequestBody MembershipGrantRequest request) {
@@ -35,12 +35,12 @@ public class AdminMembershipController {
             throw new IllegalArgumentException("인증 정보가 없습니다.");
         }
 
-        // DTO에서 값을 꺼내어 기존 Service 메서드에 전달
         membershipAdminService.grantMembership(
                 request.getMemberId(),
                 request.getType(),
                 request.getAddMonths(),
-                request.getAddCount()
+                request.getAddCount(),
+                request.getStartDate()
         );
 
         return ResponseEntity.ok("이용권이 성공적으로 처리되었습니다.");

@@ -48,8 +48,8 @@ public class PostService {
 
     @Transactional(readOnly = true)
     public Page<PostResponse> getPostList(Pageable pageable) {
-        Page<Post> posts = postRepository.findByIsDeletedFalseOrderByCreatedAtDesc(pageable);
-        return posts.map(PostResponse::from); // from 메서드 사용
+        return postRepository.findByIsDeletedFalseOrderByCreatedAtDesc(pageable)
+                .map(PostResponse::from);
     }
 
     @Transactional(readOnly = true)

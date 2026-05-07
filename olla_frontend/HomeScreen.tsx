@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import axios from 'axios';
+import QRCode from 'react-native-qrcode-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage'; 
 import { 
   View, 
@@ -16,7 +17,22 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 const HomeScreen = ({ navigation }: any) => {
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // 1️⃣ 공지사항 및 회원권 상태 관리
+  const [activeModal, setActiveModal] = useState<string | null>(null);
+  const slideAnim = useRef(new Animated.Value(500)).current;
+
+  const [qrToken, setQrToken] = useState<string | null>(null);
+
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [myNickname, setMyNickname] = useState('');
+  const [userStats, setUserStats] = useState({
+    monthlyVisits: 0,        
+    difficultyColor: '없음', 
+    difficultyType: '', // 💡 초기 타입을 빈 문자열로 변경
+    enduranceRank: 0,        
+    enduranceMinutes: 0,     
+    enduranceSeconds: 0,     
+  });
+
   const [notice, setNotice] = useState({ title: '공지사항을 불러오는 중...', content: '' });
   const [membership, setMembership] = useState({
     membershipType: '-',
@@ -27,67 +43,31 @@ const HomeScreen = ({ navigation }: any) => {
     isLoading: true
   });
 
-  // 2️⃣ 데이터 로드 통합 API 호출 (토큰 기반)
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const userToken = await AsyncStorage.getItem('userToken');
-        
-        // 📢 공지사항 로드
-        const noticeResponse = await axios.get('http://172.30.1.54:8080/api/v1/admin/notices');
-        const noticeList = noticeResponse.data?.data?.content;
+  const [attendedDates, setAttendedDates] = useState<number[]>([]);
 
-        if (noticeList && noticeList.length > 0) {
-          const latestNotice = noticeList[noticeList.length - 1]; 
-          setNotice({ title: latestNotice.title, content: latestNotice.content });
-        } else {
-          setNotice({ title: '현재 등록된 공지가 없습니다.', content: '' });
-        }
+  const fetchQrToken = async () => {
+    try {
+      const userToken = await AsyncStorage.getItem('userToken');
+      if (!userToken) return;
 
-        // 🎫 회원권 정보 로드
-        if (userToken) {
-          const memResponse = await axios.get('http://172.30.1.54:8080/api/v1/memberships/me', {
-            headers: { Authorization: `Bearer ${userToken}` }
-          });
-
-          // 백엔드 응답 구조에 맞춰 데이터 추출
-          const data = memResponse.data?.data || memResponse.data;
-
-          if (data && data.endDate) {
-            // 🔥 D-Day 계산 로직
-            const today = new Date();
-            today.setHours(0, 0, 0, 0); // 시간차 제외 일자만 계산
-            const end = new Date(data.endDate);
-            end.setHours(0, 0, 0, 0);
-            
-            const diffTime = end.getTime() - today.getTime();
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-
-            setMembership({
-              // PERIOD -> "기간권", 그 외 -> "횟수권"
-              membershipType: data.membershipType === 'PERIOD' ? '기간권' : '횟수권',
-              remainingDays: diffDays >= 0 ? diffDays : 0, 
-              startDate: data.startDate || '',
-              endDate: data.endDate || '',
-              status: data.status === 'ACTIVE' ? '이용중' : '만료',
-              isLoading: false
-            });
-          }
-        }
-      } catch (error) {
-        console.error("데이터 로드 실패:", error);
-        setMembership(prev => ({ ...prev, isLoading: false }));
+      const response = await axios.get('http://172.29.151.129:8080/api/v1/visit/qr', {
+        headers: { Authorization: `Bearer ${userToken}` }
+      });
+      
+      if (response.data && response.data.data) {
+        setQrToken(response.data.data);
       }
-    };
-
-    fetchData();
-  }, []);
-
-  const [activeModal, setActiveModal] = useState<string | null>(null);
-  const slideAnim = useRef(new Animated.Value(500)).current;
+    } catch (error) {
+      console.error("QR 토큰 발급 실패:", error);
+    }
+  };
 
   const openModal = (type: string) => {
     setActiveModal(type); 
+    if (type === 'QR') {
+      setQrToken(null);
+      fetchQrToken();
+    }
     setTimeout(() => {
       Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
     }, 50);
@@ -99,20 +79,202 @@ const HomeScreen = ({ navigation }: any) => {
     });
   };
 
-  // 💡 팝업/이동 핸들러: '지구력 랭킹' 클릭 시 랭킹 스크린의 지구력 탭으로 이동!
-  const handlePopupPress = (title: string) => {
-    if (title === '공지사항') navigation.navigate('Notice'); 
-    else if (title === 'QR') openModal('QR');
-    else if (title === '회원권') openModal('Membership');
-    else if (title === '이번달 방문') scrollViewRef.current?.scrollToEnd({ animated: true });
-    else if (title === '지구력 랭킹') navigation.navigate('Ranking', { targetTab: '지구력' }); // 💡 딥 링크 추가 완료!
+  const extractList = (serverData: any) => {
+    if (!serverData) return [];
+    if (Array.isArray(serverData)) return serverData;
+    if (Array.isArray(serverData.list)) return serverData.list;
+    if (Array.isArray(serverData.data)) return serverData.data;
+    if (serverData.masters || serverData.challengers) {
+      const m = serverData.masters || [];
+      const c = serverData.challengers || [];
+      return [...m, ...c];
+    }
+    return [];
   };
 
-  // 달력 관련 로직
-  const today = new Date();
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const userToken = await AsyncStorage.getItem('userToken');
+        if (!userToken) {
+          setMembership(prev => ({ ...prev, isLoading: false }));
+          return;
+        }
 
+        const storedRole = await AsyncStorage.getItem('userRole');
+        setUserRole(storedRole);
+
+        const config = { headers: { Authorization: `Bearer ${userToken}` } };
+
+        // [1] 내 프로필
+        let nickname = '';
+        try {
+          const profileRes = await axios.get('http://172.29.151.129:8080/api/v1/members/me', config);
+          const pData = profileRes.data?.data || profileRes.data;
+          nickname = pData.nickname || pData.name || '';
+          setMyNickname(nickname);
+        } catch (e) { console.error("프로필 로드 실패"); }
+
+        // [2] 공지사항
+        try {
+          const noticeResponse = await axios.get('http://172.29.151.129:8080/api/v1/admin/notices');
+          const noticeList = noticeResponse.data?.data?.content;
+          if (noticeList && noticeList.length > 0) {
+            const latestNotice = noticeList[noticeList.length - 1]; 
+            setNotice({ title: latestNotice.title, content: latestNotice.content });
+          } else {
+            setNotice({ title: '현재 등록된 공지가 없습니다.', content: '' });
+          }
+        } catch (e) { console.log("공지사항 실패"); }
+
+        // [3] 회원권
+        try {
+          const memResponse = await axios.get('http://172.29.151.129:8080/api/v1/memberships/me', config);
+          const data = memResponse.data?.data || memResponse.data;
+
+          if (data && data.endDate) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); 
+            const end = new Date(data.endDate);
+            end.setHours(0, 0, 0, 0);
+            
+            const diffTime = end.getTime() - today.getTime();
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+
+            setMembership({
+              membershipType: data.membershipType === 'PERIOD' ? '기간권' : '횟수권',
+              remainingDays: diffDays >= 0 ? diffDays : 0, 
+              startDate: data.startDate || '',
+              endDate: data.endDate || '',
+              status: data.status === 'ACTIVE' ? '이용중' : '만료',
+              isLoading: false
+            });
+          } else {
+            setMembership(prev => ({ ...prev, isLoading: false }));
+          }
+        } catch (e) { setMembership(prev => ({ ...prev, isLoading: false })); }
+
+        // [4] 기록
+        if (nickname) {
+          let bestColor = '없음';
+          let bestType = '';
+          let myEndRank = 0;
+          let myEndMin = 0;
+          let myEndSec = 0;
+
+          try {
+            const endRes = await axios.get('http://172.29.151.129:8080/api/v1/rankings/endurance/distance', config);
+            const endList = extractList(endRes.data?.data || endRes.data);
+            const myEndRecord = endList.find((item: any) => (item.name === nickname || item.nickname === nickname));
+            
+            if (myEndRecord) {
+              endList.sort((a: any, b: any) => {
+                 if(a.ranking && b.ranking) return a.ranking - b.ranking;
+                 return (b.oneWayCount || 0) - (a.oneWayCount || 0); 
+              });
+              const myRankIndex = endList.findIndex((item: any) => (item.name === nickname || item.nickname === nickname));
+              myEndRank = myRankIndex !== -1 ? myRankIndex + 1 : 0;
+              const totalSec = myEndRecord.timeSeconds || 0;
+              myEndMin = Math.floor(totalSec / 60);
+              myEndSec = totalSec % 60;
+            }
+          } catch (e) { console.log("지구력 기록 로드 실패", e); }
+
+          try {
+            const reverseColors = [
+              { name: '검정', enum: 'BLACK' }, { name: '주황', enum: 'ORANGE' }, { name: '보라', enum: 'PURPLE' },
+              { name: '빨강', enum: 'RED' }, { name: '파랑', enum: 'BLUE' }, { name: '초록', enum: 'GREEN' },
+              { name: '노랑', enum: 'YELLOW' }, { name: '흰색', enum: 'WHITE' }
+            ];
+
+            for (const c of reverseColors) {
+              const bRes = await axios.get(`http://172.29.151.129:8080/api/v1/rankings/beginner?difficulty=${c.enum}`, config);
+              const bList = extractList(bRes.data?.data || bRes.data);
+              const myBRecord = bList.find((item: any) => (item.name === nickname || item.nickname === nickname));
+              
+              if (myBRecord) {
+                bestColor = c.name;
+                const attemptType = myBRecord.attemptType || myBRecord.attempt_type || myBRecord.type || '';
+                const isRoundTrip = String(attemptType).toUpperCase() === 'ROUND_TRIP' || attemptType === '왕복';
+                bestType = isRoundTrip ? '왕복' : '편도';
+                break;
+              }
+            }
+          } catch (e) { console.log("초보벽 기록 로드 실패", e); }
+
+          setUserStats(prev => ({
+            ...prev,
+            difficultyColor: bestColor,
+            difficultyType: bestType,
+            enduranceRank: myEndRank,
+            enduranceMinutes: myEndMin,
+            enduranceSeconds: myEndSec
+          }));
+        }
+
+      } catch (error) {
+        console.error("데이터 전체 로드 중 오류:", error);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const today = new Date();
   const [viewDate, setViewDate] = useState(new Date());
   const [selectedFullDate, setSelectedFullDate] = useState<Date | null>(null);
+
+  useEffect(() => {
+    const fetchVisitHistory = async () => {
+      try {
+        const userToken = await AsyncStorage.getItem('userToken');
+        if (!userToken) return;
+
+        const year = viewDate.getFullYear();
+        const month = String(viewDate.getMonth() + 1).padStart(2, '0');
+        const yearMonth = `${year}-${month}`; 
+
+        const response = await axios.get(`http://172.29.151.129:8080/api/v1/visit/my-history?yearMonth=${yearMonth}`, {
+          headers: { Authorization: `Bearer ${userToken}` }
+        });
+        
+        let rawData = response.data?.data;
+        if (rawData && !Array.isArray(rawData) && rawData.data) {
+          rawData = rawData.data;
+        }
+
+        let daysAttended: number[] = [];
+
+        if (Array.isArray(rawData)) {
+          daysAttended = rawData.map((item: any) => {
+            if (typeof item === 'string') {
+              const parts = item.split('-');
+              if (parts.length >= 3) return parseInt(parts[2], 10);
+            } 
+            else if (Array.isArray(item) && item.length >= 3) {
+              return parseInt(item[2], 10);
+            }
+            return -1; 
+          }).filter((day: number) => day > 0 && !isNaN(day)); 
+        }
+
+        setAttendedDates(daysAttended || []);
+
+        if (year === today.getFullYear() && viewDate.getMonth() === today.getMonth()) {
+          setUserStats(prev => ({
+            ...prev,
+            monthlyVisits: daysAttended.length
+          }));
+        }
+
+      } catch (error) {
+        console.error("출석 내역 로드 실패:", error);
+        setAttendedDates([]);
+      }
+    };
+
+    fetchVisitHistory();
+  }, [viewDate.getFullYear(), viewDate.getMonth()]);
 
   const changeMonth = (offset: number) => {
     const newDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + offset, 1);
@@ -132,10 +294,21 @@ const HomeScreen = ({ navigation }: any) => {
   for (let i = 1; i <= daysInMonth; i++) days.push(i);
   const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
 
+  const hasMembership = !!membership.startDate && !!membership.endDate;
+
+  const handlePopupPress = (title: string) => {
+    if (title === '공지사항') navigation.navigate('Notice'); 
+    else if (title === 'QR') openModal('QR');
+    else if (title === '회원권') openModal('Membership');
+    else if (title === '이번달 방문') scrollViewRef.current?.scrollToEnd({ animated: true });
+    else if (title === '지구력 랭킹') navigation.navigate('Ranking', { targetTab: '지구력' });
+  };
+
   return (
     <SafeAreaView style={styles.background}>
       <ScrollView ref={scrollViewRef} showsVerticalScrollIndicator={false}>
         <View style={styles.scrollContent}>
+          
           <TouchableOpacity style={styles.noticeCard} onPress={() => handlePopupPress('공지사항')}>
             <View style={styles.noticeHeaderRow}>
                <View style={styles.noticeBadge}><Text style={styles.noticeBadgeText}>중요</Text></View>
@@ -152,36 +325,48 @@ const HomeScreen = ({ navigation }: any) => {
             </TouchableOpacity>
             
             <TouchableOpacity style={styles.UserCardCentered} onPress={() => handlePopupPress('회원권')}>
-              <View style={styles.circleGraphDummy}>
-                <Text style={styles.circleGraphText}>
-                  {membership.isLoading ? '...' : `D-${membership.remainingDays}`}
+              <View style={[
+                styles.circleGraphDummy, 
+                !hasMembership && { borderColor: '#444444' }
+              ]}>
+                <Text style={[
+                  styles.circleGraphText,
+                  !hasMembership && { color: '#999999', fontSize: 13 }
+                ]}>
+                  {membership.isLoading ? '' : (hasMembership ? `D-${membership.remainingDays}` : '없음')}
                 </Text>
               </View>
-              <Text style={styles.cardTitleCentered}>내 회원권</Text>
+              <Text style={styles.cardTitleCentered}>회원권</Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.unifiedDataFrame}>
             <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => handlePopupPress('이번달 방문')}>
               <Text style={styles.microSubTitle}>이번달 방문</Text>
-              <Text style={styles.microValue}>12<Text style={styles.microUnit}>회</Text></Text>
+              <Text style={styles.microValue}>{userStats.monthlyVisits}<Text style={styles.microUnit}>회</Text></Text>
             </TouchableOpacity>
             <View style={styles.verticalDivider} />
             <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => navigation.navigate('Recode', { openSection: 'difficulty' })}>
-              <Text style={styles.microSubTitle}>초보벽 난이도</Text>
-              <Text style={styles.microValuecolor}>검정</Text>
-              <Text style={styles.microUnit}>편도  <Text style={{color: '#999999'}}>진행중</Text></Text>
+              <Text style={styles.microSubTitle}>초보벽 {'\n'}최고 난이도</Text>
+              {/* 💡 텍스트 조건부 렌더링 수정 */}
+              {userStats.difficultyColor === '없음' ? (
+                <Text style={styles.microValuecolor}>미기록</Text>
+              ) : (
+                <>
+                  <Text style={styles.microValuecolor}>{userStats.difficultyColor}</Text>
+                  <Text style={styles.microUnit}>{userStats.difficultyType} <Text style={{color: '#999999'}}>완료</Text></Text>
+                </>
+              )}
             </TouchableOpacity>
             <View style={styles.verticalDivider} />
-            {/* 💡 이 버튼을 누르면 위 핸들러를 통해 Ranking 화면의 지구력 탭으로 바로 넘어갑니다 */}
             <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => handlePopupPress('지구력 랭킹')}>
               <Text style={styles.microSubTitle}>지구력 랭킹</Text>
-              <Text style={styles.microValue}>15<Text style={styles.microUnit}>위</Text></Text>
+              <Text style={styles.microValue}>{userStats.enduranceRank === 0 ? '-' : userStats.enduranceRank}<Text style={styles.microUnit}>위</Text></Text>
             </TouchableOpacity>
             <View style={styles.verticalDivider} />
             <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => navigation.navigate('Recode', { openSection: 'endurance' })}>
-              <Text style={styles.microSubTitle}>지구력 기록</Text>
-              <Text style={styles.microValue}>8<Text style={styles.microUnit}>분</Text>30<Text style={styles.microUnit}>초</Text></Text>
+              <Text style={styles.microSubTitle}>지구력 {'\n'}최고 기록</Text>
+              <Text style={styles.microValue}>{userStats.enduranceMinutes}<Text style={styles.microUnit}>분 </Text>{userStats.enduranceSeconds}<Text style={styles.microUnit}>초</Text></Text>
             </TouchableOpacity>
           </View>
 
@@ -199,19 +384,23 @@ const HomeScreen = ({ navigation }: any) => {
                 const isToday = day !== null && today.getDate() === day && today.getMonth() === currentMonth && today.getFullYear() === currentYear;
                 const isSelected = selectedFullDate !== null && day !== null && selectedFullDate.getDate() === day && selectedFullDate.getMonth() === currentMonth && selectedFullDate.getFullYear() === currentYear;
                 
+                const isAttended = day !== null && (attendedDates || []).includes(day);
+                
                 return (
                   <TouchableOpacity key={index} style={styles.dayCell} disabled={!day} onPress={() => day && onDateClick(day)}>
                     {day ? (
                       <View style={[
                         styles.dayCircle, 
                         isToday && styles.todayCircle, 
-                        isSelected && !isToday && styles.selectedCircle
+                        isSelected && !isToday && styles.selectedCircle,
+                        isAttended && !isToday && !isSelected && styles.attendedCircle
                       ]}>
                         <Text style={[
                           styles.dayText, 
                           isToday && styles.todayText, 
                           isSelected && !isToday && styles.selectedText,
-                          index % 7 === 0 && !isToday && !isSelected && styles.sundayText
+                          isAttended && !isToday && !isSelected && styles.attendedText, 
+                          index % 7 === 0 && !isToday && !isSelected && !isAttended && styles.sundayText
                         ]}>
                           {day}
                         </Text>
@@ -225,6 +414,7 @@ const HomeScreen = ({ navigation }: any) => {
         </View>
       </ScrollView>
 
+      {/* 모달 부분은 동일하므로 생략 */}
       <Modal visible={activeModal !== null} animationType="fade" transparent={true} onRequestClose={closeModal}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeModal}>
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: slideAnim }] }]}>
@@ -234,35 +424,68 @@ const HomeScreen = ({ navigation }: any) => {
                 <Text style={styles.sheetTitle}>{activeModal === 'QR' ? 'QR 체크인' : '회원권'}</Text>
                 <TouchableOpacity onPress={closeModal}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity>
               </View>
+              
               {activeModal === 'QR' ? (
                 <>
-                  <Image source={require('./assets/QR.png')} style={styles.largeQRImage} />
-                  <Text style={styles.qrDesc}>QR 코드를 카메라에 맞춰주세요</Text>
+                  <View style={{ marginBottom: 20, alignItems: 'center', justifyContent: 'center', height: 200, width: 200 }}>
+                    {qrToken ? (
+                      <View style={{ padding: 10, backgroundColor: '#ffffff', borderRadius: 10 }}>
+                        <QRCode 
+                          value={qrToken} 
+                          size={180} 
+                          color="black"
+                          backgroundColor="white"
+                        />
+                      </View>
+                    ) : (
+                      <Text style={{ color: '#999999' }}>QR 코드를 불러오는 중...</Text>
+                    )}
+                  </View>
+                  <Text style={styles.qrDesc}>QR 코드를 출입기계 카메라에 맞춰주세요</Text>
+                  <Text style={{ color: '#FF6B6B', fontSize: 12, marginTop: 10 }}>※ 발급된 QR 코드는 3분 뒤 만료됩니다.</Text>
                 </>
               ) : (
                 <View style={styles.membershipContainer}>
                   <View style={styles.memCard}>
                     <View style={styles.memCardHeader}>
                       <Text style={styles.memCardTitle}>남은 이용 기간</Text>
-                      <Text style={styles.memCardBadge}>{membership.membershipType}</Text>
                     </View>
                     <View style={styles.progressBarBg}>
-                      {/* 30일 기준 프로그레스 바 계산 */}
-                      <View style={[styles.progressBarFill, { width: `${Math.min((membership.remainingDays / 30) * 100, 100)}%` }]} />
+                      <View style={[
+                        styles.progressBarFill, 
+                        { width: `${Math.min((membership.remainingDays / 30) * 100, 100)}%` },
+                        !hasMembership && { backgroundColor: 'transparent' }
+                      ]} />
                     </View>
-                    <View style={styles.memCardDates}>
-                      <Text style={styles.memDateText}>{membership.startDate || '-'}</Text>
-                      <Text style={styles.memDateText}>{membership.endDate || '-'}</Text>
+                    <View style={[styles.memCardDates, !hasMembership && { justifyContent: 'center' }]}>
+                      {hasMembership ? (
+                        <>
+                          <Text style={styles.memDateText}>{membership.startDate}</Text>
+                          <Text style={styles.memDateText}>{membership.endDate}</Text>
+                        </>
+                      ) : (
+                        <Text style={styles.memDateText}>구매 필요</Text>
+                      )}
                     </View>
                   </View>
                   <View style={styles.memRow}>
                     <View style={styles.memHalfCard}>
                       <Text style={styles.memHalfTitle}>남은 기간</Text>
-                      <Text style={styles.memHalfValueGreen}>{membership.remainingDays}일</Text>
+                      <Text style={[
+                        styles.memHalfValueGreen,
+                        !hasMembership && { color: '#999999', fontSize: 16 }
+                      ]}>
+                        {hasMembership ? `${membership.remainingDays}일` : '구매 필요'}
+                      </Text>
                     </View>
                     <View style={styles.memHalfCard}>
                       <Text style={styles.memHalfTitle}>상태</Text>
-                      <Text style={styles.memHalfValueWhite}>{membership.status || '확인불가'}</Text>
+                      <Text style={[
+                        styles.memHalfValueWhite, 
+                        !hasMembership && { fontSize: 16, color: '#FF6B6B' }
+                      ]}>
+                        {hasMembership ? membership.status : '구매 필요'}
+                      </Text>
                     </View>
                   </View>
                 </View>
@@ -314,37 +537,19 @@ const styles = StyleSheet.create({
   todayText: { color: '#1A1A1A', fontWeight: 'bold' },
   selectedCircle: { backgroundColor: '#5DADE2' }, 
   selectedText: { color: '#000000', fontWeight: 'bold' },
+  
+  attendedCircle: { backgroundColor: '#3A3A3A', borderWidth: 1.5, borderColor: '#A1BE44' },
+  attendedText: { color: '#A1BE44', fontWeight: 'bold' },
 
-  noticeHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  noticeBadge: {
-    backgroundColor: '#A1BE44',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginRight: 8,
-  },
-  noticeBadgeText: {
-    color: '#1A1A1A',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-
-  bottomNav: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', backgroundColor: '#111111', paddingTop: 12, paddingBottom: 25, borderTopWidth: 1, borderTopColor: '#222222' },
-  bottomNavItem: { alignItems: 'center', justifyContent: 'center', flex: 1 },
-  navIcon: { width: 24, height: 24, marginBottom: 4, resizeMode: 'contain' },
-  bottomNavText: { color: '#666666', fontSize: 11, fontWeight: '500' },
-  bottomNavTextActive: { color: '#A1BE44', fontSize: 11, fontWeight: 'bold' },
+  noticeHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  noticeBadge: { backgroundColor: '#A1BE44', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 8 },
+  noticeBadgeText: { color: '#1A1A1A', fontSize: 10, fontWeight: 'bold' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 50, alignItems: 'center' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
   sheetHeader: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
   sheetTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginLeft: 10 },
   closeBtn: { color: '#999999', fontSize: 24, paddingHorizontal: 10 },
-  largeQRImage: { width: 200, height: 200, resizeMode: 'contain', marginBottom: 20 },
   qrDesc: { color: '#999999', fontSize: 14 },
   membershipContainer: { width: '100%' },
   memCard: { backgroundColor: '#2A2A2A', borderRadius: 16, padding: 22, marginBottom: 15, width: '100%' },

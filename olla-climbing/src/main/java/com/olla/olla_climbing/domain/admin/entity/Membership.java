@@ -37,11 +37,28 @@ public class Membership extends BaseTimeEntity {
     // 횟수권 전용 필드 (기간권일 경우 null 허용)
     private Integer remainingCount;
 
+    // 이용권 일시정지 필드
     private LocalDate holdStartDate;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private MembershipStatus status;
+
+    // 누적 방문 횟수 (기본값 0)
+    @Column(nullable = false)
+    private Integer accumulatedVisits = 0;
+
+    @Column(nullable = false)
+    private boolean isDeleted = false; // 기본값 false
+
+    public void markAsDeleted() {
+        this.isDeleted = true;
+    }
+
+    // 입장 성공 시 누적 횟수 1 증가 메서드
+    public void increaseAccumulatedVisits() {
+        this.accumulatedVisits++;
+    }
 
     @Builder
     public Membership(Member member, MembershipType membershipType, LocalDate startDate, LocalDate endDate, Integer remainingCount, MembershipStatus status) {
@@ -80,15 +97,18 @@ public class Membership extends BaseTimeEntity {
         this.status = MembershipStatus.EXPIRED;
     }
 
-    // 4. 입장 시 횟수 차감 로직 (새로 추가)
-    public void decreaseCount() {
+    // 4. 입장 시 횟수 차감 로직 (다중 차감 지원으로 수정)
+    public void decreaseCount(int deductionCount) {
         if (this.membershipType != MembershipType.COUNT) {
             return; // 기간권은 차감할 횟수가 없으므로 패스
         }
-        if (this.remainingCount == null || this.remainingCount <= 0) {
+        if (this.remainingCount == null || this.remainingCount < deductionCount) {
             throw new IllegalStateException("잔여 횟수가 부족합니다.");
         }
-        this.remainingCount -= 1;
+
+        // 요청받은 차감 횟수만큼 빼기
+        // 요청받은 차감 횟수만큼 빼기
+        this.remainingCount -= deductionCount;
 
         // 차감 후 0회가 되면 자동으로 만료 처리
         if (this.remainingCount == 0) {

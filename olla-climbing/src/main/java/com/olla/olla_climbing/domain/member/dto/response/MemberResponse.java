@@ -16,6 +16,11 @@ public class MemberResponse {
     private String email;
     private String phone;
     private String profileImageUrl;
+    private String role;
+    private String gender;    
+    private String birthDate;
+
+
     private DetailDto detail;
     private PrivacyDto privacy;
     private AlertDto alert;
@@ -26,6 +31,7 @@ public class MemberResponse {
     // API 응답용 DTO는 보통 public으로 열어둠, Swagger 같은 API 문서화 도구에서 자동으로 인식할 수 있도록
     @Getter @Builder
     public static class DetailDto {
+
         private Integer age;
         private Double height;
         private Double weight;
@@ -71,11 +77,14 @@ public class MemberResponse {
                 .id(member.getId())
                 .loginId(member.getLoginId())
                 .name(member.getName())
+                .gender(member.getGender())
+                .birthDate(member.getBirthDate() != null ? member.getBirthDate().toString() : null)
                 .email(member.getEmail())
                 .phone(member.getPhone())
                 .profileImageUrl(member.getProfileImageUrl())
+                .role(member.getRole() != null ? member.getRole().name() : "USER")
                 .detail(detail != null ? DetailDto.builder()
-                        .age(detail.getAge())
+                        .age(member.getMemberDetail().getAge()) // age는 MemberDetail에서 계산된 값이므로, MemberResponse에서 직접 계산하지 않고, MemberDetail에서 가져옴
                         .height(detail.getHeight())
                         .weight(detail.getWeight())
                         .armSpan(detail.getArmSpan())

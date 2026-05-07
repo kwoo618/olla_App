@@ -7,11 +7,13 @@ import com.olla.olla_climbing.domain.record.dto.request.RecordBeginnerRequest;
 import com.olla.olla_climbing.domain.record.dto.response.RecordBeginnerResponse;
 import com.olla.olla_climbing.domain.record.entity.RecordBeginner;
 import com.olla.olla_climbing.domain.record.enums.AttemptType;
+import com.olla.olla_climbing.domain.record.enums.Difficulty;
 import com.olla.olla_climbing.domain.record.repository.RecordBeginnerRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -58,17 +60,20 @@ public class RecordBeginnerService {
         RecordBeginner record = RecordBeginner.builder()
                 .member(member)
                 .difficulty(request.getDifficulty())
-                .attemptType(attemptType)
                 .isSuccess(isSuccess)
                 .maxHoldNo(maxHoldNo)
                 .recordDate(request.getRecordDate())
+                // (동철 수정) 위에서 변환 처리한 attemptType 변수를 그대로 넣어줍니다.
+                // (기존에 request.getAttemptType()으로 다시 덮어씌워서 변환 로직이 무시되는 버그 방지)
+                .attemptType(attemptType) 
                 .build();
 
         RecordBeginner savedRecord = recordBeginnerRepository.save(record);
 
         beginnerRankingService.updateBeginnerRanking(member, savedRecord);
 
-        return RecordBeginnerResponse.from(recordBeginnerRepository.save(record));
+        // (동철 수정) 불필요하게 두 번 save() 되던 코드를 하나로 깔끔하게 정리했습니다.
+        return RecordBeginnerResponse.from(savedRecord);
     }
 
     // 난이도별 최고 기록 조회 (메모리 최적화 버전)
@@ -77,16 +82,16 @@ public class RecordBeginnerService {
         Member member = memberRepository.findByLoginId(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
 
-        // 서버 메모리를 쓰지 않고, 1등 데이터만 DB에서 바로 가져옴
-        // 기존에는 모든 기록을 가져와서 자바 스트림으로 난이도별 최고 기록을 뽑아냈지만, 이제는 DB에서 난이도별 최고 기록만 가져오는 최적화된 쿼리를 사용
-        // 이유: DB를 사용하면 인덱스 활용과 정렬, 그룹핑이 가능해서 훨씬 빠르게 결과를 얻을 수 있음. 반면에 자바 스트림으로 모든 데이터를 처리하면 메모리 사용량이 많아지고, 데이터가 많아질수록 성능이 급격히 떨어짐
-        List<RecordBeginner> bestRecords = recordBeginnerRepository.findBestRecordsByMemberIdOptimized(member.getId());
+        List<RecordBeginnerResponse> bestRecords = new ArrayList<>();
 
-        // DB에서 이미 난이도별 최고 기록만 가져왔기 때문에, 자바 스트림에서는 단순히 DTO로 변환하는 작업만 하면 됨
-        // .stream()로 리스트를 순회하면서 RecordBeginnerResponse DTO로 변환한 후, 최종적으로 List<RecordBeginnerResponse> 형태로 반환
-        return bestRecords.stream()
-                .map(RecordBeginnerResponse::from)
-                .collect(Collectors.toList());
+        for (Difficulty difficulty : Difficulty.values()) {
+            // 쿼리 자체에서 AttemptTypeDesc(왕복 Z -> 편도 A 내림차순 정렬)를 걸면
+            // DB가 알아서 동점일 때 왕복을 가장 위로 올려서 반환합니다. 데이터가 오염되지 않습니다.
+            recordBeginnerRepository.findTopByMemberAndDifficultyOrderByIsSuccessDescMaxHoldNoDescAttemptTypeDesc(member, difficulty)
+                    .ifPresent(record -> bestRecords.add(RecordBeginnerResponse.from(record)));
+        }
+
+        return bestRecords;
     }
 
     // 상세 내역 조회

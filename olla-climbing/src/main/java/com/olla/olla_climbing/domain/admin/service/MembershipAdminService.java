@@ -1,5 +1,6 @@
 package com.olla.olla_climbing.domain.admin.service;
 
+import com.olla.olla_climbing.domain.admin.dto.request.AdminMemberCreateRequest;
 import com.olla.olla_climbing.domain.admin.dto.response.AdminMemberResponse;
 import com.olla.olla_climbing.domain.admin.dto.response.MembershipResponse;
 import com.olla.olla_climbing.domain.admin.entity.AdminAlert;
@@ -9,6 +10,7 @@ import com.olla.olla_climbing.domain.admin.enums.MembershipType;
 import com.olla.olla_climbing.domain.admin.repository.AdminAlertRepository;
 import com.olla.olla_climbing.domain.admin.repository.MembershipRepository;
 import com.olla.olla_climbing.domain.member.entity.Member;
+import com.olla.olla_climbing.domain.member.enums.Role;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -19,6 +21,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.scheduling.annotation.Scheduled;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @Service
@@ -27,39 +30,35 @@ public class MembershipAdminService {
 
     private final MembershipRepository membershipRepository;
     private final MemberRepository memberRepository;
+    private final GoogleSheetsService googleSheetsService;
 
     private final AdminAlertRepository adminAlertRepository;
 
     // 관리자가 회원에게 이용권을 부여 (또는 연장)
     @Transactional
-    public void grantMembership(Long memberId, MembershipType type, Integer addMonths, Integer addCount) {
+    public void grantMembership(Long memberId, MembershipType type, Integer addMonths, Integer addCount, LocalDate requestedStartDate) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
 
-        // 1. 해당 회원의 현재 활성화된 이용권이 있는지 확인
-        Membership activeMembership = membershipRepository.findByMemberIdAndStatus(member.getId(), MembershipStatus.ACTIVE)
-                .orElse(null);
+        Membership activeMembership = membershipRepository.findByMemberIdAndStatus(member.getId(), MembershipStatus.ACTIVE).orElse(null);
+        Membership savedMembership;
+
+        // [핵심 로직] 프론트에서 날짜를 지정해 보내면 그 날짜를 쓰고, 안 보내면(null) 오늘 날짜를 씁니다.
+        LocalDate actualStartDate = (requestedStartDate != null) ? requestedStartDate : LocalDate.now();
 
         if (activeMembership != null) {
-            // 2. 기존 이용권이 있는 경우: 타입이 같으면 연장, 다르면 에러 처리 (또는 기존권 만료 처리)
-            if (activeMembership.getMembershipType() != type) {
-                throw new IllegalStateException("이미 다른 타입의 활성화된 이용권이 존재합니다. 기존 이용권을 만료 처리 후 발급하세요.");
-            }
-
-            if (type == MembershipType.PERIOD) {
-                activeMembership.extendPeriod(addMonths);
-            } else if (type == MembershipType.COUNT) {
-                activeMembership.addCount(addCount);
-            }
+            if (activeMembership.getMembershipType() != type) throw new IllegalStateException("이미 다른 타입의 활성화된 이용권이 존재합니다. 기존 이용권을 만료 처리 후 발급하세요.");
+            if (type == MembershipType.PERIOD) activeMembership.extendPeriod(addMonths);
+            else if (type == MembershipType.COUNT) activeMembership.addCount(addCount);
+            savedMembership = activeMembership;
         } else {
-            // 3. 기존 이용권이 없는 경우: 신규 발급
             Membership newMembership = null;
             if (type == MembershipType.PERIOD) {
                 newMembership = Membership.builder()
                         .member(member)
                         .membershipType(MembershipType.PERIOD)
-                        .startDate(LocalDate.now())
-                        .endDate(LocalDate.now().plusMonths(addMonths))
+                        .startDate(actualStartDate) // 지정된 시작일 적용
+                        .endDate(actualStartDate.plusMonths(addMonths)) // 지정된 시작일 기준으로 종료일 계산
                         .status(MembershipStatus.ACTIVE)
                         .build();
             } else if (type == MembershipType.COUNT) {
@@ -67,11 +66,46 @@ public class MembershipAdminService {
                         .member(member)
                         .membershipType(MembershipType.COUNT)
                         .remainingCount(addCount)
+                        .startDate(actualStartDate)
                         .status(MembershipStatus.ACTIVE)
                         .build();
             }
-            membershipRepository.save(newMembership);
+            savedMembership = membershipRepository.save(newMembership);
+
+            googleSheetsService.syncNewMembership(savedMembership, addMonths, addCount);
         }
+    }
+
+    @Transactional
+    public void createOfflineMember(AdminMemberCreateRequest request) {
+        if (memberRepository.findByPhone(request.getPhone()).isPresent()) {
+            throw new IllegalArgumentException("이미 등록된 전화번호입니다.");
+        }
+        Member dummyMember = Member.builder()
+                .name(request.getName()).phone(request.getPhone()).gender(request.getGender()).birthDate(request.getBirthDate()).role(Role.USER).build();
+        Member savedMember = memberRepository.save(dummyMember);
+
+        googleSheetsService.syncNewMember(savedMember); // 시트 1 명부 저장
+        googleSheetsService.syncUnregisteredMember(savedMember); // 시트 2 장부에 '미등록'으로 저장
+    }
+
+    @Transactional
+    public void pauseMembership(Long membershipId) {
+        Membership membership = membershipRepository.findById(membershipId).orElseThrow(() -> new IllegalArgumentException("존재하지 않는 이용권입니다."));
+        membership.pause();
+        // 시트 업데이트
+        googleSheetsService.updateMembershipPauseDate(membership.getMember().getId(), LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy. MM. dd")));
+    }
+
+    @Transactional
+    public void unpauseMembership(Long membershipId) {
+        Membership membership = membershipRepository.findById(membershipId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 이용권입니다."));
+        membership.unpause();
+
+        // 해제 시 H열(종료일)에 연장된 날짜를 꽂아주고, L열을 비웁니다.
+        String newEndDateStr = membership.getEndDate() != null ? membership.getEndDate().format(DateTimeFormatter.ofPattern("yyyy. MM. dd")) : "";
+        googleSheetsService.unpauseMembershipData(membership.getMember().getId(), newEndDateStr);
     }
 
     // 유저 본인의 활성화된 이용권 조회
@@ -112,26 +146,6 @@ public class MembershipAdminService {
         });
     }
 
-    // 관리자의 이용권 일시정지 처리
-    @Transactional
-    public void pauseMembership(Long membershipId) {
-        Membership membership = membershipRepository.findById(membershipId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 이용권입니다."));
-
-        // 엔티티 내부의 pause() 호출 (더티 체킹으로 자동 UPDATE)
-        membership.pause();
-    }
-
-    // 관리자의 이용권 일시정지 해제 처리
-    @Transactional
-    public void unpauseMembership(Long membershipId) {
-        Membership membership = membershipRepository.findById(membershipId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 이용권입니다."));
-
-        // 엔티티 내부의 unpause() 호출 (만료일 연장 로직 포함)
-        membership.unpause();
-    }
-
     @Scheduled(cron = "0 0 9 * * *") // 매일 아침 9시 실행
     @Transactional
     public void generateExpirySummaryAlert() {
@@ -160,4 +174,5 @@ public class MembershipAdminService {
 
         adminAlertRepository.save(alert);
     }
+
 }

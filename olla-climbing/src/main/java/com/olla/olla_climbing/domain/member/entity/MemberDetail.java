@@ -23,10 +23,6 @@ public class MemberDetail extends BaseTimeEntity {
     @JoinColumn(name = "member_id") // DB 컬럼 이름 명시, ERD에서는 member_id로 표현
     private Member member;
 
-    // "나중 입력"이므로 Null이 들어갈 수 있는 Wrapper Class 사용
-    // Wrapper Class: int -> Integer, double -> Double 등, Null 허용
-    private Integer age;
-
     private Double height;
 
     private Double weight;
@@ -41,11 +37,17 @@ public class MemberDetail extends BaseTimeEntity {
     }
 
     // 나중에 정보를 업데이트할 때 쓸 메서드 (Setter 대신 사용)
-    public void update(Integer age, Double height, Double weight, Double armSpan, Double footSize) {
-        if (age != null) this.age = age;
+    public void update(Double height, Double weight, Double armSpan, Double footSize) {
         if (height != null) this.height = height;
         if (weight != null) this.weight = weight;
         if (armSpan != null) this.armSpan = armSpan;
         if (footSize != null) this.footSize = footSize;
+    }
+
+    // [Epic 14] 나이 자동 계산 로직 (Getter)
+    public Integer getAge() {
+        if (this.member == null || this.member.getBirthDate() == null) return null;
+        // 생년월일부터 오늘까지의 기간을 계산하여 만 나이 반환
+        return java.time.Period.between(this.member.getBirthDate(), java.time.LocalDate.now()).getYears();
     }
 }

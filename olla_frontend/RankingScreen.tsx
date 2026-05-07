@@ -1,33 +1,215 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image } from 'react-native';
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// 💡 1. props에 route를 추가하여 홈에서 보낸 파라미터를 받을 수 있게 합니다.
-const RankingScreen = ({ route, myProfile, difficultyData, enduranceData, consecutiveData }: any) => {
+
+const RANKING_BEGINNER_URL = 'http://172.29.151.129:8080/api/v1/rankings/beginner';
+const RANKING_ENDURANCE_DISTANCE_URL = 'http://172.29.151.129:8080/api/v1/rankings/endurance/distance';
+const RANKING_SERIES_URL = 'http://172.29.151.129:8080/api/v1/rankings/series';
+const MY_PROFILE_URL = 'http://172.29.151.129:8080/api/v1/members/me'; 
+
+axios.interceptors.request.use(
+  async (config) => {
+    try {
+      const token = await AsyncStorage.getItem('userToken'); 
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch (error) {
+      console.error("토큰 가져오기 실패:", error);
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+const colors = [
+  { name: '흰색', hex: '#EAEAEA', enum: 'WHITE' },
+  { name: '노랑', hex: '#F4D03F', enum: 'YELLOW' },
+  { name: '초록', hex: '#58D68D', enum: 'GREEN' },
+  { name: '파랑', hex: '#5DADE2', enum: 'BLUE' },
+  { name: '빨강', hex: '#EC7063', enum: 'RED' },
+  { name: '보라', hex: '#AF7AC5', enum: 'PURPLE' },
+  { name: '주황', hex: '#F0B27A', enum: 'ORANGE' },
+  { name: '검정', hex: '#000000', enum: 'BLACK' }
+];
+
+const reverseColorMap: { [key: string]: string } = {
+  "WHITE": "흰색", "YELLOW": "노랑", "ORANGE": "주황", "GREEN": "초록",
+  "BLUE": "파랑", "RED": "빨강", "PURPLE": "보라", "BLACK": "검정"
+};
+
+const RankingScreen = ({ route }: any) => {
   
-  // 💡 2. 홈에서 넘어온 targetTab이 있으면 그걸로, 없으면 '초보벽'으로 탭을 초기화합니다.
   const [mainTab, setMainTab] = useState(route?.params?.targetTab || '초보벽');
   const mainTabs = ['초보벽', '지구력', '연속'];
   const [colorTab, setColorTab] = useState('전체');
 
-  // 💡 3. 화면이 켜져 있는 상태에서 홈의 버튼을 다시 눌렀을 때도 탭이 바뀌도록 감지합니다.
+  const [beginnerRankings, setBeginnerRankings] = useState<any[]>([]);
+  const [enduranceRankings, setEnduranceRankings] = useState<any[]>([]);
+  const [consecutiveRankings, setConsecutiveRankings] = useState<any[]>([]);
+  
+  const [myNickname, setMyNickname] = useState('알 수 없음');
+
   useEffect(() => {
     if (route?.params?.targetTab) {
       setMainTab(route.params.targetTab);
     }
   }, [route?.params?.targetTab]);
 
-  const colors = [
-    { name: '흰색', hex: '#EAEAEA' },
-    { name: '노랑', hex: '#F4D03F' },
-    { name: '초록', hex: '#58D68D' },
-    { name: '파랑', hex: '#5DADE2' },
-    { name: '빨강', hex: '#EC7063' },
-    { name: '보라', hex: '#AF7AC5' },
-    { name: '주황', hex: '#F0B27A' },
-    { name: '검정', hex: '#000000' }
-  ];
+  useEffect(() => {
+    fetchMyProfile().then(() => {
+      fetchAllRankings();
+    });
+  }, []);
 
-  const sectionOrder = ['1-0', '1-2', '1-6', '2-4', '2-8', '2-12', '3-1', '3-2', '3-4', '3-6', '4-1', '4-2'];
+  const fetchMyProfile = async () => {
+    try {
+      const response = await axios.get(MY_PROFILE_URL);
+      const data = response.data?.data || response.data;
+      if (data && (data.name || data.nickname)) {
+        setMyNickname(data.nickname || data.name);
+      }
+    } catch (error) {
+      console.log("내 프로필 로드 실패", error);
+    }
+  };
+
+  const fetchAllRankings = async () => {
+    fetchBeginnerRankings();
+    fetchEnduranceRankings();
+    fetchConsecutiveRankings();
+  };
+
+  // (동철 수정) 백엔드 응답 데이터 구조가 리스트나 특정 키(data, list)에 담겨올 경우를 대비해 보완
+  const extractList = (serverData: any) => {
+    if (!serverData) return [];
+    if (Array.isArray(serverData)) return serverData;
+    if (Array.isArray(serverData.list)) return serverData.list;
+    if (Array.isArray(serverData.data)) return serverData.data;
+    if (serverData.masters || serverData.challengers) {
+      const m = serverData.masters || [];
+      const c = serverData.challengers || [];
+      return [...m, ...c];
+    }
+    return [];
+  };
+
+  // 1. 초보벽 랭킹 조회
+  const fetchBeginnerRankings = async () => {
+    try {
+      const requests = colors.map(c => axios.get(`${RANKING_BEGINNER_URL}?difficulty=${c.enum}`));
+      const responses = await Promise.all(
+        requests.map(p => p.catch(e => ({ data: { data: [] } })))
+      );
+      
+      let allData: any[] = [];
+      const colorOrder = ['흰색', '노랑', '초록', '파랑', '빨강', '보라', '주황', '검정'];
+      
+      responses.forEach((response, index) => {
+        const rawList = extractList(response.data?.data || response.data);
+        const currentColor = colors[index];
+        const colorIdx = colorOrder.indexOf(currentColor.name);
+        
+        const mappedData = rawList.map((item: any, itemIndex: number) => {
+          
+          // 💡 [수정] 오직 넘겨받은 필드로만 왕복/편도 판단
+          const attemptType = item.attemptType || item.attempt_type || item.type || '';
+          const isRoundTrip = String(attemptType).toUpperCase() === 'ROUND_TRIP' || attemptType === '왕복';
+          const typeStr = isRoundTrip ? '왕복' : '편도';
+          
+          const holdCount = item.maxHoldNo ?? item.total ?? item.score ?? 0;
+
+          // 가장 높은 랭킹 산출을 위한 절대 점수화 (검정: 70만, 왕복: +5만, 편도: +0)
+          const colorWeight = colorIdx * 100000; 
+          const typeWeight = isRoundTrip ? 50000 : 0; 
+          const absoluteScore = colorWeight + typeWeight + Number(holdCount);
+
+          return {
+            id: item.memberId ?? item.id ?? `temp-beginner-${index}-${itemIndex}`,
+            name: item.name || item.nickname || '알 수 없음',
+            colorName: currentColor.name,
+            colorHex: currentColor.hex,
+            type: typeStr, // 이제 화면에 DB 데이터대로 "왕복"이 정상적으로 뜹니다.
+            hold: holdCount, 
+            rawScore: absoluteScore, 
+            achievedAt: item.achievedAt || item.recordDate ? new Date(item.achievedAt || item.recordDate).getTime() : 9999999999999
+          };
+        });
+        
+        allData = [...allData, ...mappedData];
+      });
+
+      setBeginnerRankings(allData);
+    } catch (error) {
+      console.error("초보벽 랭킹 로드 실패:", error);
+    }
+  };
+
+  // 2. 지구력 랭킹 조회
+  const fetchEnduranceRankings = async () => {
+    try {
+      const response = await axios.get(RANKING_ENDURANCE_DISTANCE_URL);
+      const rawList = extractList(response.data?.data || response.data);
+      
+      const boxSequence = ['1-1','1-2','1-3','1-4','1-5','1-6','2-1','2-2','2-3','2-4','2-5','2-6','2-7','2-8','2-9','2-10','2-11','2-12','3-1','3-2','3-3','3-4','3-5','3-6','4-1','4-2'];
+
+      const mappedData = rawList.map((item: any, index: number) => {
+        const min = Math.floor((item.timeSeconds || 0) / 60).toString().padStart(2, '0');
+        const sec = ((item.timeSeconds || 0) % 60).toString().padStart(2, '0');
+        
+        let sectionStr = '완주';
+        if (item.additionalBlocks > 0 && item.additionalBlocks <= 26) {
+            sectionStr = boxSequence[item.additionalBlocks - 1];
+        } else if (item.additionalBlocks === 0 && item.oneWayCount === 0) {
+            sectionStr = '0';
+        }
+
+        return {
+          id: item.memberId ?? `temp-endurance-${index}`,
+          name: item.name || item.nickname || '알 수 없음',
+          laps: item.oneWayCount || 0,
+          time: `${min}:${sec}`,
+          section: sectionStr,
+          rawRank: item.ranking || 0
+        };
+      });
+      setEnduranceRankings(mappedData);
+    } catch (error) {
+      console.error("지구력 랭킹 로드 실패:", error);
+    }
+  };
+
+  // 3. 연속 완등 랭킹 조회 (동철 수정)
+  const fetchConsecutiveRankings = async () => {
+    try {
+      const response = await axios.get(RANKING_SERIES_URL);
+      // 데이터가 객체 형태(data: [])인지 배열 형태([])인지 모두 대응
+      const rawData = response.data?.data || response.data;
+      const rawList = extractList(rawData);
+      
+      const mappedData = rawList.map((item: any, index: number) => {
+        // 백엔드 Difficulty Enum 리스트를 화면용 색상 Hex로 변환
+        const log = item.sequenceLog || [];
+        const mappedColors = log.map((diffEnum: string) => {
+          const krColor = reverseColorMap[diffEnum] || '흰색';
+          return colors.find(c => c.name === krColor)?.hex || '#999999';
+        });
+
+        return {
+          id: item.memberId ?? item.id ?? `temp-series-${index}`,
+          name: item.name || item.nickname || '알 수 없음',
+          colors: mappedColors,
+          // (동철 수정) 백엔드 DTO 필드명인 totalScore를 우선 확인
+          score: item.totalScore ?? item.score ?? 0, 
+        };
+      });
+      setConsecutiveRankings(mappedData);
+    } catch (error) {
+      console.error("연속 완등 랭킹 로드 실패:", error);
+    }
+  };
 
   const getRankColor = (rank: number) => {
     if (rank === 1) return '#FFCC00';
@@ -50,205 +232,58 @@ const RankingScreen = ({ route, myProfile, difficultyData, enduranceData, consec
     return '#FFFFFF';
   };
 
-  const getColorScore = (hex: string) => {
-    switch (hex.toUpperCase()) {
-      case '#EAEAEA': return 10;
-      case '#F4D03F': return 20;
-      case '#58D68D': return 30;
-      case '#5DADE2': return 40;
-      case '#EC7063': return 50;
-      case '#AF7AC5': return 60;
-      case '#F0B27A': return 70;
-      case '#000000': return 80;
-      default: return 0;
-    }
-  };
-  const calculateTotalScore = (colorArr: string[]) => colorArr.reduce((sum, hex) => sum + getColorScore(hex), 0);
-
-  const getBeginnerScore = (colorName: string, type: string, current: number) => {
-    const colorOrder = ['흰색', '노랑', '초록', '파랑', '빨강', '보라', '주황', '검정'];
-    const colorIdx = colorOrder.indexOf(colorName);
-    
-    if (colorIdx === -1) return 0;
-    
-    const colorBase = colorIdx * 1000;
-    const typeBase = type === '왕복' ? 500 : 0;
-    return colorBase + typeBase + current;
-  };
-
-  const myBestBeginner = useMemo(() => {
-    if (!difficultyData || difficultyData.length === 0) return null;
-    const sorted = [...difficultyData].sort((a: any, b: any) => {
-      const scoreA = getBeginnerScore(a.color, a.type, a.current || 0);
-      const scoreB = getBeginnerScore(b.color, b.type, b.current || 0);
-      return scoreB - scoreA;
-    });
-    return sorted[0];
-  }, [difficultyData]);
-
-  const myBestEndurance = useMemo(() => {
-    if (!enduranceData?.length) return null;
-    return [...enduranceData].sort((a: any, b: any) => {
-      const lapA = parseInt(a.laps, 10), lapB = parseInt(b.laps, 10);
-      if (lapA !== lapB) return lapB - lapA;
-      const idxA = sectionOrder.indexOf(a.section), idxB = sectionOrder.indexOf(b.section);
-      return lapA % 2 !== 0 ? idxB - idxA : idxA - idxB;
-    })[0];
-  }, [enduranceData]);
-
-  const myBestConsecutive = useMemo(() => {
-    if (!consecutiveData?.length) return null;
-    return [...consecutiveData].map((d: any) => ({
-      ...d,
-      score: calculateTotalScore(d.colors)
-    })).sort((a: any, b: any) => b.score - a.score)[0];
-  }, [consecutiveData]);
-
-  const baseBeginnerData = useMemo(() => {
-    return [
-      { id: 2, name: '최강우', colorName: '검정', colorHex: '#000000', type: '왕복', hold: 30, isMe: false, achievedAt: 1600000000000 },
-      { id: 3, name: '김정산', colorName: '검정', colorHex: '#000000', type: '편도', hold: 28, isMe: false, achievedAt: 1600000001000 },
-      { id: 4, name: '박지구력', colorName: '주황', colorHex: '#F0B27A', type: '왕복', hold: 28, isMe: false, achievedAt: 1600000002000 },
-      { id: 5, name: '이초보', colorName: '주황', colorHex: '#F0B27A', type: '편도', hold: 25, isMe: false, achievedAt: 1600000003000 },
-      { id: 6, name: '홍길동', colorName: '보라', colorHex: '#AF7AC5', type: '왕복', hold: 25, isMe: false, achievedAt: 1600000004000 },
-      { id: 7, name: '고수', colorName: '보라', colorHex: '#AF7AC5', type: '편도', hold: 20, isMe: false, achievedAt: 1600000005000 },
-      { id: 8, name: '초보자', colorName: '빨강', colorHex: '#EC7063', type: '왕복', hold: 26, isMe: false, achievedAt: 1600000006000 },
-      { id: 9, name: '중수', colorName: '빨강', colorHex: '#EC7063', type: '편도', hold: 20, isMe: false, achievedAt: 1600000007000 },
-      { id: 10, name: '클라이머', colorName: '파랑', colorHex: '#5DADE2', type: '왕복', hold: 26, isMe: false, achievedAt: 1600000008000 },
-      { id: 11, name: '스파이더', colorName: '파랑', colorHex: '#5DADE2', type: '편도', hold: 15, isMe: false, achievedAt: 1600000009000 },
-      { id: 12, name: '홀드잡이', colorName: '초록', colorHex: '#58D68D', type: '왕복', hold: 28, isMe: false, achievedAt: 1600000010000 },
-      { id: 13, name: '다이노', colorName: '초록', colorHex: '#58D68D', type: '편도', hold: 10, isMe: false, achievedAt: 1600000011000 },
-      { id: 14, name: '병아리', colorName: '노랑', colorHex: '#F4D03F', type: '왕복', hold: 30, isMe: false, achievedAt: 1600000012000 },
-      { id: 15, name: '입문자', colorName: '노랑', colorHex: '#F4D03F', type: '편도', hold: 15, isMe: false, achievedAt: 1600000013000 },
-      { id: 16, name: '클린이', colorName: '흰색', colorHex: '#EAEAEA', type: '왕복', hold: 26, isMe: false, achievedAt: 1600000014000 },
-      { id: 17, name: '첫경험', colorName: '흰색', colorHex: '#EAEAEA', type: '편도', hold: 10, isMe: false, achievedAt: 1600000015000 },
-    ].map(u => ({ ...u, sortScore: getBeginnerScore(u.colorName, u.type, u.hold) }));
-  }, []);
-
-  const enduranceList = useMemo(() => {
-    const others = [
-      { id: 2, name: '최강우', laps: 10, section: '4-2', time: '20:15', isMe: false },
-      { id: 3, name: '김정산', laps: 8, section: '2-12', time: '18:30', isMe: false },
-      { id: 4, name: '박지구력', laps: 7, section: '1-0', time: '16:45', isMe: false },
-      { id: 5, name: '이초보', laps: 6, section: '3-6', time: '14:20', isMe: false },
-      { id: 6, name: '홍길동', laps: 5, section: '2-8', time: '12:10', isMe: false },
-      { id: 7, name: '고수', laps: 4, section: '1-6', time: '10:05', isMe: false },
-      { id: 8, name: '초보자', laps: 3, section: '4-1', time: '08:30', isMe: false },
-      { id: 9, name: '중수', laps: 3, section: '2-4', time: '07:15', isMe: false },
-      { id: 10, name: '클라이머', laps: 2, section: '3-4', time: '05:50', isMe: false },
-      { id: 11, name: '스파이더', laps: 2, section: '1-2', time: '04:40', isMe: false },
-      { id: 12, name: '홀드잡이', laps: 1, section: '3-2', time: '03:20', isMe: false },
-      { id: 13, name: '다이노', laps: 1, section: '1-0', time: '02:10', isMe: false },
-    ];
-
-    let list: any[] = [...others];
-
-    if (myBestEndurance) {
-      list.push({
-        id: 999, 
-        name: myProfile?.name || '권클라이밍', 
-        laps: parseInt(myBestEndurance.laps, 10),
-        section: myBestEndurance.section, 
-        time: myBestEndurance.time, 
-        isMe: true
-      });
-    }
-
-    list.sort((a: any, b: any) => {
-      if (a.laps !== b.laps) return b.laps - a.laps;
-      const idxA = sectionOrder.indexOf(a.section), idxB = sectionOrder.indexOf(b.section);
-      return a.laps % 2 !== 0 ? idxB - idxA : idxA - idxB;
-    });
-    
-    return list.map((item, index) => ({ ...item, rank: index + 1 }));
-  }, [myBestEndurance, myProfile]);
-
-  const consecutiveList = useMemo(() => {
-    const others = [
-      { id: 2, name: '최강우', colors: ['#000000', '#F0B27A', '#AF7AC5', '#EC7063'], score: 260, isMe: false },
-      { id: 3, name: '김정산', colors: ['#000000', '#F0B27A', '#AF7AC5'], score: 210, isMe: false },
-      { id: 4, name: '박지구력', colors: ['#F0B27A', '#AF7AC5', '#EC7063'], score: 180, isMe: false },
-      { id: 5, name: '이초보', colors: ['#AF7AC5', '#EC7063', '#5DADE2'], score: 150, isMe: false },
-      { id: 6, name: '홍길동', colors: ['#EC7063', '#5DADE2', '#58D68D'], score: 120, isMe: false },
-      { id: 7, name: '고수', colors: ['#5DADE2', '#58D68D', '#F4D03F'], score: 90, isMe: false },
-      { id: 8, name: '초보자', colors: ['#58D68D', '#F4D03F', '#EAEAEA'], score: 60, isMe: false },
-      { id: 9, name: '중수', colors: ['#F4D03F', '#EAEAEA'], score: 30, isMe: false },
-      { id: 10, name: '클라이머', colors: ['#58D68D'], score: 30, isMe: false },
-      { id: 11, name: '스파이더', colors: ['#F4D03F'], score: 20, isMe: false },
-      { id: 12, name: '홀드잡이', colors: ['#EAEAEA'], score: 10, isMe: false },
-      { id: 13, name: '다이노', colors: [], score: 0, isMe: false },
-    ];
-
-    let list: any[] = [...others];
-
-    if (myBestConsecutive) {
-      list.push({
-        id: 999, 
-        name: myProfile?.name || '권클라이밍',
-        colors: myBestConsecutive.colors, 
-        score: myBestConsecutive.score, 
-        isMe: true
-      });
-    } else {
-      list.push({ id: 999, name: myProfile?.name || '권클라이밍', colors: [], score: 0, isMe: true });
-    }
-
-    list.sort((a: any, b: any) => b.score - a.score);
-    return list.map((item, index) => ({ ...item, rank: index + 1 }));
-  }, [myBestConsecutive, myProfile]);
-
+  // 💡 정렬, 최고 기록 1개만 추출, 시간 동점자 처리
   const filteredList = useMemo(() => {
-    if (mainTab === '지구력') return enduranceList;
-    if (mainTab === '연속') return consecutiveList;
-    
-    let currentList = [];
-    let myBest: any = null;
-    
-    if (difficultyData && difficultyData.length > 0) {
-      let myData = difficultyData;
+    let list: any[] = [];
+
+    if (mainTab === '초보벽') {
+      list = [...beginnerRankings];
+
       if (colorTab !== '전체') {
-        myData = difficultyData.filter((d: any) => d.color === colorTab);
+        list = list.filter(r => r.colorName === colorTab);
       }
-      if (myData.length > 0) {
-        const sortedMyData = [...myData].sort((a: any, b: any) => {
-          const scoreA = getBeginnerScore(a.color, a.type, a.current || 0);
-          const scoreB = getBeginnerScore(b.color, b.type, b.current || 0);
-          return scoreB - scoreA;
-        });
-        myBest = sortedMyData[0];
-      }
-    }
 
-    let list = [...baseBeginnerData];
-    if (colorTab !== '전체') {
-      list = list.filter(r => r.colorName === colorTab);
-    }
-
-    if (myBest && myBest.current > 0) {
-      list.push({
-        id: 999,
-        name: myProfile?.name || '권클라이밍',
-        colorName: myBest.color,
-        colorHex: myBest.hex,
-        type: myBest.type,
-        hold: myBest.current,
-        isMe: true,
-        sortScore: getBeginnerScore(myBest.color, myBest.type, myBest.current),
-        achievedAt: myBest.id || Date.now() 
+      // 유저(닉네임)별로 가장 점수가 높거나 시간이 빠른 단 1개의 최고기록만 남김
+      const userMap = new Map();
+      list.forEach(item => {
+        const existing = userMap.get(item.name);
+        if (!existing) {
+          userMap.set(item.name, item);
+        } else {
+          if (item.rawScore > existing.rawScore) {
+            userMap.set(item.name, item);
+          } else if (item.rawScore === existing.rawScore && item.achievedAt < existing.achievedAt) {
+            userMap.set(item.name, item);
+          }
+        }
       });
+      list = Array.from(userMap.values());
+      
+      // 검정>왕복>홀드 순으로 최종 랭킹 내림차순 정렬 (동점 시 달성시간 오름차순)
+      list.sort((a, b) => {
+        if (b.rawScore !== a.rawScore) {
+          return b.rawScore - a.rawScore; 
+        }
+        return a.achievedAt - b.achievedAt;
+      });
+
+    } else if (mainTab === '지구력') {
+      list = [...enduranceRankings];
+      list.sort((a, b) => {
+         if(a.rawRank && b.rawRank) return a.rawRank - b.rawRank;
+         return b.laps - a.laps; 
+      });
+    } else if (mainTab === '연속') {
+      list = [...consecutiveRankings];
+      list.sort((a, b) => (b.score || 0) - (a.score || 0));
     }
 
-    list.sort((a: any, b: any) => {
-      if (b.sortScore !== a.sortScore) {
-        return b.sortScore - a.sortScore; 
-      }
-      return a.achievedAt - b.achievedAt; 
-    });
-
-    currentList = list.map((item, index) => ({ ...item, rank: index + 1 }));
-    return currentList;
-
-  }, [mainTab, colorTab, baseBeginnerData, enduranceList, consecutiveList, difficultyData, myProfile]);
+    return list.map((item, index) => ({ 
+      ...item, 
+      rank: index + 1,
+      isMe: item.name === myNickname 
+    }));
+  }, [mainTab, colorTab, beginnerRankings, enduranceRankings, consecutiveRankings, myNickname]);
 
   const myCurrentRank = filteredList.find(r => r.isMe)?.rank || '-';
 
@@ -261,7 +296,7 @@ const RankingScreen = ({ route, myProfile, difficultyData, enduranceData, consec
             <View style={styles.myRankingLeft}>
               <Image source={require('./assets/profile.png')} style={styles.myProfileImg} defaultSource={undefined} />
               <View>
-                <Text style={styles.myNameText}>{myProfile?.name || '권클라이밍'}</Text>
+                <Text style={styles.myNameText}>{myNickname}</Text>
                 <Text style={styles.myRankSubText}>{mainTab} 나의 순위</Text>
               </View>
             </View>
@@ -297,8 +332,8 @@ const RankingScreen = ({ route, myProfile, difficultyData, enduranceData, consec
         )}
 
         <View style={styles.rankingListContainer}>
-          {filteredList.map((item: any) => (
-            <View key={item.id} style={[styles.rankItemCard, item.isMe && styles.myRankItemHighlight]}>
+          {filteredList.map((item: any, index: number) => (
+            <View key={`rank-${mainTab}-${item.id}-${index}`} style={[styles.rankItemCard, item.isMe && styles.myRankItemHighlight]}>
               
               <View style={[styles.rankCircle, { borderColor: getRankColor(item.rank) }]}>
                 <Text style={[styles.rankNumberText, { color: getRankColor(item.rank) }]}>{item.rank}</Text>
@@ -314,7 +349,7 @@ const RankingScreen = ({ route, myProfile, difficultyData, enduranceData, consec
                   <>
                     <View style={styles.consecutiveColorsRow}>
                       {item.colors.map((colorHex: string, idx: number) => (
-                        <View key={idx} style={[styles.miniColorCircle, { backgroundColor: colorHex }]} />
+                        <View key={`color-${item.id}-${idx}`} style={[styles.miniColorCircle, { backgroundColor: colorHex }]} />
                       ))}
                     </View>
                     <Text style={styles.consecutiveScoreText}>{item.score}점</Text>
@@ -342,6 +377,9 @@ const RankingScreen = ({ route, myProfile, difficultyData, enduranceData, consec
 
             </View>
           ))}
+          {filteredList.length === 0 && (
+             <Text style={{color: '#999', textAlign: 'center', marginTop: 30}}>랭킹 데이터가 없습니다.</Text>
+          )}
         </View>
 
       </ScrollView>

@@ -26,7 +26,7 @@ const NoticeScreen = ({ navigation }: any) => {
         return;
       }
 
-      const response = await fetch('http://172.30.1.54:8080/api/v1/admin/notices', {
+      const response = await fetch('http://172.29.151.129:8080/api/v1/admin/notices', {
         method: 'GET',
         headers: {
           'Accept': 'application/json',

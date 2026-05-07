@@ -6,6 +6,7 @@ import com.olla.olla_climbing.domain.auth.dto.request.SignupRequest;
 import com.olla.olla_climbing.domain.auth.dto.response.TokenResponse;
 import com.olla.olla_climbing.domain.auth.service.AuthService;
 import com.olla.olla_climbing.domain.member.service.MemberService; // 아이디 중복확인 코드 추가 (동철 수정)
+import com.olla.olla_climbing.global.common.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -69,5 +70,21 @@ public class AuthController {
     public ResponseEntity<String> logout(@RequestBody LogoutRequest request) {
         authService.logout(request);
         return ResponseEntity.ok("로그아웃이 완료되었습니다.");
+    }
+
+    @PostMapping("/find-id")
+    @Operation(summary = "아이디 찾기 (마스킹)")
+    public ResponseEntity<ApiResponse<String>> findId(@RequestParam String name, @RequestParam String phone) {
+        String maskedId = authService.findMaskedLoginId(name, phone);
+        return ResponseEntity.ok(ApiResponse.success(maskedId));
+    }
+
+    @PostMapping("/find-password")
+    @Operation(summary = "임시 비밀번호 발송")
+    public ResponseEntity<ApiResponse<Void>> findPassword(@RequestParam String name,
+                                                          @RequestParam String phone,
+                                                          @RequestParam String loginId) {
+        authService.sendTempPassword(name, phone, loginId);
+        return ResponseEntity.ok(ApiResponse.success(null));
     }
 }

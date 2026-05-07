@@ -1,82 +1,178 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, TextInput } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, TextInput, Alert } from 'react-native';
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// 💡 API URL (참고: vi/posts가 오타일 수 있어 확인이 필요합니다. v1이 맞다면 v1으로 변경해주세요)
+const POST_API_URL = 'http://172.29.151.129:8080/api/vi/posts'; // 게시글 조회/작성/삭제 (vi)
+const PARTICIPANT_API_URL = 'http://172.29.151.129:8080/api/v1/posts'; // 참가/취소 (v1)
+const MEMBER_API_URL = 'http://172.29.151.129:8080/api/v1/members'; // 멤버 정보
 
 const CommunityScreen = ({ myProfile, myToggles }: any) => {
   const [selectedTab, setSelectedTab] = useState('전체');
   const tabs = ['전체', '센터', '아웃도어'];
 
-  // 💡 기존 더미 데이터에 isJoined(내 참여 여부) 상태를 추가했습니다.
-  const [posts, setPosts] = useState([
-    { 
-      id: 1, 
-      type: '센터', 
-      title: '주말 클라이밍 같이 하실 분!', 
-      desc: '이번 주 토요일 오후에 센터에서 같이 클라이밍 하실 분 구합니다.', 
-      location: 'olla 클라이밍 센터', 
-      date: '2026-03-28', 
-      people: '2/4명', 
-      postDate: '2026.03.24', 
-      author: myProfile?.name || '권클라이밍',
-      isMine: true,
-      isJoined: false
-    },
-    { 
-      id: 2, 
-      type: '아웃도어', 
-      title: '북한산 암벽 등반 모집', 
-      desc: '봄 맞이 북한산 암벽등반 가실 분 모집합니다.', 
-      location: '북한산 인수봉', 
-      date: '2026-04-05', 
-      people: '4/6명', 
-      postDate: '2026.03.31', 
-      author: '최강우',
-      isMine: false,
-      isJoined: false // 💡 참여 여부 기본값
+  const [posts, setPosts] = useState<any[]>([]);
+  const [myNickname, setMyNickname] = useState('');
+
+  // 1. 초기 데이터 로드 (내 닉네임을 확실히 가져온 뒤 게시글 호출)
+  useEffect(() => {
+    const initData = async () => {
+      let currentNickname = '';
+      try {
+        const token = await AsyncStorage.getItem('userToken');
+        if (token) {
+          const profileRes = await axios.get(`${MEMBER_API_URL}/me`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const pData = profileRes.data?.data || profileRes.data;
+          currentNickname = pData.nickname || pData.name || '';
+          setMyNickname(currentNickname); 
+        }
+      } catch (error: any) {
+        console.error("초기 데이터 로드 실패 (내 프로필):", error?.response?.data || error);
+      } finally {
+        fetchPosts(currentNickname);
+      }
+    };
+    initData();
+  }, []);
+
+  // 2. 게시글 목록 불러오기
+  const fetchPosts = async (nicknameToUse = myNickname) => {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      const response = await axios.get(POST_API_URL, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      const rawList = response.data?.data?.content || response.data?.data || response.data || [];
+      if (!Array.isArray(rawList)) return;
+
+      const mappedPosts = rawList.map((item: any) => {
+        // 날짜 포맷팅 안전 처리
+        const meetDate = new Date(item.meetDateTime);
+        const formattedMeetDate = isNaN(meetDate.getTime()) 
+          ? item.meetDateTime 
+          : `${meetDate.getFullYear()}-${String(meetDate.getMonth() + 1).padStart(2, '0')}-${String(meetDate.getDate()).padStart(2, '0')} ${String(meetDate.getHours()).padStart(2, '0')}:${String(meetDate.getMinutes()).padStart(2, '0')}`;
+        
+        const createdDate = new Date(item.createdAt);
+        const formattedCreated = isNaN(createdDate.getTime()) 
+          ? item.createdAt 
+          : `${createdDate.getFullYear()}.${String(createdDate.getMonth() + 1).padStart(2, '0')}.${String(createdDate.getDate()).padStart(2, '0')}`;
+
+        // 🚨 [핵심 수정 부분] 참여 여부 판단 조건 대폭 강화
+        // 백엔드에서 내려주는 필드명이 다를 수 있으므로 여러 가능성을 모두 체크합니다.
+        const isJoined = 
+          item.isParticipant === true || 
+          item.isParticipated === true || 
+          item.participated === true || 
+          (Array.isArray(item.participants) && item.participants.some((p: any) => 
+            typeof p === 'string' ? p === nicknameToUse : (p?.name === nicknameToUse || p?.nickname === nicknameToUse || p?.memberName === nicknameToUse)
+          )) || false;
+
+        return {
+          id: item.id,
+          type: item.differentGym ? '아웃도어' : '센터',
+          title: item.title,
+          desc: item.content,
+          location: item.differentGym ? (item.gymPlace || '장소 미정') : 'olla 클라이밍 센터',
+          date: formattedMeetDate,
+          people: `${item.memberCount || item.participants?.length || 1}/${item.maxMember}명`,
+          postDate: formattedCreated,
+          author: item.writerName,
+          isMine: item.writerName === nicknameToUse, 
+          isJoined: isJoined
+        };
+      });
+
+      // 최신순 정렬
+      setPosts(mappedPosts.sort((a: any, b: any) => b.id - a.id));
+    } catch (error: any) {
+      console.error("게시글 목록 로드 실패:", error?.response?.data || error.message);
+      if (error?.response?.status === 500) {
+        Alert.alert("서버 오류", "게시글 목록을 불러오는 중 서버 내부 오류가 발생했습니다.");
+      }
     }
-  ]);
+  };
 
   const filteredPosts = posts.filter(post => selectedTab === '전체' || post.type === selectedTab);
 
-  // 삭제 팝업 로직
+  // ==========================================
+  // 💡 게시글 삭제 로직
+  // ==========================================
   const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
 
   const confirmDelete = (id: number) => { setItemToDelete(id); setDeleteModalVisible(true); };
-  const executeDelete = () => {
-    if (itemToDelete !== null) setPosts(posts.filter(post => post.id !== itemToDelete));
-    setDeleteModalVisible(false); setItemToDelete(null);
+  
+  const executeDelete = async () => {
+    if (itemToDelete !== null) {
+      try {
+        const token = await AsyncStorage.getItem('userToken');
+        await axios.delete(`${POST_API_URL}/${itemToDelete}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        Alert.alert("알림", "게시글이 성공적으로 삭제되었습니다.");
+        fetchPosts(); 
+      } catch (error: any) {
+        console.error("게시글 삭제 실패:", error?.response?.data || error.message);
+        Alert.alert("삭제 실패", error.response?.data?.message || "게시글을 삭제할 수 없습니다.");
+      }
+    }
+    setDeleteModalVisible(false); 
+    setItemToDelete(null);
   };
   const cancelDelete = () => { setDeleteModalVisible(false); setItemToDelete(null); };
 
-  // 프로필 보기 팝업 로직
+  // ==========================================
+  // 💡 프로필 보기 팝업 로직 
+  // ==========================================
   const [isDetailVisible, setDetailVisible] = useState(false);
   const detailSlideAnim = useRef(new Animated.Value(800)).current;
   const [selectedUser, setSelectedUser] = useState<any>(null);
 
-  const openDetailModal = (userType: 'me' | 'dummy') => {
-    if (userType === 'me') {
-      setSelectedUser({
-        name: myProfile?.name || '권클라이밍', phone: myProfile?.phone, age: myProfile?.age, height: myProfile?.height,
-        weight: myProfile?.weight, arm: myProfile?.arm, shoe: myProfile?.shoe, toggles: myToggles || {}, isMe: true
+  const openDetailModal = async (authorName: string, isMine: boolean) => {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      const res = await axios.get(`${MEMBER_API_URL}/profile?nickname=${encodeURIComponent(authorName)}`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
-    } else {
+      const userData = res.data?.data || res.data;
+
       setSelectedUser({
-        name: '최강우', phone: '010-0000-0000', age: '25', height: '180', weight: '75', arm: '185', shoe: '275',
-        toggles: { showName: true, showAge: true, showPhone: false, showHeight: false, showWeight: false, showArm: false, showShoe: false }, isMe: false
+        name: userData.nickname || userData.name || authorName, 
+        phone: userData.phone || '-', 
+        age: userData.age || '-', 
+        height: userData.height || '-',
+        weight: userData.weight || '-', 
+        arm: userData.armSpan || '-', 
+        shoe: userData.footSize || '-',
+        toggles: userData.privacy || { showName: true, showAge: true, showPhone: true, showHeight: true, showWeight: true, showArm: true, showShoe: true },
+        isMe: isMine
       });
+
+      setDetailVisible(true);
+      setTimeout(() => { Animated.timing(detailSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(); }, 50);
+
+    } catch (error: any) {
+      console.error("회원 프로필 조회 실패:", error?.response?.data || error.message);
+      Alert.alert("프로필 조회 불가", "해당 사용자의 프로필 정보를 불러올 수 없습니다.");
     }
-    setDetailVisible(true);
-    setTimeout(() => { Animated.timing(detailSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(); }, 50);
   };
+  
   const closeDetailModal = () => {
     Animated.timing(detailSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => { setDetailVisible(false); setSelectedUser(null); });
   };
+  
   const renderDetailRow = (label: string, value: string, isVisible: boolean, unit: string = '') => {
     if (!isVisible) return null;
-    return (<View style={styles.detailRow}><Text style={styles.detailLabel}>{label}</Text><Text style={styles.detailValue}>{value}{unit}</Text></View>);
+    return (<View style={styles.detailRow}><Text style={styles.detailLabel}>{label}</Text><Text style={styles.detailValue}>{value !== '-' ? value + unit : '-'}</Text></View>);
   };
 
-  // 모집 글 작성 팝업 State
+  // ==========================================
+  // 💡 모집 글 작성 로직
+  // ==========================================
   const [isCreateVisible, setCreateVisible] = useState(false);
   const createSlideAnim = useRef(new Animated.Value(800)).current;
 
@@ -126,70 +222,152 @@ const CommunityScreen = ({ myProfile, myToggles }: any) => {
     if (isNaN(num)) setCreatePeople('');
     else setCreatePeople(String(num));
   };
+  
   const handlePeopleBlur = () => {
     const num = parseInt(createPeople, 10);
     if (isNaN(num) || num < 2) setCreatePeople('2');
   };
+  
   const adjustPeople = (amount: number) => {
     let num = parseInt(createPeople, 10);
     if (isNaN(num)) num = 2;
     setCreatePeople(String(Math.max(2, num + amount)));
   };
 
-  const submitNewPost = () => {
-    const today = new Date();
-    const formattedToday = `${today.getFullYear()}.${String(today.getMonth() + 1).padStart(2, '0')}.${String(today.getDate()).padStart(2, '0')}`;
-    
-    const finalDate = createDate.replace(/\//g, '-') || '날짜 미정';
+  const submitNewPost = async () => {
+    if (!createTitle || !createDesc || !createDate || !createTime) {
+      Alert.alert("알림", "모든 항목을 입력해주세요.");
+      return;
+    }
 
-    const newPost = {
-      id: Date.now(),
-      type: createCategory,
-      title: createTitle || '새로운 모집글',
-      desc: createDesc || '모집 내용이 없습니다.',
-      location: createCategory === '센터' ? 'olla 클라이밍 센터' : (createLocation || '장소 미정'),
-      date: finalDate,
-      people: `1/${createPeople}명`, 
-      postDate: formattedToday,
-      author: myProfile?.name || '권클라이밍',
-      isMine: true,
-      isJoined: false 
-    };
+    if (createDate.length !== 10 || createTime.length !== 5) {
+      Alert.alert("알림", "날짜(YYYY/MM/DD)와 시간(HH:MM)을 끝까지 올바르게 입력해주세요.");
+      return;
+    }
 
-    setPosts([newPost, ...posts]);
-    closeCreateModal();
+    const [year, month, day] = createDate.split('/').map(Number);
+    const [hours, minutes] = createTime.split(':').map(Number);
+
+    if (month < 1 || month > 12) {
+      Alert.alert("알림", "올바른 월(1~12월)을 입력해주세요.");
+      return;
+    }
+    const daysInMonth = new Date(year, month, 0).getDate(); 
+    if (day < 1 || day > daysInMonth) {
+      Alert.alert("알림", `${month}월은 ${daysInMonth}일까지 있습니다. 올바른 일자를 입력해주세요.`);
+      return;
+    }
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+      Alert.alert("알림", "올바른 시간을 입력해주세요. (00:00 ~ 23:59)");
+      return;
+    }
+
+    const inputDateObj = new Date(year, month - 1, day, hours, minutes);
+    const now = new Date();
+
+    if (inputDateObj < now) {
+      Alert.alert("알림", "과거의 시간으로 모집글을 등록할 수 없습니다.");
+      return;
+    }
+
+    const maxDate = new Date();
+    maxDate.setMonth(maxDate.getMonth() + 3); 
+    if (inputDateObj > maxDate) {
+      Alert.alert("알림", "일정은 오늘로부터 최대 3개월 이내의 날짜만 등록 가능합니다.");
+      return;
+    }
+
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      const dateTimeString = inputDateObj.toISOString(); 
+      
+      const payload = {
+        title: createTitle,
+        content: createDesc,
+        isDifferentGym: createCategory === '아웃도어',
+        gymPlace: createCategory === '센터' ? 'olla 클라이밍 센터' : createLocation,
+        meetDateTime: dateTimeString,
+        maxMember: parseInt(createPeople, 10)
+      };
+
+      await axios.post(POST_API_URL, payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      Alert.alert("알림", "모집 글이 작성되었습니다.");
+      closeCreateModal();
+      fetchPosts(); 
+    } catch (error: any) {
+      console.error("게시글 작성 실패:", error?.response?.data || error.message);
+      Alert.alert("작성 실패", error.response?.data?.message || "게시글 작성에 실패했습니다.");
+    }
   };
 
   // ==========================================
-  // 💡 참여하기 / 취소하기 토글 함수
+  // 💡 참여하기 / 취소하기 토글 함수 
   // ==========================================
-  const toggleJoin = (postId: number) => {
-    setPosts(posts.map(post => {
-      if (post.id === postId) {
-        // "4/6명" 같은 문자열에서 현재 인원(current)과 최대 인원(max)을 숫자로 뽑아냅니다.
-        const [currStr, maxStr] = post.people.replace('명', '').split('/');
-        let current = parseInt(currStr, 10);
-        const max = parseInt(maxStr, 10);
+  const toggleJoin = async (postId: number, isCurrentlyJoined: boolean) => {
+    // 1. 낙관적 UI 업데이트 (버튼 상태와 인원수를 즉각적으로 변경)
+    setPosts(prevPosts => 
+      prevPosts.map(post => {
+        if (post.id === postId) {
+          // "1/4명" 형태에서 숫자 추출
+          const [currentStr, maxStr] = post.people.replace('명', '').split('/');
+          let currentCount = parseInt(currentStr, 10);
+          const maxCount = parseInt(maxStr, 10);
 
-        if (post.isJoined) {
-          // 이미 참여 중이면 취소 처리 (인원 -1)
-          current = Math.max(0, current - 1);
-          return { ...post, people: `${current}/${max}명`, isJoined: false };
-        } else {
-          // 미참여 상태일 때 최대 인원보다 적으면 참여 (인원 +1)
-          if (current < max) {
-            current += 1;
-            return { ...post, people: `${current}/${max}명`, isJoined: true };
+          // 참여하는 거면 +1, 취소하는 거면 -1
+          if (!isCurrentlyJoined) {
+            currentCount = Math.min(currentCount + 1, maxCount); // 최대인원 초과 방지
           } else {
-            // 만약 이미 꽉 찼다면 그냥 리턴 (나중에 꽉 찼다는 알림을 띄워도 됩니다)
-            return post;
+            currentCount = Math.max(currentCount - 1, 1); // 1명 밑으로 내려가지 않게 방지
           }
-        }
-      }
-      return post;
-    }));
-  };
 
+          return { 
+            ...post, 
+            isJoined: !isCurrentlyJoined, // 버튼 취소/참여 변경
+            people: `${currentCount}/${maxCount}명` // 변경된 인원수 텍스트 반영
+          };
+        }
+        return post;
+      })
+    );
+
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      const url = `${PARTICIPANT_API_URL}/${postId}/participants`;
+
+      if (isCurrentlyJoined) {
+        await axios.delete(url, { headers: { Authorization: `Bearer ${token}` } });
+      } else {
+        await axios.post(url, {}, { headers: { Authorization: `Bearer ${token}` } });
+      }
+
+    } catch (error: any) {
+      console.error("참여/취소 실패:", error?.response?.data || error.message);
+      
+      // 2. 실패 시 롤백 (원래 버튼과 인원수로 복구)
+      setPosts(prevPosts => 
+        prevPosts.map(post => {
+          if (post.id === postId) {
+             const [currentStr, maxStr] = post.people.replace('명', '').split('/');
+             let currentCount = parseInt(currentStr, 10);
+             const maxCount = parseInt(maxStr, 10);
+             // 롤백 계산
+             if (isCurrentlyJoined) currentCount = Math.min(currentCount + 1, maxCount);
+             else currentCount = Math.max(currentCount - 1, 1);
+
+             return { ...post, isJoined: isCurrentlyJoined, people: `${currentCount}/${maxCount}명` };
+          }
+          return post;
+        })
+      );
+
+      const errorMsg = error.response?.data?.message || error.response?.data?.data || "참여 요청을 처리할 수 없습니다.";
+      Alert.alert("알림", errorMsg);
+    }
+  };
+  
   return (
     <View style={styles.background}>
       
@@ -235,21 +413,18 @@ const CommunityScreen = ({ myProfile, myToggles }: any) => {
               </View>
               <View style={styles.divider} />
               <View style={styles.cardFooter}>
-                <TouchableOpacity style={styles.profileRow} onPress={() => openDetailModal(post.isMine ? 'me' : 'dummy')}>
-                  {post.author === '최강우' ? (
-                    <View style={styles.textProfileImg}><Text style={styles.textProfileText}>최</Text></View>
-                  ) : (
-                    <Image source={require('./assets/profile.png')} style={styles.profileImg} defaultSource={undefined} />
-                  )}
+                
+                <TouchableOpacity style={styles.profileRow} onPress={() => openDetailModal(post.author, post.isMine)}>
+                  <Image source={require('./assets/profile.png')} style={styles.profileImg} defaultSource={undefined} />
                   <Text style={styles.authorText}>{post.author}</Text>
                 </TouchableOpacity>
 
-                {/* 💡 내가 쓴 글이 아닐 때 '참여하기 / 취소하기' 버튼 토글 */}
+                {/* 💡 참여하기 버튼 */}
                 {!post.isMine && (
                   <TouchableOpacity 
                     style={[styles.joinButton, post.isJoined && styles.cancelButton]} 
                     activeOpacity={0.8}
-                    onPress={() => toggleJoin(post.id)}
+                    onPress={() => toggleJoin(post.id, post.isJoined)}
                   >
                     <Text style={[styles.joinButtonText, post.isJoined && styles.cancelButtonText]}>
                       {post.isJoined ? '취소하기' : '참여하기'}
@@ -260,6 +435,9 @@ const CommunityScreen = ({ myProfile, myToggles }: any) => {
             </View>
           );
         })}
+        {filteredPosts.length === 0 && (
+          <Text style={{color: '#999', textAlign: 'center', marginTop: 30}}>등록된 게시글이 없습니다.</Text>
+        )}
       </ScrollView>
 
       <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={openCreateModal}>
@@ -283,16 +461,15 @@ const CommunityScreen = ({ myProfile, myToggles }: any) => {
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: detailSlideAnim }] }]}>
             <TouchableOpacity activeOpacity={1} style={{ width: '100%' }}>
               <View style={styles.dragHandle} />
-              <View style={styles.sheetHeader}><Text style={styles.sheetTitle}>회원 정보 확인</Text><TouchableOpacity onPress={closeDetailModal}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity></View>
+              <View style={styles.sheetHeader}>
+                <Text style={styles.sheetTitle}>회원 정보 확인</Text>
+                <TouchableOpacity onPress={closeDetailModal}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity>
+              </View>
               <View style={styles.horizontalDivider} />
               {selectedUser && (
                 <View style={styles.detailContainer}>
                   <View style={styles.detailProfileWrapper}>
-                    {selectedUser.name === '최강우' ? (
-                       <View style={[styles.textProfileImg, { width: 80, height: 80, borderRadius: 40 }]}><Text style={[styles.textProfileText, { fontSize: 28 }]}>최</Text></View>
-                    ) : (
-                       <Image source={require('./assets/profile.png')} style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#444444' }} />
-                    )}
+                    <Image source={require('./assets/profile.png')} style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#444444' }} />
                   </View>
                   <View style={styles.detailInfoBox}>
                     {renderDetailRow('이름', selectedUser.name, selectedUser.toggles.showName)}
@@ -340,76 +517,37 @@ const CommunityScreen = ({ myProfile, myToggles }: any) => {
 
                 <Text style={styles.createLabel}>제목</Text>
                 <View style={styles.inputWrapper}>
-                  <TextInput 
-                    style={styles.inputBox} 
-                    placeholder="모집 제목을 작성하세요." 
-                    placeholderTextColor="#666666" 
-                    value={createTitle} 
-                    onChangeText={setCreateTitle} 
-                  />
+                  <TextInput style={styles.inputBox} placeholder="모집 제목을 작성하세요." placeholderTextColor="#666666" value={createTitle} onChangeText={setCreateTitle} />
                 </View>
 
                 <Text style={styles.createLabel}>내용</Text>
                 <View style={styles.inputWrapper}>
-                  <TextInput 
-                    style={[styles.inputBox, { minHeight: 45, textAlignVertical: 'top' }]} 
-                    placeholder="모집 내용을 입력하세요." 
-                    placeholderTextColor="#666666" 
-                    multiline={true} 
-                    value={createDesc} 
-                    onChangeText={setCreateDesc} 
-                  />
+                  <TextInput style={[styles.inputBox, { minHeight: 45, textAlignVertical: 'top' }]} placeholder="모집 내용을 입력하세요." placeholderTextColor="#666666" multiline={true} value={createDesc} onChangeText={setCreateDesc} />
                 </View>
 
                 <View style={styles.rowWrapper}>
                   <View style={styles.halfField}>
                     <Text style={styles.createLabel}>날짜</Text>
                     <View style={styles.inputWrapper}>
-                      <TextInput 
-                        style={styles.inputBox} 
-                        placeholder="YYYY/MM/DD" 
-                        placeholderTextColor="#666666" 
-                        value={createDate} 
-                        onChangeText={handleDateChange} 
-                        keyboardType="numeric" 
-                        maxLength={10} 
-                      />
+                      <TextInput style={styles.inputBox} placeholder="YYYY/MM/DD" placeholderTextColor="#666666" value={createDate} onChangeText={handleDateChange} keyboardType="numeric" maxLength={10} />
                     </View>
                   </View>
                   <View style={styles.halfField}>
                     <Text style={styles.createLabel}>시간</Text>
                     <View style={styles.inputWrapper}>
-                      <TextInput 
-                        style={styles.inputBox} 
-                        placeholder="00:00" 
-                        placeholderTextColor="#666666" 
-                        value={createTime} 
-                        onChangeText={handleTimeChange} 
-                        keyboardType="numeric" 
-                        maxLength={5} 
-                      />
+                      <TextInput style={styles.inputBox} placeholder="00:00" placeholderTextColor="#666666" value={createTime} onChangeText={handleTimeChange} keyboardType="numeric" maxLength={5} />
                     </View>
                   </View>
                 </View>
 
                 <Text style={styles.createLabel}>모집인원</Text>
                 <View style={styles.counterRow}>
-                  <TouchableOpacity style={styles.counterBtn} onPress={() => adjustPeople(-1)}>
-                    <Text style={styles.counterBtnText}>-</Text>
-                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.counterBtn} onPress={() => adjustPeople(-1)}><Text style={styles.counterBtnText}>-</Text></TouchableOpacity>
                   <View style={styles.counterInputWrapper}>
-                    <TextInput 
-                      style={styles.counterInput} 
-                      value={createPeople} 
-                      onChangeText={handlePeopleChange} 
-                      onBlur={handlePeopleBlur}
-                      keyboardType="numeric" 
-                    />
+                    <TextInput style={styles.counterInput} value={createPeople} onChangeText={handlePeopleChange} onBlur={handlePeopleBlur} keyboardType="numeric" />
                     <Text style={styles.counterUnit}>명</Text>
                   </View>
-                  <TouchableOpacity style={styles.counterBtn} onPress={() => adjustPeople(1)}>
-                    <Text style={styles.counterBtnText}>+</Text>
-                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.counterBtn} onPress={() => adjustPeople(1)}><Text style={styles.counterBtnText}>+</Text></TouchableOpacity>
                 </View>
 
                 {createCategory === '아웃도어' && (
@@ -417,13 +555,7 @@ const CommunityScreen = ({ myProfile, myToggles }: any) => {
                     <View style={styles.innerDivider} />
                     <Text style={styles.createLabel}>장소정보</Text>
                     <View style={styles.inputWrapper}>
-                      <TextInput 
-                        style={styles.inputBox} 
-                        placeholder="위치" 
-                        placeholderTextColor="#666666" 
-                        value={createLocation} 
-                        onChangeText={setCreateLocation} 
-                      />
+                      <TextInput style={styles.inputBox} placeholder="위치" placeholderTextColor="#666666" value={createLocation} onChangeText={setCreateLocation} />
                     </View>
                   </>
                 )}
@@ -471,15 +603,12 @@ const styles = StyleSheet.create({
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   profileRow: { flexDirection: 'row', alignItems: 'center' },
   profileImg: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#444444', marginRight: 10 },
-  textProfileImg: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#444444', marginRight: 10, justifyContent: 'center', alignItems: 'center' },
-  textProfileText: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
   authorText: { color: '#cccccc', fontSize: 14, fontWeight: '600' },
   
-  // 💡 버튼 스타일 추가 (참여 / 취소)
   joinButton: { backgroundColor: '#A1BE44', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 },
   joinButtonText: { color: '#000000', fontSize: 14, fontWeight: 'bold' },
-  cancelButton: { backgroundColor: '#333333' }, // 취소하기 버튼 배경 (어두운 회색)
-  cancelButtonText: { color: '#ffffff' }, // 취소하기 버튼 글씨 (흰색)
+  cancelButton: { backgroundColor: '#333333' }, 
+  cancelButtonText: { color: '#ffffff' }, 
   
   fab: { position: 'absolute', right: 20, bottom: 20, width: 60, height: 60, borderRadius: 30, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', elevation: 5 },
   fabText: { color: '#000000', fontSize: 32, marginTop: -4 },

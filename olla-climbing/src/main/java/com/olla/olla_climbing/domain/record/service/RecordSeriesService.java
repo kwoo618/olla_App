@@ -35,11 +35,10 @@ public class RecordSeriesService {
         for (int i = 0; i < sequence.size(); i++) {
             Difficulty difficulty = sequence.get(i);
             int baseScore = difficulty.getBaseScore();
-            double multiplier = 1.0 + (i * 0.1); // 순서는 0번 인덱스부터 시작하므로 그대로 i 사용
+            double multiplier = 1.0 + (i * 0.1); 
             calculatedTotalScore += (baseScore * multiplier);
         }
 
-        // 소수점 첫째 자리까지만 유지되도록 반올림
         calculatedTotalScore = Math.round(calculatedTotalScore * 10.0) / 10.0;
 
         RecordSeries record = RecordSeries.builder()
@@ -49,11 +48,15 @@ public class RecordSeriesService {
                 .recordDate(request.getRecordDate())
                 .build();
 
+        // (동철 수정) 1. 기록을 한 번만 저장
         RecordSeries savedRecord = recordSeriesRepository.save(record);
 
+        // (동철 수정) 2. 에러 해결: 기존 메서드 사양에 맞춰 인자를 2개(member, score)로 수정
+        // 💡 주의: 이 메서드가 내부에서 'SERIES' 타입으로 저장하고 있는지 확인이 필요합니다.
         seriesRankingService.updateBeginnerSeriesRanking(member, savedRecord.getTotalScore());
 
-        return RecordSeriesResponse.from(recordSeriesRepository.save(record));
+        // (동철 수정) 3. 중복 저장 제거 및 savedRecord 반환
+        return RecordSeriesResponse.from(savedRecord);
     }
 
     @Transactional(readOnly = true)
