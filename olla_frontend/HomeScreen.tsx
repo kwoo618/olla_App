@@ -27,7 +27,7 @@ const HomeScreen = ({ navigation }: any) => {
   const [userStats, setUserStats] = useState({
     monthlyVisits: 0,        
     difficultyColor: '없음', 
-    difficultyType: '', // 💡 초기 타입을 빈 문자열로 변경
+    difficultyType: '',
     enduranceRank: 0,        
     enduranceMinutes: 0,     
     enduranceSeconds: 0,     
@@ -305,116 +305,118 @@ const HomeScreen = ({ navigation }: any) => {
   };
 
   return (
-    <SafeAreaView style={styles.background}>
-      <ScrollView ref={scrollViewRef} showsVerticalScrollIndicator={false}>
-        <View style={styles.scrollContent}>
-          
-          <TouchableOpacity style={styles.noticeCard} onPress={() => handlePopupPress('공지사항')}>
-            <View style={styles.noticeHeaderRow}>
-               <View style={styles.noticeBadge}><Text style={styles.noticeBadgeText}>중요</Text></View>
-               <Text style={styles.noticeHeadline} numberOfLines={1}>{notice.title}</Text>
-            </View>
-            <Text style={styles.noticeBody} numberOfLines={1}>{notice.content}</Text>
+    <SafeAreaView style={styles.background} edges={['top', 'left', 'right']}>
+      {/* 💡 View를 제거하고 ScrollView의 contentContainerStyle로 병합하여 스크롤 잘림 문제 해결 */}
+      <ScrollView 
+        ref={scrollViewRef} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <TouchableOpacity style={styles.noticeCard} onPress={() => handlePopupPress('공지사항')}>
+          <View style={styles.noticeHeaderRow}>
+             <View style={styles.noticeBadge}><Text style={styles.noticeBadgeText}>중요</Text></View>
+             <Text style={styles.noticeHeadline} numberOfLines={1}>{notice.title}</Text>
+          </View>
+          <Text style={styles.noticeBody} numberOfLines={1}>{notice.content}</Text>
+        </TouchableOpacity>
+
+        <View style={styles.row}>
+          <TouchableOpacity style={styles.QRCardCentered} onPress={() => handlePopupPress('QR')}>
+            <Image source={require('./assets/QR.png')} style={styles.largeIcon} />
+            {/* 💡 좁은 화면에서 글씨 자동 축소 */}
+            <Text style={styles.cardTitleCentered} numberOfLines={1} adjustsFontSizeToFit>QR 입장</Text>
+            <Text style={styles.microSubTitle}>탭하여 입장</Text>
           </TouchableOpacity>
-
-          <View style={styles.row}>
-            <TouchableOpacity style={styles.QRCardCentered} onPress={() => handlePopupPress('QR')}>
-              <Image source={require('./assets/QR.png')} style={styles.largeIcon} />
-              <Text style={styles.cardTitleCentered}>QR 입장</Text>
-              <Text style={styles.microSubTitle}>탭하여 입장</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.UserCardCentered} onPress={() => handlePopupPress('회원권')}>
-              <View style={[
-                styles.circleGraphDummy, 
-                !hasMembership && { borderColor: '#444444' }
-              ]}>
-                <Text style={[
-                  styles.circleGraphText,
-                  !hasMembership && { color: '#999999', fontSize: 13 }
-                ]}>
-                  {membership.isLoading ? '' : (hasMembership ? `D-${membership.remainingDays}` : '없음')}
-                </Text>
-              </View>
-              <Text style={styles.cardTitleCentered}>회원권</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.unifiedDataFrame}>
-            <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => handlePopupPress('이번달 방문')}>
-              <Text style={styles.microSubTitle}>이번달 방문</Text>
-              <Text style={styles.microValue}>{userStats.monthlyVisits}<Text style={styles.microUnit}>회</Text></Text>
-            </TouchableOpacity>
-            <View style={styles.verticalDivider} />
-            <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => navigation.navigate('Recode', { openSection: 'difficulty' })}>
-              <Text style={styles.microSubTitle}>초보벽 {'\n'}최고 난이도</Text>
-              {/* 💡 텍스트 조건부 렌더링 수정 */}
-              {userStats.difficultyColor === '없음' ? (
-                <Text style={styles.microValuecolor}>미기록</Text>
-              ) : (
-                <>
-                  <Text style={styles.microValuecolor}>{userStats.difficultyColor}</Text>
-                  <Text style={styles.microUnit}>{userStats.difficultyType} <Text style={{color: '#999999'}}>완료</Text></Text>
-                </>
-              )}
-            </TouchableOpacity>
-            <View style={styles.verticalDivider} />
-            <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => handlePopupPress('지구력 랭킹')}>
-              <Text style={styles.microSubTitle}>지구력 랭킹</Text>
-              <Text style={styles.microValue}>{userStats.enduranceRank === 0 ? '-' : userStats.enduranceRank}<Text style={styles.microUnit}>위</Text></Text>
-            </TouchableOpacity>
-            <View style={styles.verticalDivider} />
-            <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => navigation.navigate('Recode', { openSection: 'endurance' })}>
-              <Text style={styles.microSubTitle}>지구력 {'\n'}최고 기록</Text>
-              <Text style={styles.microValue}>{userStats.enduranceMinutes}<Text style={styles.microUnit}>분 </Text>{userStats.enduranceSeconds}<Text style={styles.microUnit}>초</Text></Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.calendarCard}>
-            <View style={styles.calendarHeader}>
-              <TouchableOpacity onPress={() => changeMonth(-1)} style={styles.monthArrow}><Text style={styles.arrowText}>{"<"}</Text></TouchableOpacity>
-              <Text style={styles.calendarMonthText}>{currentYear}년 {currentMonth + 1}월</Text>
-              <TouchableOpacity onPress={() => changeMonth(1)} style={styles.monthArrow}><Text style={styles.arrowText}>{">"}</Text></TouchableOpacity>
+          
+          <TouchableOpacity style={styles.UserCardCentered} onPress={() => handlePopupPress('회원권')}>
+            <View style={[
+              styles.circleGraphDummy, 
+              !hasMembership && { borderColor: '#444444' }
+            ]}>
+              <Text style={[
+                styles.circleGraphText,
+                !hasMembership && { color: '#999999', fontSize: 13 }
+              ]} numberOfLines={1} adjustsFontSizeToFit>
+                {membership.isLoading ? '' : (hasMembership ? `D-${membership.remainingDays}` : '없음')}
+              </Text>
             </View>
-            <View style={styles.weekRow}>
-              {weekDays.map((day, index) => (<Text key={index} style={[styles.weekDayText, index === 0 && { color: '#FF6B6B' }]}>{day}</Text>))}
-            </View>
-            <View style={styles.daysGrid}>
-              {days.map((day, index) => {
-                const isToday = day !== null && today.getDate() === day && today.getMonth() === currentMonth && today.getFullYear() === currentYear;
-                const isSelected = selectedFullDate !== null && day !== null && selectedFullDate.getDate() === day && selectedFullDate.getMonth() === currentMonth && selectedFullDate.getFullYear() === currentYear;
-                
-                const isAttended = day !== null && (attendedDates || []).includes(day);
-                
-                return (
-                  <TouchableOpacity key={index} style={styles.dayCell} disabled={!day} onPress={() => day && onDateClick(day)}>
-                    {day ? (
-                      <View style={[
-                        styles.dayCircle, 
-                        isToday && styles.todayCircle, 
-                        isSelected && !isToday && styles.selectedCircle,
-                        isAttended && !isToday && !isSelected && styles.attendedCircle
+            <Text style={styles.cardTitleCentered} numberOfLines={1} adjustsFontSizeToFit>회원권</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.unifiedDataFrame}>
+          <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => handlePopupPress('이번달 방문')}>
+            <Text style={styles.microSubTitle}>이번달 방문</Text>
+            <Text style={styles.microValue} numberOfLines={1} adjustsFontSizeToFit>{userStats.monthlyVisits}<Text style={styles.microUnit}>회</Text></Text>
+          </TouchableOpacity>
+          <View style={styles.verticalDivider} />
+          <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => navigation.navigate('Recode', { openSection: 'difficulty' })}>
+            <Text style={styles.microSubTitle}>초보벽 {'\n'}최고 난이도</Text>
+            {userStats.difficultyColor === '없음' ? (
+              <Text style={styles.microValuecolor} numberOfLines={1} adjustsFontSizeToFit>미기록</Text>
+            ) : (
+              <>
+                <Text style={styles.microValuecolor} numberOfLines={1} adjustsFontSizeToFit>{userStats.difficultyColor}</Text>
+                <Text style={styles.microUnit}>{userStats.difficultyType} <Text style={{color: '#999999'}}>완료</Text></Text>
+              </>
+            )}
+          </TouchableOpacity>
+          <View style={styles.verticalDivider} />
+          <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => handlePopupPress('지구력 랭킹')}>
+            <Text style={styles.microSubTitle}>지구력 랭킹</Text>
+            <Text style={styles.microValue} numberOfLines={1} adjustsFontSizeToFit>{userStats.enduranceRank === 0 ? '-' : userStats.enduranceRank}<Text style={styles.microUnit}>위</Text></Text>
+          </TouchableOpacity>
+          <View style={styles.verticalDivider} />
+          <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => navigation.navigate('Recode', { openSection: 'endurance' })}>
+            <Text style={styles.microSubTitle}>지구력 {'\n'}최고 기록</Text>
+            <Text style={styles.microValue} numberOfLines={1} adjustsFontSizeToFit>{userStats.enduranceMinutes}<Text style={styles.microUnit}>분 </Text>{userStats.enduranceSeconds}<Text style={styles.microUnit}>초</Text></Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.calendarCard}>
+          <View style={styles.calendarHeader}>
+            <TouchableOpacity onPress={() => changeMonth(-1)} style={styles.monthArrow}><Text style={styles.arrowText}>{"<"}</Text></TouchableOpacity>
+            <Text style={styles.calendarMonthText}>{currentYear}년 {currentMonth + 1}월</Text>
+            <TouchableOpacity onPress={() => changeMonth(1)} style={styles.monthArrow}><Text style={styles.arrowText}>{">"}</Text></TouchableOpacity>
+          </View>
+          <View style={styles.weekRow}>
+            {weekDays.map((day, index) => (<Text key={index} style={[styles.weekDayText, index === 0 && { color: '#FF6B6B' }]}>{day}</Text>))}
+          </View>
+          <View style={styles.daysGrid}>
+            {days.map((day, index) => {
+              const isToday = day !== null && today.getDate() === day && today.getMonth() === currentMonth && today.getFullYear() === currentYear;
+              const isSelected = selectedFullDate !== null && day !== null && selectedFullDate.getDate() === day && selectedFullDate.getMonth() === currentMonth && selectedFullDate.getFullYear() === currentYear;
+              
+              const isAttended = day !== null && (attendedDates || []).includes(day);
+              
+              return (
+                <TouchableOpacity key={index} style={styles.dayCell} disabled={!day} onPress={() => day && onDateClick(day)}>
+                  {day ? (
+                    <View style={[
+                      styles.dayCircle, 
+                      isToday && styles.todayCircle, 
+                      isSelected && !isToday && styles.selectedCircle,
+                      isAttended && !isToday && !isSelected && styles.attendedCircle
+                    ]}>
+                      <Text style={[
+                        styles.dayText, 
+                        isToday && styles.todayText, 
+                        isSelected && !isToday && styles.selectedText,
+                        isAttended && !isToday && !isSelected && styles.attendedText, 
+                        index % 7 === 0 && !isToday && !isSelected && !isAttended && styles.sundayText
                       ]}>
-                        <Text style={[
-                          styles.dayText, 
-                          isToday && styles.todayText, 
-                          isSelected && !isToday && styles.selectedText,
-                          isAttended && !isToday && !isSelected && styles.attendedText, 
-                          index % 7 === 0 && !isToday && !isSelected && !isAttended && styles.sundayText
-                        ]}>
-                          {day}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+                        {day}
+                      </Text>
+                    </View>
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
       </ScrollView>
 
-      {/* 모달 부분은 동일하므로 생략 */}
+      {/* 모달 부분 */}
       <Modal visible={activeModal !== null} animationType="fade" transparent={true} onRequestClose={closeModal}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeModal}>
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: slideAnim }] }]}>
@@ -474,7 +476,7 @@ const HomeScreen = ({ navigation }: any) => {
                       <Text style={[
                         styles.memHalfValueGreen,
                         !hasMembership && { color: '#999999', fontSize: 16 }
-                      ]}>
+                      ]} numberOfLines={1} adjustsFontSizeToFit>
                         {hasMembership ? `${membership.remainingDays}일` : '구매 필요'}
                       </Text>
                     </View>
@@ -483,7 +485,7 @@ const HomeScreen = ({ navigation }: any) => {
                       <Text style={[
                         styles.memHalfValueWhite, 
                         !hasMembership && { fontSize: 16, color: '#FF6B6B' }
-                      ]}>
+                      ]} numberOfLines={1} adjustsFontSizeToFit>
                         {hasMembership ? membership.status : '구매 필요'}
                       </Text>
                     </View>
@@ -503,7 +505,10 @@ const styles = StyleSheet.create({
   topNav: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, height: 60 },
   logoText: { fontSize: 28, fontWeight: '900', color: '#A1BE44' },
   topIcon: { width: 24, height: 24, resizeMode: 'contain' },
-  scrollContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 20 },
+  
+  // 💡 수정됨: iOS 하단 인디케이터에 가려지지 않게 여백(paddingBottom)을 충분히 주고, 공간을 다 채우도록 flexGrow 추가
+  scrollContent: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 60 },
+  
   noticeCard: { width: '100%', backgroundColor: '#2A2A2A', paddingVertical: 18, paddingHorizontal: 20, borderRadius: 12, marginBottom: 20 },
   noticeHeadline: { color: '#ffffff', fontSize: 16, fontWeight: '600', marginBottom: 6 },
   noticeBody: { color: '#999999', fontSize: 13, fontWeight: '400' },

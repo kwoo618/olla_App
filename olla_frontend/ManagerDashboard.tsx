@@ -43,7 +43,8 @@ const ManagerDashboard = () => {
               <Text style={styles.subText}>010-1234-5678</Text>
             </View>
             <View style={[styles.badge, { backgroundColor: 'rgba(161, 190, 68, 0.2)' }]}>
-              <Text style={[styles.badgeText, { color: '#A1BE44' }]}>활동중</Text>
+              {/* 💡 활동중 -> 출석으로 텍스트 변경 */}
+              <Text style={[styles.badgeText, { color: '#A1BE44' }]}>출석</Text>
             </View>
           </View>
 
@@ -54,8 +55,8 @@ const ManagerDashboard = () => {
               <Text style={styles.subText}>010-9876-5432</Text>
             </View>
             <View style={[styles.badge, { backgroundColor: 'rgba(142, 142, 142, 0.2)' }]}>
-              {/* 💡 비활중으로 텍스트 변경 */}
-              <Text style={[styles.badgeText, { color: '#8E8E8E' }]}>비활중</Text>
+              {/* 💡 비활중 -> 미출석으로 텍스트 변경 */}
+              <Text style={[styles.badgeText, { color: '#8E8E8E' }]}>미출석</Text>
             </View>
           </View>
         </View>
@@ -234,15 +235,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
-  // 💡 상태 표시 배지 디자인 수정 (좌우 호, 위아래 직선)
+  // 💡 상태 표시 배지 디자인 수정 (좌우 호, 위아래 직선 + 고정 길이)
   badge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 20, // 높이의 절반 이상을 주어 알약 형태(Pill) 생성
+    width: 65,            // 💡 고정 너비를 주어서 글자 수와 상관없이 길이를 통일합니다!
+    paddingVertical: 5,   // 위아래 여백
+    alignItems: 'center', // 💡 글씨를 도형의 정중앙에 오도록 맞춥니다.
+    borderRadius: 20,     // 알약 형태(Pill) 생성
   },
   badgeText: {
     fontSize: 12,
     fontWeight: 'bold',
+    textAlign: 'center',  // 텍스트 중앙 정렬
   },
 
   // 💡 공지사항 리스트 아이템 및 우측 버튼 레이아웃 구조

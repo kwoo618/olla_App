@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, StatusBar, Modal } from 'react-native';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -62,6 +62,9 @@ const AppContent = () => {
   const insets = useSafeAreaInsets(); 
   const [routeName, setRouteName] = useState<string>('');
 
+  // 💡 관리자 종료 모달 상태 추가
+  const [isExitModalVisible, setExitModalVisible] = useState(false);
+
   // --- 기존 데이터 유지 ---
   const [profileData, setProfileData] = useState({ name: '권클라이밍', phone: '010-1234-5678', age: '25', height: '175', weight: '70', arm: '180', shoe: '260' });
   const [profileToggles, setProfileToggles] = useState({ showName: true, showPhone: false, showAge: true, showHeight: true, showWeight: true, showArm: true, showShoe: true });
@@ -95,7 +98,7 @@ const AppContent = () => {
         onReady={() => setRouteName(navigationRef.getCurrentRoute()?.name || '')} 
         onStateChange={() => setRouteName(navigationRef.getCurrentRoute()?.name || '')}
       >
-        {/* 상단 배너 높이 최적화 */}
+        {/* 상단 배너 */}
         {shouldShowNav && (
           <View style={[styles.topNav, { paddingTop: Math.max(insets.top, 10) }]}>
             <View style={styles.topNavInner}>
@@ -112,9 +115,10 @@ const AppContent = () => {
                     <Text style={styles.logoText}>olla</Text>
                     <Text style={styles.adminSubText}>관리자</Text>
                   </View>
-                  <TouchableOpacity style={styles.adminExitBtn} onPress={() => navigationRef.navigate('MY')}>
+                  {/* 💡 관리자 종료 버튼 누르면 모달창 띄우기 */}
+                  <TouchableOpacity style={styles.adminExitBtn} onPress={() => setExitModalVisible(true)}>
                     <Image source={require('./assets/EXIT.png')} style={styles.adminExitIcon} />
-                    <Text style={styles.adminExitText}>종료</Text>
+                    <Text style={styles.adminExitText}>관리자 모드 종료</Text>
                   </TouchableOpacity>
                 </>
               )}
@@ -123,7 +127,7 @@ const AppContent = () => {
         )}
 
         <View style={styles.mainContent}>
-          <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+          <Stack.Navigator initialRouteName="ManagerDashboard" screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Signup" component={SignupScreen} />
             <Stack.Screen name="PersonalInfo" component={PersonalScreen} />
@@ -165,6 +169,33 @@ const AppContent = () => {
           </View>
         )}
       </NavigationContainer>
+
+      {/* 💡 관리자 모드 종료 확인 모달 추가 */}
+      <Modal visible={isExitModalVisible} animationType="fade" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.deleteModalBox}>
+            <Text style={styles.modalTitle}>관리자 모드를 종료하시겠습니까?</Text>
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity 
+                style={styles.btnYes} 
+                onPress={() => {
+                  setExitModalVisible(false); // 모달 닫기
+                  navigationRef.navigate('MY'); // MY 화면으로 이동 (종료)
+                }}
+              >
+                <Text style={styles.btnTextBlack}>예</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.btnNo} 
+                onPress={() => setExitModalVisible(false)} // 취소 시 모달만 닫기
+              >
+                <Text style={styles.btnTextWhite}>아니오</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 };
@@ -182,34 +213,41 @@ const styles = StyleSheet.create({
   mainContent: { flex: 1 },
   topNav: { backgroundColor: '#1A1A1A', borderBottomWidth: 0.5, borderBottomColor: '#222' },
   topNavInner: { 
-    height: 50, // 60에서 50으로 축소 (슬림한 배너)
+    height: 50, 
     flexDirection: 'row', 
     justifyContent: 'space-between', 
     alignItems: 'center', 
     paddingHorizontal: 20 
   },
-  logoText: { fontSize: 24, fontWeight: '900', color: '#A1BE44' }, // 로고 크기 살짝 축소
-  topIcon: { width: 20, height: 20, resizeMode: 'contain' }, // 아이콘 크기 살짝 축소
+  logoText: { fontSize: 24, fontWeight: '900', color: '#A1BE44' }, 
+  topIcon: { width: 20, height: 20, resizeMode: 'contain' }, 
   adminLogoContainer: { flexDirection: 'column' },
   adminSubText: { color: '#999999', fontSize: 9, fontWeight: 'bold', marginTop: -3 },
+  
+  // 버튼 디자인
   adminExitBtn: { 
     flexDirection: 'row', 
     alignItems: 'center', 
     backgroundColor: '#331111', 
-    paddingHorizontal: 8, 
-    paddingVertical: 5, 
-    borderRadius: 6 
+    paddingHorizontal: 14, 
+    paddingVertical: 8,  
+    borderRadius: 8 
   },
-  adminExitIcon: { width: 10, height: 10, tintColor: '#FF4D4D', marginRight: 4 },
-  adminExitText: { color: '#FF4D4D', fontSize: 10, fontWeight: 'bold' },
-  bottomNav: { 
-    flexDirection: 'row', 
-    backgroundColor: '#111111', 
-    borderTopWidth: 1, 
-    borderTopColor: '#222222', 
-    paddingTop: 8 
-  },
+  adminExitIcon: { width: 14, height: 14, tintColor: '#FF4D4D', marginRight: 6 },
+  adminExitText: { color: '#FF4D4D', fontSize: 13, fontWeight: 'bold' },
+  
+  bottomNav: { flexDirection: 'row', backgroundColor: '#111111', borderTopWidth: 1, borderTopColor: '#222222', paddingTop: 8 },
   bottomNavItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   navIcon: { width: 20, height: 20, marginBottom: 3, resizeMode: 'contain' },
   bottomNavText: { fontSize: 9, color: '#7D7D7D' },
+
+  // 💡 모달창 스타일 (제공해주신 코드 그대로 적용 및 버튼 스타일 추가)
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  deleteModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
+  modalTitle: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 25 },
+  modalBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  btnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
+  btnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
+  btnTextBlack: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  btnTextWhite: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
 });

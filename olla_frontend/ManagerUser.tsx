@@ -3,10 +3,12 @@ import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, 
   ScrollView, Image, Modal, KeyboardAvoidingView, Platform 
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // 💡 App.tsx에서 users와 setUsers를 받아옵니다.
 const ManagerUser = ({ users, setUsers }: any) => {
+  const insets = useSafeAreaInsets();
+
   const [searchQuery, setSearchQuery] = useState('');
   
   const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
@@ -47,7 +49,7 @@ const ManagerUser = ({ users, setUsers }: any) => {
       id: Date.now(),
       name: newName,
       phone: newPhone,
-      status: '비활중',
+      status: '미출석', // 💡 새로 추가된 회원은 기본적으로 '미출석' 상태
       ticket: null // 새로 추가된 회원은 티켓이 없음
     };
     setUsers([...users, newUser]);
@@ -82,7 +84,7 @@ const ManagerUser = ({ users, setUsers }: any) => {
   const isFormValid = newName && newGender && newBirth.length === 10 && newPhone.length >= 12;
 
   return (
-    <SafeAreaView style={styles.background} edges={[]}>
+    <SafeAreaView style={styles.background} edges={['top', 'left', 'right']}>
       <View style={styles.searchContainer}>
         <View style={styles.searchBox}>
           <Text style={styles.searchIcon}>🔎</Text>
@@ -93,12 +95,16 @@ const ManagerUser = ({ users, setUsers }: any) => {
       <View style={styles.tableHeader}>
         <Text style={[styles.headerText, styles.colName]}>회원 정보</Text>
         <Text style={[styles.headerText, styles.colPhone, { textAlign: 'center' }]}>연락처</Text>
-        <Text style={[styles.headerText, styles.colStatus, { textAlign: 'center' }]}>현재 상태</Text>
+        {/* 💡 헤더 텍스트 변경: 현재 상태 -> 당일 출석 */}
+        <Text style={[styles.headerText, styles.colStatus, { textAlign: 'center' }]}>당일 출석</Text>
         <Text style={[styles.headerText, styles.colAction, { textAlign: 'center' }]}>삭제</Text>
       </View>
       <View style={styles.headerDivider} />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.listContainer}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={[styles.listContainer, { paddingBottom: Math.max(insets.bottom + 100, 100) }]}
+      >
         {filteredAndSortedUsers.length === 0 ? (
           <Text style={styles.emptyText}>검색 결과가 없습니다.</Text>
         ) : (
@@ -107,8 +113,11 @@ const ManagerUser = ({ users, setUsers }: any) => {
               <Text style={[styles.rowTextBold, styles.colName]} numberOfLines={1}>{user.name}</Text>
               <Text style={[styles.rowText, styles.colPhone, { textAlign: 'center' }]}>{user.phone}</Text>
               <View style={[styles.colStatus, styles.centerAlign]}>
-                <View style={[styles.badge, user.status === '활동중' ? styles.badgeActive : styles.badgeInactive]}>
-                  <Text style={user.status === '활동중' ? styles.badgeTextActive : styles.badgeTextInactive}>{user.status}</Text>
+                {/* 💡 활동중 -> 출석으로 판단 기준 변경 */}
+                <View style={[styles.badge, user.status === '출석' || user.status === '활동중' ? styles.badgeActive : styles.badgeInactive]}>
+                  <Text style={user.status === '출석' || user.status === '활동중' ? styles.badgeTextActive : styles.badgeTextInactive}>
+                    {user.status === '활동중' ? '출석' : (user.status === '비활중' ? '미출석' : user.status)}
+                  </Text>
                 </View>
               </View>
               <View style={[styles.colAction, styles.centerAlign]}>
@@ -121,11 +130,15 @@ const ManagerUser = ({ users, setUsers }: any) => {
         )}
       </ScrollView>
 
-      <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={() => setAddModalVisible(true)}>
+      <TouchableOpacity 
+        style={[styles.fab, { bottom: Math.max(insets.bottom + 30, 30) }]} 
+        activeOpacity={0.8} 
+        onPress={() => setAddModalVisible(true)}
+      >
         <Text style={styles.fabText}>+ 등록</Text>
       </TouchableOpacity>
 
-      {/* 모달 영역 생략 (이전 코드와 동일하므로 UI만 유지) */}
+      {/* 모달 영역 */}
       <Modal visible={isDeleteModalVisible} animationType="fade" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.deleteModalBox}>
@@ -181,7 +194,7 @@ const styles = StyleSheet.create({
   tableHeader: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 5 },
   headerText: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
   headerDivider: { height: 1, backgroundColor: '#333333', marginBottom: 10 },
-  listContainer: { paddingBottom: 100 },
+  listContainer: { flexGrow: 1 },
   tableRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#212121', borderRadius: 12, paddingVertical: 16, paddingHorizontal: 5, marginBottom: 10, borderWidth: 1, borderColor: '#2A2A2A' },
   rowTextBold: { color: '#ffffff', fontSize: 15, fontWeight: 'bold' },
   rowText: { color: '#CCCCCC', fontSize: 14 },
@@ -191,11 +204,14 @@ const styles = StyleSheet.create({
   colPhone: { flex: 3 },
   colStatus: { flex: 2 },
   colAction: { flex: 1 },
-  badge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  
+  // 💡 배지 너비 고정(width: 65) 및 가운데 정렬로 통일
+  badge: { width: 65, paddingVertical: 6, borderRadius: 20, alignItems: 'center' },
   badgeActive: { backgroundColor: 'rgba(161, 190, 68, 0.2)' },
   badgeInactive: { backgroundColor: 'rgba(142, 142, 142, 0.2)' },
-  badgeTextActive: { color: '#A1BE44', fontSize: 12, fontWeight: 'bold' },
-  badgeTextInactive: { color: '#8E8E8E', fontSize: 12, fontWeight: 'bold' },
+  badgeTextActive: { color: '#A1BE44', fontSize: 12, fontWeight: 'bold', textAlign: 'center' },
+  badgeTextInactive: { color: '#8E8E8E', fontSize: 12, fontWeight: 'bold', textAlign: 'center' },
+  
   trashBtn: { padding: 8 },
   trashIcon: { width: 20, height: 20, tintColor: '#FF4D4D', resizeMode: 'contain' },
   fab: { position: 'absolute', bottom: 30, right: 20, backgroundColor: '#A1BE44', paddingHorizontal: 20, paddingVertical: 15, borderRadius: 30, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4 },
