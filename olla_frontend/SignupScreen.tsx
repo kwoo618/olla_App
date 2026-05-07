@@ -12,7 +12,7 @@ import {
   Platform,
 } from 'react-native';
 
-const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
+const API_BASE_URL = 'http://192.168.0.8:8080/api/v1';
 
 const SignupScreen = ({ navigation }: any) => {
   const [id, setId] = useState('');

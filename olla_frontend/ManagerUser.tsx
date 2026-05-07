@@ -18,7 +18,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // 💡 API URL 세팅
-const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
+const API_BASE_URL = 'http://192.168.0.8:8080/api/v1';
 const MEMBER_LIST_API = `${API_BASE_URL}/admin/memberships/members`; 
 const OFFLINE_REGISTER_API = `${API_BASE_URL}/admin/members/offline`; 
 const MEMBER_DELETE_API = `${API_BASE_URL}/admin/members`; 

@@ -47,6 +47,7 @@ if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   include("C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/x86/rnasyncstorage_autolinked_build/cmake_install.cmake")
   include("C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/x86/safeareacontext_autolinked_build/cmake_install.cmake")
   include("C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/x86/rnscreens_autolinked_build/cmake_install.cmake")
+  include("C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/x86/rnsvg_autolinked_build/cmake_install.cmake")
 
 endif()
 

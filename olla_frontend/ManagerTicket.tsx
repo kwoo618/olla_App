@@ -221,7 +221,7 @@ const ManagerTicket = ({ users = [], setUsers }: any) => {
                   }}
                 >
                   <Image 
-                    source={item.status === '정지해제' ? require('./assets/stop.png') : require('./assets/Play.png')} 
+                    source={item.status === '정지해제' ? require('./assets/stop.png') : require('./assets/play.png')} 
                     style={[styles.actionIcon, item.status === '일시정지' && { tintColor: '#8E8E8E' }]} 
                   />
                 </TouchableOpacity>

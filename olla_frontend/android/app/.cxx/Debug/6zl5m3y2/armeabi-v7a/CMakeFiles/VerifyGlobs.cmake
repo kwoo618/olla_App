@@ -137,6 +137,43 @@ if(NOT "${NEW_GLOB}" STREQUAL "${OLD_GLOB}")
   file(TOUCH_NOCREATE "C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/armeabi-v7a/CMakeFiles/cmake.verify_globs")
 endif()
 
+# rnsvg_SRCS at C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-svg/android/src/main/jni/CMakeLists.txt:10 (file)
+file(GLOB NEW_GLOB LIST_DIRECTORIES true "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-svg/android/src/main/jni/*.cpp")
+set(OLD_GLOB
+  "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-svg/android/src/main/jni/rnsvg.cpp"
+  )
+if(NOT "${NEW_GLOB}" STREQUAL "${OLD_GLOB}")
+  message("-- GLOB mismatch!")
+  file(TOUCH_NOCREATE "C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/armeabi-v7a/CMakeFiles/cmake.verify_globs")
+endif()
+
+# rnsvg_SRCS at C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-svg/android/src/main/jni/CMakeLists.txt:10 (file)
+file(GLOB NEW_GLOB LIST_DIRECTORIES true "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-svg/android/src/main/jni/../../../../common/cpp/react/renderer/components/rnsvg/*.cpp")
+set(OLD_GLOB
+  "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-svg/android/src/main/jni/../../../../common/cpp/react/renderer/components/rnsvg/RNSVGImageShadowNode.cpp"
+  "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-svg/android/src/main/jni/../../../../common/cpp/react/renderer/components/rnsvg/RNSVGImageState.cpp"
+  "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-svg/android/src/main/jni/../../../../common/cpp/react/renderer/components/rnsvg/RNSVGLayoutableShadowNode.cpp"
+  "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-svg/android/src/main/jni/../../../../common/cpp/react/renderer/components/rnsvg/RNSVGShadowNodes.cpp"
+  )
+if(NOT "${NEW_GLOB}" STREQUAL "${OLD_GLOB}")
+  message("-- GLOB mismatch!")
+  file(TOUCH_NOCREATE "C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/armeabi-v7a/CMakeFiles/cmake.verify_globs")
+endif()
+
+# rnsvg_codegen_SRCS at C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-svg/android/src/main/jni/CMakeLists.txt:11 (file)
+file(GLOB NEW_GLOB LIST_DIRECTORIES true "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-svg/android/src/main/jni/../../../build/generated/source/codegen/jni/react/renderer/components/rnsvg/*cpp")
+set(OLD_GLOB
+  "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-svg/android/src/main/jni/../../../build/generated/source/codegen/jni/react/renderer/components/rnsvg/ComponentDescriptors.cpp"
+  "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-svg/android/src/main/jni/../../../build/generated/source/codegen/jni/react/renderer/components/rnsvg/EventEmitters.cpp"
+  "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-svg/android/src/main/jni/../../../build/generated/source/codegen/jni/react/renderer/components/rnsvg/Props.cpp"
+  "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-svg/android/src/main/jni/../../../build/generated/source/codegen/jni/react/renderer/components/rnsvg/ShadowNodes.cpp"
+  "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-svg/android/src/main/jni/../../../build/generated/source/codegen/jni/react/renderer/components/rnsvg/States.cpp"
+  )
+if(NOT "${NEW_GLOB}" STREQUAL "${OLD_GLOB}")
+  message("-- GLOB mismatch!")
+  file(TOUCH_NOCREATE "C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/armeabi-v7a/CMakeFiles/cmake.verify_globs")
+endif()
+
 # override_cpp_SRC at C:/Users/82103/olla_App/olla_frontend/node_modules/react-native/ReactAndroid/cmake-utils/ReactNative-application.cmake:50 (file)
 # input_SRC at C:/Users/82103/olla_App/olla_frontend/node_modules/react-native/ReactAndroid/cmake-utils/ReactNative-application.cmake:55 (file)
 file(GLOB NEW_GLOB LIST_DIRECTORIES true "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native/ReactAndroid/cmake-utils/default-app-setup/*.cpp")
