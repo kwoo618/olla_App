@@ -17,7 +17,7 @@ import java.time.LocalDate;
 public class SignupRequest {
 
     @NotBlank(message = "아이디는 필수 입력입니다.")
-    @jakarta.validation.constraints.Size(min = 4, max = 15, message = "아이디는 4자에서 15자 사이여야 합니다.") // 추가
+    @Pattern(regexp = "^[a-zA-Z0-9]{4,20}$", message = "아이디는 영문, 숫자만 사용하여 4~20자로 입력해주세요.") // 💡 한글 방지 정규식 추가    private String loginId;
     private String loginId;
 
     @NotBlank

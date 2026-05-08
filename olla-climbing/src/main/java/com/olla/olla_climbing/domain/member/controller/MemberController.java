@@ -1,5 +1,6 @@
 package com.olla.olla_climbing.domain.member.controller;
 
+import com.olla.olla_climbing.domain.member.dto.request.FcmTokenRequest;
 import com.olla.olla_climbing.domain.member.dto.response.OtherMemberProfileResponse;
 import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.dto.request.MemberUpdateRequest;
@@ -13,8 +14,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import com.olla.olla_climbing.domain.member.dto.request.AlertUpdateRequest;
-import com.olla.olla_climbing.domain.member.dto.response.AlertResponse;
+import com.olla.olla_climbing.domain.member.dto.request.NotificationUpdateRequest;
+import com.olla.olla_climbing.domain.member.dto.response.NotificationResponse;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
@@ -62,19 +63,22 @@ public class MemberController {
         return ResponseEntity.ok(response);
     }
 
-    @PatchMapping("/me/alert")
-    @Operation(summary = "알림 설정 수정", description = "로그인한 회원의 확장된 알림 설정을 수정합니다.",
+    // 💡 패치 매핑 URL 변경 및 DTO 이름 변경 적용
+    @PatchMapping("/me/notifications/settings")
+    @Operation(summary = "알림 설정 수정", description = "로그인한 회원의 알림 설정을 수정합니다.",
             security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<AlertResponse> updateAlertSettings(@AuthenticationPrincipal Member member, @RequestBody AlertUpdateRequest request) {
+    public ResponseEntity<ApiResponse<NotificationResponse>> updateNotificationSettings(
+            @AuthenticationPrincipal Member member,
+            @RequestBody NotificationUpdateRequest request) {
 
         if (member == null) {
             throw new IllegalArgumentException("로그인 인증 정보가 없습니다.");
         }
 
-        // 서비스에 알림 수정 요청
-        AlertResponse response = memberService.updateAlertSettings(member.getLoginId(), request);
+        // 서비스 이름도 updateNotificationSettings 로 맞춤
+        NotificationResponse response = memberService.updateNotificationSettings(member.getLoginId(), request);
 
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @GetMapping("/{memberId}/profile")
@@ -96,5 +100,15 @@ public class MemberController {
 
         memberService.withdrawMember(member.getLoginId());
         return ResponseEntity.ok(ApiResponse.success("회원 탈퇴가 정상적으로 처리되었습니다."));
+    }
+
+    @PostMapping("/me/fcm-token")
+    @Operation(summary = "FCM 토큰 저장", description = "기기의 FCM 푸시 토큰을 갱신합니다.", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<ApiResponse<String>> updateFcmToken(
+            @AuthenticationPrincipal Member member,
+            @RequestBody FcmTokenRequest request) {
+
+        memberService.updateFcmToken(member.getLoginId(), request.getToken());
+        return ResponseEntity.ok(ApiResponse.success("FCM 토큰이 성공적으로 저장되었습니다."));
     }
 }

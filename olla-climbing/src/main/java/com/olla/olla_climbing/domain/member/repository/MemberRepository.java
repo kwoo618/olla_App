@@ -12,6 +12,8 @@ import org.springframework.data.domain.Pageable;
 // JpaRepository를 상속받으면 기본적인 CRUD 메서드가 자동으로 제공됨 (save, findById, findAll, delete 등)
 public interface MemberRepository extends JpaRepository<Member, Long> {
 
+    boolean existsByEmail(String email);
+
     // 로그인 아이디로 회원을 찾는 메서드
     // SQL: select * from member where login_id = ?
     Optional<Member> findByLoginId(String loginId);
@@ -30,9 +32,6 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
 
     // 삭제되지 않은 회원 중 전화번호로 조회 (중복 가입 방지 및 아이디 찾기용)
     Optional<Member> findByPhoneAndIsDeletedFalse(String phone);
-
-    // 로그인 아이디와 이메일로 회원 찾기 (비밀번호 찾기용)
-    Optional<Member> findByLoginIdAndEmail(String loginId, String email);
 
     // 로그인 아이디로 삭제되지 않은 회원 찾기
     Optional<Member> findByLoginIdAndIsDeletedFalse(String loginId);

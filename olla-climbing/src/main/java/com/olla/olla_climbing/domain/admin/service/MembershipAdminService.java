@@ -3,14 +3,15 @@ package com.olla.olla_climbing.domain.admin.service;
 import com.olla.olla_climbing.domain.admin.dto.request.AdminMemberCreateRequest;
 import com.olla.olla_climbing.domain.admin.dto.response.AdminMemberResponse;
 import com.olla.olla_climbing.domain.admin.dto.response.MembershipResponse;
-import com.olla.olla_climbing.domain.admin.entity.AdminAlert;
+import com.olla.olla_climbing.domain.admin.entity.AdminNotification;
 import com.olla.olla_climbing.domain.admin.entity.Membership;
 import com.olla.olla_climbing.domain.admin.enums.MembershipStatus;
-import com.olla.olla_climbing.domain.admin.repository.AdminAlertRepository;
+import com.olla.olla_climbing.domain.admin.repository.AdminNotificationRepository;
 import com.olla.olla_climbing.domain.admin.repository.MembershipRepository;
 import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.enums.Role;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
+import com.olla.olla_climbing.domain.member.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,34 +31,50 @@ public class MembershipAdminService {
     private final MembershipRepository membershipRepository;
     private final MemberRepository memberRepository;
     private final GoogleSheetsService googleSheetsService;
-    private final AdminAlertRepository adminAlertRepository;
+    private final AdminNotificationRepository adminNotificationRepository;
+    private final NotificationService notificationService;
 
-    // 💡 [복구] 지워졌던 이용권 부여 메서드 복구
     @Transactional
     public void grantMembership(Long memberId, Integer addMonths, Integer addCount, LocalDate startDate) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new IllegalArgumentException("회원을 찾을 수 없습니다."));
 
-        Membership membership;
+        // 기존에 활성화된 회원권이 있는지 찾기
+        Membership activeMembership = membershipRepository.findByMemberIdAndStatusIn(
+                memberId, List.of(MembershipStatus.ACTIVE, MembershipStatus.HOLDING)
+        ).orElse(null);
 
-        if (addMonths != null && addMonths > 0) {
-            membership = Membership.builder()
-                    .member(member)
-                    .startDate(startDate)
-                    .durationMonth(addMonths)
-                    .build();
-        } else if (addCount != null && addCount > 0) {
-            membership = Membership.builder()
-                    .member(member)
-                    .startDate(startDate)
-                    .remainingCount(addCount)
-                    .build();
+        if (activeMembership != null) {
+            // 이미 있으면 새로 만들지 말고 기간/횟수를 연장함
+            if (addMonths != null && addMonths > 0) activeMembership.addDuration(addMonths);
+            if (addCount != null && addCount > 0) activeMembership.addRemainingCount(addCount);
         } else {
-            throw new IllegalArgumentException("기간(개월) 또는 횟수 중 하나를 입력해야 합니다.");
+            // 없으면 새로 생성
+            Membership newMembership;
+            if (addMonths != null && addMonths > 0) {
+                newMembership = Membership.builder()
+                        .member(member)
+                        .startDate(startDate)
+                        .durationMonth(addMonths)
+                        .build();
+            } else if (addCount != null && addCount > 0) {
+                newMembership = Membership.builder()
+                        .member(member)
+                        .startDate(startDate)
+                        .remainingCount(addCount)
+                        .build();
+            } else {
+                throw new IllegalArgumentException("기간(개월) 또는 횟수 중 하나를 입력해야 합니다.");
+            }
+            membershipRepository.save(newMembership);
         }
+    }
 
-        membershipRepository.save(membership);
-        googleSheetsService.syncNewMembership(member, membership);
+    @Transactional
+    public void deleteMembership(Long membershipId) {
+        Membership membership = membershipRepository.findById(membershipId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 이용권입니다."));
+        membership.markAsDeleted();
     }
 
     @Transactional
@@ -140,11 +157,11 @@ public class MembershipAdminService {
         sb.append("\n[3일 뒤 만료: ").append(expiringIn3Days.size()).append("명]\n");
         expiringIn3Days.forEach(m -> sb.append("- ").append(m.getMember().getName()).append("\n"));
 
-        AdminAlert alert = AdminAlert.builder()
+        AdminNotification alert = AdminNotification.builder()
                 .title(today + " 회원권 만료 요약 알림")
                 .content(sb.toString())
                 .build();
 
-        adminAlertRepository.save(alert);
+        adminNotificationRepository.save(alert);
     }
 }

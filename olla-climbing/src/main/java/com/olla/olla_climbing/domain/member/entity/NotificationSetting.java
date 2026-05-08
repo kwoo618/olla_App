@@ -19,75 +19,35 @@ public class NotificationSetting {
     @JoinColumn(name = "member_id")
     private Member member;
 
-    // 1. 마스터 알림 (이게 꺼지면 아래 모든 알림이 안 울림)
+    // 1. 마스터 스위치
     @Column(nullable = false)
-    private boolean isGlobalAlertOn;
+    private boolean isGlobalNotificationOn = true;
 
-    // 2. 회원권 관련 알림
+    // 2. 이용권 만료 관련
     @Column(nullable = false)
-    private boolean isMembershipWeekBeforeAlertOn; // 1주 전
-    @Column(nullable = false)
-    private boolean isMembershipDayBeforeAlertOn;  // 하루 전
-    @Column(nullable = false)
-    private boolean isMembershipExpiredAlertOn;    // 종료 시
+    private boolean isMembershipNotificationOn = true;
 
-    // 3. 커뮤니티 알림
+    // 3. 내 활동 (댓글, 좋아요)
     @Column(nullable = false)
-    private boolean isNoticeAlertOn; // 공지사항
-    @Column(nullable = false)
-    private boolean isCrewParticipantChangeAlertOn; // 모집글 인원 변동
-    @Column(nullable = false)
-    private boolean isCrewMeetingReminderAlertOn; // 운동 모임 리마인드
+    private boolean isActivityNotificationOn = true;
 
-    // 4. 기록 및 랭킹 알림
+    // 4. 모임/크루 (참여, 취소, 리마인드)
     @Column(nullable = false)
-    private boolean isRankingChangeAlertOn; // 순위 변동
+    private boolean isCrewNotificationOn = true;
+
+    // 5. 공지사항 및 이벤트
     @Column(nullable = false)
-    private boolean isWeeklyReportAlertOn;  // 주간 등반 리포트
+    private boolean isNoticeNotificationOn = true;
 
-    // 5. 동기부여(미출석) 알림
-    @Column(nullable = false)
-    private boolean isInactivityAlertOn; // 미출석 알림 ON/OFF
-
-    @Column(nullable = true)
-    private Integer inactivityDays; // 며칠 미출석 시 알릴 것인지 (예: 3일. null이면 작동안함)
-
-    // 생성자 (회원가입 시 초기 세팅)
     public NotificationSetting(Member member) {
         this.member = member;
-        this.isGlobalAlertOn = true;
-
-        // 기본적으로 정보성/활동성 알림은 ON
-        this.isMembershipWeekBeforeAlertOn = true;
-        this.isMembershipDayBeforeAlertOn = true;
-        this.isMembershipExpiredAlertOn = true;
-        this.isNoticeAlertOn = true;
-        this.isCrewParticipantChangeAlertOn = true;
-        this.isCrewMeetingReminderAlertOn = true;
-        this.isRankingChangeAlertOn = true;
-        this.isWeeklyReportAlertOn = true;
-
-        // 동기부여 알림은 사용자가 직접 설정하도록 초기엔 OFF
-        this.isInactivityAlertOn = false;
-        this.inactivityDays = null;
     }
 
-    // 데이터 업데이트 편의 메서드 (null 방어 로직 포함)
-    public void update(Boolean global, Boolean memWeek, Boolean memDay, Boolean memExp,
-                       Boolean notice, Boolean crewPart, Boolean crewRemind,
-                       Boolean rank, Boolean weekly, Boolean inactive, Integer inactiveDays) {
-
-        if (global != null) this.isGlobalAlertOn = global;
-        if (memWeek != null) this.isMembershipWeekBeforeAlertOn = memWeek;
-        if (memDay != null) this.isMembershipDayBeforeAlertOn = memDay;
-        if (memExp != null) this.isMembershipExpiredAlertOn = memExp;
-        if (notice != null) this.isNoticeAlertOn = notice;
-        if (crewPart != null) this.isCrewParticipantChangeAlertOn = crewPart;
-        if (crewRemind != null) this.isCrewMeetingReminderAlertOn = crewRemind;
-        if (rank != null) this.isRankingChangeAlertOn = rank;
-        if (weekly != null) this.isWeeklyReportAlertOn = weekly;
-
-        if (inactive != null) this.isInactivityAlertOn = inactive;
-        if (inactiveDays != null) this.inactivityDays = inactiveDays;
+    public void update(Boolean global, Boolean membership, Boolean activity, Boolean crew, Boolean notice) {
+        if (global != null) this.isGlobalNotificationOn = global;
+        if (membership != null) this.isMembershipNotificationOn = membership;
+        if (activity != null) this.isActivityNotificationOn = activity;
+        if (crew != null) this.isCrewNotificationOn = crew;
+        if (notice != null) this.isNoticeNotificationOn = notice;
     }
 }

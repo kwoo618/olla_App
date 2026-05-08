@@ -25,12 +25,14 @@ public class Membership extends BaseTimeEntity {
     @JoinColumn(name = "member_id")
     private Member member;
 
-    // 💡 [수정] MembershipType 삭제됨 -> 아래 두 변수로 권종 파악
     private Integer durationMonth; // 기간권: 개월 수
     private Integer remainingCount; // 횟수권: 남은 횟수
 
     private LocalDate startDate;
     private LocalDate endDate;
+
+    @Column(nullable = false)
+    private boolean isDeleted = false;
 
     @Enumerated(EnumType.STRING)
     private MembershipStatus status = MembershipStatus.ACTIVE;
@@ -99,4 +101,24 @@ public class Membership extends BaseTimeEntity {
         }
         this.accumulatedVisits++;
     }
+
+    public void markAsDeleted() {
+        this.isDeleted = true;
+    }
+
+    public void addDuration(int addMonths) {
+        this.durationMonth += addMonths;
+        this.endDate = this.endDate.plusMonths(addMonths);
+    }
+    public void addRemainingCount(int addCount) {
+        this.remainingCount += addCount;
+    }
+
+    public void useCount(int deductionCount) {
+        if (this.remainingCount == null || this.remainingCount < deductionCount) {
+            throw new IllegalStateException("잔여 횟수가 부족합니다.");
+        }
+        this.remainingCount -= deductionCount;
+    }
+
 }

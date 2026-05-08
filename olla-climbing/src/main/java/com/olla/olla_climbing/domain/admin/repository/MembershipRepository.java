@@ -18,4 +18,7 @@ public interface MembershipRepository extends JpaRepository<Membership, Long> {
 
     // 특정 날짜(endDate)와 특정 상태(status)를 가진 이용권 목록을 조회하는 메서드
     List<Membership> findByEndDateAndStatus(LocalDate endDate, MembershipStatus status);
+
+    // 활성화된(ACTIVE) 모든 이용권을 리스트로 가져오기 (우선순위 판별용)
+    List<Membership> findAllByMemberIdAndStatusAndIsDeletedFalse(Long memberId, MembershipStatus status);
 }

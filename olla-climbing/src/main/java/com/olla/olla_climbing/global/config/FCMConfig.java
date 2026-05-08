@@ -18,7 +18,7 @@ public class FCMConfig {
     public void init() {
         try {
             // resources/firebase 폴더 안에 키 파일을 넣어야 합니다.
-            InputStream serviceAccount = new ClassPathResource("firebase/firebase-service-account.json").getInputStream();
+            InputStream serviceAccount = new ClassPathResource("/firebase/firebase-service-account.json").getInputStream();
 
             FirebaseOptions options = FirebaseOptions.builder()
                     .setCredentials(GoogleCredentials.fromStream(serviceAccount))

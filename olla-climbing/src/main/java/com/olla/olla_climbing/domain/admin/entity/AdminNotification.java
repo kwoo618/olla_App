@@ -10,7 +10,7 @@ import lombok.NoArgsConstructor;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class AdminAlert extends BaseTimeEntity {
+public class AdminNotification extends BaseTimeEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -25,7 +25,7 @@ public class AdminAlert extends BaseTimeEntity {
     private boolean isRead = false; // 읽음 여부
 
     @Builder
-    public AdminAlert(String title, String content) {
+    public AdminNotification(String title, String content) {
         this.title = title;
         this.content = content;
     }
