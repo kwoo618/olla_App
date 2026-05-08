@@ -12,19 +12,20 @@ import {
   Platform,
 } from 'react-native';
 
-const API_BASE_URL = 'http://172.29.145.90:8080/api/v1';
+const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
 
 const SignupScreen = ({ navigation }: any) => {
   const [id, setId] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [name, setName] = useState('');
-  const [gender, setGender] = useState<'남자' | '여자' | null>(null);
+  const [gender, setGender] = useState<'남' | '여' | null>(null);
   const [birth, setBirth] = useState('');
-  const [email, setEmail] = useState(''); // 필수 사항으로 변경됨
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
 
   const [idError, setIdError] = useState('');
+  const [idSuccess, setIdSuccess] = useState(''); // ✅ 추가: 성공 메시지 상태
   const [passwordError, setPasswordError] = useState('');
   const [passwordConfirmError, setPasswordConfirmError] = useState('');
   const [emailError, setEmailError] = useState('');
@@ -33,10 +34,8 @@ const SignupScreen = ({ navigation }: any) => {
 
   const [isIdChecked, setIsIdChecked] = useState(false);
 
-  // 현재 포커스된 필드 추적용 상태
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
-  // 포커스 이동을 위한 Ref
   const passwordRef = useRef<TextInput>(null);
   const confirmRef = useRef<TextInput>(null);
   const nameRef = useRef<TextInput>(null);
@@ -44,7 +43,6 @@ const SignupScreen = ({ navigation }: any) => {
   const emailRef = useRef<TextInput>(null);
   const phoneRef = useRef<TextInput>(null);
 
-  // 🔐 비밀번호 유효성 검증 함수
   const validatePassword = (pw: string) => {
     setPassword(pw);
     const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/;
@@ -62,7 +60,6 @@ const SignupScreen = ({ navigation }: any) => {
     }
   };
 
-  // 🔐 비밀번호 재입력 검증 함수
   const validatePasswordConfirm = (cf: string) => {
     setPasswordConfirm(cf);
     if (cf !== password) {
@@ -72,7 +69,6 @@ const SignupScreen = ({ navigation }: any) => {
     }
   };
 
-  // 📧 이메일 유효성 검증 함수 (필수)
   const validateEmail = (text: string) => {
     setEmail(text);
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -85,13 +81,10 @@ const SignupScreen = ({ navigation }: any) => {
     }
   };
 
-  // 🎂 생년월일 자동 하이픈 포맷터 및 날짜 유효성 검증 (YYYY-MM-DD)
   const formatBirth = (text: string) => {
-    // 1. 숫자만 추출
     const cleaned = text.replace(/[^0-9]/g, '');
     let formatted = cleaned;
 
-    // 2. 하이픈 추가
     if (cleaned.length > 4 && cleaned.length <= 6) {
       formatted = `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`;
     } else if (cleaned.length > 6) {
@@ -100,49 +93,41 @@ const SignupScreen = ({ navigation }: any) => {
     
     setBirth(formatted);
 
-    // 3. 길이 검증
     if (cleaned.length > 0 && cleaned.length < 8) {
       setBirthError('생년월일 8자리를 모두 입력해주세요.');
       return;
     }
 
-    // 4. 날짜 유효성 검증 로직 (길이가 8자리 일 때)
     if (cleaned.length === 8) {
       const year = parseInt(cleaned.slice(0, 4), 10);
       const month = parseInt(cleaned.slice(4, 6), 10);
       const day = parseInt(cleaned.slice(6, 8), 10);
 
-      // 연도 검증 (예: 1900년 ~ 현재 연도)
       const currentYear = new Date().getFullYear();
       if (year < 1900 || year > currentYear) {
         setBirthError('유효한 연도를 입력해주세요.');
         return;
       }
 
-      // 월 검증 (1 ~ 12)
       if (month < 1 || month > 12) {
         setBirthError('유효한 월(1~12)을 입력해주세요.');
         return;
       }
 
-      // 일 검증 (1 ~ 해당 월의 마지막 일)
-      const daysInMonth = new Date(year, month, 0).getDate(); // 해당 연도/월의 마지막 날짜
+      const daysInMonth = new Date(year, month, 0).getDate();
       if (day < 1 || day > daysInMonth) {
         setBirthError(`유효한 일(1~${daysInMonth})을 입력해주세요.`);
         return;
       }
 
-      // 모든 검증 통과 시 에러 초기화
       setBirthError('');
     } else {
-      // 8자리가 아닐 때 (입력 중이거나 다 지웠을 때) 오류 메시지 초기화
       if (cleaned.length === 0) {
         setBirthError('');
       }
     }
   };
 
-  // 📞 전화번호 자동 하이픈 포맷터
   const formatPhone = (text: string) => {
     const cleaned = text.replace(/[^0-9]/g, '');
     let formatted = cleaned;
@@ -159,14 +144,15 @@ const SignupScreen = ({ navigation }: any) => {
     }
   };
 
-  // 🔍 아이디 중복 확인 연동 (4~15자 제한)
   const checkDuplicateId = async () => {
     if (!id) {
       setIdError('아이디를 먼저 입력해주세요.');
+      setIdSuccess('');
       return;
     }
     if (id.length < 4 || id.length > 15) {
       setIdError('아이디는 4~15자로 입력해주세요.');
+      setIdSuccess('');
       return;
     }
 
@@ -178,10 +164,11 @@ const SignupScreen = ({ navigation }: any) => {
 
       if (isDuplicate) {
         setIdError('이미 사용 중인 아이디입니다.');
+        setIdSuccess(''); // ✅ 성공 메시지 초기화
         setIsIdChecked(false);
       } else {
-        Alert.alert('확인', '사용 가능한 아이디입니다.');
         setIdError('');
+        setIdSuccess('사용 가능한 아이디입니다.'); // ✅ Alert 대신 인라인 성공 메시지
         setIsIdChecked(true);
         passwordRef.current?.focus();
       }
@@ -190,7 +177,6 @@ const SignupScreen = ({ navigation }: any) => {
     }
   };
 
-  // 🚀 다음 단계로 이동
   const handleNextStep = () => {
     if (!isIdChecked) {
       Alert.alert('알림', '아이디 중복 확인을 해주세요.');
@@ -201,13 +187,11 @@ const SignupScreen = ({ navigation }: any) => {
       return;
     }
     
-    // 이메일 유효성 체크 
     if (!email || emailError) {
       Alert.alert('알림', '이메일을 올바르게 입력해주세요.');
       return;
     }
 
-    // 💡 생년월일 에러(birthError)가 있거나 형식이 맞지 않으면 팝업을 띄우고 차단
     if (birthError || birth.length !== 10) {
       Alert.alert('알림', '올바른 생년월일을 입력해주세요. (예: 1999-01-01)');
       return;
@@ -218,7 +202,6 @@ const SignupScreen = ({ navigation }: any) => {
       return;
     }
 
-    // Role은 USER로 고정해서 전송
     navigation.navigate('PersonalInfo', {
       accountData: {
         loginId: id,
@@ -247,7 +230,8 @@ const SignupScreen = ({ navigation }: any) => {
           <View style={[
             styles.inputRow, 
             focusedField === 'id' && styles.focusedInput,
-            idError !== '' && styles.inputRowError
+            idError !== '' && styles.inputRowError,
+            idSuccess !== '' && styles.inputRowSuccess // ✅ 성공 시 초록 테두리
           ]}>
             <TextInput 
               style={styles.inputFlex} 
@@ -268,6 +252,7 @@ const SignupScreen = ({ navigation }: any) => {
                 } else {
                   setIdError('');
                 }
+                setIdSuccess(''); // ✅ 텍스트 변경 시 성공 메시지 초기화
                 setIsIdChecked(false);
               }}
             />
@@ -276,6 +261,7 @@ const SignupScreen = ({ navigation }: any) => {
             </TouchableOpacity>
           </View>
           {idError !== '' && <Text style={styles.errorText}>{idError}</Text>}
+          {idSuccess !== '' && <Text style={styles.successText}>{idSuccess}</Text>}
 
           {/* 2. 비밀번호 */}
           <Text style={styles.middleText}>비밀번호</Text>
@@ -343,20 +329,20 @@ const SignupScreen = ({ navigation }: any) => {
           <Text style={styles.middleText}>성별</Text>
           <View style={styles.genderRow}>
             <TouchableOpacity 
-              style={[styles.genderBtn, gender === '남자' && styles.genderBtnActive]}
-              onPress={() => setGender('남자')}
+              style={[styles.genderBtn, gender === '남' && styles.genderBtnActive]}
+              onPress={() => setGender('남')}
             >
-              <Text style={[styles.genderBtnText, gender === '남자' && styles.genderBtnTextActive]}>남자</Text>
+              <Text style={[styles.genderBtnText, gender === '남' && styles.genderBtnTextActive]}>남자</Text>
             </TouchableOpacity>
             <TouchableOpacity 
-              style={[styles.genderBtn, gender === '여자' && styles.genderBtnActive]}
-              onPress={() => setGender('여자')}
+              style={[styles.genderBtn, gender === '여' && styles.genderBtnActive]}
+              onPress={() => setGender('여')}
             >
-              <Text style={[styles.genderBtnText, gender === '여자' && styles.genderBtnTextActive]}>여자</Text>
+              <Text style={[styles.genderBtnText, gender === '여' && styles.genderBtnTextActive]}>여자</Text>
             </TouchableOpacity>
           </View>
 
-          {/* 💡 생년월일 입력 필드 */}
+          {/* 생년월일 */}
           <Text style={styles.middleText}>생년월일</Text>
           <TextInput 
             ref={birthRef}
@@ -399,7 +385,7 @@ const SignupScreen = ({ navigation }: any) => {
           />
           {phoneError !== '' && <Text style={styles.errorText}>{phoneError}</Text>}
 
-          {/* 이메일 (필수 입력화) */}
+          {/* 이메일 */}
           <Text style={styles.middleText}>이메일</Text>
           <TextInput 
             ref={emailRef}
@@ -446,11 +432,13 @@ const styles = StyleSheet.create({
   duplicateCheckButton: { backgroundColor: '#A1BE44', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 },
   duplicateCheckText: { color: '#000000', fontSize: 12, fontWeight: 'bold' },
   errorText: { color: '#ff4d4d', fontSize: 12, alignSelf: 'flex-start', marginLeft: 5, marginBottom: 10 },
+  successText: { color: '#A1BE44', fontSize: 12, alignSelf: 'flex-start', marginLeft: 5, marginBottom: 10 }, // ✅ 추가
   divider: { height: 1, backgroundColor: '#333333', marginVertical: 15 },
 
   focusedInput: { borderColor: '#A1BE44' }, 
   inputError: { borderColor: '#ff4d4d' },    
   inputRowError: { borderColor: '#ff4d4d' }, 
+  inputRowSuccess: { borderColor: '#A1BE44' }, // ✅ 추가
   
   genderRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
   genderBtn: { flex: 1, backgroundColor: '#2A2A2A', borderWidth: 1, borderColor: '#444444', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginHorizontal: 4 },

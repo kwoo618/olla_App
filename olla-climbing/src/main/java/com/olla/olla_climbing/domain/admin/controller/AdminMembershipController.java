@@ -4,6 +4,7 @@ import com.olla.olla_climbing.domain.admin.dto.response.AdminMemberResponse;
 import com.olla.olla_climbing.domain.admin.dto.request.MembershipGrantRequest;
 import com.olla.olla_climbing.domain.admin.service.MembershipAdminService;
 import com.olla.olla_climbing.domain.member.entity.Member;
+import com.olla.olla_climbing.global.common.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -25,9 +26,9 @@ public class AdminMembershipController {
 
     private final MembershipAdminService membershipAdminService;
 
-    @Operation(summary = "이용권 부여/연장", description = "관리자 권한으로 특정 회원에게 기간권이나 횟수권을 부여합니다.", security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/grant")
-    public ResponseEntity<String> grantMembership(
+    @Operation(summary = "관리자: 이용권 부여", description = "특정 회원에게 이용권을 수동으로 부여합니다.", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<ApiResponse<String>> grantMembership(
             @AuthenticationPrincipal Member admin,
             @Valid @RequestBody MembershipGrantRequest request) {
 
@@ -35,6 +36,7 @@ public class AdminMembershipController {
             throw new IllegalArgumentException("인증 정보가 없습니다.");
         }
 
+        // DTO에서 값을 하나씩 꺼내서 서비스의 파라미터 규격에 맞게 넘겨줍니다.
         membershipAdminService.grantMembership(
                 request.getMemberId(),
                 request.getAddMonths(),
@@ -42,7 +44,7 @@ public class AdminMembershipController {
                 request.getStartDate()
         );
 
-        return ResponseEntity.ok("이용권이 성공적으로 처리되었습니다.");
+        return ResponseEntity.ok(ApiResponse.success("이용권이 성공적으로 부여되었습니다."));
     }
 
     @GetMapping("/members")
@@ -58,15 +60,16 @@ public class AdminMembershipController {
 
     @PatchMapping("/{membershipId}/pause")
     @Operation(summary = "이용권 일시정지", description = "관리자가 회원의 활성화된 이용권을 일시정지합니다.")
-    public ResponseEntity<String> pauseMembership(@PathVariable("membershipId") Long membershipId) {
+    public ResponseEntity<ApiResponse<String>> pauseMembership(@PathVariable("membershipId") Long membershipId) { // 💡 타입 변경
         membershipAdminService.pauseMembership(membershipId);
-        return ResponseEntity.ok("이용권이 성공적으로 일시정지 되었습니다.");
+        return ResponseEntity.ok(ApiResponse.success("이용권이 성공적으로 일시정지 되었습니다.")); // 💡 ApiResponse 적용
     }
+
 
     @PatchMapping("/{membershipId}/unpause")
     @Operation(summary = "이용권 정지 해제", description = "관리자가 일시정지된 이용권을 해제하고 기간을 연장합니다.")
-    public ResponseEntity<String> unpauseMembership(@PathVariable("membershipId") Long membershipId) {
+    public ResponseEntity<ApiResponse<String>> unpauseMembership(@PathVariable("membershipId") Long membershipId) { // 💡 타입 변경
         membershipAdminService.unpauseMembership(membershipId);
-        return ResponseEntity.ok("이용권 일시정지가 해제되었습니다.");
+        return ResponseEntity.ok(ApiResponse.success("이용권이 성공적으로 정지 해제되었습니다.")); // 💡 ApiResponse 적용
     }
 }

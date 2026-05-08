@@ -1,60 +1,99 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  ScrollView, 
+  Image, 
+  Modal, 
+  Animated, 
+  Alert, 
+  ActivityIndicator 
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useIsFocused } from '@react-navigation/native';
 
-// 💡 추후 App.tsx에서 posts 데이터를 통합 관리할 때 대비하여 props로 받습니다.
-const ManagerCommunity = ({ posts: propsPosts, setPosts: propsSetPosts }: any) => {
+// 🔥 API 주소 설정
+const BASE = 'http://192.168.0.23:8080/api/v1/posts';
+const MEMBERS = `${BASE}/members`;
+
+const p = (n: number) => String(n).padStart(2, '0');
+
+const authHeader = async () => {
+  const token = await AsyncStorage.getItem('userToken');
+  return { Authorization: `Bearer ${token}` };
+};
+
+const ManagerCommunity = ({ navigation }: any) => {
+  const isFocused = useIsFocused();
+  const [loading, setLoading] = useState(true);
+  const [posts, setPosts] = useState<any[]>([]);
   const [selectedTab, setSelectedTab] = useState('전체');
   const tabs = ['전체', '센터', '아웃도어'];
 
-  // 임시 더미 데이터 (App.tsx에서 넘겨주지 않았을 경우 사용)
-  const [localPosts, setLocalPosts] = useState([
-    { 
-      id: 1, 
-      type: '센터', 
-      title: '주말 클라이밍 같이 하실 분!', 
-      desc: '이번 주 토요일 오후에 센터에서 같이 클라이밍 하실 분 구합니다.', 
-      location: 'olla 클라이밍 센터', 
-      date: '2026-03-28', 
-      people: '2/4명', 
-      postDate: '2026.03.24', 
-      author: '권클라이밍',
-      isJoined: false
-    },
-    { 
-      id: 2, 
-      type: '아웃도어', 
-      title: '북한산 암벽 등반 모집', 
-      desc: '봄 맞이 북한산 암벽등반 가실 분 모집합니다.', 
-      location: '북한산 인수봉', 
-      date: '2026-04-05', 
-      people: '4/6명', 
-      postDate: '2026.03.31', 
-      author: '최강우',
-      isJoined: false
-    },
-    { 
-      id: 3, 
-      type: '센터', 
-      title: '지구력 특훈 파티 모집', 
-      desc: '오늘 퇴근하고 지구력 벽에서 땀 뺄 분 구합니다.', 
-      location: 'olla 클라이밍 센터', 
-      date: '2026-04-01', 
-      people: '6/6명', 
-      postDate: '2026.04.01', 
-      author: '박지구력',
-      isJoined: true,
-      status: '마감' // 임의의 상태 추가 가능
+  // 화면 진입 시 데이터 로드
+  useEffect(() => {
+    if (isFocused) {
+      fetchPosts();
     }
-  ]);
+  }, [isFocused]);
 
-  const displayPosts = propsPosts || localPosts;
-  const updatePosts = propsSetPosts || setLocalPosts;
+  // 💡 정렬 로직 (마감된 글은 하단으로, 나머지는 최신순으로)
+  const sortPosts = (list: any[]) => {
+    return list.sort((a, b) => {
+      if (a.isPast && !b.isPast) return 1;
+      if (!a.isPast && b.isPast) return -1;
+      return b.id - a.id;
+    });
+  };
 
-  const filteredPosts = displayPosts.filter((post: any) => selectedTab === '전체' || post.type === selectedTab);
+  // 백엔드 API에서 커뮤니티 데이터 가져오기
+  const fetchPosts = async () => {
+    try {
+      const headers = await authHeader();
+      // 🔥 수정: 백엔드 페이징 규격에 맞춰 URL 파라미터 구성
+      const response = await axios.get(`${BASE}?page=0&size=100&sort=id,desc`, { headers });
+      
+      // 🔥 수정: 백엔드의 다중 중첩 구조(data.data.content)를 안전하게 파싱
+      const raw = response.data?.data?.data?.content || response.data?.data?.content || response.data?.data || [];
+      const list = Array.isArray(raw) ? raw : [];
+
+      const mappedList = list.map((item: any) => {
+        const md = new Date(item.meetDateTime);
+        const cd = new Date(item.createdAt);
+        // 모임 시간이 지났는지 체크
+        const isPast = md.getTime() < new Date().getTime(); 
+        
+        return {
+          id: item.id,
+          writerId: item.writerId,
+          type: item.differentGym ? '아웃도어' : '센터',
+          title: item.title,
+          desc: item.content,
+          author: item.writerName || '알 수 없음',
+          location: item.differentGym ? (item.gymPlace || '장소 미정') : 'olla 클라이밍 센터',
+          date: isNaN(md.getTime()) ? item.meetDateTime : `${md.getFullYear()}-${p(md.getMonth()+1)}-${p(md.getDate())} ${p(md.getHours())}:${p(md.getMinutes())}`,
+          rawMeetDateTime: item.meetDateTime,
+          people: `${item.memberCount||0}/${item.maxMember}명`,
+          postDate: isNaN(cd.getTime()) ? item.createdAt : `${cd.getFullYear()}.${p(cd.getMonth()+1)}.${p(cd.getDate())}`,
+          isPast,
+        };
+      });
+
+      setPosts(sortPosts(mappedList));
+    } catch (error) {
+      Alert.alert('오류', '게시글 목록을 불러오지 못했습니다.');
+      console.log('ManagerCommunity Fetch Error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // ==========================================
-  // 💡 삭제 모달 로직 (관리자는 모든 글 삭제 가능)
+  // 💡 삭제 모달 로직 (관리자는 무조건 삭제 가능)
   // ==========================================
   const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
@@ -64,9 +103,16 @@ const ManagerCommunity = ({ posts: propsPosts, setPosts: propsSetPosts }: any) =
     setDeleteModalVisible(true); 
   };
   
-  const executeDelete = () => {
+  const executeDelete = async () => {
     if (itemToDelete !== null) {
-      updatePosts(displayPosts.filter((post: any) => post.id !== itemToDelete));
+      try {
+        const headers = await authHeader();
+        await axios.delete(`${BASE}/${itemToDelete}`, { headers });
+        Alert.alert("알림", "게시글이 삭제되었습니다.");
+        fetchPosts(); // 삭제 후 목록 다시 불러오기
+      } catch (error) {
+        Alert.alert("오류", "게시글 삭제에 실패했습니다.");
+      }
     }
     setDeleteModalVisible(false); 
     setItemToDelete(null);
@@ -78,27 +124,46 @@ const ManagerCommunity = ({ posts: propsPosts, setPosts: propsSetPosts }: any) =
   };
 
   // ==========================================
-  // 💡 프로필 팝업 로직 (기존과 동일)
+  // 💡 프로필 팝업 로직 (실제 API 연동)
   // ==========================================
   const [isDetailVisible, setDetailVisible] = useState(false);
   const detailSlideAnim = useRef(new Animated.Value(800)).current;
   const [selectedUser, setSelectedUser] = useState<any>(null);
 
-  const openDetailModal = (authorName: string) => {
-    // 실제 앱에서는 작성자 이름을 기반으로 유저 DB를 검색하여 띄웁니다.
-    // 여기서는 더미 응답으로 설정합니다.
-    setSelectedUser({
-      name: authorName, 
-      phone: '010-0000-0000', 
-      age: '25', 
-      height: '175', 
-      weight: '70', 
-      arm: '180', 
-      shoe: '260',
-      toggles: { showName: true, showAge: true, showPhone: false, showHeight: true, showWeight: false, showArm: true, showShoe: true }
-    });
-    setDetailVisible(true);
-    setTimeout(() => { Animated.timing(detailSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(); }, 50);
+  const openDetailModal = async (authorId: number, authorName: string) => {
+    try {
+      const headers = await authHeader();
+      const { data } = await axios.get(`${MEMBERS}/${authorId}/profile`, { headers });
+      const d = data?.data?.data || data?.data || data; 
+      
+      if (!d) { 
+        Alert.alert('프로필 조회 불가','정보를 불러올 수 없습니다.'); 
+        return; 
+      }
+      
+      setSelectedUser({
+        name: d.name || authorName,
+        phone: '-', // 타 회원 프로필 조회 시 전화번호는 주로 블라인드 처리됨
+        age: d.age || '-',
+        height: d.height || '-',
+        weight: d.weight || '-',
+        arm: d.armSpan || '-',
+        shoe: d.footSize || '-',
+        toggles: {
+          showName: true,
+          showPhone: false,
+          showAge: !!d.age,
+          showHeight: !!d.height,
+          showWeight: !!d.weight,
+          showArm: !!d.armSpan,
+          showShoe: !!d.footSize,
+        },
+      });
+      setDetailVisible(true);
+      setTimeout(() => { Animated.timing(detailSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(); }, 50);
+    } catch (error) {
+      Alert.alert('프로필 조회 불가', '해당 회원의 정보를 불러올 수 없습니다.');
+    }
   };
 
   const closeDetailModal = () => {
@@ -117,6 +182,16 @@ const ManagerCommunity = ({ posts: propsPosts, setPosts: propsSetPosts }: any) =
       </View>
     );
   };
+
+  const filteredPosts = posts.filter((post: any) => selectedTab === '전체' || post.type === selectedTab);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.background, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#A1BE44" />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.background} edges={[]}>
@@ -139,11 +214,14 @@ const ManagerCommunity = ({ posts: propsPosts, setPosts: propsSetPosts }: any) =
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {filteredPosts.map((post: any) => {
           const isOutdoor = post.type === '아웃도어';
-          const badgeBgColor = isOutdoor ? '#00810F' : '#0072B9';
-          const badgeTextColor = isOutdoor ? '#2CDE00' : '#009DFF';
+          const isPast = post.isPast; // 🔥 마감 여부
+
+          // 마감된 글은 회색, 진행 중인 글은 고유 색상
+          const badgeBgColor = isPast ? '#333333' : (isOutdoor ? '#00810F' : '#0072B9');
+          const badgeTextColor = isPast ? '#888888' : (isOutdoor ? '#2CDE00' : '#009DFF');
 
           return (
-            <View key={post.id} style={styles.postCard}>
+            <View key={post.id} style={[styles.postCard, isPast && styles.postCardDimmed]}>
               <View style={styles.cardHeader}>
                 <View style={[styles.badge, { backgroundColor: badgeBgColor }]}>
                   <Text style={[styles.badgeText, { color: badgeTextColor }]}>{post.type}</Text>
@@ -151,8 +229,9 @@ const ManagerCommunity = ({ posts: propsPosts, setPosts: propsSetPosts }: any) =
                 <Text style={styles.postDateText}>{post.postDate}</Text>
               </View>
               
-              <Text style={styles.postTitle}>{post.title}</Text>
-              <Text style={styles.postDesc}>{post.desc}</Text>
+              {/* 마감된 경우 제목/내용도 회색 톤으로 다운 */}
+              <Text style={[styles.postTitle, isPast && { color: '#888888' }]}>{post.title}</Text>
+              <Text style={[styles.postDesc, isPast && { color: '#666666' }]}>{post.desc}</Text>
               
               <View style={styles.infoRow}>
                 <View style={styles.infoItemGroup}>
@@ -170,9 +249,9 @@ const ManagerCommunity = ({ posts: propsPosts, setPosts: propsSetPosts }: any) =
                   </View>
                 </View>
                 
-                {/* 💡 관리자 모드: 모든 게시글에 무조건 삭제(휴지통) 아이콘 노출 */}
+                {/* 💡 관리자 모드: 모든 게시글에 삭제(휴지통) 아이콘 노출 */}
                 <TouchableOpacity style={styles.trashBtn} onPress={() => confirmDelete(post.id)}>
-                  <Image source={require('./assets/trash.png')} style={styles.trashIcon} />
+                  <Image source={require('./assets/trash.png')} style={[styles.trashIcon, isPast && { tintColor: '#666666' }]} />
                 </TouchableOpacity>
               </View>
 
@@ -180,20 +259,25 @@ const ManagerCommunity = ({ posts: propsPosts, setPosts: propsSetPosts }: any) =
               
               <View style={styles.cardFooter}>
                 {/* 프로필 조회 버튼 */}
-                <TouchableOpacity style={styles.profileRow} onPress={() => openDetailModal(post.author)}>
+                <TouchableOpacity style={styles.profileRow} onPress={() => openDetailModal(post.writerId, post.author)}>
                   {post.author === '최강우' ? (
-                    <View style={styles.textProfileImg}><Text style={styles.textProfileText}>최</Text></View>
+                    <View style={[styles.textProfileImg, isPast && { opacity: 0.5 }]}>
+                      <Text style={styles.textProfileText}>최</Text>
+                    </View>
                   ) : (
-                    <Image source={require('./assets/profile.png')} style={styles.profileImg} />
+                    <Image source={require('./assets/profile.png')} style={[styles.profileImg, isPast && { opacity: 0.5 }]} />
                   )}
-                  <Text style={styles.authorText}>{post.author}</Text>
+                  <Text style={[styles.authorText, isPast && { color: '#666666' }]}>{post.author}</Text>
                 </TouchableOpacity>
                 
-                {/* 💡 참여하기 버튼, 게시물 관리 텍스트 모두 제거됨 */}
+                {/* 관리자는 별도 참여 버튼 표시 없음 (삭제 아이콘은 상단 위치) */}
               </View>
             </View>
           );
         })}
+        {filteredPosts.length === 0 && (
+          <Text style={{ color: '#999', textAlign: 'center', marginTop: 30 }}>등록된 커뮤니티 글이 없습니다.</Text>
+        )}
       </ScrollView>
 
       {/* 삭제 모달 */}
@@ -224,7 +308,9 @@ const ManagerCommunity = ({ posts: propsPosts, setPosts: propsSetPosts }: any) =
                 <View style={styles.detailContainer}>
                   <View style={styles.detailProfileWrapper}>
                     {selectedUser.name === '최강우' ? (
-                       <View style={[styles.textProfileImg, { width: 80, height: 80, borderRadius: 40 }]}><Text style={[styles.textProfileText, { fontSize: 28 }]}>최</Text></View>
+                       <View style={[styles.textProfileImg, { width: 80, height: 80, borderRadius: 40 }]}>
+                         <Text style={[styles.textProfileText, { fontSize: 28 }]}>최</Text>
+                       </View>
                     ) : (
                        <Image source={require('./assets/profile.png')} style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#444444' }} />
                     )}
@@ -262,6 +348,8 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: 80 },
 
   postCard: { backgroundColor: '#212121', borderColor: '#262626', borderWidth: 1.5, borderRadius: 16, padding: 20, marginBottom: 15 },
+  postCardDimmed: { opacity: 0.6, borderColor: '#333333' }, // 🔥 마감된 게시글 투명도 조절
+
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   badge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8 },
   badgeText: { fontSize: 12, fontWeight: 'bold' },
@@ -276,7 +364,6 @@ const styles = StyleSheet.create({
   infoText: { color: '#999999', fontSize: 12 },
   
   trashBtn: { padding: 4, marginLeft: 5 },
-  // 💡 휴지통 색상을 #A1BE44로 변경
   trashIcon: { width: 18, height: 18, resizeMode: 'contain', tintColor: '#A1BE44' }, 
   
   divider: { height: 1, backgroundColor: '#333333', marginBottom: 15 },

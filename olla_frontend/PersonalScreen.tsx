@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // 💡 [추가] 토큰 저장을 위해 import
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { 
   View, 
   Text, 
@@ -11,29 +11,24 @@ import {
   Alert 
 } from 'react-native';
 
-const API_BASE_URL = 'http://172.29.145.90:8080/api/v1';
+const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
 
 const PersonalScreen = ({ navigation, route }: any) => {
-  // 1️⃣ 이전 화면(SignupScreen)에서 전달받은 데이터 추출
   const { accountData } = route.params || {};
 
-  // 2. 데이터 저장소 (신체 정보)
   const [age, setAge] = useState('');
   const [height, setHeight] = useState('');
   const [weight, setWeight] = useState('');
   const [armSpan, setArmSpan] = useState('');
   const [footSize, setFootSize] = useState('');
 
-  // 3. 공개/비공개 스위치 상태
   const [isAgePublic, setIsAgePublic] = useState(true);
   const [isHeightPublic, setIsHeightPublic] = useState(true);
   const [isWeightPublic, setIsWeightPublic] = useState(true);
   const [isArmPublic, setIsArmPublic] = useState(true);
   const [isFootPublic, setIsFootPublic] = useState(true);
 
-  // 🚀 최종 회원가입 제출 함수
   const handleFinalSignup = async () => {
-    // 이전 데이터가 없는 경우 방어 로직
     if (!accountData) {
       Alert.alert('오류', '계정 정보가 유실되었습니다. 다시 가입해주세요.');
       navigation.goBack();
@@ -41,9 +36,8 @@ const PersonalScreen = ({ navigation, route }: any) => {
     }
 
     try {
-      // 1. 회원가입 요청
       const response = await axios.post(`${API_BASE_URL}/auth/signup`, {
-        ...accountData, // 아이디, 비번, 이름, 이메일, 전화번호 등
+        ...accountData,
         role: 'USER',
         detail: {
           age: parseInt(age) || null,
@@ -53,7 +47,7 @@ const PersonalScreen = ({ navigation, route }: any) => {
           footSize: parseFloat(footSize) || null
         },
         privacy: {
-          isPhonePublic: false, // 연락처는 기본 비공개
+          isPhonePublic: false,
           isEmailPublic: false,
           isHeightPublic: isHeightPublic,
           isWeightPublic: isWeightPublic,
@@ -62,21 +56,17 @@ const PersonalScreen = ({ navigation, route }: any) => {
         }
       });
 
-      // 2. 회원가입 성공 시 자동 로그인 처리
       if (response.status === 200 || response.status === 201) {
         
         try {
-          // 💡 [추가] 가입했던 아이디와 비밀번호로 즉시 로그인 요청을 보냅니다.
           const loginResponse = await axios.post(`${API_BASE_URL}/auth/login`, {
             loginId: accountData.loginId,
             password: accountData.password
           });
 
-          // 백엔드 응답 구조에 맞게 토큰 추출 (보통 data 안에 있거나 data.data 안에 있습니다)
           const accessToken = loginResponse.data?.data?.accessToken || loginResponse.data?.accessToken;
           const refreshToken = loginResponse.data?.data?.refreshToken || loginResponse.data?.refreshToken;
 
-          // 💡 [추가] 발급받은 토큰을 기기에 안전하게 저장합니다.
           if (accessToken) {
             await AsyncStorage.setItem('userToken', accessToken);
             if (refreshToken) {
@@ -85,13 +75,10 @@ const PersonalScreen = ({ navigation, route }: any) => {
           }
         } catch (loginError) {
           console.error("자동 로그인 에러:", loginError);
-          // 로그인 실패 시 (거의 발생하지 않지만 대비용)
         }
 
-        // 3. 모든 과정이 끝나면 화면 이동
-        Alert.alert('성공', '회원가입이 성공적으로 완료되었습니다!', [
-          { text: '확인', onPress: () => navigation.replace('Loading', { type: 'signup' }) }
-        ]);
+        // ✅ Alert 제거 후 바로 화면 이동
+        navigation.replace('Loading', { type: 'signup' });
       }
     } catch (error: any) {
       console.error("회원가입 에러:", error.response?.data);
@@ -100,7 +87,6 @@ const PersonalScreen = ({ navigation, route }: any) => {
     }
   };
 
-  // 커스텀 스위치 컴포넌트
   const CustomSwitch = ({ isOn, onToggle }: { isOn: boolean, onToggle: () => void }) => (
     <View style={styles.switchWrapper}>
       <Text style={styles.switchLabel}>{isOn ? '공개' : '비공개'}</Text>

@@ -88,12 +88,13 @@ public class AuthService {
     @Transactional
     public TokenResponse signup(SignupRequest request) {
         // 1. 이메일 인증 여부 최종 확인
-        EmailVerification verification = verificationRepository.findTopByEmailOrderByCreatedAtDesc(request.getEmail())
+        /* EmailVerification verification = verificationRepository.findTopByEmailOrderByCreatedAtDesc(request.getEmail())
                 .orElseThrow(() -> new IllegalArgumentException("이메일 인증 기록이 없습니다."));
 
         if (!verification.isConfirmed()) {
             throw new IllegalArgumentException("이메일 인증이 완료되지 않았습니다.");
         }
+        */ 
 
         if(memberRepository.findByLoginId(request.getLoginId()).isPresent()){
             throw new IllegalArgumentException("이미 존재하는 아이디입니다.");

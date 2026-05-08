@@ -8,11 +8,13 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 type RootParamList = {
   Login: undefined; Signup: undefined; PersonalInfo: undefined; Loading: undefined;
   Home: undefined; Notice: undefined; Recode: undefined; Ranking: undefined;
-  Community: undefined; MY: undefined; ManagerDashboard: undefined;
+  // Community에 데이터를 넘길 수 있도록 수정 // 내 정보 조회 
+  Community: { filter?: 'ALL' | 'MY_WRITTEN' | 'MY_APPLIED' } | undefined; 
+  MY: undefined; ManagerDashboard: undefined;
   ManagerUser: undefined; ManagerTicket: undefined; ManagerNotice: undefined; ManagerCommunity: undefined;
 };
 
-// 스크린 임포트 (기존 경로 유지)
+// 스크린 임포트
 import LoginScreen from './LoginScreen';
 import SignupScreen from './SignupScreen';
 import PersonalScreen from './PersonalScreen';
@@ -62,7 +64,6 @@ const AppContent = () => {
   const insets = useSafeAreaInsets(); 
   const [routeName, setRouteName] = useState<string>('');
 
-  // 💡 관리자 종료 모달 상태 추가
   const [isExitModalVisible, setExitModalVisible] = useState(false);
 
   // --- 기존 데이터 유지 ---
@@ -90,7 +91,6 @@ const AppContent = () => {
 
   return (
     <View style={styles.globalContainer}>
-      {/* StatusBar 설정을 조정하여 공백 느낌 제거 */}
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
       
       <NavigationContainer 
@@ -98,7 +98,6 @@ const AppContent = () => {
         onReady={() => setRouteName(navigationRef.getCurrentRoute()?.name || '')} 
         onStateChange={() => setRouteName(navigationRef.getCurrentRoute()?.name || '')}
       >
-        {/* 상단 배너 */}
         {shouldShowNav && (
           <View style={[styles.topNav, { paddingTop: Math.max(insets.top, 10) }]}>
             <View style={styles.topNavInner}>
@@ -115,7 +114,6 @@ const AppContent = () => {
                     <Text style={styles.logoText}>olla</Text>
                     <Text style={styles.adminSubText}>관리자</Text>
                   </View>
-                  {/* 💡 관리자 종료 버튼 누르면 모달창 띄우기 */}
                   <TouchableOpacity style={styles.adminExitBtn} onPress={() => setExitModalVisible(true)}>
                     <Image source={require('./assets/EXIT.png')} style={styles.adminExitIcon} />
                     <Text style={styles.adminExitText}>관리자 모드 종료</Text>
@@ -146,7 +144,6 @@ const AppContent = () => {
           </Stack.Navigator>
         </View>
 
-        {/* 하단바 */}
         {shouldShowNav && (
           <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 12) }]}>
             {!isAdminMode ? (
@@ -170,25 +167,15 @@ const AppContent = () => {
         )}
       </NavigationContainer>
 
-      {/* 💡 관리자 모드 종료 확인 모달 추가 */}
       <Modal visible={isExitModalVisible} animationType="fade" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.deleteModalBox}>
             <Text style={styles.modalTitle}>관리자 모드를 종료하시겠습니까?</Text>
             <View style={styles.modalBtnRow}>
-              <TouchableOpacity 
-                style={styles.btnYes} 
-                onPress={() => {
-                  setExitModalVisible(false); // 모달 닫기
-                  navigationRef.navigate('MY'); // MY 화면으로 이동 (종료)
-                }}
-              >
+              <TouchableOpacity style={styles.btnYes} onPress={() => { setExitModalVisible(false); navigationRef.navigate('MY'); }}>
                 <Text style={styles.btnTextBlack}>예</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.btnNo} 
-                onPress={() => setExitModalVisible(false)} // 취소 시 모달만 닫기
-              >
+              <TouchableOpacity style={styles.btnNo} onPress={() => setExitModalVisible(false)}>
                 <Text style={styles.btnTextWhite}>아니오</Text>
               </TouchableOpacity>
             </View>
@@ -212,36 +199,18 @@ const styles = StyleSheet.create({
   globalContainer: { flex: 1, backgroundColor: '#1A1A1A' },
   mainContent: { flex: 1 },
   topNav: { backgroundColor: '#1A1A1A', borderBottomWidth: 0.5, borderBottomColor: '#222' },
-  topNavInner: { 
-    height: 50, 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    paddingHorizontal: 20 
-  },
+  topNavInner: { height: 50, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20 },
   logoText: { fontSize: 24, fontWeight: '900', color: '#A1BE44' }, 
   topIcon: { width: 20, height: 20, resizeMode: 'contain' }, 
   adminLogoContainer: { flexDirection: 'column' },
   adminSubText: { color: '#999999', fontSize: 9, fontWeight: 'bold', marginTop: -3 },
-  
-  // 버튼 디자인
-  adminExitBtn: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: '#331111', 
-    paddingHorizontal: 14, 
-    paddingVertical: 8,  
-    borderRadius: 8 
-  },
+  adminExitBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#331111', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
   adminExitIcon: { width: 14, height: 14, tintColor: '#FF4D4D', marginRight: 6 },
   adminExitText: { color: '#FF4D4D', fontSize: 13, fontWeight: 'bold' },
-  
   bottomNav: { flexDirection: 'row', backgroundColor: '#111111', borderTopWidth: 1, borderTopColor: '#222222', paddingTop: 8 },
   bottomNavItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   navIcon: { width: 20, height: 20, marginBottom: 3, resizeMode: 'contain' },
   bottomNavText: { fontSize: 9, color: '#7D7D7D' },
-
-  // 💡 모달창 스타일 (제공해주신 코드 그대로 적용 및 버튼 스타일 추가)
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   deleteModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
   modalTitle: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 25 },

@@ -4,10 +4,10 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
-const RANKING_BEGINNER_URL = 'http://172.29.145.90:8080/api/v1/rankings/beginner';
-const RANKING_ENDURANCE_DISTANCE_URL = 'http://172.29.145.90:8080/api/v1/rankings/endurance/distance';
-const RANKING_SERIES_URL = 'http://172.29.145.90:8080/api/v1/rankings/series';
-const MY_PROFILE_URL = 'http://172.29.145.90:8080/api/v1/members/me'; 
+const RANKING_BEGINNER_URL = 'http://192.168.0.23:8080/api/v1/rankings/beginner';
+const RANKING_ENDURANCE_DISTANCE_URL = 'http://192.168.0.23:8080/api/v1/rankings/endurance/distance';
+const RANKING_SERIES_URL = 'http://192.168.0.23:8080/api/v1/rankings/series';
+const MY_PROFILE_URL = 'http://192.168.0.23:8080/api/v1/members/me'; 
 
 axios.interceptors.request.use(
   async (config) => {
@@ -51,6 +51,7 @@ const RankingScreen = ({ route }: any) => {
   const [consecutiveRankings, setConsecutiveRankings] = useState<any[]>([]);
   
   const [myNickname, setMyNickname] = useState('알 수 없음');
+  const [myMemberId, setMyMemberId] = useState<number | null>(null); // ✅ memberId 상태 추가
 
   useEffect(() => {
     if (route?.params?.targetTab) {
@@ -68,8 +69,15 @@ const RankingScreen = ({ route }: any) => {
     try {
       const response = await axios.get(MY_PROFILE_URL);
       const data = response.data?.data || response.data;
-      if (data && (data.name || data.nickname)) {
-        setMyNickname(data.nickname || data.name);
+      if (data) {
+        if (data.name || data.nickname) {
+          setMyNickname(data.nickname || data.name);
+        }
+        // ✅ memberId(또는 id) 저장 - 백엔드 응답 필드명에 따라 둘 다 대응
+        const myId = data.memberId ?? data.id ?? null;
+        if (myId !== null) {
+          setMyMemberId(Number(myId));
+        }
       }
     } catch (error) {
       console.log("내 프로필 로드 실패", error);
@@ -82,7 +90,6 @@ const RankingScreen = ({ route }: any) => {
     fetchConsecutiveRankings();
   };
 
-  // (동철 수정) 백엔드 응답 데이터 구조가 리스트나 특정 키(data, list)에 담겨올 경우를 대비해 보완
   const extractList = (serverData: any) => {
     if (!serverData) return [];
     if (Array.isArray(serverData)) return serverData;
@@ -113,25 +120,22 @@ const RankingScreen = ({ route }: any) => {
         const colorIdx = colorOrder.indexOf(currentColor.name);
         
         const mappedData = rawList.map((item: any, itemIndex: number) => {
-          
-          // 💡 [수정] 오직 넘겨받은 필드로만 왕복/편도 판단
           const attemptType = item.attemptType || item.attempt_type || item.type || '';
           const isRoundTrip = String(attemptType).toUpperCase() === 'ROUND_TRIP' || attemptType === '왕복';
           const typeStr = isRoundTrip ? '왕복' : '편도';
           
           const holdCount = item.maxHoldNo ?? item.total ?? item.score ?? 0;
-
-          // 가장 높은 랭킹 산출을 위한 절대 점수화 (검정: 70만, 왕복: +5만, 편도: +0)
           const colorWeight = colorIdx * 100000; 
           const typeWeight = isRoundTrip ? 50000 : 0; 
           const absoluteScore = colorWeight + typeWeight + Number(holdCount);
 
           return {
             id: item.memberId ?? item.id ?? `temp-beginner-${index}-${itemIndex}`,
+            memberId: item.memberId ?? item.id ?? null, // ✅ memberId 명시적 보존
             name: item.name || item.nickname || '알 수 없음',
             colorName: currentColor.name,
             colorHex: currentColor.hex,
-            type: typeStr, // 이제 화면에 DB 데이터대로 "왕복"이 정상적으로 뜹니다.
+            type: typeStr,
             hold: holdCount, 
             rawScore: absoluteScore, 
             achievedAt: item.achievedAt || item.recordDate ? new Date(item.achievedAt || item.recordDate).getTime() : 9999999999999
@@ -168,6 +172,7 @@ const RankingScreen = ({ route }: any) => {
 
         return {
           id: item.memberId ?? `temp-endurance-${index}`,
+          memberId: item.memberId ?? null, // ✅ memberId 명시적 보존
           name: item.name || item.nickname || '알 수 없음',
           laps: item.oneWayCount || 0,
           time: `${min}:${sec}`,
@@ -181,16 +186,14 @@ const RankingScreen = ({ route }: any) => {
     }
   };
 
-  // 3. 연속 완등 랭킹 조회 (동철 수정)
+  // 3. 연속 완등 랭킹 조회
   const fetchConsecutiveRankings = async () => {
     try {
       const response = await axios.get(RANKING_SERIES_URL);
-      // 데이터가 객체 형태(data: [])인지 배열 형태([])인지 모두 대응
       const rawData = response.data?.data || response.data;
       const rawList = extractList(rawData);
       
       const mappedData = rawList.map((item: any, index: number) => {
-        // 백엔드 Difficulty Enum 리스트를 화면용 색상 Hex로 변환
         const log = item.sequenceLog || [];
         const mappedColors = log.map((diffEnum: string) => {
           const krColor = reverseColorMap[diffEnum] || '흰색';
@@ -199,9 +202,9 @@ const RankingScreen = ({ route }: any) => {
 
         return {
           id: item.memberId ?? item.id ?? `temp-series-${index}`,
+          memberId: item.memberId ?? item.id ?? null, // ✅ memberId 명시적 보존
           name: item.name || item.nickname || '알 수 없음',
           colors: mappedColors,
-          // (동철 수정) 백엔드 DTO 필드명인 totalScore를 우선 확인
           score: item.totalScore ?? item.score ?? 0, 
         };
       });
@@ -232,7 +235,15 @@ const RankingScreen = ({ route }: any) => {
     return '#FFFFFF';
   };
 
-  // 💡 정렬, 최고 기록 1개만 추출, 시간 동점자 처리
+  // ✅ isMe 판단: memberId가 있으면 ID로, 없으면 이름으로 fallback
+  const checkIsMe = (item: any): boolean => {
+    if (myMemberId !== null && item.memberId !== null && item.memberId !== undefined) {
+      return Number(item.memberId) === myMemberId;
+    }
+    // memberId를 못 받아온 경우에만 이름으로 fallback
+    return item.name === myNickname;
+  };
+
   const filteredList = useMemo(() => {
     let list: any[] = [];
 
@@ -243,27 +254,28 @@ const RankingScreen = ({ route }: any) => {
         list = list.filter(r => r.colorName === colorTab);
       }
 
-      // 유저(닉네임)별로 가장 점수가 높거나 시간이 빠른 단 1개의 최고기록만 남김
+      // ✅ 유저별 최고기록 1개 추출 - memberId 기준으로 변경
       const userMap = new Map();
       list.forEach(item => {
-        const existing = userMap.get(item.name);
+        // memberId가 있으면 그걸로, 없으면 이름으로 키 설정
+        const key = (item.memberId !== null && item.memberId !== undefined)
+          ? `id_${item.memberId}`
+          : `name_${item.name}`;
+        const existing = userMap.get(key);
         if (!existing) {
-          userMap.set(item.name, item);
+          userMap.set(key, item);
         } else {
           if (item.rawScore > existing.rawScore) {
-            userMap.set(item.name, item);
+            userMap.set(key, item);
           } else if (item.rawScore === existing.rawScore && item.achievedAt < existing.achievedAt) {
-            userMap.set(item.name, item);
+            userMap.set(key, item);
           }
         }
       });
       list = Array.from(userMap.values());
       
-      // 검정>왕복>홀드 순으로 최종 랭킹 내림차순 정렬 (동점 시 달성시간 오름차순)
       list.sort((a, b) => {
-        if (b.rawScore !== a.rawScore) {
-          return b.rawScore - a.rawScore; 
-        }
+        if (b.rawScore !== a.rawScore) return b.rawScore - a.rawScore; 
         return a.achievedAt - b.achievedAt;
       });
 
@@ -281,11 +293,12 @@ const RankingScreen = ({ route }: any) => {
     return list.map((item, index) => ({ 
       ...item, 
       rank: index + 1,
-      isMe: item.name === myNickname 
+      isMe: checkIsMe(item) // ✅ memberId 기반 본인 판별
     }));
-  }, [mainTab, colorTab, beginnerRankings, enduranceRankings, consecutiveRankings, myNickname]);
+  }, [mainTab, colorTab, beginnerRankings, enduranceRankings, consecutiveRankings, myNickname, myMemberId]);
 
-  const myCurrentRank = filteredList.find(r => r.isMe)?.rank || '-';
+  // ✅ 랭킹에 없으면 '-' 표시 (기록 없는 경우 정확히 처리)
+  const myCurrentRank = filteredList.find(r => r.isMe)?.rank ?? '-';
 
   return (
     <View style={styles.background}>

@@ -15,12 +15,14 @@ public class AdminMemberResponse {
     private String name;
     private String phone;
 
-    // 이용권 관련 정보
-    private String membershipStatus; // ACTIVE, HOLDING, EXPIRED, NONE(미등록)
-    private String membershipType;   // PERIOD(기간권), COUNT(횟수권), null
-    private LocalDate startDate;     // 시작일 (동철 수정)
-    private LocalDate endDate;       // 기간권일 경우 만료일
-    private Integer remainingCount;  // 횟수권일 경우 남은 횟수
+    private String role;
+    private boolean isDeleted;
+
+    private String membershipStatus;
+    private String membershipType;
+    private LocalDate startDate;
+    private LocalDate endDate;
+    private Integer remainingCount;
 
     public static AdminMemberResponse from(Member member, Membership membership) {
         if (membership == null) {
@@ -29,6 +31,8 @@ public class AdminMemberResponse {
                     // membershipId는 매핑하지 않음 (null)
                     .name(member.getName())
                     .phone(member.getPhone())
+                    .role(member.getRole() != null ? member.getRole().name() : "USER") // 💡 Null 방어
+                    .isDeleted(member.isDeleted())
                     .membershipStatus("NONE")
                     .build();
         }
@@ -38,6 +42,8 @@ public class AdminMemberResponse {
                 .membershipId(membership.getId()) // (동철 수정) 멤버십 아이디 주는게 없어서 추가 
                 .name(member.getName())
                 .phone(member.getPhone())
+                .role(member.getRole() != null ? member.getRole().name() : "USER") // 💡 Null 방어
+                .isDeleted(member.isDeleted())
                 .membershipStatus(membership.getStatus().name())
                 .membershipType(membership.getMembershipTypeName())
                 .startDate(membership.getStartDate()) // (동철 수정) 시작일 

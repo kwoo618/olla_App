@@ -95,9 +95,6 @@ public class PostService {
         return PostResponse.of(post, isApplied, isLiked, likeCount);
     }
 
-    /**
-     * [목록 조회] 목록에서도 좋아요 수와 내 상태를 보여줌
-     */
     @Transactional(readOnly = true)
     public Page<PostResponse> getPostList(Pageable pageable, String loginId) {
         Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
