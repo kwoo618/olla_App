@@ -25,6 +25,7 @@ public class JwtTokenProvider {
 
     private final long accessTokenValidity = 1000L * 60 * 30; // 토큰 유효 기간: 30분
     private final long refreshTokenValidity = 1000L * 60 * 60 * 24 * 28; // 28일
+    private final long qrTokenValidity = 1000L * 60 * 3; // QR 토큰 유효 기간: 3분 (180초)
 
     // 초기화: 서버가 켜질 때 비밀키를 디코딩해서 사용할 준비
     @PostConstruct      // PostConstruct 어노테이션은 의존성 주입이 완료된 후에 실행되는 메서드를 지정할 때 사용
@@ -57,6 +58,20 @@ public class JwtTokenProvider {
         // Refresh Token은 Access Token보다 더 긴 유효 기간을 가지며, 권한 정보 없이 생성됩니다. 로그인 ID만 포함하여 토큰을 생성합니다.
         return Jwts.builder()
                 .subject(loginId) // 누구의 토큰인지 식별용
+                .issuedAt(now)
+                .expiration(validity)
+                .signWith(key)
+                .compact();
+    }
+
+    // 3분짜리 일회용 QR 토큰 생성
+    public String createQrToken(String loginId) {
+        Date now = new Date();
+        Date validity = new Date(now.getTime() + this.qrTokenValidity);
+
+        return Jwts.builder()
+                .subject(loginId)
+                .claim("type", "QR") // 토큰 목적 명시
                 .issuedAt(now)
                 .expiration(validity)
                 .signWith(key)

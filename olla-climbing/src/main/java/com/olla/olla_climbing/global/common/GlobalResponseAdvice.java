@@ -1,5 +1,8 @@
 package com.olla.olla_climbing.global.common;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageConverter;
@@ -11,7 +14,10 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 // 팩트 체크: Swagger 오류 방지를 위해 우리 도메인 패키지에서 나오는 응답만 낚아채도록 설정합니다.
 // (본인의 컨트롤러들이 모여있는 상위 패키지 경로로 수정해 주세요. 예: com.olla.olla_climbing.domain)
 @RestControllerAdvice(basePackages = "com.olla.olla_climbing.domain")
+@RequiredArgsConstructor
 public class GlobalResponseAdvice implements ResponseBodyAdvice<Object> {
+
+    private final ObjectMapper objectMapper;
 
     @Override
     public boolean supports(MethodParameter returnType, Class<? extends HttpMessageConverter<?>> converterType) {
@@ -24,12 +30,24 @@ public class GlobalResponseAdvice implements ResponseBodyAdvice<Object> {
                                   Class<? extends HttpMessageConverter<?>> selectedConverterType,
                                   ServerHttpRequest request, ServerHttpResponse response) {
 
-        // 데이터가 없는 void 반환 타입이나 null일 경우
+        // 1. String 타입일 경우의 특수 처리
+        if (body instanceof String) {
+            try {
+                // 응답 헤더를 JSON으로 설정
+                response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+                // ApiResponse 객체를 생성한 후 직접 JSON 문자열로 변환하여 반환
+                return objectMapper.writeValueAsString(ApiResponse.success(body));
+            } catch (JsonProcessingException e) {
+                throw new RuntimeException("JSON 직렬화 중 오류가 발생했습니다.", e);
+            }
+        }
+
+        // 2. 데이터가 null일 경우
         if (body == null) {
             return ApiResponse.success();
         }
 
-        // 정상 데이터 반환 시 ApiResponse.success() 로 감싸서 리턴
+        // 3. 그 외 일반 객체일 경우 ApiResponse로 감싸서 반환
         return ApiResponse.success(body);
     }
 }

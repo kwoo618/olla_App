@@ -1,29 +1,43 @@
 package com.olla.olla_climbing.domain.member.service;
 
+import com.olla.olla_climbing.domain.admin.service.GoogleSheetsService;
+import com.olla.olla_climbing.domain.member.dto.response.OtherMemberProfileResponse;
 import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.entity.NotificationSetting;
-import com.olla.olla_climbing.domain.member.dto.request.AlertUpdateRequest;
-import com.olla.olla_climbing.domain.member.dto.response.AlertResponse;
+import com.olla.olla_climbing.domain.member.dto.request.NotificationUpdateRequest;
+import com.olla.olla_climbing.domain.member.dto.response.NotificationResponse;
 import com.olla.olla_climbing.domain.member.dto.response.MemberResponse;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.olla.olla_climbing.domain.member.dto.request.MemberUpdateRequest;
 import com.olla.olla_climbing.domain.member.entity.MemberDetail;
 import com.olla.olla_climbing.domain.member.entity.MemberPrivacy;
 
+import java.time.LocalDate;
+
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class MemberService {
 
     private final MemberRepository memberRepository;
+    private final GoogleSheetsService googleSheetsService;
 
+    // 회원가입 화면에서 DB 아이디 중복 확인 로직 (동철 수정)
+    @Transactional(readOnly = true)
+    public boolean existsByLoginId(String loginId) {
+        return memberRepository.findByLoginIdAndIsDeletedFalse(loginId).isPresent();
+        }
     // Transactional(readOnly = true) -> 데이터 조회 시 성능 최적화, 트랜잭션 관리
     @Transactional(readOnly = true)
     public MemberResponse getMyInfo(String loginId) {
-        // 1. 로그인 ID로 회원 조회 (없으면 예외 발생)
-        Member member = memberRepository.findByLoginId(loginId)
+        // 1. 회원 조회
+        // N+1 방지를 위해 @EntityGraph가 적용된 쿼리를 사용합니다.
+        // 이제 member, detail, privacy, notification 테이블을 JOIN해서 쿼리 1방에 가져옵니다.
+        Member member = memberRepository.findWithDetailsByLoginId(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
 
         // 2. 엔티티를 DTO로 변환하여 반환
@@ -37,8 +51,17 @@ public class MemberService {
         Member member = memberRepository.findByLoginId(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
 
-        // 2. 기본 정보 수정 (null 체크는 엔티티 안에서 함)
+        // (동철 수정) 에러 유발하던 중복 로직 및 파라미터 불일치 코드 정리
         member.updateBasicInfo(request.getName(), request.getPhone());
+
+        LocalDate parsedBirthDate = member.getBirthDate();
+        // 날짜 파싱 로직
+        if (request.getBirthDate() != null) {
+            parsedBirthDate = request.getBirthDate();
+        }
+        member.updateAdditionalInfo(request.getGender(), parsedBirthDate);
+
+        member.updateAdditionalInfo(request.getGender(), parsedBirthDate);
 
         // 프로필 이미지 처리 로직 고도화
         String requestImageUrl = request.getProfileImageUrl();
@@ -51,64 +74,100 @@ public class MemberService {
             member.updateProfileImage(requestImageUrl);
         }
 
-        // 3. 상세 정보 수정 (처음 입력하는 거라면 객체를 새로 만들어줘야 함)
+       //  상세 정보 수정 로직 통합 (수정할때 데이터 꼬일 수 있어서 수정)
         if (member.getMemberDetail() == null) {
-            MemberDetail newDetail = new MemberDetail(member);
-            newDetail.update(request.getAge(), request.getHeight(), request.getWeight(), request.getArmSpan(), request.getFootSize());
-            member.setMemberDetail(newDetail);
-            // 연관관계 편의 메서드나 양방향 매핑 설정에 따라 다를 수 있지만,
-            // CascadeType.ALL이 걸려있으므로 이렇게만 둬도 저장이 됨 (나중에 보완)
-            // cascade 옵션이 없으면, memberRepository.save(member)로 저장할 때, memberDetail도 같이 저장되도록 설정해야 함 (save 호출 필요)
-        } else {
-            member.getMemberDetail().update(request.getAge(), request.getHeight(), request.getWeight(), request.getArmSpan(), request.getFootSize());
+            member.setMemberDetail(new MemberDetail(member));
+        }
+        member.getMemberDetail().update(
+                request.getHeight(), request.getWeight(),
+            request.getArmSpan(), request.getFootSize()
+        );
+
+        //  공개 설정 수정 - Boolean null 체크 추가 (데이터 유실 방지)
+        if (member.getMemberPrivacy() == null) {
+            member.setMemberPrivacy(new MemberPrivacy(member));
         }
 
-        // 4. 공개 설정 수정
-        if (member.getMemberPrivacy() == null) {
-            MemberPrivacy newPrivacy = new MemberPrivacy(member);
-            newPrivacy.update(request.getIsPublicPhone(), request.getIsEmailPublic(), request.getIsHeightPublic(), request.getIsWeightPublic(), request.getIsArmSpanPublic(), request.getIsFootSizePublic());
-            member.setMemberPrivacy(newPrivacy);
-        } else {
-            member.getMemberPrivacy().update(request.getIsPublicPhone(), request.getIsEmailPublic(), request.getIsHeightPublic(), request.getIsWeightPublic(), request.getIsArmSpanPublic(), request.getIsFootSizePublic());
-        }
+        member.getMemberPrivacy().update(
+            request.getIsPublicPhone() != null ? request.getIsPublicPhone() : member.getMemberPrivacy().isPhonePublic(),
+            request.getIsEmailPublic() != null ? request.getIsEmailPublic() : member.getMemberPrivacy().isEmailPublic(),
+            request.getIsHeightPublic() != null ? request.getIsHeightPublic() : member.getMemberPrivacy().isHeightPublic(),
+            request.getIsWeightPublic() != null ? request.getIsWeightPublic() : member.getMemberPrivacy().isWeightPublic(),
+            request.getIsArmSpanPublic() != null ? request.getIsArmSpanPublic() : member.getMemberPrivacy().isArmSpanPublic(),
+            request.getIsFootSizePublic() != null ? request.getIsFootSizePublic() : member.getMemberPrivacy().isFootSizePublic()
+        );
 
         // 5. DB 저장(save) 명령어 없음! @Transactional이 끝나면 알아서 UPDATE 됨 (Dirty Checking)
+        memberRepository.save(member);
 
         // 6. 수정된 결과를 다시 DTO로 만들어서 반환
         return MemberResponse.from(member);
     }
 
+
+
     // 알림 설정 업데이트 비즈니스 로직
     @Transactional
-    public AlertResponse updateAlertSettings(String loginId, AlertUpdateRequest request) {
-        Member member = memberRepository.findByLoginId(loginId)
+    public NotificationResponse updateNotificationSettings(String loginId, NotificationUpdateRequest request) {
+        Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
-
+        
         if (member.getNotificationSetting() == null) {
-            // 최초 설정 시
-            NotificationSetting newSetting = new NotificationSetting(member);
-            newSetting.update(
-                    request.getIsGlobalAlertOn(), request.getIsMembershipWeekBeforeAlertOn(),
-                    request.getIsMembershipDayBeforeAlertOn(), request.getIsMembershipExpiredAlertOn(),
-                    request.getIsNoticeAlertOn(), request.getIsCrewParticipantChangeAlertOn(),
-                    request.getIsCrewMeetingReminderAlertOn(), request.getIsRankingChangeAlertOn(),
-                    request.getIsWeeklyReportAlertOn(), request.getIsInactivityAlertOn(),
-                    request.getInactivityDays()
-            );
-            member.setNotificationSetting(newSetting);
-        } else {
-            // 기존 설정 변경 시
-            member.getNotificationSetting().update(
-                    request.getIsGlobalAlertOn(), request.getIsMembershipWeekBeforeAlertOn(),
-                    request.getIsMembershipDayBeforeAlertOn(), request.getIsMembershipExpiredAlertOn(),
-                    request.getIsNoticeAlertOn(), request.getIsCrewParticipantChangeAlertOn(),
-                    request.getIsCrewMeetingReminderAlertOn(), request.getIsRankingChangeAlertOn(),
-                    request.getIsWeeklyReportAlertOn(), request.getIsInactivityAlertOn(),
-                    request.getInactivityDays()
-            );
+            member.setNotificationSetting(new NotificationSetting(member));
         }
 
-        // 업데이트된 결과를 DTO로 변환하여 반환
-        return AlertResponse.from(member.getNotificationSetting());
+        member.getNotificationSetting().update(
+                request.getIsGlobalNotificationOn(),
+                request.getIsMembershipNotificationOn(),
+                request.getIsActivityNotificationOn(),
+                request.getIsCrewNotificationOn(),
+                request.getIsNoticeNotificationOn()
+        );
+
+        return NotificationResponse.from(member.getNotificationSetting());
+    }
+
+    @Transactional
+    public void updateMemberByAdmin(Long memberId, MemberUpdateRequest request) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
+
+        member.updateBasicInfo(request.getName(), request.getPhone());
+
+        LocalDate parsedBirthDate = request.getBirthDate() != null ? request.getBirthDate() : member.getBirthDate();
+        member.updateAdditionalInfo(request.getGender(), parsedBirthDate);
+
+        log.info("관리자가 회원 정보 수정 완료: {}", member.getId());
+
+        // googleSheetsService.updateMemberRow(member);
+    }
+
+    @Transactional(readOnly = true)
+    public OtherMemberProfileResponse getOtherMemberProfile(Long memberId) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
+
+        if (member.isDeleted()) {
+            throw new IllegalArgumentException("탈퇴한 회원의 정보는 조회할 수 없습니다.");
+        }
+
+        return OtherMemberProfileResponse.of(member);
+    }
+
+    @Transactional
+    public void withdrawMember(String loginId) {
+        Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않거나 이미 탈퇴한 회원입니다."));
+
+        // 엔티티 내부의 withdraw() 호출 (isDeleted = true, loginId/phone 변조 수행)
+        member.withdraw();
+        log.info("회원 탈퇴 완료: {}", member.getId());
+    }
+
+    @Transactional
+    public void updateFcmToken(String loginId, String fcmToken) {
+        Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
+                .orElseThrow(() -> new IllegalArgumentException("회원 정보가 없습니다."));
+        member.updateFcmToken(fcmToken);
     }
 }

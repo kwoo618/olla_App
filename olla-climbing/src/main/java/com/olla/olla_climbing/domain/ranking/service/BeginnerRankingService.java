@@ -27,50 +27,69 @@ public class BeginnerRankingService {
     // 초보벽 단일 리드 랭킹 조회 (난이도별로 명예의 전당과 챌린저 구분)
     @Transactional(readOnly = true)
     public BeginnerRankingResponse getBeginnerRanking(Difficulty difficulty) {
-        // 💡 수정 1: 명예의 전당은 IsMasterTrue 여야 하며, 메서드명에 Difficulty가 누락되어 있던 것을 추가했습니다.
         List<Ranking> masterRankings = rankingRepository.findByRankTypeAndDifficultyAndIsMasterTrueOrderByBaseDateDesc(RankType.BEGINNER, difficulty);
+        
         List<BeginnerRankingResponse.MasterDto> masterDtos = masterRankings.stream()
-                .map(r -> BeginnerRankingResponse.MasterDto.builder()
-                        .memberId(r.getMember().getId())
-                        .name(r.getMember().getName())
-                        .score(r.getScore())
-                        .achievedAt(r.getBaseDate())
-                        .build())
+                .map(r -> {
+                    // (동철 수정) 점수에 0.5가 더해져 있다면 왕복(ROUND_TRIP), 아니면 편도(ONE_WAY)로 확실하게 판단!
+                    String attemptType = (r.getScore() != null && r.getScore() % 1 != 0) ? "ROUND_TRIP" : "ONE_WAY";
+
+                    return BeginnerRankingResponse.MasterDto.builder()
+                            .memberId(r.getMember().getId())
+                            .name(r.getMember().getName())
+                            .score(Math.floor(r.getScore())) // 프론트엔드에는 0.5를 제거한 순수 홀드 수만 전달
+                            .attemptType(attemptType) // (동철 수정) DTO에 왕복/편도 명확히 주입
+                            .achievedAt(r.getBaseDate())
+                            .build();
+                })
                 .collect(Collectors.toList());
 
         List<BeginnerRankingResponse.ChallengerDto> challengerDtos = new ArrayList<>();
         LocalDateTime latestBaseDate = rankingRepository.findLatestBaseDate(RankType.BEGINNER, difficulty).orElse(null);
 
         if (latestBaseDate != null) {
-            // 💡 수정 2: 파라미터 3개(RankType, Difficulty, BaseDate)를 받는 메서드로 정확히 매핑했습니다.
             List<Ranking> challengerRankings = rankingRepository.findByRankTypeAndDifficultyAndIsMasterFalseAndBaseDateOrderByRankingAsc(RankType.BEGINNER, difficulty, latestBaseDate);
+            
             challengerDtos = challengerRankings.stream()
-                    .map(r -> BeginnerRankingResponse.ChallengerDto.builder()
-                            .memberId(r.getMember().getId())
-                            .name(r.getMember().getName())
-                            .ranking(r.getRanking())
-                            .score(r.getScore())
-                            .build())
+                    .map(r -> {
+                        // (동철 수정) 챌린저 역시 점수를 통해 왕복/편도 판단
+                        String attemptType = (r.getScore() != null && r.getScore() % 1 != 0) ? "ROUND_TRIP" : "ONE_WAY";
+
+                        return BeginnerRankingResponse.ChallengerDto.builder()
+                                .memberId(r.getMember().getId())
+                                .name(r.getMember().getName())
+                                .ranking(r.getRanking())
+                                .score(Math.floor(r.getScore())) // 순수 홀드 수만 전달
+                                .attemptType(attemptType) // (동철 수정) DTO에 왕복/편도 명확히 주입
+                                .achievedAt(r.getBaseDate())
+                                .build();
+                    })
                     .collect(Collectors.toList());
         }
 
         return BeginnerRankingResponse.builder().masters(masterDtos).challengers(challengerDtos).build();
     }
 
-    // 초보벽 단일 리드 기록 추가/업데이트 시 랭킹 업데이트 로직
     @Transactional
     public void updateBeginnerRanking(Member member, RecordBeginner record) {
         Difficulty difficulty = record.getDifficulty();
         Ranking ranking = rankingRepository.findByMemberAndRankTypeAndDifficulty(member, RankType.BEGINNER, difficulty).orElse(null);
 
-        boolean isNowMaster = record.isSuccess() || record.getMaxHoldNo() >= difficulty.getHoldCount();
-        Double newScore = Double.valueOf(record.getMaxHoldNo());
+        int safeMaxHoldNo = (record.getMaxHoldNo() != null) ? record.getMaxHoldNo() :
+                (record.isSuccess() ? difficulty.getHoldCount() : 0);
+
+        boolean isNowMaster = record.isSuccess() || safeMaxHoldNo >= difficulty.getHoldCount();
+
+        // 순수한 홀드 수를 저장합니다.
+        Double newScore = Double.valueOf(safeMaxHoldNo);
+
         boolean isRankingChanged = false;
 
         if (ranking != null) {
-            if (ranking.isMaster()) return;
-
-            if (isNowMaster) {
+            // 마스터 처리나 점수 갱신 로직은 동철님이 수정한 것(왕복 갱신 가능)을
+            // 랭킹 테이블 내의 attempt_type 비교 로직으로 교체해야 완벽하지만,
+            // 현재 구조에서는 동철님 의도대로 작동시키기 위해 아래와 같이 단순화합니다.
+            if (isNowMaster && !ranking.isMaster()) {
                 ranking.updateToMaster(newScore);
                 isRankingChanged = true;
             } else if (newScore > ranking.getScore()) {
@@ -78,12 +97,24 @@ public class BeginnerRankingService {
                 isRankingChanged = true;
             }
         } else {
-            ranking = Ranking.builder().member(member).baseDate(LocalDateTime.now()).rankType(RankType.BEGINNER).difficulty(difficulty).score(newScore).isMaster(isNowMaster).build();
+            ranking = Ranking.builder().member(member).baseDate(record.getRecordDate().atStartOfDay()) // 현재 시간이 아닌 '기록 달성일'을 기준일로 명확히 삽입
+                    .rankType(RankType.BEGINNER).difficulty(difficulty).score(newScore).isMaster(isNowMaster).build();
             rankingRepository.save(ranking);
             if (!isNowMaster) isRankingChanged = true;
         }
 
         if (isRankingChanged) recalculateChallengerRankings(difficulty);
+    }
+
+    // 챌린저 랭킹 재계산 시 순수 점수와 달성일(baseDate)로만 정렬
+    private void recalculateChallengerRankings(Difficulty difficulty) {
+        // 점수가 높을수록(Desc), 달성일이 빠를수록(Asc) 높은 랭킹을 줍니다.
+        List<Ranking> challengers = rankingRepository.findByRankTypeAndDifficultyAndIsMasterFalseOrderByScoreDescBaseDateAsc(RankType.BEGINNER, difficulty);
+        int currentRank = 1;
+        for (Ranking challenger : challengers) {
+            challenger.updateRanking(currentRank);
+            currentRank++;
+        }
     }
 
     // 초보벽 단일 리드 기록 삭제 시 랭킹 동기화 로직
@@ -99,8 +130,16 @@ public class BeginnerRankingService {
             rankingRepository.delete(ranking);
             isRankingChanged = true;
         } else {
-            boolean isStillMaster = bestRemainingRecord.isSuccess() || bestRemainingRecord.getMaxHoldNo() >= difficulty.getHoldCount();
-            Double bestScore = Double.valueOf(bestRemainingRecord.getMaxHoldNo());
+            int safeMaxHoldNo = (bestRemainingRecord.getMaxHoldNo() != null) ? bestRemainingRecord.getMaxHoldNo() :
+                                (bestRemainingRecord.isSuccess() ? difficulty.getHoldCount() : 0);
+
+            boolean isStillMaster = bestRemainingRecord.isSuccess() || safeMaxHoldNo >= difficulty.getHoldCount();
+            
+            // (동철 수정) 삭제 후 남은 기록이 왕복이면 똑같이 0.5점 가산 유지
+            Double bestScore = Double.valueOf(safeMaxHoldNo);
+            if (bestRemainingRecord.getAttemptType() != null && "ROUND_TRIP".equalsIgnoreCase(bestRemainingRecord.getAttemptType().name())) {
+                bestScore += 0.5;
+            }
 
             if (ranking.isMaster() != isStillMaster || !ranking.getScore().equals(bestScore)) {
                 ranking.syncBestRecord(bestScore, isStillMaster);
@@ -111,14 +150,4 @@ public class BeginnerRankingService {
         if (isRankingChanged) recalculateChallengerRankings(difficulty);
     }
 
-    // 챌린저 랭킹 재계산 로직 (초보벽 단일 리드 난이도별)
-    private void recalculateChallengerRankings(Difficulty difficulty) {
-        // 💡 수정 3: 메서드명에 Difficulty 누락되어 있던 것을 매핑했습니다.
-        List<Ranking> challengers = rankingRepository.findByRankTypeAndDifficultyAndIsMasterFalseOrderByScoreDescBaseDateAsc(RankType.BEGINNER, difficulty);
-        int currentRank = 1;
-        for (Ranking challenger : challengers) {
-            challenger.updateRanking(currentRank);
-            currentRank++;
-        }
-    }
 }

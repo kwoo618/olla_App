@@ -31,6 +31,7 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-security'		// [Security] 스프링 보안 관련 라이브러리 모음
 	implementation 'org.springframework.boot:spring-boot-starter-validation'	// [Validation] 유효성 검사를 도와주는 라이브러리
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'	//[Swagger] API 문서를 자동으로 만들어주는 라이브러리
+	implementation 'org.springframework.boot:spring-boot-starter-mail' 			// 이메일 전송 
 
 	// [JWT] 토큰 생성 및 검증을 위한 라이브러리 (jjwt 0.12.3 버전)
 	implementation 'io.jsonwebtoken:jjwt-api:0.12.3'	// JWT API 인터페이스 제공
@@ -50,6 +51,15 @@ dependencies {
 	implementation 'io.awspring.cloud:spring-cloud-aws-starter-s3:3.1.1'	// [AWS S3] Spring Boot 3.x 호환 클라우드 라이브러리
 
 	implementation 'net.nurigo:sdk:4.3.0'	// CoolSMS(Solapi) Java SDK
+
+	// Google Sheets API
+	implementation 'com.google.api-client:google-api-client:2.2.0'		// Google API Client Library (Google Sheets API와 상호작용하기 위해 필요)
+	implementation 'com.google.oauth-client:google-oauth-client-jetty:1.34.1'		// Google OAuth Client (Jetty 서버를 사용하여 인증 과정을 처리하기 위해 필요)
+	implementation 'com.google.apis:google-api-services-sheets:v4-rev20220927-2.0.0'	// Google Sheets API 라이브러리
+	implementation 'com.google.auth:google-auth-library-oauth2-http:1.23.0'		// Google Auth Library (GoogleCredentials 객체를 사용하기 위해 필수)
+
+	implementation 'org.springframework.boot:spring-boot-starter-mail'	// [Email] 이메일 발송을 위한 라이브러리
+	implementation 'com.google.firebase:firebase-admin:9.2.0'	// [Firebase Admin SDK] Firebase Admin SDK 라이브러리 (FCM 푸시 알림을 위해 필요)
 }
 
 tasks.named('test') {

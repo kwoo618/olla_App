@@ -1,7 +1,6 @@
 package com.olla.olla_climbing.domain.admin.entity;
 
 import com.olla.olla_climbing.domain.admin.enums.MembershipStatus;
-import com.olla.olla_climbing.domain.admin.enums.MembershipType;
 import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
@@ -11,11 +10,11 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Table(name = "membership")
 public class Membership extends BaseTimeEntity {
 
     @Id
@@ -23,107 +22,103 @@ public class Membership extends BaseTimeEntity {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "member_id", nullable = false)
+    @JoinColumn(name = "member_id")
     private Member member;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private MembershipType membershipType;
+    private Integer durationMonth; // 기간권: 개월 수
+    private Integer remainingCount; // 횟수권: 남은 횟수
 
-    // 기간권 전용 필드 (횟수권일 경우 null 허용)
     private LocalDate startDate;
     private LocalDate endDate;
 
-    // 횟수권 전용 필드 (기간권일 경우 null 허용)
-    private Integer remainingCount;
-
-    private LocalDate holdStartDate;
+    @Column(nullable = false)
+    private boolean isDeleted = false;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private MembershipStatus status;
+    private MembershipStatus status = MembershipStatus.ACTIVE;
+
+    private boolean isPaused = false;
+    private LocalDate pauseStartDate;
+    private Long remainingDaysAtPause;
+
+    private Integer accumulatedVisits = 0;
 
     @Builder
-    public Membership(Member member, MembershipType membershipType, LocalDate startDate, LocalDate endDate, Integer remainingCount, MembershipStatus status) {
+    public Membership(Member member, LocalDate startDate, Integer durationMonth, Integer remainingCount) {
         this.member = member;
-        this.membershipType = membershipType;
-        this.startDate = startDate;
-        this.endDate = endDate;
+        this.startDate = startDate != null ? startDate : LocalDate.now();
+        this.durationMonth = durationMonth;
         this.remainingCount = remainingCount;
-        this.status = status != null ? status : MembershipStatus.ACTIVE;
+
+        // 기간권일 경우 종료일 자동 계산
+        if (this.durationMonth != null) {
+            this.endDate = this.startDate.plusMonths(durationMonth);
+        }
     }
 
-    // --- 비즈니스 로직 메서드 ---
+    // 💡 [추가] 외부(DTO, 시트)에서 권종을 알아야 할 때 사용하는 비즈니스 메서드
+    public String getMembershipTypeName() {
+        if (this.durationMonth != null) return "PERIOD";
+        if (this.remainingCount != null) return "COUNT";
+        return "NONE";
+    }
 
-    // 1. 기간권 연장 로직
-    public void extendPeriod(int addMonths) {
-        if (this.membershipType != MembershipType.PERIOD) {
-            throw new IllegalArgumentException("기간권만 기간을 연장할 수 있습니다.");
-        }
-        // 기존 종료일이 오늘보다 이전이면 만료된 것이므로 오늘부터 새로 시작, 아니면 기존 종료일에 합산
-        LocalDate baseDate = (this.endDate != null && this.endDate.isAfter(LocalDate.now())) ? this.endDate : LocalDate.now();
-        this.endDate = baseDate.plusMonths(addMonths);
+    // 기존의 일시정지(pause), 해제(unpause) 로직은 동일하게 유지
+    public void pause() {
+        if (this.endDate == null || this.isPaused) return;
+        this.isPaused = true;
+        this.pauseStartDate = LocalDate.now();
+        this.remainingDaysAtPause = ChronoUnit.DAYS.between(pauseStartDate, this.endDate);
+        this.status = MembershipStatus.HOLDING;
+    }
+
+    public void unpause() {
+        if (!this.isPaused) return;
+        this.endDate = LocalDate.now().plusDays(this.remainingDaysAtPause);
+        this.isPaused = false;
+        this.pauseStartDate = null;
+        this.remainingDaysAtPause = null;
         this.status = MembershipStatus.ACTIVE;
     }
 
-    // 2. 횟수권 추가 로직
-    public void addCount(int addCount) {
-        if (this.membershipType != MembershipType.COUNT) {
-            throw new IllegalArgumentException("횟수권만 횟수를 추가할 수 있습니다.");
-        }
-        this.remainingCount = (this.remainingCount != null ? this.remainingCount : 0) + addCount;
-        this.status = MembershipStatus.ACTIVE;
-    }
-
-    // 3. 만료 처리 로직
     public void expire() {
         this.status = MembershipStatus.EXPIRED;
     }
 
-    // 4. 입장 시 횟수 차감 로직 (새로 추가)
-    public void decreaseCount() {
-        if (this.membershipType != MembershipType.COUNT) {
-            return; // 기간권은 차감할 횟수가 없으므로 패스
+    public void decreaseCount(int count) {
+        if (this.remainingCount == null || this.remainingCount < count) {
+            throw new IllegalArgumentException("잔여 횟수가 부족합니다.");
         }
-        if (this.remainingCount == null || this.remainingCount <= 0) {
+        this.remainingCount -= count;
+        if (this.remainingCount <= 0) {
+            this.status = MembershipStatus.EXPIRED;
+        }
+    }
+
+    public void increaseAccumulatedVisits() {
+        if (this.accumulatedVisits == null) {
+            this.accumulatedVisits = 0;
+        }
+        this.accumulatedVisits++;
+    }
+
+    public void markAsDeleted() {
+        this.isDeleted = true;
+    }
+
+    public void addDuration(int addMonths) {
+        this.durationMonth += addMonths;
+        this.endDate = this.endDate.plusMonths(addMonths);
+    }
+    public void addRemainingCount(int addCount) {
+        this.remainingCount += addCount;
+    }
+
+    public void useCount(int deductionCount) {
+        if (this.remainingCount == null || this.remainingCount < deductionCount) {
             throw new IllegalStateException("잔여 횟수가 부족합니다.");
         }
-        this.remainingCount -= 1;
-
-        // 차감 후 0회가 되면 자동으로 만료 처리
-        if (this.remainingCount == 0) {
-            this.expire();
-        }
+        this.remainingCount -= deductionCount;
     }
 
-    // 5. 이용권 일시정지 처리 로직 (새로 추가)
-    public void pause() {
-        if (this.status != MembershipStatus.ACTIVE) {
-            throw new IllegalStateException("활성 상태의 이용권만 일시정지할 수 있습니다.");
-        }
-
-        this.status = MembershipStatus.HOLDING;
-        this.holdStartDate = LocalDate.now(); // 정지 시작일 기록
-    }
-
-    // 6. 이용권 일시정지 해제 로직 (새로 추가)
-    public void unpause() {
-        if (this.status != MembershipStatus.HOLDING) {
-            throw new IllegalStateException("일시정지 상태의 이용권만 해제할 수 있습니다.");
-        }
-
-        // 기간권일 경우: 정지되어 있던 일수만큼 만료일(endDate) 연장
-        if (this.membershipType == MembershipType.PERIOD && this.holdStartDate != null && this.endDate != null) {
-            long holdDays = java.time.temporal.ChronoUnit.DAYS.between(this.holdStartDate, LocalDate.now());
-
-            // 만약 당일 정지 후 당일 해제했다면 holdDays는 0이므로 endDate 변화 없음
-            if (holdDays > 0) {
-                this.endDate = this.endDate.plusDays(holdDays);
-            }
-        }
-
-        // 공통: 상태를 다시 활성으로 변경하고 정지 시작일 초기화
-        this.status = MembershipStatus.ACTIVE;
-        this.holdStartDate = null;
-    }
 }

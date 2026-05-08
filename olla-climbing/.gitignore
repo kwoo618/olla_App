@@ -42,3 +42,27 @@ Thumbs.db
 
 ### Secret properties ###
 application-secret.yml
+google-credentials.json
+src/main/resources/firebase/
+
+
+
+### React Native Frontend ### 
+node_modules/
+.expo/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Android build files
+android/.gradle/
+android/app/build/
+android/local.properties
+
+# iOS build files
+ios/Pods/
+ios/DerivedData/
+ios/build/
+.xcode.env.local
+*.xcworkspace

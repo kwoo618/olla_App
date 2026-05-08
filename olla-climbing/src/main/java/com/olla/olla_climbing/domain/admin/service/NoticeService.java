@@ -11,12 +11,32 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+// (동철 수정) 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 @Service
 @RequiredArgsConstructor
 public class NoticeService {
 
     private final NoticeRepository noticeRepository;
     private final MemberRepository memberRepository;
+
+    // (동철 수정) 공지사항 사용자도 볼 수 있게 수정 
+    // 유저/관리자 공용 조회 메서드 추가
+    @Transactional(readOnly = true)
+    public Page<NoticeResponse> getNotices(Pageable pageable) {
+        return noticeRepository.findAll(pageable)
+                .map(NoticeResponse::from);
+    }
+    
+    // 상세 조회 메서드 추가
+    @Transactional(readOnly = true)
+    public NoticeResponse getNotice(Long noticeId) {
+        Notice notice = noticeRepository.findById(noticeId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 공지사항입니다."));
+        return NoticeResponse.from(notice);
+    }
 
     @Transactional
     public NoticeResponse createNotice(String loginId, NoticeCreateRequest request) {

@@ -14,6 +14,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+// (동철 수정) 사용자 조회 import
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
+
 @RestController
 @RequestMapping("/api/v1/admin/notices")
 @RequiredArgsConstructor
@@ -21,6 +26,23 @@ import org.springframework.web.bind.annotation.*;
 public class AdminNoticeController {
 
     private final NoticeService noticeService;
+
+    // (동철 수정) 공지 목록 조회 추가 
+    @GetMapping
+    @Operation(summary = "공지사항 목록 조회", description = "모든 사용자가 공지사항 목록을 조회할 수 있습니다.")
+    public ResponseEntity<Page<NoticeResponse>> getNotices(
+            @PageableDefault(size = 10) Pageable pageable) {
+        System.out.println("======= [확인] 공지사항 조회 API 호출됨 =======");
+        return ResponseEntity.ok(noticeService.getNotices(pageable));
+    }
+
+    // (동철 수정) 공지 상세 조회 추가
+    @GetMapping("/{noticeId}")
+    @Operation(summary = "공지사항 상세 조회", description = "특정 공지사항의 상세 내용을 조회합니다.")
+    public ResponseEntity<NoticeResponse> getNotice(@PathVariable("noticeId") Long noticeId) {
+        return ResponseEntity.ok(noticeService.getNotice(noticeId));
+    }
+
 
     @PostMapping
     @Operation(summary = "공지사항 작성", description = "관리자 권한으로 새로운 공지사항을 작성합니다.", security = @SecurityRequirement(name = "bearerAuth"))
