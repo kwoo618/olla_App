@@ -3,9 +3,9 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Ani
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const POST_API_URL = 'http://192.168.0.23:8080/api/vi/posts'; // 게시글 조회/작성/삭제 (vi)
-const PARTICIPANT_API_URL = 'http://192.168.0.23:8080/api/v1/posts'; // 참가/취소 (v1)
-const MEMBER_API_URL = 'http://192.168.0.23:8080/api/v1/members'; // 멤버 정보
+const POST_API_URL = 'http://172.29.145.90:8080/api/vi/posts'; // 게시글 조회/작성/삭제 (vi)
+const PARTICIPANT_API_URL = 'http://172.29.145.90:8080/api/v1/posts'; // 참가/취소 (v1)
+const MEMBER_API_URL = 'http://172.29.145.90:8080/api/v1/members'; // 멤버 정보
 
 const CommunityScreen = ({ myProfile, myToggles }: any) => {
   const [selectedTab, setSelectedTab] = useState('전체');

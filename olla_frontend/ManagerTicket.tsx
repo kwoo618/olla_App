@@ -9,7 +9,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // API 주소 세팅
-const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
+const API_BASE_URL = 'http://172.29.145.90:8080/api/v1';
 const MEMBER_LIST_API = `${API_BASE_URL}/admin/memberships/members`; 
 const MEMBERSHIP_GRANT_API = `${API_BASE_URL}/admin/memberships/grant`; 
 const MEMBERSHIP_BASE_API = `${API_BASE_URL}/admin/memberships`; 

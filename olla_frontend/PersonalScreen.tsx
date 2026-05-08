@@ -11,7 +11,7 @@ import {
   Alert 
 } from 'react-native';
 
-const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
+const API_BASE_URL = 'http://172.29.145.90:8080/api/v1';
 
 const PersonalScreen = ({ navigation, route }: any) => {
   // 1️⃣ 이전 화면(SignupScreen)에서 전달받은 데이터 추출

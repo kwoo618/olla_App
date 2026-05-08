@@ -13,8 +13,8 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // 💡 API URL 세팅 (posts는 vi, 관리자는 v1)
-const API_BASE_URL_V1 = 'http://192.168.0.23:8080/api/v1';
-const API_BASE_URL_VI = 'http://192.168.0.23:8080/api/vi';
+const API_BASE_URL_V1 = 'http://172.29.145.90:8080/api/v1';
+const API_BASE_URL_VI = 'http://172.29.145.90:8080/api/vi';
 
 const POST_API_URL = `${API_BASE_URL_VI}/posts`;
 const NOTICE_API_URL = `${API_BASE_URL_V1}/admin/notices`;

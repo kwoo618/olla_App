@@ -7,7 +7,7 @@ import {
   Image, Switch, Modal, Animated, TextInput, Alert, ActivityIndicator, Linking
 } from 'react-native';
 
-const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
+const API_BASE_URL = 'http://172.29.145.90:8080/api/v1';
 
 const MYScreen = ({ navigation }: any) => {
   const isFocused = useIsFocused();
