@@ -16,7 +16,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
 
-// 🔥 API 주소 설정
+// API 주소 설정
 const BASE = 'http://192.168.0.23:8080/api/v1/posts';
 const MEMBERS = `${BASE}/members`;
 
@@ -41,7 +41,7 @@ const ManagerCommunity = ({ navigation }: any) => {
     }
   }, [isFocused]);
 
-  // 💡 정렬 로직 (마감된 글은 하단으로, 나머지는 최신순으로)
+  // 정렬 로직 (마감된 글은 하단으로, 나머지는 최신순으로)
   const sortPosts = (list: any[]) => {
     return list.sort((a, b) => {
       if (a.isPast && !b.isPast) return 1;
@@ -54,10 +54,10 @@ const ManagerCommunity = ({ navigation }: any) => {
   const fetchPosts = async () => {
     try {
       const headers = await authHeader();
-      // 🔥 수정: 백엔드 페이징 규격에 맞춰 URL 파라미터 구성
+      // 수정: 백엔드 페이징 규격에 맞춰 URL 파라미터 구성
       const response = await axios.get(`${BASE}?page=0&size=100&sort=id,desc`, { headers });
       
-      // 🔥 수정: 백엔드의 다중 중첩 구조(data.data.content)를 안전하게 파싱
+      // 수정: 백엔드의 다중 중첩 구조(data.data.content)를 안전하게 파싱
       const raw = response.data?.data?.data?.content || response.data?.data?.content || response.data?.data || [];
       const list = Array.isArray(raw) ? raw : [];
 
@@ -269,8 +269,7 @@ const ManagerCommunity = ({ navigation }: any) => {
                   )}
                   <Text style={[styles.authorText, isPast && { color: '#666666' }]}>{post.author}</Text>
                 </TouchableOpacity>
-                
-                {/* 관리자는 별도 참여 버튼 표시 없음 (삭제 아이콘은 상단 위치) */}
+            
               </View>
             </View>
           );

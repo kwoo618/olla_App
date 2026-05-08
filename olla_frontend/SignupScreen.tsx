@@ -24,15 +24,31 @@ const SignupScreen = ({ navigation }: any) => {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
 
+  // 아이디
   const [idError, setIdError] = useState('');
-  const [idSuccess, setIdSuccess] = useState(''); // ✅ 추가: 성공 메시지 상태
+  const [idSuccess, setIdSuccess] = useState('');
+  const [isIdChecked, setIsIdChecked] = useState(false);
+
+  // 비밀번호
   const [passwordError, setPasswordError] = useState('');
   const [passwordConfirmError, setPasswordConfirmError] = useState('');
-  const [emailError, setEmailError] = useState('');
-  const [phoneError, setPhoneError] = useState('');
-  const [birthError, setBirthError] = useState('');
 
-  const [isIdChecked, setIsIdChecked] = useState(false);
+  // 이메일
+  const [emailError, setEmailError] = useState('');
+  const [emailSuccess, setEmailSuccess] = useState('');
+  const [isEmailSent, setIsEmailSent] = useState(false);
+  const [isEmailVerified, setIsEmailVerified] = useState(false);
+  const [emailCode, setEmailCode] = useState('');
+  const [emailCodeError, setEmailCodeError] = useState('');
+  const [emailCodeSuccess, setEmailCodeSuccess] = useState('');
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
+
+  // 전화번호
+  const [phoneError, setPhoneError] = useState('');
+
+  // 생년월일
+  const [birthError, setBirthError] = useState('');
 
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
@@ -41,7 +57,10 @@ const SignupScreen = ({ navigation }: any) => {
   const nameRef = useRef<TextInput>(null);
   const birthRef = useRef<TextInput>(null);
   const emailRef = useRef<TextInput>(null);
+  const emailCodeRef = useRef<TextInput>(null);
   const phoneRef = useRef<TextInput>(null);
+
+  // ─── 유효성 검사 ───────────────────────────────────────
 
   const validatePassword = (pw: string) => {
     setPassword(pw);
@@ -79,52 +98,39 @@ const SignupScreen = ({ navigation }: any) => {
     } else {
       setEmailError('');
     }
+    setIsEmailSent(false);
+    setIsEmailVerified(false);
+    setEmailCode('');
+    setEmailCodeError('');
+    setEmailCodeSuccess('');
+    setEmailSuccess('');
   };
 
   const formatBirth = (text: string) => {
     const cleaned = text.replace(/[^0-9]/g, '');
     let formatted = cleaned;
-
     if (cleaned.length > 4 && cleaned.length <= 6) {
       formatted = `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`;
     } else if (cleaned.length > 6) {
       formatted = `${cleaned.slice(0, 4)}-${cleaned.slice(4, 6)}-${cleaned.slice(6, 8)}`;
     }
-    
     setBirth(formatted);
-
     if (cleaned.length > 0 && cleaned.length < 8) {
       setBirthError('생년월일 8자리를 모두 입력해주세요.');
       return;
     }
-
     if (cleaned.length === 8) {
       const year = parseInt(cleaned.slice(0, 4), 10);
       const month = parseInt(cleaned.slice(4, 6), 10);
       const day = parseInt(cleaned.slice(6, 8), 10);
-
       const currentYear = new Date().getFullYear();
-      if (year < 1900 || year > currentYear) {
-        setBirthError('유효한 연도를 입력해주세요.');
-        return;
-      }
-
-      if (month < 1 || month > 12) {
-        setBirthError('유효한 월(1~12)을 입력해주세요.');
-        return;
-      }
-
+      if (year < 1900 || year > currentYear) { setBirthError('유효한 연도를 입력해주세요.'); return; }
+      if (month < 1 || month > 12) { setBirthError('유효한 월(1~12)을 입력해주세요.'); return; }
       const daysInMonth = new Date(year, month, 0).getDate();
-      if (day < 1 || day > daysInMonth) {
-        setBirthError(`유효한 일(1~${daysInMonth})을 입력해주세요.`);
-        return;
-      }
-
+      if (day < 1 || day > daysInMonth) { setBirthError(`유효한 일(1~${daysInMonth})을 입력해주세요.`); return; }
       setBirthError('');
     } else {
-      if (cleaned.length === 0) {
-        setBirthError('');
-      }
+      if (cleaned.length === 0) setBirthError('');
     }
   };
 
@@ -144,98 +150,148 @@ const SignupScreen = ({ navigation }: any) => {
     }
   };
 
+  // ─── API 호출 ───────────────────────────────────────────
+
   const checkDuplicateId = async () => {
-    if (!id) {
-      setIdError('아이디를 먼저 입력해주세요.');
-      setIdSuccess('');
-      return;
-    }
-    if (id.length < 4 || id.length > 15) {
-      setIdError('아이디는 4~15자로 입력해주세요.');
-      setIdSuccess('');
-      return;
-    }
-
+    if (!id) { setIdError('아이디를 먼저 입력해주세요.'); setIdSuccess(''); return; }
+    if (id.length < 4 || id.length > 15) { setIdError('아이디는 4~15자로 입력해주세요.'); setIdSuccess(''); return; }
     try {
-      const response = await axios.get(`${API_BASE_URL}/auth/check-id`, {
-        params: { loginId: id }
-      });
+      const response = await axios.get(`${API_BASE_URL}/auth/check-id`, { params: { loginId: id } });
       const isDuplicate = response.data?.data?.isDuplicate ?? response.data?.isDuplicate;
-
       if (isDuplicate) {
         setIdError('이미 사용 중인 아이디입니다.');
-        setIdSuccess(''); // ✅ 성공 메시지 초기화
+        setIdSuccess('');
         setIsIdChecked(false);
       } else {
         setIdError('');
-        setIdSuccess('사용 가능한 아이디입니다.'); // ✅ Alert 대신 인라인 성공 메시지
+        setIdSuccess('사용 가능한 아이디입니다.');
         setIsIdChecked(true);
-        passwordRef.current?.focus();
       }
-    } catch (error: any) {
+    } catch {
       Alert.alert('오류', '중복 확인 중 서버 오류가 발생했습니다.');
     }
   };
+
+  const sendEmailVerification = async () => {
+    if (!email || emailError) {
+      Alert.alert('알림', '이메일을 올바르게 입력해주세요.');
+      return;
+    }
+    setIsSendingEmail(true);
+    try {
+      await axios.post(`${API_BASE_URL}/auth/email/request`, null, { params: { email } });
+      setIsEmailSent(true);
+      setEmailSuccess('인증코드가 발송되었습니다.');
+      setEmailCodeError('');
+      setEmailCodeSuccess('');
+      setEmailCode('');
+      setTimeout(() => emailCodeRef.current?.focus(), 300);
+    } catch {
+      Alert.alert('오류', '이메일 발송 중 서버 오류가 발생했습니다.');
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
+  const verifyEmailCode = async () => {
+    if (!emailCode) {
+      setEmailCodeError('인증코드를 입력해주세요.');
+      return;
+    }
+    setIsVerifyingEmail(true);
+    try {
+      const response = await axios.post(`${API_BASE_URL}/auth/email/verify`, null, { params: { email, code: emailCode } });
+      const status = response.data?.status;
+      if (status === 0 || response.status === 200) {
+        setEmailCodeError('');
+        setEmailCodeSuccess('이메일 인증이 완료되었습니다.');
+        setIsEmailVerified(true);
+      } else {
+        setEmailCodeError(response.data?.message || '인증코드가 올바르지 않습니다.');
+        setIsEmailVerified(false);
+      }
+    } catch (error: any) {
+      const msg = error.response?.data?.message || '인증코드가 올바르지 않습니다.';
+      setEmailCodeError(msg);
+      setIsEmailVerified(false);
+    } finally {
+      setIsVerifyingEmail(false);
+    }
+  };
+
+  // ─── 다음으로 ────────────────────────────────────────────
 
   const handleNextStep = () => {
     if (!isIdChecked) {
       Alert.alert('알림', '아이디 중복 확인을 해주세요.');
       return;
     }
-    if (passwordError || !password || password !== passwordConfirm) {
-      Alert.alert('알림', '비밀번호 양식을 확인해주세요.');
+    if (!password || passwordError) {
+      Alert.alert('알림', '비밀번호를 올바르게 입력해주세요.');
       return;
     }
-    
-    if (!email || emailError) {
-      Alert.alert('알림', '이메일을 올바르게 입력해주세요.');
+    if (password !== passwordConfirm || passwordConfirmError) {
+      Alert.alert('알림', '비밀번호가 일치하지 않습니다.');
       return;
     }
-
+    if (!name.trim()) {
+      Alert.alert('알림', '이름을 입력해주세요.');
+      return;
+    }
+    if (!gender) {
+      Alert.alert('알림', '성별을 선택해주세요.');
+      return;
+    }
     if (birthError || birth.length !== 10) {
       Alert.alert('알림', '올바른 생년월일을 입력해주세요. (예: 1999-01-01)');
       return;
     }
-
-    if (!name || !gender || phoneError || !phone) {
-      Alert.alert('알림', '필수 정보를 모두 올바르게 입력해주세요.');
+    if (!phone || phoneError) {
+      Alert.alert('알림', '전화번호를 올바르게 입력해주세요.');
+      return;
+    }
+    if (!email || emailError) {
+      Alert.alert('알림', '이메일을 올바르게 입력해주세요.');
+      return;
+    }
+    if (!isEmailVerified) {
+      Alert.alert('알림', '이메일 인증을 완료해주세요.');
       return;
     }
 
     navigation.navigate('PersonalInfo', {
       accountData: {
         loginId: id,
-        password: password,
-        name: name,
-        gender: gender,
+        password,
+        name,
+        gender,
         birthDate: birth,
-        phone: phone,
-        email: email,
-        role: 'USER'
+        phone,
+        email,
+        role: 'USER',
       }
     });
   };
 
+  // ─── 렌더링 ─────────────────────────────────────────────
+
   return (
-    <KeyboardAvoidingView 
-      style={{ flex: 1 }} 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.background} keyboardShouldPersistTaps="handled">
         <View style={styles.container}>
           <Text style={styles.title}>회원가입</Text>
 
-          {/* 1. 아이디 */}
+          {/* 아이디 */}
           <Text style={styles.middleText}>아이디</Text>
           <View style={[
-            styles.inputRow, 
+            styles.inputRow,
             focusedField === 'id' && styles.focusedInput,
             idError !== '' && styles.inputRowError,
-            idSuccess !== '' && styles.inputRowSuccess // ✅ 성공 시 초록 테두리
+            isIdChecked && focusedField === 'id' && styles.inputRowSuccess,
           ]}>
-            <TextInput 
-              style={styles.inputFlex} 
-              placeholder="4~15자로 입력하세요" 
+            <TextInput
+              style={styles.inputFlex}
+              placeholder="4~15자로 입력하세요"
               placeholderTextColor="#ffffff80"
               value={id}
               autoCapitalize="none"
@@ -244,7 +300,6 @@ const SignupScreen = ({ navigation }: any) => {
               returnKeyType="next"
               onFocus={() => setFocusedField('id')}
               onBlur={() => setFocusedField(null)}
-              onSubmitEditing={checkDuplicateId}
               onChangeText={(text) => {
                 setId(text);
                 if (text.length > 0 && (text.length < 4 || text.length > 15)) {
@@ -252,29 +307,27 @@ const SignupScreen = ({ navigation }: any) => {
                 } else {
                   setIdError('');
                 }
-                setIdSuccess(''); // ✅ 텍스트 변경 시 성공 메시지 초기화
+                setIdSuccess('');
                 setIsIdChecked(false);
               }}
             />
-            <TouchableOpacity style={styles.duplicateCheckButton} onPress={checkDuplicateId}>
-              <Text style={styles.duplicateCheckText}>중복확인</Text>
+            <TouchableOpacity style={styles.checkButton} onPress={checkDuplicateId}>
+              <Text style={styles.checkButtonText}>중복확인</Text>
             </TouchableOpacity>
           </View>
           {idError !== '' && <Text style={styles.errorText}>{idError}</Text>}
-          {idSuccess !== '' && <Text style={styles.successText}>{idSuccess}</Text>}
+          {idSuccess !== '' && focusedField === 'id' && (
+            <Text style={styles.successText}>{idSuccess}</Text>
+          )}
 
-          {/* 2. 비밀번호 */}
+          {/* 비밀번호 */}
           <Text style={styles.middleText}>비밀번호</Text>
-          <TextInput 
+          <TextInput
             ref={passwordRef}
-            style={[
-              styles.input, 
-              focusedField === 'password' && styles.focusedInput,
-              passwordError ? styles.inputError : null
-            ]} 
-            placeholder="영문+숫자 포함 6자 이상" 
+            style={[styles.input, focusedField === 'password' && styles.focusedInput, passwordError ? styles.inputError : null]}
+            placeholder="영문+숫자 포함 6자 이상"
             placeholderTextColor="#ffffff80"
-            secureTextEntry={true}
+            secureTextEntry
             autoCapitalize="none"
             textContentType="oneTimeCode"
             returnKeyType="next"
@@ -286,18 +339,14 @@ const SignupScreen = ({ navigation }: any) => {
           />
           {passwordError !== '' && <Text style={styles.errorText}>{passwordError}</Text>}
 
-          {/* 3. 비밀번호 재입력 */}
+          {/* 비밀번호 재입력 */}
           <Text style={styles.middleText}>비밀번호 재입력</Text>
-          <TextInput 
+          <TextInput
             ref={confirmRef}
-            style={[
-              styles.input, 
-              focusedField === 'confirm' && styles.focusedInput,
-              passwordConfirmError ? styles.inputError : null
-            ]} 
-            placeholder="비밀번호를 다시 입력하세요" 
+            style={[styles.input, focusedField === 'confirm' && styles.focusedInput, passwordConfirmError ? styles.inputError : null]}
+            placeholder="비밀번호를 다시 입력하세요"
             placeholderTextColor="#ffffff80"
-            secureTextEntry={true}
+            secureTextEntry
             autoCapitalize="none"
             textContentType="oneTimeCode"
             returnKeyType="next"
@@ -308,50 +357,41 @@ const SignupScreen = ({ navigation }: any) => {
             onChangeText={validatePasswordConfirm}
           />
           {passwordConfirmError !== '' && <Text style={styles.errorText}>{passwordConfirmError}</Text>}
-          
+
           <View style={styles.divider} />
 
-          {/* 사용자 정보 영역 */}
+          {/* 이름 */}
           <Text style={styles.middleText}>이름</Text>
-          <TextInput 
+          <TextInput
             ref={nameRef}
-            style={[styles.input, focusedField === 'name' && styles.focusedInput]} 
-            placeholder="이름을 입력하세요" 
+            style={[styles.input, focusedField === 'name' && styles.focusedInput]}
+            placeholder="이름을 입력하세요"
             placeholderTextColor="#ffffff80"
             returnKeyType="next"
             onFocus={() => setFocusedField('name')}
             onBlur={() => setFocusedField(null)}
-            onSubmitEditing={() => birthRef.current?.focus()} 
+            onSubmitEditing={() => birthRef.current?.focus()}
             value={name}
             onChangeText={setName}
           />
 
+          {/* 성별 */}
           <Text style={styles.middleText}>성별</Text>
           <View style={styles.genderRow}>
-            <TouchableOpacity 
-              style={[styles.genderBtn, gender === '남' && styles.genderBtnActive]}
-              onPress={() => setGender('남')}
-            >
+            <TouchableOpacity style={[styles.genderBtn, gender === '남' && styles.genderBtnActive]} onPress={() => setGender('남')}>
               <Text style={[styles.genderBtnText, gender === '남' && styles.genderBtnTextActive]}>남자</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.genderBtn, gender === '여' && styles.genderBtnActive]}
-              onPress={() => setGender('여')}
-            >
+            <TouchableOpacity style={[styles.genderBtn, gender === '여' && styles.genderBtnActive]} onPress={() => setGender('여')}>
               <Text style={[styles.genderBtnText, gender === '여' && styles.genderBtnTextActive]}>여자</Text>
             </TouchableOpacity>
           </View>
 
           {/* 생년월일 */}
           <Text style={styles.middleText}>생년월일</Text>
-          <TextInput 
+          <TextInput
             ref={birthRef}
-            style={[
-              styles.input, 
-              focusedField === 'birth' && styles.focusedInput,
-              birthError ? styles.inputError : null
-            ]} 
-            placeholder="YYYY-MM-DD (예: 1999-01-01)" 
+            style={[styles.input, focusedField === 'birth' && styles.focusedInput, birthError ? styles.inputError : null]}
+            placeholder="YYYY-MM-DD (예: 1999-01-01)"
             placeholderTextColor="#ffffff80"
             keyboardType="number-pad"
             maxLength={10}
@@ -363,16 +403,17 @@ const SignupScreen = ({ navigation }: any) => {
             onChangeText={formatBirth}
           />
           {birthError !== '' && <Text style={styles.errorText}>{birthError}</Text>}
-          
+
+          {/* 전화번호 */}
           <Text style={styles.middleText}>전화번호</Text>
-          <TextInput 
+          <TextInput
             ref={phoneRef}
             style={[
-              styles.input, 
+              styles.input,
               focusedField === 'phone' && styles.focusedInput,
-              phoneError ? styles.inputError : null
-            ]} 
-            placeholder="010-0000-0000" 
+              phoneError !== '' ? styles.inputError : null,
+            ]}
+            placeholder="010-0000-0000"
             placeholderTextColor="#ffffff80"
             keyboardType="phone-pad"
             maxLength={13}
@@ -387,29 +428,87 @@ const SignupScreen = ({ navigation }: any) => {
 
           {/* 이메일 */}
           <Text style={styles.middleText}>이메일</Text>
-          <TextInput 
-            ref={emailRef}
-            style={[
-              styles.input, 
-              focusedField === 'email' && styles.focusedInput,
-              emailError ? styles.inputError : null
-            ]} 
-            placeholder="example@email.com" 
-            placeholderTextColor="#ffffff80"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            returnKeyType="done"
-            onFocus={() => setFocusedField('email')}
-            onBlur={() => setFocusedField(null)}
-            onSubmitEditing={handleNextStep}
-            value={email}
-            onChangeText={validateEmail}
-          />
+          <View style={[
+            styles.inputRow,
+            focusedField === 'email' && styles.focusedInput,
+            emailError !== '' && styles.inputRowError,
+            isEmailVerified && focusedField === 'email' && styles.inputRowSuccess,
+          ]}>
+            <TextInput
+              ref={emailRef}
+              style={styles.inputFlex}
+              placeholder="example@email.com"
+              placeholderTextColor="#ffffff80"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              returnKeyType="next"
+              onFocus={() => setFocusedField('email')}
+              onBlur={() => setFocusedField(null)}
+              onSubmitEditing={sendEmailVerification}
+              value={email}
+              onChangeText={validateEmail}
+              editable={!isEmailVerified}
+            />
+            <TouchableOpacity
+              style={[styles.checkButton, (isSendingEmail || isEmailVerified) && styles.checkButtonDisabled]}
+              onPress={sendEmailVerification}
+              disabled={isSendingEmail || isEmailVerified}
+            >
+              <Text style={styles.checkButtonText}>
+                {isEmailVerified ? '인증완료' : isSendingEmail ? '발송중' : isEmailSent ? '재발송' : '인증발송'}
+              </Text>
+            </TouchableOpacity>
+          </View>
           {emailError !== '' && <Text style={styles.errorText}>{emailError}</Text>}
+          {emailSuccess !== '' && !isEmailVerified && <Text style={styles.successText}>{emailSuccess}</Text>}
+          {isEmailVerified && focusedField === 'email' && (
+            <Text style={styles.successText}>✓ 이메일 인증 완료</Text>
+          )}
 
-          <TouchableOpacity 
-            onPress={handleNextStep} 
-            style={[styles.button, !isIdChecked && styles.buttonDisabled]}
+          {/* 이메일 인증코드 입력 (발송 후 표시) */}
+          {isEmailSent && !isEmailVerified && (
+            <>
+              <Text style={styles.middleText}>인증코드</Text>
+              <View style={[
+                styles.inputRow,
+                focusedField === 'emailCode' && styles.focusedInput,
+                emailCodeError !== '' && styles.inputRowError,
+                emailCodeSuccess !== '' && styles.inputRowSuccess,
+              ]}>
+                <TextInput
+                  ref={emailCodeRef}
+                  style={styles.inputFlex}
+                  placeholder="인증코드 6자리 입력"
+                  placeholderTextColor="#ffffff80"
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  returnKeyType="done"
+                  onFocus={() => setFocusedField('emailCode')}
+                  onBlur={() => setFocusedField(null)}
+                  onSubmitEditing={verifyEmailCode}
+                  value={emailCode}
+                  onChangeText={(text) => {
+                    setEmailCode(text);
+                    setEmailCodeError('');
+                    setEmailCodeSuccess('');
+                  }}
+                />
+                <TouchableOpacity
+                  style={[styles.checkButton, isVerifyingEmail && styles.checkButtonDisabled]}
+                  onPress={verifyEmailCode}
+                  disabled={isVerifyingEmail}
+                >
+                  <Text style={styles.checkButtonText}>{isVerifyingEmail ? '확인중' : '인증확인'}</Text>
+                </TouchableOpacity>
+              </View>
+              {emailCodeError !== '' && <Text style={styles.errorText}>{emailCodeError}</Text>}
+              {emailCodeSuccess !== '' && <Text style={styles.successText}>{emailCodeSuccess}</Text>}
+            </>
+          )}
+
+          <TouchableOpacity
+            onPress={handleNextStep}
+            style={[styles.button, (!isIdChecked || !isEmailVerified) && styles.buttonDisabled]}
           >
             <Text style={styles.buttonText}>다음으로</Text>
           </TouchableOpacity>
@@ -424,22 +523,24 @@ const styles = StyleSheet.create({
   container: { width: '100%', backgroundColor: '#212121', padding: 20, borderRadius: 25, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 10 },
   title: { fontSize: 32, fontWeight: 'bold', marginBottom: 20, color: '#ffffff', textAlign: 'center' },
   middleText: { color: '#ffffff', fontSize: 14, alignSelf: 'flex-start', marginBottom: 8, marginLeft: 5, marginTop: 10 },
-  
+
   input: { width: '100%', height: 50, borderWidth: 1, borderColor: '#444444', color: '#ffffff', borderRadius: 10, paddingHorizontal: 15, marginBottom: 5 },
   inputRow: { flexDirection: 'row', alignItems: 'center', width: '100%', height: 50, borderWidth: 1, borderColor: '#444444', borderRadius: 10, marginBottom: 5, paddingRight: 5 },
-  
   inputFlex: { flex: 1, height: '100%', color: '#ffffff', paddingHorizontal: 15 },
-  duplicateCheckButton: { backgroundColor: '#A1BE44', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 },
-  duplicateCheckText: { color: '#000000', fontSize: 12, fontWeight: 'bold' },
+
+  checkButton: { backgroundColor: '#A1BE44', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8 },
+  checkButtonDisabled: { backgroundColor: '#555555' },
+  checkButtonText: { color: '#000000', fontSize: 12, fontWeight: 'bold' },
+
   errorText: { color: '#ff4d4d', fontSize: 12, alignSelf: 'flex-start', marginLeft: 5, marginBottom: 10 },
-  successText: { color: '#A1BE44', fontSize: 12, alignSelf: 'flex-start', marginLeft: 5, marginBottom: 10 }, // ✅ 추가
+  successText: { color: '#A1BE44', fontSize: 12, alignSelf: 'flex-start', marginLeft: 5, marginBottom: 10 },
   divider: { height: 1, backgroundColor: '#333333', marginVertical: 15 },
 
-  focusedInput: { borderColor: '#A1BE44' }, 
-  inputError: { borderColor: '#ff4d4d' },    
-  inputRowError: { borderColor: '#ff4d4d' }, 
-  inputRowSuccess: { borderColor: '#A1BE44' }, // ✅ 추가
-  
+  focusedInput: { borderColor: '#A1BE44' },
+  inputError: { borderColor: '#ff4d4d' },
+  inputRowError: { borderColor: '#ff4d4d' },
+  inputRowSuccess: { borderColor: '#A1BE44' },
+
   genderRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
   genderBtn: { flex: 1, backgroundColor: '#2A2A2A', borderWidth: 1, borderColor: '#444444', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginHorizontal: 4 },
   genderBtnActive: { borderColor: '#A1BE44', backgroundColor: 'rgba(161, 190, 68, 0.1)' },

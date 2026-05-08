@@ -64,12 +64,10 @@ const CommunityScreen = ({ route, navigation }: any) => {
     });
   };
 
-  // ✅ isMine 판별 함수 - writerId가 있으면 ID로만 비교, 없을 때만 이름 fallback
   const checkIsMine = (writerId: number | null, writerName: string, uId: number | null, uName: string, uNick: string): boolean => {
     if (uId !== null && writerId !== null && writerId !== undefined) {
       return Number(writerId) === Number(uId);
     }
-    // writerId를 못 받아온 경우에만 이름으로 fallback
     return writerName === uName || writerName === uNick;
   };
 
@@ -85,7 +83,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
 
       if (filterToUse === 'MY_APPLIED') {
         list = list.filter((item: any) => {
-          // ✅ MY_APPLIED 필터에서도 isMine을 ID 기준으로 판별
           const isMine = checkIsMine(item.writerId, item.writerName || '', uId, uName, uNick);
           return !isMine;
         });
@@ -104,7 +101,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
     list.map(item => {
       const md = new Date(item.meetDateTime), cd = new Date(item.createdAt);
       const author = item.writerName || '알 수 없음';
-      // ✅ isMine을 ID 기준으로 판별
       const isMine = checkIsMine(item.writerId, author, uId, uName, uNick);
       const isPast = md.getTime() < new Date().getTime();
 
@@ -167,7 +163,8 @@ const CommunityScreen = ({ route, navigation }: any) => {
     updatePost(id, { isLiked: !liked, likeCount: (post: any) => liked ? Math.max(post.likeCount-1,0) : post.likeCount+1 });
     try {
       const headers = await authHeader();
-      liked ? await axios.delete(`${POSTS}/${id}/like`,{headers}) : await axios.post(`${POSTS}/${id}/like`,{},{headers});
+      // DELETE 대신 POST로 토글 처리 (서버 에러 방지)
+      await axios.post(`${POSTS}/${id}/like`, {}, { headers });
     } catch {
       updatePost(id, { isLiked: liked, likeCount: (post: any) => liked ? post.likeCount+1 : post.likeCount-1 });
       Alert.alert('알림','좋아요 요청을 처리할 수 없습니다.');
@@ -347,7 +344,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
       closeCreateModal(); 
       initData(currentFilter);
     } catch (e: any) {
-      console.log('Post Error: ', e?.response?.data);
       Alert.alert(`${isEditMode ? '수정' : '작성'} 실패`, e?.response?.data?.message || '처리에 실패했습니다.');
     }
   };
