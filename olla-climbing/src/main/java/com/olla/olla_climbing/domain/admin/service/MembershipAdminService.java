@@ -122,7 +122,7 @@ public class MembershipAdminService {
         });
     }
 
-    @Scheduled(cron = "0 0 9 * * *")
+    @Scheduled(cron = "0 0 9 * * *")    //
     @Transactional
     public void generateExpirySummaryAlert() {
         LocalDate today = LocalDate.now();

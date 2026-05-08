@@ -47,15 +47,8 @@ public class SecurityConfig {
                 // requestMatchers: 특정 주소를 콕 집어서 설정합니다.
                 // permitAll(): "묻지도 따지지도 말고 들여보내라" (누구나 접속 가능)
                 .authorizeHttpRequests(auth -> auth
-                        // [Swagger 관련 주소]
-                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-resources/**").permitAll()
-
-                        // [회원가입/로그인 주소]
-                        .requestMatchers("/api/v1/auth/**").permitAll()
-
-                        // [그 외 모든 주소] - 위에서 말한 것 빼고는 다 인증(로그인) 해야 들어갈 수 있다!
-                        // .anyRequest().authenticated() // (지금은 개발 중이라 일단 주석 처리하거나 permitAll)
-                        .anyRequest().permitAll()
+                        .requestMatchers("/api/v1/auth/**", "/swagger-ui/**", "/v3/api-docs/**").permitAll() // 열어둘 곳
+                        .anyRequest().authenticated() // 나머지는 모두 인증 필요
                 )
 
                 // 5. JWT 인증 필터 추가

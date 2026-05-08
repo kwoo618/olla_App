@@ -15,6 +15,9 @@ public class AdminMemberResponse {
     private String name;
     private String phone;
 
+    private String role;
+    private boolean isDeleted;
+
     private String membershipStatus;
     private String membershipType;
     private LocalDate startDate;
@@ -27,6 +30,8 @@ public class AdminMemberResponse {
                     .memberId(member.getId())
                     .name(member.getName())
                     .phone(member.getPhone())
+                    .role(member.getRole() != null ? member.getRole().name() : "USER") // 💡 Null 방어
+                    .isDeleted(member.isDeleted())
                     .membershipStatus("NONE")
                     .build();
         }
@@ -36,6 +41,8 @@ public class AdminMemberResponse {
                 .membershipId(membership.getId())
                 .name(member.getName())
                 .phone(member.getPhone())
+                .role(member.getRole() != null ? member.getRole().name() : "USER") // 💡 Null 방어
+                .isDeleted(member.isDeleted())
                 .membershipStatus(membership.getStatus().name())
                 .membershipType(membership.getMembershipTypeName())
                 .startDate(membership.getStartDate())

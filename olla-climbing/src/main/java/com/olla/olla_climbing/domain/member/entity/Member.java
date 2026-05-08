@@ -18,16 +18,16 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
     @GeneratedValue(strategy = GenerationType.IDENTITY) // 5. Auto Increment (1, 2, 3... 번호 자동 증가)
     private Long id;
 
-    @Column(unique = true)
+    @Column(unique = true, length = 50)
     private String loginId;
 
-    @Column
+    @Column(length = 255)
     private String password;
 
     @Column(nullable = false)
     private String name;
 
-    @Column(nullable = false, unique = true, length = 20)
+    @Column(nullable = false, unique = true, length = 50)
     private String phone;
 
     @Column(length = 10)
