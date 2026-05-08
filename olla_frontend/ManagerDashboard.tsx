@@ -259,7 +259,7 @@ const ManagerDashboard = ({ navigation }: any) => {
       const token = await AsyncStorage.getItem('userToken');
       await axios.post(
         `${API_BASE_URL}/visit/qr/scan`,
-        { qrToken: data },
+        { qrToken: data },  
         { headers: { Authorization: `Bearer ${token}` } }
       );
       Alert.alert('출석 완료! 🎉', '정상적으로 출석 처리되었습니다.', [
