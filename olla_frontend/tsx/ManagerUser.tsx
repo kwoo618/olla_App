@@ -279,7 +279,7 @@ const ManagerUser = ({ navigation }: any) => {
                 
                 <View style={[styles.colAction, styles.centerAlign]}>
                   <TouchableOpacity style={styles.trashBtn} onPress={() => confirmDelete(memberId)}>
-                    <Image source={require('./assets/trash.png')} style={styles.trashIcon} />
+                    <Image source={require('../assets/trash.png')} style={styles.trashIcon} />
                   </TouchableOpacity>
                 </View>
               </View>

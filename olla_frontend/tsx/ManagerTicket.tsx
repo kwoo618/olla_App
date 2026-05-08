@@ -377,7 +377,7 @@ const ManagerTicket = ({ navigation }: any) => {
                   </TouchableOpacity>
 
                   <TouchableOpacity style={styles.trashBtn} onPress={() => confirmDeleteTicket(item.membershipId)}>
-                    <Image source={require('./assets/trash.png')} style={styles.trashIcon} />
+                    <Image source={require('../assets/trash.png')} style={styles.trashIcon} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -471,7 +471,7 @@ const ManagerTicket = ({ navigation }: any) => {
                     <Text style={styles.inputLabel}>시작일</Text>
                     <TouchableOpacity style={styles.dateInputBox} onPress={() => setStartCalendarVisible(true)}>
                       <Text style={styles.dateText}>{editStart || getToday()}</Text>
-                      <Image source={require('./assets/DATE.png')} style={styles.dateIcon} />
+                      <Image source={require('../assets/DATE.png')} style={styles.dateIcon} />
                     </TouchableOpacity>
                     {editStart && editStart !== getToday() && (
                       <TouchableOpacity onPress={() => setEditStart('')} style={styles.resetDateBtn}>

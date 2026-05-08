@@ -187,10 +187,10 @@ const ManagerNotice = () => {
 
               <View style={styles.noticeActions}>
                 <TouchableOpacity style={styles.actionBtn} onPress={() => openEditModal(notice)}>
-                  <Image source={require('./assets/fix.png')} style={[styles.actionIcon, { tintColor: '#A1BE44' }]} />
+                  <Image source={require('../assets/fix.png')} style={[styles.actionIcon, { tintColor: '#A1BE44' }]} />
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.actionBtn} onPress={() => confirmDelete(notice.id)}>
-                  <Image source={require('./assets/trash.png')} style={[styles.actionIcon, { tintColor: '#FF4D4D' }]} />
+                  <Image source={require('../assets/trash.png')} style={[styles.actionIcon, { tintColor: '#FF4D4D' }]} />
                 </TouchableOpacity>
               </View>
             </View>

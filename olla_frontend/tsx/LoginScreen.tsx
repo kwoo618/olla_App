@@ -49,7 +49,7 @@ const LoginScreen = ({ navigation }: any) => {
   return (
     <View style={styles.background}>
       <Image 
-        source={require('./assets/olla_logo_white.png')}
+        source={require('../assets/olla_logo_white.png')}
         style={styles.logo} 
       />
 

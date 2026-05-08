@@ -307,7 +307,7 @@ const RankingScreen = ({ route }: any) => {
         <View style={styles.myRankingCard}>
           <View style={styles.myRankingContent}>
             <View style={styles.myRankingLeft}>
-              <Image source={require('./assets/profile.png')} style={styles.myProfileImg} defaultSource={undefined} />
+              <Image source={require('../assets/profile.png')} style={styles.myProfileImg} defaultSource={undefined} />
               <View>
                 <Text style={styles.myNameText}>{myNickname}</Text>
                 <Text style={styles.myRankSubText}>{mainTab} 나의 순위</Text>
@@ -353,7 +353,7 @@ const RankingScreen = ({ route }: any) => {
               </View>
 
               <View style={styles.rankCenter}>
-                <Image source={require('./assets/profile.png')} style={styles.rankProfileImg} defaultSource={undefined} />
+                <Image source={require('../assets/profile.png')} style={styles.rankProfileImg} defaultSource={undefined} />
                 <Text style={styles.rankNameText}>{item.name}</Text>
               </View>
 

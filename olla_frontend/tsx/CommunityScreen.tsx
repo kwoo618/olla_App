@@ -415,7 +415,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
               <View style={s.infoRow}>
                 {([['point.png',post.location],['DATE.png',post.date],['people.png',post.people]] as [string,string][]).map(([img,val],i) => (
                   <View key={i} style={s.infoItem}>
-                    <Image source={img==='point.png'?require('./assets/point.png'):img==='DATE.png'?require('./assets/DATE.png'):require('./assets/people.png')} style={s.infoIcon}/>
+                    <Image source={img==='point.png'?require('../assets/point.png'):img==='DATE.png'?require('../assets/DATE.png'):require('../assets/people.png')} style={s.infoIcon}/>
                     <Text style={s.infoText} numberOfLines={1}>{val}</Text>
                   </View>
                 ))}
@@ -424,7 +424,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
               <View style={s.divider}/>
               <View style={s.footer}>
                 <TouchableOpacity style={s.profileRow} onPress={() => openDetailModal(post.writerId, post.author, post.isMine)}>
-                  <Image source={require('./assets/profile.png')} style={[s.avatar, isPast && { opacity: 0.5 }]}/>
+                  <Image source={require('../assets/profile.png')} style={[s.avatar, isPast && { opacity: 0.5 }]}/>
                   <Text style={[s.author, isPast && { color: '#666' }]}>{post.author}</Text>
                 </TouchableOpacity>
                 {!post.isMine && (
@@ -444,7 +444,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
                       <TouchableOpacity style={s.editBtn} onPress={() => openEditModal(post)}><Text style={s.editText}>수정</Text></TouchableOpacity>
                     )}
                     <TouchableOpacity style={s.trashBtn} onPress={() => setDeleteTarget(post.id)}>
-                      <Image source={require('./assets/trash.png')} style={[s.trashIcon, isPast && { tintColor: '#666' }]}/>
+                      <Image source={require('../assets/trash.png')} style={[s.trashIcon, isPast && { tintColor: '#666' }]}/>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -482,7 +482,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
               {selectedUser && (
                 <View>
                   <View style={s.profileCenter}>
-                    <Image source={require('./assets/profile.png')} style={s.profileBig}/>
+                    <Image source={require('../assets/profile.png')} style={s.profileBig}/>
                     <Text style={s.profileName}>{selectedUser.name}</Text>
                   </View>
                   <View style={s.infoBox}>

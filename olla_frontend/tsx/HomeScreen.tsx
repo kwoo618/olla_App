@@ -397,7 +397,7 @@ const HomeScreen = ({ navigation }: any) => {
 
         <View style={styles.row}>
           <TouchableOpacity style={styles.QRCardCentered} onPress={() => handlePopupPress('QR')}>
-            <Image source={require('./assets/QR.png')} style={styles.largeIcon} />
+            <Image source={require('../assets/QR.png')} style={styles.largeIcon} />
             <Text style={styles.cardTitleCentered} numberOfLines={1} adjustsFontSizeToFit>QR 입장</Text>
             <Text style={styles.microSubTitle}>탭하여 입장</Text>
           </TouchableOpacity>
