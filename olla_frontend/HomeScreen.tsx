@@ -13,7 +13,6 @@ import {
   Alert,
   Animated 
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 const API_BASE_URL = 'http://172.29.145.90:8080/api/v1';
 
@@ -148,12 +147,10 @@ const HomeScreen = ({ navigation }: any) => {
             const diffTime = end.getTime() - today.getTime();
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
 
-            // 💡 기간 차이 계산을 통해 일일권 여부 판별 로직 추가
             const durationDiff = end.getTime() - start.getTime();
             const totalDurationDays = Math.round(durationDiff / (1000 * 60 * 60 * 24));
 
             let displayType = data.membershipType === 'PERIOD' ? '기간권' : '횟수권';
-            // 시작일과 종료일 차이가 1일 이하라면 '일일권'으로 표시
             if (data.membershipType === 'PERIOD' && totalDurationDays <= 1) {
               displayType = '일일권';
             }
@@ -336,113 +333,117 @@ const HomeScreen = ({ navigation }: any) => {
   };
 
   return (
-    <SafeAreaView style={styles.background}>
-      <ScrollView ref={scrollViewRef} showsVerticalScrollIndicator={false}>
-        <View style={styles.scrollContent}>
-          
-          <TouchableOpacity style={styles.noticeCard} onPress={() => handlePopupPress('공지사항')}>
-            <View style={styles.noticeHeaderRow}>
-               <View style={styles.noticeBadge}><Text style={styles.noticeBadgeText}>중요</Text></View>
-               <Text style={styles.noticeHeadline} numberOfLines={1}>{notice.title}</Text>
-            </View>
-            <Text style={styles.noticeBody} numberOfLines={1}>{notice.content}</Text>
+    // 💡 SafeAreaView를 View로 변경하여 상단 빈 공간을 제거했습니다.
+    <View style={styles.background}>
+      <ScrollView 
+        ref={scrollViewRef} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* 공지사항 */}
+        <TouchableOpacity style={styles.noticeCard} onPress={() => handlePopupPress('공지사항')}>
+          <View style={styles.noticeHeaderRow}>
+             <View style={styles.noticeBadge}><Text style={styles.noticeBadgeText}>중요</Text></View>
+             <Text style={styles.noticeHeadline} numberOfLines={1}>{notice.title}</Text>
+          </View>
+          <Text style={styles.noticeBody} numberOfLines={1}>{notice.content}</Text>
+        </TouchableOpacity>
+
+        <View style={styles.row}>
+          <TouchableOpacity style={styles.QRCardCentered} onPress={() => handlePopupPress('QR')}>
+            <Image source={require('./assets/QR.png')} style={styles.largeIcon} />
+            <Text style={styles.cardTitleCentered} numberOfLines={1} adjustsFontSizeToFit>QR 입장</Text>
+            <Text style={styles.microSubTitle}>탭하여 입장</Text>
           </TouchableOpacity>
-
-          <View style={styles.row}>
-            <TouchableOpacity style={styles.QRCardCentered} onPress={() => handlePopupPress('QR')}>
-              <Image source={require('./assets/QR.png')} style={styles.largeIcon} />
-              <Text style={styles.cardTitleCentered}>QR 입장</Text>
-              <Text style={styles.microSubTitle}>탭하여 입장</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.UserCardCentered} onPress={() => handlePopupPress('회원권')}>
-              <View style={[
-                styles.circleGraphDummy, 
-                !hasMembership && { borderColor: '#444444' }
+          
+          <TouchableOpacity style={styles.UserCardCentered} onPress={() => handlePopupPress('회원권')}>
+            <View style={[
+              styles.circleGraphDummy, 
+              !hasMembership && { borderColor: '#444444' }
+            ]}>
+              <Text style={[
+                styles.circleGraphText,
+                !hasMembership && { color: '#999999', fontSize: 13 }
               ]}>
-                <Text style={[
-                  styles.circleGraphText,
-                  !hasMembership && { color: '#999999', fontSize: 13 }
-                ]}>
-                  {membership.isLoading ? '' : (hasMembership ? `D-${membership.remainingDays}` : '없음')}
-                </Text>
-              </View>
-              {/* 💡 회원권 종류가 일일권이면 '일일권', 아니면 해당 텍스트 출력되게 수정 */}
-              <Text style={styles.cardTitleCentered}>
-                {hasMembership ? membership.membershipType : '회원권'}
+                {membership.isLoading ? '' : (hasMembership ? `D-${membership.remainingDays}` : '없음')}
               </Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.unifiedDataFrame}>
-            <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => handlePopupPress('이번달 방문')}>
-              <Text style={styles.microSubTitle}>이번달 방문</Text>
-              <Text style={styles.microValue}>{userStats.monthlyVisits}<Text style={styles.microUnit}>회</Text></Text>
-            </TouchableOpacity>
-            <View style={styles.verticalDivider} />
-            <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => navigation.navigate('Recode', { openSection: 'difficulty' })}>
-              <Text style={styles.microSubTitle}>초보벽 {'\n'}최고 난이도</Text>
-              {userStats.difficultyColor === '없음' ? (
-                <Text style={styles.microValuecolor}>미기록</Text>
-              ) : (
-                <>
-                  <Text style={styles.microValuecolor}>{userStats.difficultyColor}</Text>
-                  <Text style={styles.microUnit}>{userStats.difficultyType} <Text style={{color: '#999999'}}>완료</Text></Text>
-                </>
-              )}
-            </TouchableOpacity>
-            <View style={styles.verticalDivider} />
-            <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => handlePopupPress('지구력 랭킹')}>
-              <Text style={styles.microSubTitle}>지구력 랭킹</Text>
-              <Text style={styles.microValue}>{userStats.enduranceRank === 0 ? '-' : userStats.enduranceRank}<Text style={styles.microUnit}>위</Text></Text>
-            </TouchableOpacity>
-            <View style={styles.verticalDivider} />
-            <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => navigation.navigate('Recode', { openSection: 'endurance' })}>
-              <Text style={styles.microSubTitle}>지구력 {'\n'}최고 기록</Text>
-              <Text style={styles.microValue}>{userStats.enduranceMinutes}<Text style={styles.microUnit}>분 </Text>{userStats.enduranceSeconds}<Text style={styles.microUnit}>초</Text></Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.calendarCard}>
-            <View style={styles.calendarHeader}>
-              <TouchableOpacity onPress={() => changeMonth(-1)} style={styles.monthArrow}><Text style={styles.arrowText}>{"<"}</Text></TouchableOpacity>
-              <Text style={styles.calendarMonthText}>{currentYear}년 {currentMonth + 1}월</Text>
-              <TouchableOpacity onPress={() => changeMonth(1)} style={styles.monthArrow}><Text style={styles.arrowText}>{">"}</Text></TouchableOpacity>
             </View>
-            <View style={styles.weekRow}>
-              {weekDays.map((day, index) => (<Text key={index} style={[styles.weekDayText, index === 0 && { color: '#FF6B6B' }]}>{day}</Text>))}
-            </View>
-            <View style={styles.daysGrid}>
-              {days.map((day, index) => {
-                const isToday = day !== null && today.getDate() === day && today.getMonth() === currentMonth && today.getFullYear() === currentYear;
-                const isSelected = selectedFullDate !== null && day !== null && selectedFullDate.getDate() === day && selectedFullDate.getMonth() === currentMonth && selectedFullDate.getFullYear() === currentYear;
-                
-                const isAttended = day !== null && (attendedDates || []).includes(day);
-                
-                return (
-                  <TouchableOpacity key={index} style={styles.dayCell} disabled={!day} onPress={() => day && onDateClick(day)}>
-                    {day ? (
-                      <View style={[
-                        styles.dayCircle, 
-                        isToday && styles.todayCircle, 
-                        isSelected && !isToday && styles.selectedCircle,
-                        isAttended && !isToday && !isSelected && styles.attendedCircle
+            <Text style={styles.cardTitleCentered}>
+              {hasMembership ? membership.membershipType : '회원권'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* 기록 및 통계 데이터 */}
+        <View style={styles.unifiedDataFrame}>
+          <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => handlePopupPress('이번달 방문')}>
+            <Text style={styles.microSubTitle}>이번달 방문</Text>
+            <Text style={styles.microValue} numberOfLines={1} adjustsFontSizeToFit>{userStats.monthlyVisits}<Text style={styles.microUnit}>회</Text></Text>
+          </TouchableOpacity>
+          <View style={styles.verticalDivider} />
+          <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => navigation.navigate('Recode', { openSection: 'difficulty' })}>
+            <Text style={styles.microSubTitle}>초보벽 {'\n'}최고 난이도</Text>
+            {userStats.difficultyColor === '없음' ? (
+              <Text style={styles.microValuecolor} numberOfLines={1} adjustsFontSizeToFit>미기록</Text>
+            ) : (
+              <>
+                <Text style={styles.microValuecolor} numberOfLines={1} adjustsFontSizeToFit>{userStats.difficultyColor}</Text>
+                <Text style={styles.microUnit}>{userStats.difficultyType} <Text style={{color: '#999999'}}>완료</Text></Text>
+              </>
+            )}
+          </TouchableOpacity>
+          <View style={styles.verticalDivider} />
+          <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => handlePopupPress('지구력 랭킹')}>
+            <Text style={styles.microSubTitle}>지구력 랭킹</Text>
+            <Text style={styles.microValue} numberOfLines={1} adjustsFontSizeToFit>{userStats.enduranceRank === 0 ? '-' : userStats.enduranceRank}<Text style={styles.microUnit}>위</Text></Text>
+          </TouchableOpacity>
+          <View style={styles.verticalDivider} />
+          <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => navigation.navigate('Recode', { openSection: 'endurance' })}>
+            <Text style={styles.microSubTitle}>지구력 {'\n'}최고 기록</Text>
+            <Text style={styles.microValue} numberOfLines={1} adjustsFontSizeToFit>{userStats.enduranceMinutes}<Text style={styles.microUnit}>분 </Text>{userStats.enduranceSeconds}<Text style={styles.microUnit}>초</Text></Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* 캘린더 */}
+        <View style={styles.calendarCard}>
+          <View style={styles.calendarHeader}>
+            <TouchableOpacity onPress={() => changeMonth(-1)} style={styles.monthArrow}><Text style={styles.arrowText}>{"<"}</Text></TouchableOpacity>
+            <Text style={styles.calendarMonthText}>{currentYear}년 {currentMonth + 1}월</Text>
+            <TouchableOpacity onPress={() => changeMonth(1)} style={styles.monthArrow}><Text style={styles.arrowText}>{">"}</Text></TouchableOpacity>
+          </View>
+          <View style={styles.weekRow}>
+            {weekDays.map((day, index) => (<Text key={index} style={[styles.weekDayText, index === 0 && { color: '#FF6B6B' }]}>{day}</Text>))}
+          </View>
+          <View style={styles.daysGrid}>
+            {days.map((day, index) => {
+              const isToday = day !== null && today.getDate() === day && today.getMonth() === currentMonth && today.getFullYear() === currentYear;
+              const isSelected = selectedFullDate !== null && day !== null && selectedFullDate.getDate() === day && selectedFullDate.getMonth() === currentMonth && selectedFullDate.getFullYear() === currentYear;
+              
+              const isAttended = day !== null && (attendedDates || []).includes(day);
+              
+              return (
+                <TouchableOpacity key={index} style={styles.dayCell} disabled={!day} onPress={() => day && onDateClick(day)}>
+                  {day ? (
+                    <View style={[
+                      styles.dayCircle, 
+                      isToday && styles.todayCircle, 
+                      isSelected && !isToday && styles.selectedCircle,
+                      isAttended && !isToday && !isSelected && styles.attendedCircle
+                    ]}>
+                      <Text style={[
+                        styles.dayText, 
+                        isToday && styles.todayText, 
+                        isSelected && !isToday && styles.selectedText,
+                        isAttended && !isToday && !isSelected && styles.attendedText, 
+                        index % 7 === 0 && !isToday && !isSelected && !isAttended && styles.sundayText
                       ]}>
-                        <Text style={[
-                          styles.dayText, 
-                          isToday && styles.todayText, 
-                          isSelected && !isToday && styles.selectedText,
-                          isAttended && !isToday && !isSelected && styles.attendedText, 
-                          index % 7 === 0 && !isToday && !isSelected && !isAttended && styles.sundayText
-                        ]}>
-                          {day}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+                        {day}
+                      </Text>
+                    </View>
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
       </ScrollView>
@@ -453,7 +454,6 @@ const HomeScreen = ({ navigation }: any) => {
             <TouchableOpacity activeOpacity={1} style={{ width: '100%', alignItems: 'center' }}>
               <View style={styles.dragHandle} />
               <View style={styles.sheetHeader}>
-                {/* 💡 모달 타이틀에도 일일권 여부 반영 */}
                 <Text style={styles.sheetTitle}>
                   {activeModal === 'QR' ? 'QR 체크인' : (hasMembership ? membership.membershipType : '회원권')}
                 </Text>
@@ -509,7 +509,7 @@ const HomeScreen = ({ navigation }: any) => {
                       <Text style={[
                         styles.memHalfValueGreen,
                         !hasMembership && { color: '#999999', fontSize: 16 }
-                      ]}>
+                      ]} numberOfLines={1} adjustsFontSizeToFit>
                         {hasMembership ? `${membership.remainingDays}일` : '구매 필요'}
                       </Text>
                     </View>
@@ -518,7 +518,7 @@ const HomeScreen = ({ navigation }: any) => {
                       <Text style={[
                         styles.memHalfValueWhite, 
                         !hasMembership && { fontSize: 16, color: '#FF6B6B' }
-                      ]}>
+                      ]} numberOfLines={1} adjustsFontSizeToFit>
                         {hasMembership ? membership.status : '구매 필요'}
                       </Text>
                     </View>
@@ -529,16 +529,16 @@ const HomeScreen = ({ navigation }: any) => {
           </Animated.View>
         </TouchableOpacity>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
-  topNav: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, height: 60 },
-  logoText: { fontSize: 28, fontWeight: '900', color: '#A1BE44' },
-  topIcon: { width: 24, height: 24, resizeMode: 'contain' },
-  scrollContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 20 },
+  
+  // 💡 paddingTop을 10으로 유지하여 랭킹 화면과 일관성을 맞춥니다.
+  scrollContent: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 60 },
+  
   noticeCard: { width: '100%', backgroundColor: '#2A2A2A', paddingVertical: 18, paddingHorizontal: 20, borderRadius: 12, marginBottom: 20 },
   noticeHeadline: { color: '#ffffff', fontSize: 16, fontWeight: '600', marginBottom: 6 },
   noticeBody: { color: '#999999', fontSize: 13, fontWeight: '400' },
@@ -572,10 +572,8 @@ const styles = StyleSheet.create({
   todayText: { color: '#1A1A1A', fontWeight: 'bold' },
   selectedCircle: { backgroundColor: '#5DADE2' }, 
   selectedText: { color: '#000000', fontWeight: 'bold' },
-  
   attendedCircle: { backgroundColor: '#3A3A3A', borderWidth: 1.5, borderColor: '#A1BE44' },
   attendedText: { color: '#A1BE44', fontWeight: 'bold' },
-
   noticeHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   noticeBadge: { backgroundColor: '#A1BE44', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 8 },
   noticeBadgeText: { color: '#1A1A1A', fontSize: 10, fontWeight: 'bold' },

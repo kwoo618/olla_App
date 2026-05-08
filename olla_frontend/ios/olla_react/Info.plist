@@ -64,6 +64,8 @@
 	<string>telprompt</string>
 	</array>
 
-	
+	<key>NSCameraUsageDescription</key>
+	<string>이 앱은 사진 촬영 및 QR 코드 스캔을 위해 카메라 권한이 필요합니다.</string>
+
 </dict>
 </plist>

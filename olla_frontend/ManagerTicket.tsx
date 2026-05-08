@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, 
   ScrollView, Image, Modal, KeyboardAvoidingView, Platform, Alert, ActivityIndicator 
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -33,7 +33,7 @@ const ManagerTicket = ({ navigation }: any) => {
   const [modalSearch, setModalSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<any>(null);
 
-  // 달력 모달 상태
+  // 💡 달력 모달 상태
   const [isStartCalendarVisible, setStartCalendarVisible] = useState(false);
   
   // 부여할 이용권 상태
@@ -93,6 +93,7 @@ const ManagerTicket = ({ navigation }: any) => {
     return days >= 0 ? `${days}일` : '만료';
   };
 
+  // 💡 이용권 보유 유저 필터링
   const ticketHolders = useMemo(() => {
     return users.filter((u: any) => {
       const isTicketActive = u.membershipStatus === 'ACTIVE' || u.membershipStatus === 'HOLDING';
@@ -221,6 +222,24 @@ const ManagerTicket = ({ navigation }: any) => {
     setAddValue('');
   };
 
+  // 💡 일시정지/해제 토글 실행 함수
+  const executeTogglePause = () => {
+    if (!userToTogglePause) return;
+    
+    const newStatus = userToTogglePause.status === '정지해제' ? '일시정지' : '정지해제';
+    
+    const updatedUsers = users.map((u: any) => {
+      if (u.id === userToTogglePause.id) {
+        return { ...u, status: newStatus };
+      }
+      return u;
+    });
+
+    setUsers(updatedUsers);
+    setPauseModalVisible(false);
+    setUserToTogglePause(null);
+  };
+
   const calendarTheme = {
     backgroundColor: '#212121',
     calendarBackground: '#212121',
@@ -335,7 +354,6 @@ const ManagerTicket = ({ navigation }: any) => {
               <Text style={styles.modalTitle}>이용권 부여</Text>
               <TouchableOpacity onPress={closeEditModal}><Text style={styles.closeIcon}>✕</Text></TouchableOpacity>
             </View>
-
             <View style={styles.modalSearchBox}>
               <Text style={styles.searchIcon}>🔎</Text>
               <TextInput 
@@ -346,14 +364,12 @@ const ManagerTicket = ({ navigation }: any) => {
                 onChangeText={setModalSearch}
               />
             </View>
-
             <View style={styles.modalTableHeader}>
               <Text style={[styles.modalHeaderText, { flex: 1.5 }]}>회원정보</Text>
               <Text style={[styles.modalHeaderText, { flex: 2, textAlign: 'center' }]}>연락처</Text>
               <Text style={[styles.modalHeaderText, { flex: 1.5, textAlign: 'center' }]}>현재 이용권</Text>
             </View>
             <View style={styles.headerDivider} />
-
             <View style={{ height: 140, marginBottom: 20 }}>
               <ScrollView style={styles.searchResultTable}>
                 {searchResults.length === 0 ? (
@@ -380,7 +396,6 @@ const ManagerTicket = ({ navigation }: any) => {
                 )}
               </ScrollView>
             </View>
-
             {selectedUser && (
               <View style={styles.editForm}>
                 <View style={styles.typeToggleRow}>
@@ -460,7 +475,6 @@ const styles = StyleSheet.create({
   tableHeader: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 5 },
   headerText: { color: '#ffffff', fontSize: 12, fontWeight: 'bold', textAlign: 'center' },
   headerDivider: { height: 1, backgroundColor: '#333333', marginBottom: 10 },
-  listContainer: { paddingBottom: 100 },
   
   tableRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#212121', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 5, marginBottom: 8, borderWidth: 1, borderColor: '#2A2A2A' },
   

@@ -503,7 +503,8 @@ const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, en
   };
 
   return (
-    <SafeAreaView style={styles.background}>
+    // 💡 최상단 SafeAreaView를 일반 View로 변경하여 불필요한 상단 여백을 제거했습니다.
+    <View style={styles.background}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         
         <View style={styles.summaryContainer}>
@@ -629,7 +630,7 @@ const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, en
       {/* 💡 지구력 모달 (타이머까지 완벽하게 통합된 버전) */}
       <Modal visible={isEnduranceModalVisible} animationType="fade" transparent={true} onRequestClose={closeEnduranceModal}>
         {isTimerActive ? (
-          // 타이머 활성화 시 화면 전체를 스톱워치 뷰로 변경
+          // 💡 타이머 활성화 시 화면 전체를 덮으므로 여기는 SafeAreaView를 유지해야 상단 노치 영역을 침범하지 않습니다.
           <SafeAreaView style={[StyleSheet.absoluteFill, styles.timerModalBackground, { zIndex: 1000 }]}>
             <View style={styles.timerHeader}>
               <Text style={styles.timerHeaderTitle}>지구력 측정 타이머</Text>
@@ -747,7 +748,7 @@ const RecodeScreen = ({ route, navigation, difficultyData, setDifficultyData, en
           </Animated.View>
         </TouchableOpacity>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 };
 

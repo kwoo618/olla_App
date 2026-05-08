@@ -13,7 +13,7 @@ import {
   Alert,
   ActivityIndicator
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -22,7 +22,9 @@ const MEMBER_LIST_API = `${API_BASE_URL}/admin/memberships/members`;
 const OFFLINE_REGISTER_API = `${API_BASE_URL}/admin/members/offline`; 
 const MEMBER_DELETE_API = `${API_BASE_URL}/admin/members`; 
 
+// 💡 App.tsx에서 users와 setUsers를 받아옵니다.
 const ManagerUser = ({ navigation }: any) => {
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<any[]>([]); 
   const [searchQuery, setSearchQuery] = useState('');
@@ -211,7 +213,7 @@ const ManagerUser = ({ navigation }: any) => {
   }
 
   return (
-    <SafeAreaView style={styles.background} edges={[]}>
+    <SafeAreaView style={styles.background} edges={['top', 'left', 'right']}>
       <View style={styles.searchContainer}>
         <View style={styles.searchBox}>
           <Text style={styles.searchIcon}>🔎</Text>
@@ -233,7 +235,10 @@ const ManagerUser = ({ navigation }: any) => {
       </View>
       <View style={styles.headerDivider} />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.listContainer}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={[styles.listContainer, { paddingBottom: Math.max(insets.bottom + 100, 100) }]}
+      >
         {filteredAndSortedUsers.length === 0 ? (
           <Text style={styles.emptyText}>검색 결과가 없습니다.</Text>
         ) : (
@@ -283,7 +288,11 @@ const ManagerUser = ({ navigation }: any) => {
         )}
       </ScrollView>
 
-      <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={() => setAddModalVisible(true)}>
+      <TouchableOpacity 
+        style={[styles.fab, { bottom: Math.max(insets.bottom + 30, 30) }]} 
+        activeOpacity={0.8} 
+        onPress={() => setAddModalVisible(true)}
+      >
         <Text style={styles.fabText}>+ 등록</Text>
       </TouchableOpacity>
 
@@ -341,21 +350,17 @@ const styles = StyleSheet.create({
   tableHeader: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 5 },
   headerText: { color: '#ffffff', fontSize: 13, fontWeight: 'bold' },
   headerDivider: { height: 1, backgroundColor: '#333333', marginBottom: 10 },
-  listContainer: { paddingBottom: 100 },
-  
-  tableRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#212121', borderRadius: 12, paddingVertical: 15, paddingHorizontal: 5, marginBottom: 8, borderWidth: 1, borderColor: '#2A2A2A' },
-  
-  colName: { flex: 2.2, paddingLeft: 8 },
-  colPhone: { flex: 3.2 },
-  colStatus: { flex: 2.2 },
-  colAction: { flex: 1.4 },
-
-  rowTextBold: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
-  rowText: { color: '#CCCCCC', fontSize: 13 },
+  listContainer: { flexGrow: 1 },
+  tableRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#212121', borderRadius: 12, paddingVertical: 16, paddingHorizontal: 5, marginBottom: 10, borderWidth: 1, borderColor: '#2A2A2A' },
+  rowTextBold: { color: '#ffffff', fontSize: 15, fontWeight: 'bold' },
+  rowText: { color: '#CCCCCC', fontSize: 14 },
   centerAlign: { alignItems: 'center', justifyContent: 'center' },
   emptyText: { color: '#666666', fontSize: 15, textAlign: 'center', marginTop: 40 },
-  
-  badge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },
+  colName: { flex: 2, paddingLeft: 10 },
+  colPhone: { flex: 3 },
+  colStatus: { flex: 2 },
+  colAction: { flex: 1 },
+  badge: { width: 65, paddingVertical: 6, borderRadius: 20, alignItems: 'center' },
   badgePeriod: { backgroundColor: 'rgba(161, 190, 68, 0.2)' },
   badgeCount: { backgroundColor: 'rgba(0, 157, 255, 0.2)' },
   badgeInactive: { backgroundColor: 'rgba(142, 142, 142, 0.2)' },
