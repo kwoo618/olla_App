@@ -236,22 +236,22 @@ const ManagerCommunity = ({ navigation }: any) => {
               <View style={styles.infoRow}>
                 <View style={styles.infoItemGroup}>
                   <View style={styles.infoItem}>
-                    <Image source={require('./assets/point.png')} style={styles.infoIcon} />
+                    <Image source={require('../assets/point.png')} style={styles.infoIcon} />
                     <Text style={styles.infoText} numberOfLines={1}>{post.location}</Text>
                   </View>
                   <View style={styles.infoItem}>
-                    <Image source={require('./assets/DATE.png')} style={styles.infoIcon} />
+                    <Image source={require('../assets/DATE.png')} style={styles.infoIcon} />
                     <Text style={styles.infoText}>{post.date}</Text>
                   </View>
                   <View style={styles.infoItem}>
-                    <Image source={require('./assets/people.png')} style={styles.infoIcon} />
+                    <Image source={require('../assets/people.png')} style={styles.infoIcon} />
                     <Text style={styles.infoText}>{post.people}</Text>
                   </View>
                 </View>
                 
                 {/* 💡 관리자 모드: 모든 게시글에 삭제(휴지통) 아이콘 노출 */}
                 <TouchableOpacity style={styles.trashBtn} onPress={() => confirmDelete(post.id)}>
-                  <Image source={require('./assets/trash.png')} style={[styles.trashIcon, isPast && { tintColor: '#666666' }]} />
+                  <Image source={require('../assets/trash.png')} style={[styles.trashIcon, isPast && { tintColor: '#666666' }]} />
                 </TouchableOpacity>
               </View>
 
@@ -265,7 +265,7 @@ const ManagerCommunity = ({ navigation }: any) => {
                       <Text style={styles.textProfileText}>최</Text>
                     </View>
                   ) : (
-                    <Image source={require('./assets/profile.png')} style={[styles.profileImg, isPast && { opacity: 0.5 }]} />
+                    <Image source={require('../assets/profile.png')} style={[styles.profileImg, isPast && { opacity: 0.5 }]} />
                   )}
                   <Text style={[styles.authorText, isPast && { color: '#666666' }]}>{post.author}</Text>
                 </TouchableOpacity>
@@ -311,7 +311,7 @@ const ManagerCommunity = ({ navigation }: any) => {
                          <Text style={[styles.textProfileText, { fontSize: 28 }]}>최</Text>
                        </View>
                     ) : (
-                       <Image source={require('./assets/profile.png')} style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#444444' }} />
+                       <Image source={require('../assets/profile.png')} style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#444444' }} />
                     )}
                   </View>
                   <View style={styles.detailInfoBox}>

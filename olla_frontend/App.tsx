@@ -15,21 +15,21 @@ type RootParamList = {
 };
 
 // 스크린 임포트
-import LoginScreen from './LoginScreen';
-import SignupScreen from './SignupScreen';
-import PersonalScreen from './PersonalScreen';
-import LoadingScreen from './LoadingScreen';
-import HomeScreen from './HomeScreen';
-import NoticeScreen from './NoticeScreen';
-import RecodeScreen from './RecodeScreen';
-import RankingScreen from './RankingScreen';
-import CommunityScreen from './CommunityScreen';
-import MYScreen from './MYScreen';
-import ManagerDashboard from './ManagerDashboard';
-import ManagerUser from './ManagerUser';
-import ManagerTicket from './ManagerTicket';
-import ManagerNotice from './ManagerNotice';
-import ManagerCommunity from './ManagerCommunity';
+import LoginScreen from './tsx/LoginScreen';
+import SignupScreen from './tsx/SignupScreen';
+import PersonalScreen from './tsx/PersonalScreen';
+import LoadingScreen from './tsx/LoadingScreen';
+import HomeScreen from './tsx/HomeScreen';
+import NoticeScreen from './tsx/NoticeScreen';
+import RecodeScreen from './tsx/RecodeScreen';
+import RankingScreen from './tsx/RankingScreen';
+import CommunityScreen from './tsx/CommunityScreen';
+import MYScreen from './tsx/MYScreen';
+import ManagerDashboard from './tsx/ManagerDashboard';
+import ManagerUser from './tsx/ManagerUser';
+import ManagerTicket from './tsx/ManagerTicket';
+import ManagerNotice from './tsx/ManagerNotice';
+import ManagerCommunity from './tsx/ManagerCommunity';
 
 const Stack = createNativeStackNavigator<RootParamList>();
 
@@ -125,7 +125,7 @@ const AppContent = () => {
         )}
 
         <View style={styles.mainContent}>
-          <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+          <Stack.Navigator initialRouteName="ManagerDashboard" screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Signup" component={SignupScreen} />
             <Stack.Screen name="PersonalInfo" component={PersonalScreen} />

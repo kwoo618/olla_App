@@ -7,7 +7,7 @@ import {
   Image, Switch, Modal, Animated, TextInput, Alert, ActivityIndicator, Linking
 } from 'react-native';
 
-const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
+const API_BASE_URL = 'http://10.0.2.2:8080/api/v1';
 
 // ✅ HomeScreen과 동일한 타입 해석 함수
 const resolveMembershipType = (
@@ -353,7 +353,7 @@ const MYScreen = ({ navigation }: any) => {
         <TouchableOpacity style={styles.profileCard} activeOpacity={0.8} onPress={openProfileModal}>
           <View style={styles.profileLeft}>
             <View style={styles.profileImagePlaceholder}>
-              <Image source={require('./assets/profile.png')} style={styles.profileImage} />
+              <Image source={require('../assets/profile.png')} style={styles.profileImage} />
             </View>
             <View style={styles.profileTextContainer}>
               <Text style={styles.profileName}>{profileData.name || '사용자'}</Text>
@@ -366,7 +366,7 @@ const MYScreen = ({ navigation }: any) => {
         {/* 멤버십 */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Image source={require('./assets/membership.png')} style={styles.cardHeaderIcon} />
+            <Image source={require('../assets/membership.png')} style={styles.cardHeaderIcon} />
             <Text style={styles.cardHeaderTitle}>멤버십 정보</Text>
           </View>
           <View style={styles.memInfoContainer}>
@@ -397,7 +397,7 @@ const MYScreen = ({ navigation }: any) => {
         {/* 내 활동 */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Image source={require('./assets/Vector.png')} style={styles.cardHeaderIcon} />
+            <Image source={require('../assets/Vector.png')} style={styles.cardHeaderIcon} />
             <Text style={styles.cardHeaderTitle}>내 활동</Text>
           </View>
           <TouchableOpacity style={styles.activityRow} onPress={() => navigation.navigate('Community', { filter: 'MY_WRITTEN' })}>
@@ -414,7 +414,7 @@ const MYScreen = ({ navigation }: any) => {
         {/* 알림 설정 */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Image source={require('./assets/Vector.png')} style={styles.cardHeaderIcon} />
+            <Image source={require('../assets/Vector.png')} style={styles.cardHeaderIcon} />
             <Text style={styles.cardHeaderTitle}>알림설정</Text>
           </View>
           <View style={styles.settingRow}>
@@ -447,14 +447,14 @@ const MYScreen = ({ navigation }: any) => {
         {/* 관리자 모드 */}
         {isAdmin && (
           <TouchableOpacity style={styles.adminCard} activeOpacity={0.8} onPress={() => navigation.navigate('ManagerDashboard')}>
-            <Image source={require('./assets/SquaresFour.png')} style={styles.adminIcon} />
+            <Image source={require('../assets/SquaresFour.png')} style={styles.adminIcon} />
             <Text style={styles.adminText}>관리자 모드 실행</Text>
           </TouchableOpacity>
         )}
 
         {/* 로그아웃 */}
         <TouchableOpacity style={styles.logoutCard} activeOpacity={0.8} onPress={() => setLogoutModalVisible(true)}>
-          <Image source={require('./assets/EXIT.png')} style={styles.logoutIcon} />
+          <Image source={require('../assets/EXIT.png')} style={styles.logoutIcon} />
           <Text style={styles.logoutText}>로그아웃</Text>
         </TouchableOpacity>
 
@@ -536,7 +536,7 @@ const MYScreen = ({ navigation }: any) => {
               <Text style={styles.sheetTitleCenter}>프론트 데스크 문의</Text>
               <View style={styles.horizontalDivider} />
               <View style={styles.contactContentBox}>
-                <Image source={require('./assets/PhoneCall.png')} style={styles.phoneIcon} />
+                <Image source={require('../assets/PhoneCall.png')} style={styles.phoneIcon} />
                 <Text style={styles.contactLabel}>연락처</Text>
                 <Text style={styles.contactNumber}>053-851-3322</Text>
                 <Text style={styles.contactTime}>운영시간: 평일 13:00 ~ 22:00 / 토 13:00 ~ 19:00</Text>
@@ -571,7 +571,7 @@ const MYScreen = ({ navigation }: any) => {
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
                 <View style={styles.profileEditContainer}>
                   <TouchableOpacity style={styles.profileImageEditWrapper} activeOpacity={0.7}>
-                    <Image source={require('./assets/profile.png')} style={styles.profileImageLarge} />
+                    <Image source={require('../assets/profile.png')} style={styles.profileImageLarge} />
                     <View style={styles.profileImageEditOverlay}>
                       <Text style={styles.profileImageEditText}>수정</Text>
                     </View>

@@ -50,7 +50,7 @@ const LoadingScreen = ({ route, navigation }: any) => {
       <View style={styles.cardContent}>
         {/* 중앙 로고 아이콘 */}
         <Image 
-          source={require('./assets/olla_logo_white.png')}
+          source={require('../assets/olla_logo_white.png')}
           style={styles.logoIcon} 
           resizeMode="contain"
         />
@@ -82,7 +82,7 @@ const LoadingScreen = ({ route, navigation }: any) => {
       {/* 오른쪽 하단 작은 OLLA 로고 */}
       <View style={styles.bottomLogoContainer}>
         <Image 
-          source={require('./assets/olla_logo_white.png')}
+          source={require('../assets/olla_logo_white.png')}
           style={styles.bottomLogoIcon} 
           resizeMode="contain"
         />

@@ -332,14 +332,14 @@ const ManagerDashboard = ({ navigation }: any) => {
               const label = isActive ? '활동중' : '비활중';
               const profileImgSource = member.profileImageUrl
                 ? { uri: member.profileImageUrl }
-                : require('./assets/profile.png');
+                : require('../assets/profile.png');
 
               return (
                 <View key={member.id || index} style={[styles.rowItem, index > 0 && { marginTop: 15 }]}>
                   <Image
                     source={profileImgSource}
                     style={styles.profileImg}
-                    defaultSource={require('./assets/profile.png')}
+                    defaultSource={require('../assets/profile.png')}
                   />
                   <View style={styles.infoCol}>
                     <Text style={styles.nameText}>{member.name || '이름 없음'}</Text>
@@ -387,10 +387,10 @@ const ManagerDashboard = ({ navigation }: any) => {
                     style={styles.actionBtn}
                     onPress={() => Alert.alert('알림', '수정 페이지로 이동 (개발 예정)')}
                   >
-                    <Image source={require('./assets/fix.png')} style={[styles.actionIcon, { tintColor: '#A1BE44' }]} />
+                    <Image source={require('../assets/fix.png')} style={[styles.actionIcon, { tintColor: '#A1BE44' }]} />
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.actionBtn} onPress={() => confirmDelete('notice', notice.id)}>
-                    <Image source={require('./assets/trash.png')} style={[styles.actionIcon, { tintColor: '#FF0000' }]} />
+                    <Image source={require('../assets/trash.png')} style={[styles.actionIcon, { tintColor: '#FF0000' }]} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -445,7 +445,7 @@ const ManagerDashboard = ({ navigation }: any) => {
                       onPress={() => confirmDelete('post', post.id)}
                     >
                       <Image
-                        source={require('./assets/trash.png')}
+                        source={require('../assets/trash.png')}
                         style={[styles.actionIcon, { tintColor: isPast ? '#666666' : '#FF4D4D' }]}
                       />
                     </TouchableOpacity>
@@ -462,7 +462,7 @@ const ManagerDashboard = ({ navigation }: any) => {
 
       {/* FAB — QR 스캔 */}
       <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={openScanner}>
-        <Image source={require('./assets/QR.png')} style={styles.fabIcon} />
+        <Image source={require('../assets/QR.png')} style={styles.fabIcon} />
       </TouchableOpacity>
 
       {/* QR 스캐너 모달 */}

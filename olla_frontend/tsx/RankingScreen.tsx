@@ -4,10 +4,10 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
-const RANKING_BEGINNER_URL = 'http://192.168.0.23:8080/api/v1/rankings/beginner';
-const RANKING_ENDURANCE_DISTANCE_URL = 'http://192.168.0.23:8080/api/v1/rankings/endurance/distance';
-const RANKING_SERIES_URL = 'http://192.168.0.23:8080/api/v1/rankings/series';
-const MY_PROFILE_URL = 'http://192.168.0.23:8080/api/v1/members/me'; 
+const RANKING_BEGINNER_URL = 'http://10.0.2.2:8080/api/v1/rankings/beginner';
+const RANKING_ENDURANCE_DISTANCE_URL = 'http://10.0.2.2:8080/api/v1/rankings/endurance/distance';
+const RANKING_SERIES_URL = 'http://10.0.2.2:8080/api/v1/rankings/series';
+const MY_PROFILE_URL = 'http://10.0.2.2:8080/api/v1/members/me'; 
 
 axios.interceptors.request.use(
   async (config) => {
@@ -307,7 +307,7 @@ const RankingScreen = ({ route }: any) => {
         <View style={styles.myRankingCard}>
           <View style={styles.myRankingContent}>
             <View style={styles.myRankingLeft}>
-              <Image source={require('./assets/profile.png')} style={styles.myProfileImg} defaultSource={undefined} />
+              <Image source={require('../assets/profile.png')} style={styles.myProfileImg} defaultSource={undefined} />
               <View>
                 <Text style={styles.myNameText}>{myNickname}</Text>
                 <Text style={styles.myRankSubText}>{mainTab} 나의 순위</Text>
@@ -353,7 +353,7 @@ const RankingScreen = ({ route }: any) => {
               </View>
 
               <View style={styles.rankCenter}>
-                <Image source={require('./assets/profile.png')} style={styles.rankProfileImg} defaultSource={undefined} />
+                <Image source={require('../assets/profile.png')} style={styles.rankProfileImg} defaultSource={undefined} />
                 <Text style={styles.rankNameText}>{item.name}</Text>
               </View>
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Image, Alert } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage'; 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const LoginScreen = ({ navigation }: any) => {
   const [loginId, setLoginId] = useState('');
@@ -16,7 +16,7 @@ const LoginScreen = ({ navigation }: any) => {
     }
 
     try {
-      const response = await axios.post('http://192.168.0.23:8080/api/v1/auth/login', {
+      const response = await axios.post('http://10.0.2.2:8080/api/v1/auth/login', {
         loginId: loginId,
         password: password,
       });
@@ -49,7 +49,7 @@ const LoginScreen = ({ navigation }: any) => {
   return (
     <View style={styles.background}>
       <Image 
-        source={require('./assets/olla_logo_white.png')}
+        source={require('../assets/olla_logo_white.png')}
         style={styles.logo} 
       />
 
