@@ -4,6 +4,8 @@ import com.olla.olla_climbing.domain.member.entity.Member;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -35,4 +37,6 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
 
     // 로그인 아이디로 삭제되지 않은 회원 찾기
     Optional<Member> findByLoginIdAndIsDeletedFalse(String loginId);
+
+    List<Member> findByCreatedAtAfter(LocalDateTime dateTime);
 }

@@ -10,6 +10,8 @@ import com.olla.olla_climbing.domain.member.entity.NotificationSetting;
 import com.olla.olla_climbing.domain.member.repository.MemberNotificationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -97,5 +99,21 @@ public class NotificationService {
                 log.error("FCM 푸시 발송 실패 - 수신자: {}, 에러: {}", receiver.getLoginId(), e.getMessage());
             }
         }
+    }
+
+    @Transactional(readOnly = true)
+    public Page<MemberNotification> getMyNotifications(Long memberId, Pageable pageable) {
+        return notificationRepository.findByMemberIdOrderByCreatedAtDesc(memberId, pageable);
+    }
+
+    @Transactional
+    public void markAsRead(Long notiId, Long memberId) {
+        MemberNotification noti = notificationRepository.findById(notiId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 알림입니다."));
+
+        if (!noti.getMember().getId().equals(memberId)) {
+            throw new IllegalArgumentException("본인의 알림만 읽음 처리할 수 있습니다.");
+        }
+        noti.markAsRead();
     }
 }
