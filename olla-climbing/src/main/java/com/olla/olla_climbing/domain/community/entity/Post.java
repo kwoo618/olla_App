@@ -47,7 +47,7 @@ public class Post extends BaseTimeEntity {
     private Integer memberCount; // 현재 참여 인원 (작성자 포함 기본 1명부터 시작)
 
     @Column(nullable = false)
-    private boolean isDeleted; // 삭제 여부 (Soft Delete 방식 적용)
+    private boolean isDeleted = false;; // 삭제 여부 (Soft Delete 방식 적용)
 
     private int viewCount = 0;
 
