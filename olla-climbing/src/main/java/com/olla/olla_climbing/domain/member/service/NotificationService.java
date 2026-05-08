@@ -116,4 +116,15 @@ public class NotificationService {
         }
         noti.markAsRead();
     }
+
+    @Async
+    @Transactional
+    public void sendCrewReminderNotification(Member receiver, Post post) {
+        if (isNotificationDisabled(receiver, "CREW")) return;
+
+        String title = "모임 리마인드 ⏰";
+        String content = "내일 [" + post.getTitle() + "] 모임이 예정되어 있습니다! 잊지 말고 준비물 챙겨주세요!";
+
+        saveAndSendPush(receiver, title, content, "CREW", String.valueOf(post.getId()));
+    }
 }

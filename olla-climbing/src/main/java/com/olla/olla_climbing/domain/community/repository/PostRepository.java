@@ -6,6 +6,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.List;
+
 public interface PostRepository extends JpaRepository<Post, Long> {
 
     // 삭제되지 않은 게시글만 페이징 처리하여 최신순으로 조회
@@ -22,4 +24,6 @@ public interface PostRepository extends JpaRepository<Post, Long> {
 
     @EntityGraph(attributePaths = {"member"})
     Page<Post> findByMemberIdAndIsDeletedFalseOrderByCreatedAtDesc(Long memberId, Pageable pageable);
+
+    List<Post> findByMeetDateTimeBetweenAndIsDeletedFalse(java.time.LocalDateTime start, java.time.LocalDateTime end);
 }
