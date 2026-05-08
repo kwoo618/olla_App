@@ -39,7 +39,7 @@ public class AdminMemberResponse {
                 .name(member.getName())
                 .phone(member.getPhone())
                 .membershipStatus(membership.getStatus().name())
-                .membershipType(membership.getMembershipType().name())
+                .membershipType(membership.getMembershipTypeName())
                 .startDate(membership.getStartDate()) // (동철 수정) 시작일 
                 .endDate(membership.getEndDate())
                 .remainingCount(membership.getRemainingCount())
