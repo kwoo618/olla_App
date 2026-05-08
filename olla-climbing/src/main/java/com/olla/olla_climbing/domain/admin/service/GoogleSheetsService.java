@@ -3,7 +3,6 @@ package com.olla.olla_climbing.domain.admin.service;
 import com.google.api.services.sheets.v4.Sheets;
 import com.google.api.services.sheets.v4.model.ValueRange;
 import com.olla.olla_climbing.domain.admin.entity.Membership;
-import com.olla.olla_climbing.domain.admin.enums.MembershipType;
 import com.olla.olla_climbing.domain.member.entity.Member;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,7 +13,6 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.Collections;
 import java.util.List;
 
 /*
@@ -97,11 +95,11 @@ public class GoogleSheetsService {
     }
 
     @Async
-    public void syncNewMembership(Membership membership, Integer addMonths, Integer addCount) {
-        Member member = membership.getMember();
-        String startDateStr = membership.getStartDate() != null ? membership.getStartDate().format(DateTimeFormatter.ofPattern("yyyy. MM. dd")) : "";
-        String serviceAmount = membership.getMembershipType() == MembershipType.PERIOD ? String.valueOf(addMonths) : String.valueOf(addCount);
-        String typeDesc = membership.getMembershipType().getDescription();
+    public void syncNewMembership(Member member, Membership membership) {
+        String typeStr = "PERIOD".equals(membership.getMembershipTypeName()) ? "기간권" : "횟수권";
+        String amountStr = "PERIOD".equals(membership.getMembershipTypeName())
+                ? membership.getDurationMonth() + "개월"
+                : membership.getRemainingCount() + "회";
 
         /* ----- 구글 시트 활성화 시 이 줄 삭제 -----
         try {

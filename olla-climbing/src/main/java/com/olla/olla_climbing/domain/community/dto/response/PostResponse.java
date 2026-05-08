@@ -5,13 +5,13 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Getter
 @Builder
 public class PostResponse {
     private Long id;
-    private String writerName; // 작성자 닉네임/이름
+    private Long writerId;
+    private String writerName;
     private String title;
     private String content;
     private boolean isDifferentGym;
@@ -21,12 +21,15 @@ public class PostResponse {
     private int memberCount;
     private LocalDateTime createdAt;
 
-    private List<ParticipantDto> participants;
+    private int viewCount;    // 조회수
+    private long likeCount;   // 좋아요 총 개수
+    private boolean isApplied; // 내가 참여 신청했는지 여부
+    private boolean isLiked;   // 내가 좋아요 눌렀는지 여부
 
-    // 목록 조회나 작성 직후에 사용
-    public static PostResponse from(Post post) {
+    public static PostResponse of(Post post, boolean isApplied, boolean isLiked, long likeCount) {
         return PostResponse.builder()
                 .id(post.getId())
+                .writerId(post.getMember().getId())
                 .writerName(post.getMember().getName())
                 .title(post.getTitle())
                 .content(post.getContent())
@@ -36,23 +39,10 @@ public class PostResponse {
                 .maxMember(post.getMaxMember())
                 .memberCount(post.getMemberCount())
                 .createdAt(post.getCreatedAt())
-                .build();
-    }
-
-    // 상세 조회 시 참여자 정보까지 포함하여 반환
-    public static PostResponse of(Post post, List<ParticipantDto> participants) {
-        return PostResponse.builder()
-                .id(post.getId())
-                .writerName(post.getMember().getName())
-                .title(post.getTitle())
-                .content(post.getContent())
-                .isDifferentGym(post.isDifferentGym())
-                .gymPlace(post.getGymPlace())
-                .meetDateTime(post.getMeetDateTime())
-                .maxMember(post.getMaxMember())
-                .memberCount(post.getMemberCount())
-                .createdAt(post.getCreatedAt())
-                .participants(participants) // 리스트 주입
+                .viewCount(post.getViewCount())
+                .likeCount(likeCount)
+                .isApplied(isApplied)
+                .isLiked(isLiked)
                 .build();
     }
 }

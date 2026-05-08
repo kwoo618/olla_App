@@ -37,7 +37,6 @@ public class AdminMembershipController {
 
         membershipAdminService.grantMembership(
                 request.getMemberId(),
-                request.getType(),
                 request.getAddMonths(),
                 request.getAddCount(),
                 request.getStartDate()
@@ -70,6 +69,4 @@ public class AdminMembershipController {
         membershipAdminService.unpauseMembership(membershipId);
         return ResponseEntity.ok("이용권 일시정지가 해제되었습니다.");
     }
-
-
 }

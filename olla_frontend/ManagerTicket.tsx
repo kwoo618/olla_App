@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, 
   ScrollView, Image, Modal, KeyboardAvoidingView, Platform, Alert, ActivityIndicator 
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -33,7 +33,7 @@ const ManagerTicket = ({ navigation }: any) => {
   const [modalSearch, setModalSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<any>(null);
 
-  // 💡 달력 모달 상태
+  // 달력 모달 상태
   const [isStartCalendarVisible, setStartCalendarVisible] = useState(false);
   
   // 부여할 이용권 상태
@@ -93,7 +93,7 @@ const ManagerTicket = ({ navigation }: any) => {
     return days >= 0 ? `${days}일` : '만료';
   };
 
-  // 💡 이용권 보유 유저 필터링
+  // 이용권 보유 유저 필터링
   const ticketHolders = useMemo(() => {
     return users.filter((u: any) => {
       const isTicketActive = u.membershipStatus === 'ACTIVE' || u.membershipStatus === 'HOLDING';
@@ -184,7 +184,7 @@ const ManagerTicket = ({ navigation }: any) => {
     );
   };
 
-  // 💡 알림(Alert)창으로 변경된 이용권 삭제 처리 함수
+  // 알림(Alert)창으로 변경된 이용권 삭제 처리 함수
   const executeDeleteTicket = async (membershipId: number) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
@@ -204,7 +204,6 @@ const ManagerTicket = ({ navigation }: any) => {
       Alert.alert("오류", "이용권 ID를 확인할 수 없습니다.");
       return;
     }
-    // 모달 대신 Alert 사용
     Alert.alert(
       "이용권 삭제 확인",
       "해당 이용권을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.",
@@ -220,24 +219,6 @@ const ManagerTicket = ({ navigation }: any) => {
     setSelectedUser(null);
     setModalSearch('');
     setAddValue('');
-  };
-
-  // 💡 일시정지/해제 토글 실행 함수
-  const executeTogglePause = () => {
-    if (!userToTogglePause) return;
-    
-    const newStatus = userToTogglePause.status === '정지해제' ? '일시정지' : '정지해제';
-    
-    const updatedUsers = users.map((u: any) => {
-      if (u.id === userToTogglePause.id) {
-        return { ...u, status: newStatus };
-      }
-      return u;
-    });
-
-    setUsers(updatedUsers);
-    setPauseModalVisible(false);
-    setUserToTogglePause(null);
   };
 
   const calendarTheme = {
@@ -464,7 +445,7 @@ const ManagerTicket = ({ navigation }: any) => {
   );
 };
 
-// 💡 Flex 값을 전체 10.0 기준으로 화면에 조화롭게 들어가도록 재조정
+// Flex 값을 전체 10.0 기준으로 화면에 조화롭게 들어가도록 재조정
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A', paddingHorizontal: 15, paddingTop: 15 },
   searchContainer: { marginBottom: 20 },
@@ -476,6 +457,9 @@ const styles = StyleSheet.create({
   headerText: { color: '#ffffff', fontSize: 12, fontWeight: 'bold', textAlign: 'center' },
   headerDivider: { height: 1, backgroundColor: '#333333', marginBottom: 10 },
   
+  // 💡 스크롤 마지막 컨텐츠가 플로팅 버튼(fab)에 가리지 않도록 하단 여백 추가
+  listContainer: { paddingBottom: 100 },
+
   tableRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#212121', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 5, marginBottom: 8, borderWidth: 1, borderColor: '#2A2A2A' },
   
   // 가로 정렬 및 공간 최적화

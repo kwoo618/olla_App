@@ -22,10 +22,8 @@ public class AdminMemberResponse {
     private LocalDate endDate;       // 기간권일 경우 만료일
     private Integer remainingCount;  // 횟수권일 경우 남은 횟수
 
-    // Member 엔티티와 Membership 엔티티 2개를 받아서 하나의 DTO로 합치는 팩토리 메서드
     public static AdminMemberResponse from(Member member, Membership membership) {
         if (membership == null) {
-            // 활성화/정지된 이용권이 아예 없는 회원 (신규 가입자 또는 완전 만료자)
             return AdminMemberResponse.builder()
                     .memberId(member.getId())
                     // membershipId는 매핑하지 않음 (null)
@@ -35,7 +33,6 @@ public class AdminMemberResponse {
                     .build();
         }
 
-        // 이용권이 있는 회원
         return AdminMemberResponse.builder()
                 .memberId(member.getId())
                 .membershipId(membership.getId()) // (동철 수정) 멤버십 아이디 주는게 없어서 추가 

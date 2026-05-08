@@ -2,7 +2,6 @@ package com.olla.olla_climbing.domain.admin.dto.response;
 
 import com.olla.olla_climbing.domain.admin.entity.Membership;
 import com.olla.olla_climbing.domain.admin.enums.MembershipStatus;
-import com.olla.olla_climbing.domain.admin.enums.MembershipType;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -11,7 +10,7 @@ import java.time.LocalDate;
 @Getter
 @Builder
 public class MembershipResponse {
-    private MembershipType membershipType;
+    private String membershipType;
     private MembershipStatus status;
     private LocalDate startDate;
     private LocalDate endDate;
@@ -19,7 +18,7 @@ public class MembershipResponse {
 
     public static MembershipResponse from(Membership membership) {
         return MembershipResponse.builder()
-                .membershipType(membership.getMembershipType())
+                .membershipType(membership.getMembershipTypeName()) // 엔티티의 메서드 활용
                 .status(membership.getStatus())
                 .startDate(membership.getStartDate())
                 .endDate(membership.getEndDate())

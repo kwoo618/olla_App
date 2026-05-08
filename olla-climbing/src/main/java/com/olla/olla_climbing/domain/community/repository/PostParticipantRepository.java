@@ -3,6 +3,8 @@ package com.olla.olla_climbing.domain.community.repository;
 import com.olla.olla_climbing.domain.community.entity.Post;
 import com.olla.olla_climbing.domain.community.entity.PostParticipant;
 import com.olla.olla_climbing.domain.member.entity.Member;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -20,4 +22,7 @@ public interface PostParticipantRepository extends JpaRepository<PostParticipant
 
    // 특정 게시글에 참여한 모든 참여자 목록을 조회하는 메서드
     List<PostParticipant> findByPost(Post post);
+
+    // 내가 참여 신청한 내역을 페이징하여 조회
+    Page<PostParticipant> findByMemberIdOrderByCreatedAtDesc(Long memberId, Pageable pageable);
 }

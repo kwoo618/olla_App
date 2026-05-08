@@ -1,5 +1,6 @@
 package com.olla.olla_climbing.domain.admin.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -16,7 +17,7 @@ public class AdminMemberCreateRequest {
     private String name;
 
     @NotBlank(message = "전화번호는 필수 입력입니다.")
-    @Pattern(regexp = "^\\d{3}-\\d{3,4}-\\d{4}$", message = "전화번호는 000-0000-0000 형식이어야 합니다.")
+    @Pattern(regexp = "^01[016789]-\\d{3,4}-\\d{4}$", message = "전화번호는 010-0000-0000 형식으로 하이픈(-)을 포함해야 합니다.")
     private String phone;
 
     @NotBlank(message = "성별은 필수 입력입니다.")
@@ -24,5 +25,6 @@ public class AdminMemberCreateRequest {
     private String gender;
 
     @NotNull(message = "생년월일은 필수 입력입니다.")
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd", timezone = "Asia/Seoul")
     private LocalDate birthDate;
 }

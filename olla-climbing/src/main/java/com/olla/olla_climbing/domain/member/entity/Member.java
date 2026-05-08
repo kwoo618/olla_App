@@ -152,8 +152,8 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
         // 2. 전화번호 변조 (Unique 제약 조건 우회)
         this.phone = "del_" + now + "_" + this.phone + "_" + this.id;
 
-        // 3. 이름 및 개인정보 익명화
-        this.name = "탈퇴회원";
+        // 3. 개인정보 익명화
+        this.name = "탈퇴회원" + "_" + this.name + "_" + this.id;  //
         this.email = null;
     }
 }

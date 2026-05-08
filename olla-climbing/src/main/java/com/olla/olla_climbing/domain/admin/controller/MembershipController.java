@@ -1,7 +1,6 @@
 package com.olla.olla_climbing.domain.admin.controller;
 
 import com.olla.olla_climbing.domain.admin.dto.response.MembershipResponse;
-import com.olla.olla_climbing.domain.admin.enums.MembershipType;
 import com.olla.olla_climbing.domain.admin.service.MembershipAdminService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

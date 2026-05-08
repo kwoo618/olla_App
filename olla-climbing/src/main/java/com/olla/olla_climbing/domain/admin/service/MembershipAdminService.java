@@ -6,7 +6,6 @@ import com.olla.olla_climbing.domain.admin.dto.response.MembershipResponse;
 import com.olla.olla_climbing.domain.admin.entity.AdminAlert;
 import com.olla.olla_climbing.domain.admin.entity.Membership;
 import com.olla.olla_climbing.domain.admin.enums.MembershipStatus;
-import com.olla.olla_climbing.domain.admin.enums.MembershipType;
 import com.olla.olla_climbing.domain.admin.repository.AdminAlertRepository;
 import com.olla.olla_climbing.domain.admin.repository.MembershipRepository;
 import com.olla.olla_climbing.domain.member.entity.Member;
@@ -31,49 +30,34 @@ public class MembershipAdminService {
     private final MembershipRepository membershipRepository;
     private final MemberRepository memberRepository;
     private final GoogleSheetsService googleSheetsService;
-
     private final AdminAlertRepository adminAlertRepository;
 
-    // 관리자가 회원에게 이용권을 부여 (또는 연장)
+    // 💡 [복구] 지워졌던 이용권 부여 메서드 복구
     @Transactional
-    public void grantMembership(Long memberId, MembershipType type, Integer addMonths, Integer addCount, LocalDate requestedStartDate) {
+    public void grantMembership(Long memberId, Integer addMonths, Integer addCount, LocalDate startDate) {
         Member member = memberRepository.findById(memberId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
+                .orElseThrow(() -> new IllegalArgumentException("회원을 찾을 수 없습니다."));
 
-        Membership activeMembership = membershipRepository.findByMemberIdAndStatus(member.getId(), MembershipStatus.ACTIVE).orElse(null);
-        Membership savedMembership;
+        Membership membership;
 
-        // [핵심 로직] 프론트에서 날짜를 지정해 보내면 그 날짜를 쓰고, 안 보내면(null) 오늘 날짜를 씁니다.
-        LocalDate actualStartDate = (requestedStartDate != null) ? requestedStartDate : LocalDate.now();
-
-        if (activeMembership != null) {
-            if (activeMembership.getMembershipType() != type) throw new IllegalStateException("이미 다른 타입의 활성화된 이용권이 존재합니다. 기존 이용권을 만료 처리 후 발급하세요.");
-            if (type == MembershipType.PERIOD) activeMembership.extendPeriod(addMonths);
-            else if (type == MembershipType.COUNT) activeMembership.addCount(addCount);
-            savedMembership = activeMembership;
+        if (addMonths != null && addMonths > 0) {
+            membership = Membership.builder()
+                    .member(member)
+                    .startDate(startDate)
+                    .durationMonth(addMonths)
+                    .build();
+        } else if (addCount != null && addCount > 0) {
+            membership = Membership.builder()
+                    .member(member)
+                    .startDate(startDate)
+                    .remainingCount(addCount)
+                    .build();
         } else {
-            Membership newMembership = null;
-            if (type == MembershipType.PERIOD) {
-                newMembership = Membership.builder()
-                        .member(member)
-                        .membershipType(MembershipType.PERIOD)
-                        .startDate(actualStartDate) // 지정된 시작일 적용
-                        .endDate(actualStartDate.plusMonths(addMonths)) // 지정된 시작일 기준으로 종료일 계산
-                        .status(MembershipStatus.ACTIVE)
-                        .build();
-            } else if (type == MembershipType.COUNT) {
-                newMembership = Membership.builder()
-                        .member(member)
-                        .membershipType(MembershipType.COUNT)
-                        .remainingCount(addCount)
-                        .startDate(actualStartDate)
-                        .status(MembershipStatus.ACTIVE)
-                        .build();
-            }
-            savedMembership = membershipRepository.save(newMembership);
-
-            googleSheetsService.syncNewMembership(savedMembership, addMonths, addCount);
+            throw new IllegalArgumentException("기간(개월) 또는 횟수 중 하나를 입력해야 합니다.");
         }
+
+        membershipRepository.save(membership);
+        googleSheetsService.syncNewMembership(member, membership);
     }
 
     @Transactional
@@ -85,15 +69,14 @@ public class MembershipAdminService {
                 .name(request.getName()).phone(request.getPhone()).gender(request.getGender()).birthDate(request.getBirthDate()).role(Role.USER).build();
         Member savedMember = memberRepository.save(dummyMember);
 
-        googleSheetsService.syncNewMember(savedMember); // 시트 1 명부 저장
-        googleSheetsService.syncUnregisteredMember(savedMember); // 시트 2 장부에 '미등록'으로 저장
+        googleSheetsService.syncNewMember(savedMember);
+        googleSheetsService.syncUnregisteredMember(savedMember);
     }
 
     @Transactional
     public void pauseMembership(Long membershipId) {
         Membership membership = membershipRepository.findById(membershipId).orElseThrow(() -> new IllegalArgumentException("존재하지 않는 이용권입니다."));
         membership.pause();
-        // 시트 업데이트
         googleSheetsService.updateMembershipPauseDate(membership.getMember().getId(), LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy. MM. dd")));
     }
 
@@ -103,41 +86,34 @@ public class MembershipAdminService {
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 이용권입니다."));
         membership.unpause();
 
-        // 해제 시 H열(종료일)에 연장된 날짜를 꽂아주고, L열을 비웁니다.
         String newEndDateStr = membership.getEndDate() != null ? membership.getEndDate().format(DateTimeFormatter.ofPattern("yyyy. MM. dd")) : "";
         googleSheetsService.unpauseMembershipData(membership.getMember().getId(), newEndDateStr);
     }
 
-    // 유저 본인의 활성화된 이용권 조회
     @Transactional(readOnly = true)
     public MembershipResponse getMyMembership(Long memberId) {
-        // ACTIVE뿐만 아니라 HOLDING 상태인 이용권도 가져오도록 수정
         Membership activeOrHoldingMembership = membershipRepository.findByMemberIdAndStatusIn(
                 memberId, List.of(MembershipStatus.ACTIVE, MembershipStatus.HOLDING)
         ).orElse(null);
 
         if (activeOrHoldingMembership == null) {
-            return null; // 프론트엔드에서 "이용권 없음" 처리
+            return null;
         }
 
         return MembershipResponse.from(activeOrHoldingMembership);
     }
 
-    // 관리자용 전체 회원 리스트 페이징 및 검색
     @Transactional(readOnly = true)
     public Page<AdminMemberResponse> getAdminMemberList(String searchName, Pageable pageable) {
         Page<Member> memberPage;
 
-        // 1. 이름 검색어가 있으면 조건 검색, 없으면 전체 검색
         if (StringUtils.hasText(searchName)) {
             memberPage = memberRepository.findByNameContaining(searchName, pageable);
         } else {
             memberPage = memberRepository.findAll(pageable);
         }
 
-        // 2. 조회된 회원 각각의 현재 이용권 상태를 매핑하여 DTO로 변환 (Page 객체의 map 기능 활용)
         return memberPage.map(member -> {
-            // 회원 1명당 이용권 1번씩 조회 (N+1 발생 지점이지만 관리자 페이징 단위에서는 허용 가능한 수준)
             Membership activeOrHolding = membershipRepository.findByMemberIdAndStatusIn(
                     member.getId(), List.of(MembershipStatus.ACTIVE, MembershipStatus.HOLDING)
             ).orElse(null);
@@ -146,19 +122,17 @@ public class MembershipAdminService {
         });
     }
 
-    @Scheduled(cron = "0 0 9 * * *") // 매일 아침 9시 실행
+    @Scheduled(cron = "0 0 9 * * *")
     @Transactional
     public void generateExpirySummaryAlert() {
         LocalDate today = LocalDate.now();
         LocalDate d3 = today.plusDays(3);
 
-        // 1. 대상 조회
         List<Membership> expiredToday = membershipRepository.findByEndDateAndStatus(today, MembershipStatus.ACTIVE);
         List<Membership> expiringIn3Days = membershipRepository.findByEndDateAndStatus(d3, MembershipStatus.ACTIVE);
 
         if (expiredToday.isEmpty() && expiringIn3Days.isEmpty()) return;
 
-        // 2. 메시지 구성
         StringBuilder sb = new StringBuilder();
         sb.append("[오늘 만료: ").append(expiredToday.size()).append("명]\n");
         expiredToday.forEach(m -> sb.append("- ").append(m.getMember().getName()).append("\n"));
@@ -166,7 +140,6 @@ public class MembershipAdminService {
         sb.append("\n[3일 뒤 만료: ").append(expiringIn3Days.size()).append("명]\n");
         expiringIn3Days.forEach(m -> sb.append("- ").append(m.getMember().getName()).append("\n"));
 
-        // 3. 관리자 알림 저장 (SMS 대신 DB 저장)
         AdminAlert alert = AdminAlert.builder()
                 .title(today + " 회원권 만료 요약 알림")
                 .content(sb.toString())
@@ -174,5 +147,4 @@ public class MembershipAdminService {
 
         adminAlertRepository.save(alert);
     }
-
 }
