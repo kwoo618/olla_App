@@ -8,6 +8,7 @@ import com.olla.olla_climbing.domain.community.repository.CommentRepository;
 import com.olla.olla_climbing.domain.community.repository.PostRepository;
 import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
+import com.olla.olla_climbing.domain.member.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -21,6 +22,7 @@ public class CommentService {
     private final CommentRepository commentRepository;
     private final PostRepository postRepository;
     private final MemberRepository memberRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public void createComment(Long postId, String loginId, CommentRequest request) {
@@ -46,6 +48,9 @@ public class CommentService {
                 .build();
 
         commentRepository.save(comment);
+
+        // 댓글 작성 시 게시글 작성자에게 알림 전송 (내 글에 내가 댓글 달아도 알림은 안 가도록 NotificationService에서 처리)
+        notificationService.sendCommentNotification(post.getMember(), member, post);
     }
 
     @Transactional(readOnly = true)

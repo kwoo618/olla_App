@@ -11,6 +11,7 @@ import com.olla.olla_climbing.domain.community.repository.PostLikeRepository;
 import com.olla.olla_climbing.domain.community.repository.PostParticipantRepository;
 import com.olla.olla_climbing.domain.community.repository.PostRepository;
 import com.olla.olla_climbing.domain.member.entity.Member;
+import com.olla.olla_climbing.domain.member.enums.Role;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -110,15 +111,15 @@ public class PostService {
     }
 
     @Transactional
-    public void deletePost(Long postId, String loginId) {
+    public void deletePost(Long postId, Member currentMember) { // 💡 파라미터 Member 객체로 받음
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 게시글입니다."));
 
-        if (!post.getMember().getLoginId().equals(loginId)) {
-            throw new IllegalArgumentException("게시글 작성자만 삭제할 수 있습니다.");
+        // 💡 작성자 본인이거나, 로그인한 유저의 Role이 ADMIN일 경우에만 삭제 허용
+        if (!post.getMember().getId().equals(currentMember.getId()) && currentMember.getRole() != Role.ADMIN) {
+            throw new IllegalArgumentException("게시글 작성자 또는 관리자만 삭제할 수 있습니다.");
         }
 
-        // DB에서 실제로 지우지 않고 상태만 변경 (Soft Delete)
         post.markAsDeleted();
     }
 
@@ -190,5 +191,16 @@ public class PostService {
                     postLikeRepository.save(new PostLike(post, member));
                     return true; // 좋아요 완료됨
                 });
+    }
+
+    @Transactional
+    public void closePost(Long postId, String loginId) {
+        Post post = postRepository.findById(postId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 게시글입니다."));
+
+        if (!post.getMember().getLoginId().equals(loginId)) {
+            throw new IllegalArgumentException("게시글 작성자만 마감할 수 있습니다.");
+        }
+        post.closeManual();
     }
 }

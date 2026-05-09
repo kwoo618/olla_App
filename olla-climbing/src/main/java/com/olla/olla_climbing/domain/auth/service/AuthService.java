@@ -99,6 +99,10 @@ public class AuthService {
             throw new IllegalArgumentException("이미 존재하는 아이디입니다.");
         }
 
+        if (memberRepository.existsByEmail(request.getEmail())) {
+            throw new IllegalArgumentException("이미 가입된 이메일입니다.");
+        }
+
         String encodedPassword = passwordEncoder.encode(request.getPassword());
 
         Optional<Member> existingMemberOpt = memberRepository.findByPhone(request.getPhone());

@@ -49,6 +49,9 @@ public class Post extends BaseTimeEntity {
     @Column(nullable = false)
     private boolean isDeleted = false;; // 삭제 여부 (Soft Delete 방식 적용)
 
+    @Column(nullable = false)
+    private boolean isClosed = false; // 💡 모집 수동 마감 여부
+
     private int viewCount = 0;
 
     public void increaseViewCount() {
@@ -87,6 +90,10 @@ public class Post extends BaseTimeEntity {
     // Soft Delete 상태 변경 메서드
     public void markAsDeleted() {
         this.isDeleted = true;
+    }
+
+    public void closeManual() {
+        this.isClosed = true;
     }
 
     public void updatePost(String title, String content, boolean isDifferentGym,

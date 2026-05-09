@@ -20,6 +20,9 @@ public interface VisitLogRepository extends JpaRepository<VisitLog, Long> {
     // 특정 기간(오늘 하루) 방문 기록 조회 (대시보드용)
     List<VisitLog> findByCreatedAtBetween(LocalDateTime start, LocalDateTime end);
 
+    // 최근 30일간의 모든 방문 기록 조회
+    List<VisitLog> findByCreatedAtAfter(LocalDateTime dateTime);
+
     // 특정 기간 동안의 출석 날짜를 중복 없이 조회
     @Query("SELECT DISTINCT CAST(v.createdAt AS LocalDate) FROM VisitLog v " +
             "WHERE v.member.id = :memberId " +

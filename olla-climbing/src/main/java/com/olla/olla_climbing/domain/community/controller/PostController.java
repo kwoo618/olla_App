@@ -78,15 +78,13 @@ public class PostController {
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "게시글 삭제", description = "작성자가 자신의 모집글을 삭제(Soft Delete)합니다.", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<String> deletePost(
+    @Operation(summary = "게시글 삭제", description = "작성자 또는 관리자가 글을 삭제합니다.")
+    public ResponseEntity<ApiResponse<String>> deletePost(
             @PathVariable("id") Long postId,
             @AuthenticationPrincipal Member member) {
 
-        if (member == null) throw new IllegalArgumentException("인증 정보가 없습니다.");
-
-        postService.deletePost(postId, member.getLoginId());
-        return ResponseEntity.ok("게시글이 성공적으로 삭제되었습니다.");
+        postService.deletePost(postId, member); // loginId 대신 member 자체를 넘김
+        return ResponseEntity.ok(ApiResponse.success("게시글이 삭제되었습니다."));
     }
 
     @GetMapping("/search")
@@ -125,5 +123,15 @@ public class PostController {
 
         boolean result = postService.toggleLike(postId, member.getLoginId());
         return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
+    @PatchMapping("/{id}/close")
+    @Operation(summary = "게시글 수동 마감", description = "작성자가 모집을 수동으로 마감합니다.")
+    public ResponseEntity<ApiResponse<String>> closePost(
+            @PathVariable("id") Long postId,
+            @AuthenticationPrincipal Member member) {
+
+        postService.closePost(postId, member.getLoginId());
+        return ResponseEntity.ok(ApiResponse.success("모집이 마감되었습니다."));
     }
 }

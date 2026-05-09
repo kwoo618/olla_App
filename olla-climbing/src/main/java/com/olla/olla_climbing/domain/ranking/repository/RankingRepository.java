@@ -14,7 +14,8 @@ import java.util.Optional;
 
 public interface RankingRepository extends JpaRepository<Ranking, Long> {
 
-    // [1. 초보벽 전용] Master -> IsMaster 로 모두 변경
+    List<Ranking> findTop3ByRankTypeAndIsMasterFalseOrderByRankingAsc(RankType rankType);
+
     List<Ranking> findByRankTypeAndDifficultyAndIsMasterTrueOrderByBaseDateDesc(RankType rankType, Difficulty difficulty);
 
     @Query("SELECT MAX(r.baseDate) FROM Ranking r WHERE r.rankType = :rankType AND r.difficulty = :difficulty AND r.isMaster = false")
@@ -27,7 +28,6 @@ public interface RankingRepository extends JpaRepository<Ranking, Long> {
     List<Ranking> findByRankTypeAndDifficultyAndIsMasterFalseOrderByScoreDescBaseDateAsc(RankType rankType, Difficulty difficulty);
 
 
-    // [2. 통합 랭킹 전용] Master -> IsMaster 로 모두 변경
     @Query("SELECT MAX(r.baseDate) FROM Ranking r WHERE r.rankType = :rankType AND r.isMaster = false")
     Optional<LocalDateTime> findLatestBaseDateByRankType(@Param("rankType") RankType rankType);
 

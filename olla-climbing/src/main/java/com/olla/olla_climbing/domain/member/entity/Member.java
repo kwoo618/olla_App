@@ -36,8 +36,11 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
     @Column
     private LocalDate birthDate;
 
-    @Column
+    @Column(nullable = false, unique = true, length = 100)
     private String email;
+
+    @Column
+    private String fcmToken;
 
     @Enumerated(EnumType.STRING) // 7. Enum을 DB에 저장할 때 숫자가 아니라 문자("USER")로 저장해라
     private Role role;
@@ -155,5 +158,9 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
         // 3. 개인정보 익명화
         this.name = "탈퇴회원" + "_" + this.name + "_" + this.id;  //
         this.email = null;
+    }
+
+    public void updateFcmToken(String fcmToken) {
+        this.fcmToken = fcmToken;
     }
 }

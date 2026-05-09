@@ -6,6 +6,7 @@ import com.olla.olla_climbing.domain.community.repository.PostParticipantReposit
 import com.olla.olla_climbing.domain.community.repository.PostRepository;
 import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
+import com.olla.olla_climbing.domain.member.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +18,7 @@ public class PostParticipantService {
     private final PostParticipantRepository participantRepository;
     private final PostRepository postRepository;
     private final MemberRepository memberRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public void joinPost(Long postId, String loginId) {
@@ -45,6 +47,9 @@ public class PostParticipantService {
 
         // 중간 테이블에 참여 내역 저장
         participantRepository.save(new PostParticipant(post, member));
+
+        // [알림] 모임 방장에게 참여 알림 발송 (isJoin = true)
+        notificationService.sendParticipantNotification(post.getMember(), member, post, true);
     }
 
     @Transactional
@@ -68,5 +73,8 @@ public class PostParticipantService {
 
         // 중간 테이블에서 데이터 삭제
         participantRepository.delete(participant);
+
+        // [알림] 모임 방장에게 취소 알림 발송 (isJoin = false)
+        notificationService.sendParticipantNotification(post.getMember(), member, post, false);
     }
 }

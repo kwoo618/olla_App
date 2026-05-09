@@ -1,8 +1,8 @@
 package com.olla.olla_climbing.domain.admin.controller;
 
 import com.olla.olla_climbing.domain.admin.dto.request.AdminNotificationSendRequest;
-import com.olla.olla_climbing.domain.admin.dto.response.AdminAlertResponse;
-import com.olla.olla_climbing.domain.admin.service.AdminAlertService;
+import com.olla.olla_climbing.domain.admin.dto.response.AdminNotificationResponse;
+import com.olla.olla_climbing.domain.admin.service.AdminNotificationService;
 import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.entity.MemberNotification;
 import com.olla.olla_climbing.domain.member.repository.MemberNotificationRepository;
@@ -23,26 +23,26 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/admin/alerts")
 @RequiredArgsConstructor
 @Tag(name = "Admin Alert API", description = "관리자 전용 알림 확인 API")
-public class AdminAlertController {
+public class AdminNotificationController {
 
-    private final AdminAlertService adminAlertService;
+    private final AdminNotificationService adminNotificationService;
 
     private final MemberRepository memberRepository;
     private final MemberNotificationRepository memberNotificationRepository;
 
     @GetMapping
     @Operation(summary = "관리자 알림 목록 조회", description = "만료 요약 등 관리자용 알림을 최신순으로 페이징하여 조회합니다.")
-    public ResponseEntity<Page<AdminAlertResponse>> getAlerts(
+    public ResponseEntity<Page<AdminNotificationResponse>> getAlerts(
             @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
 
-        Page<AdminAlertResponse> response = adminAlertService.getAlerts(pageable);
+        Page<AdminNotificationResponse> response = adminNotificationService.getAlerts(pageable);
         return ResponseEntity.ok(response);
     }
 
     @PatchMapping("/{alertId}/read")
     @Operation(summary = "알림 읽음 처리", description = "특정 알림을 클릭했을 때 읽음 상태(isRead = true)로 변경합니다.")
     public ResponseEntity<String> markAsRead(@PathVariable("alertId") Long alertId) {
-        adminAlertService.markAlertAsRead(alertId);
+        adminNotificationService.markAlertAsRead(alertId);
         return ResponseEntity.ok("알림이 읽음 처리되었습니다.");
     }
 
@@ -65,8 +65,8 @@ public class AdminAlertController {
 
         // 3. 실제 스마트폰 푸시(FCM) 발송 여부 체크 (나중에 Epic 7 진행 시 사용할 뼈대)
         if (receiver.getNotificationSetting() != null) {
-            boolean isGlobalOn = receiver.getNotificationSetting().isGlobalAlertOn();
-            boolean isNoticeOn = receiver.getNotificationSetting().isNoticeAlertOn();
+            boolean isGlobalOn = receiver.getNotificationSetting().isGlobalNotificationOn();
+            boolean isNoticeOn = receiver.getNotificationSetting().isGlobalNotificationOn();
 
             if (isGlobalOn && isNoticeOn) {
                 // TODO: 나중에 여기에 FCM 푸시 알림을 쏘는 코드

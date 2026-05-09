@@ -43,7 +43,7 @@ Thumbs.db
 ### Secret properties ###
 application-secret.yml
 google-credentials.json
-
+src/main/resources/firebase/
 
 
 
