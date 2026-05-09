@@ -14,7 +14,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Camera, CameraView } from 'expo-camera';
 
-const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
+const API_BASE_URL = 'http://10.0.2.2:8080/api/v1';
 
 
 const POST_API_URL = `${API_BASE_URL}/posts`;
@@ -460,9 +460,9 @@ const ManagerDashboard = ({ navigation }: any) => {
 
       </ScrollView>
 
-      {/* FAB — QR 스캔 */}
+      {/* FAB — QR 스캔 (아이콘을 Camera.png로 변경) */}
       <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={openScanner}>
-        <Image source={require('../assets/QR.png')} style={styles.fabIcon} />
+        <Image source={require('../assets/Camera.png')} style={styles.fabIcon} />
       </TouchableOpacity>
 
       {/* QR 스캐너 모달 */}

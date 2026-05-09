@@ -17,7 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
 
 // API 주소 설정
-const BASE = 'http://192.168.0.23:8080/api/v1/posts';
+const BASE = 'http://10.0.2.2:8080/api/v1/posts';
 const MEMBERS = `${BASE}/members`;
 
 const p = (n: number) => String(n).padStart(2, '0');

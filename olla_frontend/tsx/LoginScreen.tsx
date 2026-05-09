@@ -34,7 +34,12 @@ const LoginScreen = ({ navigation }: any) => {
         }
         
         console.log('로그인 성공! 권한:', role);
-        navigation.replace('Home');
+        // 💡 권한(role)에 따라 도착지를 다르게 설정합니다!
+         if (role === 'ADMIN' || role === 'ROLE_ADMIN') {
+          navigation.replace('ManagerDashboard');
+        } else {
+          navigation.replace('Home');
+        }
       } else {
         console.error('토큰 추출 실패. 응답 구조:', response.data);
         Alert.alert('로그인 오류', '인증 정보를 찾을 수 없습니다.');

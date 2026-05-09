@@ -1,14 +1,14 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, Modal, TextInput, KeyboardAvoidingView, Platform,
-  ActivityIndicator, Alert
+  ActivityIndicator, Alert, Animated
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
+const API_BASE_URL = 'http://10.0.2.2:8080/api/v1';
 const NOTICE_API = `${API_BASE_URL}/admin/notices`;
 
 interface Notice {
@@ -25,7 +25,10 @@ const ManagerNotice = () => {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // 💡 애니메이션 설정
   const [isWriteModalVisible, setWriteModalVisible] = useState(false);
+  const slideAnim = useRef(new Animated.Value(800)).current;
+
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [selectedNoticeId, setSelectedNoticeId] = useState<number | null>(null);
 
@@ -79,7 +82,7 @@ const ManagerNotice = () => {
     return isoString.split('T')[0];
   };
 
-  // ✅ 작성 모달 열기
+  // 💡 작성/수정 모달 제어 함수 (애니메이션 포함)
   const openWriteModal = () => {
     setModalMode('create');
     setSelectedNoticeId(null);
@@ -87,9 +90,9 @@ const ManagerNotice = () => {
     setNewContent('');
     setIsImportant(false);
     setWriteModalVisible(true);
+    Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
   };
 
-  // ✅ 수정 모달 열기
   const openEditModal = (notice: Notice) => {
     setModalMode('edit');
     setSelectedNoticeId(notice.id);
@@ -97,6 +100,13 @@ const ManagerNotice = () => {
     setNewContent(notice.content);
     setIsImportant(notice.important);
     setWriteModalVisible(true);
+    Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+  };
+
+  const closeWriteModal = () => {
+    Animated.timing(slideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => {
+      setWriteModalVisible(false);
+    });
   };
 
   // ✅ 등록 / 수정 저장
@@ -123,7 +133,7 @@ const ManagerNotice = () => {
         });
       }
 
-      setWriteModalVisible(false);
+      closeWriteModal(); // 💡 저장 성공 시 스르륵 닫히도록 변경
       await fetchNotices();
     } catch (error: any) {
       const msg = error?.response?.data?.message || '저장에 실패했습니다.';
@@ -203,65 +213,77 @@ const ManagerNotice = () => {
         <Text style={styles.fabText}>+ 작성</Text>
       </TouchableOpacity>
 
-      {/* 작성 / 수정 모달 */}
+      {/* 💡 작성 / 수정 바텀 시트 모달 */}
       <Modal visible={isWriteModalVisible} animationType="fade" transparent={true}>
-        <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalBox}>
-
-            <Text style={styles.modalHeaderTitle}>
-              {modalMode === 'create' ? '새 공지 작성' : '공지 수정'}
-            </Text>
-
-            <Text style={styles.inputLabel}>공지 제목</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="공지 제목을 입력해주세요."
-              placeholderTextColor="#666666"
-              value={newTitle}
-              onChangeText={setNewTitle}
-            />
-
-            <Text style={styles.inputLabel}>공지 내용</Text>
-            <TextInput
-              style={[styles.textInput, styles.contentInput]}
-              placeholder="공지 내용을 입력해 주세요."
-              placeholderTextColor="#666666"
-              multiline={true}
-              textAlignVertical="top"
-              value={newContent}
-              onChangeText={setNewContent}
-            />
-
-            <TouchableOpacity style={styles.checkboxRow} activeOpacity={0.8} onPress={() => setIsImportant(!isImportant)}>
-              <View style={[styles.checkbox, isImportant && styles.checkboxChecked]}>
-                {isImportant && <Text style={styles.checkmark}>✓</Text>}
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeWriteModal}>
+          <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: slideAnim }] }]}>
+            <TouchableOpacity activeOpacity={1}>
+              <View style={styles.dragHandle} />
+              <View style={styles.sheetHeader}>
+                <Text style={styles.sheetTitle}>
+                  {modalMode === 'create' ? '새 공지 작성' : '공지 수정'}
+                </Text>
+                <TouchableOpacity onPress={closeWriteModal}>
+                  <Text style={styles.closeIcon}>✕</Text>
+                </TouchableOpacity>
               </View>
-              <Text style={styles.checkboxLabel}>중요 공지로 설정</Text>
+              <View style={styles.horizontalDivider} />
+
+              <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+                  
+                  <Text style={styles.inputLabel}>공지 제목</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="공지 제목을 입력해주세요."
+                    placeholderTextColor="#666666"
+                    value={newTitle}
+                    onChangeText={setNewTitle}
+                  />
+
+                  <Text style={styles.inputLabel}>공지 내용</Text>
+                  <TextInput
+                    style={[styles.textInput, styles.contentInput]}
+                    placeholder="공지 내용을 입력해 주세요."
+                    placeholderTextColor="#666666"
+                    multiline={true}
+                    textAlignVertical="top"
+                    value={newContent}
+                    onChangeText={setNewContent}
+                  />
+
+                  <TouchableOpacity style={styles.checkboxRow} activeOpacity={0.8} onPress={() => setIsImportant(!isImportant)}>
+                    <View style={[styles.checkbox, isImportant && styles.checkboxChecked]}>
+                      {isImportant && <Text style={styles.checkmark}>✓</Text>}
+                    </View>
+                    <Text style={styles.checkboxLabel}>중요 공지로 설정</Text>
+                  </TouchableOpacity>
+
+                  <View style={styles.btnRow}>
+                    <TouchableOpacity style={styles.cancelBtn} onPress={closeWriteModal} disabled={saving}>
+                      <Text style={styles.cancelBtnText}>취소</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.registerBtn, (!newTitle || !newContent || saving) && { opacity: 0.5 }]}
+                      onPress={handleSaveNotice}
+                      disabled={!newTitle || !newContent || saving}
+                    >
+                      {saving
+                        ? <ActivityIndicator size="small" color="#000" />
+                        : <Text style={styles.registerBtnText}>{modalMode === 'create' ? '등록하기' : '수정하기'}</Text>
+                      }
+                    </TouchableOpacity>
+                  </View>
+                </ScrollView>
+              </KeyboardAvoidingView>
             </TouchableOpacity>
-
-            <View style={styles.btnRow}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setWriteModalVisible(false)} disabled={saving}>
-                <Text style={styles.cancelBtnText}>취소</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.registerBtn, (!newTitle || !newContent || saving) && { opacity: 0.5 }]}
-                onPress={handleSaveNotice}
-                disabled={!newTitle || !newContent || saving}
-              >
-                {saving
-                  ? <ActivityIndicator size="small" color="#000" />
-                  : <Text style={styles.registerBtnText}>{modalMode === 'create' ? '등록하기' : '수정하기'}</Text>
-                }
-              </TouchableOpacity>
-            </View>
-
-          </KeyboardAvoidingView>
-        </View>
+          </Animated.View>
+        </TouchableOpacity>
       </Modal>
 
-      {/* 삭제 확인 모달 */}
+      {/* 삭제 확인 모달 (중앙 알림창 형태 유지) */}
       <Modal visible={isDeleteModalVisible} animationType="fade" transparent={true}>
-        <View style={styles.modalOverlay}>
+        <View style={styles.centerModalOverlay}>
           <View style={styles.deleteModalBox}>
             <Text style={styles.deleteTitle}>공지사항을 삭제하시겠습니까?</Text>
             <View style={styles.deleteBtnRow}>
@@ -332,28 +354,18 @@ const styles = StyleSheet.create({
   },
   fabText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
 
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  modalBox: {
-    width: '90%',
-    backgroundColor: '#212121',
-    borderRadius: 20,
-    padding: 24
-  },
-  modalHeaderTitle: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    textAlign: 'center'
-  },
+  // 💡 바텀 시트 모달 스타일
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
+  bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%', maxHeight: '90%' },
+  dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
+  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, paddingHorizontal: 5 },
+  sheetTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' },
+  closeIcon: { color: '#999999', fontSize: 24, paddingHorizontal: 10 },
+  horizontalDivider: { height: 1, backgroundColor: '#333333', width: '100%', marginBottom: 20 },
+
   inputLabel: { color: '#ffffff', fontSize: 14, fontWeight: '600', marginBottom: 8, marginLeft: 2 },
   textInput: {
-    backgroundColor: '#1A1A1A', borderWidth: 1, borderColor: '#333333',
+    backgroundColor: '#000', borderWidth: 1, borderColor: '#333333',
     borderRadius: 12, color: '#ffffff', padding: 14, fontSize: 15, marginBottom: 16
   },
   contentInput: { height: 140, paddingTop: 14 },
@@ -370,6 +382,8 @@ const styles = StyleSheet.create({
   registerBtn: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 15, borderRadius: 10, alignItems: 'center', marginLeft: 6 },
   registerBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
 
+  // 삭제 모달 스타일 (기존 중앙 팝업)
+  centerModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   deleteModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
   deleteTitle: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 25, textAlign: 'center' },
   deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
