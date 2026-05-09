@@ -1,25 +1,29 @@
-# Resolve react_native_pods.rb with node to allow for hoisting
-require Pod::Executable.execute_command('node', ['-p',
-  'require.resolve(
-    "react-native/scripts/react_native_pods.rb",
-    {paths: [process.argv[1]]},
-  )', __dir__]).strip
+require Pod::Executable.execute_command(
+  'node',
+  [
+    '-p',
+    'require.resolve(
+      "react-native/scripts/react_native_pods.rb",
+      { paths: [process.argv[1]] },
+    )',
+    __dir__
+  ]
+).strip
 
-platform :ios, '15.1' # 최소 지원 버전을 명시적으로 상향
+platform :ios, '15.1'
+
 prepare_react_native_project!
 
-# 강제로 Xcode 버전 체크를 통과시키기 위한 환경 변수 설정
-ENV['FORCE_XCODE_VERSION'] = '16.1' 
+ENV['RCT_NEW_ARCH_ENABLED'] = '0'
 
 target 'olla_react' do
-  # Xcode 15.1 체크 우회 설정
-  ENV['RCT_NO_LAUNCH_PACKAGER'] = '1'
 
   config = use_native_modules!
 
   use_react_native!(
     :path => config[:reactNativePath],
-    :app_path => "#{Pod::Config.instance.installation_root}/.."
+    :app_path => "#{Pod::Config.instance.installation_root}/..",
+    :new_arch_enabled => false
   )
 
   post_install do |installer|
@@ -28,12 +32,6 @@ target 'olla_react' do
       config[:reactNativePath],
       :mac_catalyst_enabled => false
     )
-    
-    # 추가적인 빌드 설정 강제 적용
-    installer.pods_project.targets.each do |target|
-      target.build_configurations.each do |config|
-        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-      end
-    end
   end
+
 end

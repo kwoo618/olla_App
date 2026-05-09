@@ -3,311 +3,419 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image } from 'rea
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// ─────────────────────────── API URLs ───────────────────────────
+const BASE_URL = 'http://192.168.0.23:8080/api/v1';
+const RANKING_BEGINNER_URL      = `${BASE_URL}/rankings/beginner`;
+const RANKING_ENDURANCE_URL     = `${BASE_URL}/rankings/endurance/distance`;
+const RANKING_SERIES_URL        = `${BASE_URL}/rankings/series`;
+const MY_PROFILE_URL            = `${BASE_URL}/members/me`;
+const MY_BEGINNER_BEST_URL      = `${BASE_URL}/records/beginner/best`;
 
-const RANKING_BEGINNER_URL = 'http://10.0.2.2:8080/api/v1/rankings/beginner';
-const RANKING_ENDURANCE_DISTANCE_URL = 'http://10.0.2.2:8080/api/v1/rankings/endurance/distance';
-const RANKING_SERIES_URL = 'http://10.0.2.2:8080/api/v1/rankings/series';
-const MY_PROFILE_URL = 'http://10.0.2.2:8080/api/v1/members/me'; 
-
+// ─────────────────────────── Axios 인터셉터 ───────────────────────────
 axios.interceptors.request.use(
   async (config) => {
     try {
-      const token = await AsyncStorage.getItem('userToken'); 
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-    } catch (error) {
-      console.error("토큰 가져오기 실패:", error);
+      const token = await AsyncStorage.getItem('userToken');
+      if (token) config.headers.Authorization = `Bearer ${token}`;
+    } catch (e) {
+      console.error('토큰 가져오기 실패:', e);
     }
     return config;
   },
   (error) => Promise.reject(error)
 );
 
+// ─────────────────────────── 상수 ───────────────────────────
 const colors = [
-  { name: '흰색', hex: '#EAEAEA', enum: 'WHITE' },
-  { name: '노랑', hex: '#F4D03F', enum: 'YELLOW' },
-  { name: '초록', hex: '#58D68D', enum: 'GREEN' },
-  { name: '파랑', hex: '#5DADE2', enum: 'BLUE' },
-  { name: '빨강', hex: '#EC7063', enum: 'RED' },
-  { name: '보라', hex: '#AF7AC5', enum: 'PURPLE' },
-  { name: '주황', hex: '#F0B27A', enum: 'ORANGE' },
-  { name: '검정', hex: '#000000', enum: 'BLACK' }
+  { name: '흰색',  hex: '#EAEAEA', enum: 'WHITE'  },
+  { name: '노랑',  hex: '#F4D03F', enum: 'YELLOW' },
+  { name: '초록',  hex: '#58D68D', enum: 'GREEN'  },
+  { name: '파랑',  hex: '#5DADE2', enum: 'BLUE'   },
+  { name: '빨강',  hex: '#EC7063', enum: 'RED'    },
+  { name: '보라',  hex: '#AF7AC5', enum: 'PURPLE' },
+  { name: '주황',  hex: '#F0B27A', enum: 'ORANGE' },
+  { name: '검정',  hex: '#000000', enum: 'BLACK'  },
 ];
 
-const reverseColorMap: { [key: string]: string } = {
-  "WHITE": "흰색", "YELLOW": "노랑", "ORANGE": "주황", "GREEN": "초록",
-  "BLUE": "파랑", "RED": "빨강", "PURPLE": "보라", "BLACK": "검정"
+// 난이도 enum → 한글 색 이름
+const ENUM_TO_KR: Record<string, string> = {
+  WHITE: '흰색', YELLOW: '노랑', GREEN: '초록', BLUE: '파랑',
+  RED: '빨강', PURPLE: '보라', ORANGE: '주황', BLACK: '검정',
 };
 
+// 각 색상 최대 홀드 수 (완등 시 사용)
+const MAX_HOLDS: Record<string, number> = {
+  '흰색': 26, '노랑': 33, '초록': 28, '파랑': 26,
+  '빨강': 26, '보라': 25, '주황': 28, '검정': 30,
+};
+
+// 색 이름 → 색 인덱스 (점수 계산용)
+const COLOR_ORDER = ['흰색', '노랑', '초록', '파랑', '빨강', '보라', '주황', '검정'];
+
+// 지구력 구간 순서 (additionalBlocks 값 → 구간명)
+const BOX_SEQUENCE = [
+  '1-1','1-2','1-3','1-4','1-5','1-6',
+  '2-1','2-2','2-3','2-4','2-5','2-6','2-7','2-8','2-9','2-10','2-11','2-12',
+  '3-1','3-2','3-3','3-4','3-5','3-6',
+  '4-1','4-2',
+];
+
+// ─────────────────────────── 타입 ───────────────────────────
+interface BeginnerRecord {
+  id: number;
+  difficulty: string;       // WHITE | YELLOW | ...
+  attemptType: string;      // ONE_WAY | ROUND_TRIP
+  maxHoldNo: number;
+  recordDate: string;
+  success: boolean;
+}
+
+interface EnduranceRankItem {
+  id: number;
+  memberId?: number;
+  name?: string;
+  nickname?: string;
+  oneWayCount: number;
+  additionalBlocks: number;
+  timeSeconds: number;
+  totalScore?: number;
+  recordDate: string;
+  ranking?: number;
+}
+
+interface SeriesRankItem {
+  id: number;
+  memberId?: number;
+  name?: string;
+  nickname?: string;
+  sequenceLog: string[];
+  totalScore: number;
+  recordDate: string;
+}
+
+// ─────────────────────────── 헬퍼 ───────────────────────────
+/** 응답에서 배열 추출 */
+const extractList = (serverData: any): any[] => {
+  if (!serverData) return [];
+  if (Array.isArray(serverData)) return serverData;
+  if (Array.isArray(serverData.list)) return serverData.list;
+  if (Array.isArray(serverData.data)) return serverData.data;
+  if (serverData.masters || serverData.challengers)
+    return [...(serverData.masters ?? []), ...(serverData.challengers ?? [])];
+  return [];
+};
+
+/** 초보벽 rawScore 계산 */
+const calcBeginnerScore = (colorName: string, isRoundTrip: boolean, holdCount: number): number => {
+  const colorIdx = COLOR_ORDER.indexOf(colorName);
+  return colorIdx * 100_000 + (isRoundTrip ? 50_000 : 0) + holdCount;
+};
+
+/** 지구력 구간 문자열 */
+const getSectionLabel = (oneWayCount: number, additionalBlocks: number): string => {
+  if (oneWayCount === 0 && additionalBlocks === 0) return '0';
+  if (additionalBlocks > 0 && additionalBlocks <= BOX_SEQUENCE.length)
+    return BOX_SEQUENCE[additionalBlocks - 1];
+  return '완주';
+};
+
+/** 지구력 구간 색상 */
+const getSectionColor = (section: string): string => {
+  if (!section || section === '0') return '#FFFFFF';
+  if (section.startsWith('1-')) return section === '1-6' ? '#B96BC6' : '#FFFFFF';
+  if (section.startsWith('2-')) {
+    const n = parseInt(section.split('-')[1], 10);
+    if (n <= 4) return '#58CCFF';
+    if (n <= 8) return '#3A4CA8';
+    return '#692498';
+  }
+  if (section.startsWith('3-')) return '#666666';
+  if (section.startsWith('4-')) return '#343434';
+  return '#FFFFFF';
+};
+
+/** 순위 원 색상 */
+const getRankColor = (rank: number): string => {
+  if (rank === 1) return '#FFCC00';
+  if (rank === 2) return '#C2C2C2';
+  if (rank === 3) return '#C0580E';
+  return '#666666';
+};
+
+/** 초 → mm:ss */
+const formatTime = (seconds: number): string => {
+  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const s = (seconds % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+};
+
+// ─────────────────────────── 컴포넌트 ───────────────────────────
 const RankingScreen = ({ route }: any) => {
-  
-  const [mainTab, setMainTab] = useState(route?.params?.targetTab || '초보벽');
-  const mainTabs = ['초보벽', '지구력', '연속'];
-  const [colorTab, setColorTab] = useState('전체');
+  const [mainTab, setMainTab]   = useState<string>(route?.params?.targetTab ?? '초보벽');
+  const [colorTab, setColorTab] = useState<string>('전체');
 
-  const [beginnerRankings, setBeginnerRankings] = useState<any[]>([]);
-  const [enduranceRankings, setEnduranceRankings] = useState<any[]>([]);
+  const [beginnerRankings,    setBeginnerRankings]    = useState<any[]>([]);
+  const [enduranceRankings,   setEnduranceRankings]   = useState<any[]>([]);
   const [consecutiveRankings, setConsecutiveRankings] = useState<any[]>([]);
-  
-  const [myNickname, setMyNickname] = useState('알 수 없음');
-  const [myMemberId, setMyMemberId] = useState<number | null>(null); // ✅ memberId 상태 추가
 
+  const [myNickname, setMyNickname] = useState<string>('알 수 없음');
+  const [myMemberId, setMyMemberId] = useState<number | null>(null);
+
+  // targetTab 파라미터 변경 감지
   useEffect(() => {
-    if (route?.params?.targetTab) {
-      setMainTab(route.params.targetTab);
-    }
+    if (route?.params?.targetTab) setMainTab(route.params.targetTab);
   }, [route?.params?.targetTab]);
 
+  // 최초 데이터 로드
   useEffect(() => {
-    fetchMyProfile().then(() => {
-      fetchAllRankings();
-    });
+    (async () => {
+      const userData = await fetchMyProfile();
+      fetchBeginnerRankings(userData);
+      fetchEnduranceRankings();
+      fetchConsecutiveRankings();
+    })();
   }, []);
 
-  const fetchMyProfile = async () => {
+  // ── 내 프로필 ──
+  const fetchMyProfile = async (): Promise<{ id: number | null; nickname: string }> => {
     try {
-      const response = await axios.get(MY_PROFILE_URL);
-      const data = response.data?.data || response.data;
+      const res  = await axios.get(MY_PROFILE_URL);
+      const data = res.data?.data ?? res.data;
       if (data) {
-        if (data.name || data.nickname) {
-          setMyNickname(data.nickname || data.name);
-        }
-        // ✅ memberId(또는 id) 저장 - 백엔드 응답 필드명에 따라 둘 다 대응
-        const myId = data.memberId ?? data.id ?? null;
-        if (myId !== null) {
-          setMyMemberId(Number(myId));
-        }
+        const nickname = data.nickname ?? data.name ?? '알 수 없음';
+        const id       = data.memberId ?? data.id ?? null;
+        setMyNickname(nickname);
+        if (id !== null) setMyMemberId(Number(id));
+        return { id: id !== null ? Number(id) : null, nickname };
       }
-    } catch (error) {
-      console.log("내 프로필 로드 실패", error);
+    } catch (e) {
+      console.log('내 프로필 로드 실패', e);
     }
+    return { id: null, nickname: '알 수 없음' };
   };
 
-  const fetchAllRankings = async () => {
-    fetchBeginnerRankings();
-    fetchEnduranceRankings();
-    fetchConsecutiveRankings();
-  };
-
-  const extractList = (serverData: any) => {
-    if (!serverData) return [];
-    if (Array.isArray(serverData)) return serverData;
-    if (Array.isArray(serverData.list)) return serverData.list;
-    if (Array.isArray(serverData.data)) return serverData.data;
-    if (serverData.masters || serverData.challengers) {
-      const m = serverData.masters || [];
-      const c = serverData.challengers || [];
-      return [...m, ...c];
-    }
-    return [];
-  };
-
-  // 1. 초보벽 랭킹 조회
-  const fetchBeginnerRankings = async () => {
+  // ── 초보벽 랭킹 ──
+  const fetchBeginnerRankings = async (userData: { id: number | null; nickname: string }) => {
     try {
-      const requests = colors.map(c => axios.get(`${RANKING_BEGINNER_URL}?difficulty=${c.enum}`));
-      const responses = await Promise.all(
-        requests.map(p => p.catch(e => ({ data: { data: [] } })))
+      // 색상별 랭킹 병렬 요청
+      const rankResponses = await Promise.all(
+        colors.map(c =>
+          axios.get(`${RANKING_BEGINNER_URL}?difficulty=${c.enum}`)
+               .catch(() => ({ data: { data: [] } }))
+        )
       );
-      
+
+      // 내 베스트 기록 (명세: { id, difficulty, attemptType, maxHoldNo, recordDate, success })
+      let myBestList: BeginnerRecord[] = [];
+      try {
+        const res = await axios.get(MY_BEGINNER_BEST_URL);
+        const raw = res.data?.data ?? res.data;
+        myBestList = Array.isArray(raw) ? raw : (Array.isArray(raw?.list) ? raw.list : []);
+      } catch (e) {
+        console.log('내 초보벽 베스트 기록 로드 실패', e);
+      }
+
       let allData: any[] = [];
-      const colorOrder = ['흰색', '노랑', '초록', '파랑', '빨강', '보라', '주황', '검정'];
-      
-      responses.forEach((response, index) => {
-        const rawList = extractList(response.data?.data || response.data);
-        const currentColor = colors[index];
-        const colorIdx = colorOrder.indexOf(currentColor.name);
-        
-        const mappedData = rawList.map((item: any, itemIndex: number) => {
-          const attemptType = item.attemptType || item.attempt_type || item.type || '';
-          const isRoundTrip = String(attemptType).toUpperCase() === 'ROUND_TRIP' || attemptType === '왕복';
-          const typeStr = isRoundTrip ? '왕복' : '편도';
-          
-          const holdCount = item.maxHoldNo ?? item.total ?? item.score ?? 0;
-          const colorWeight = colorIdx * 100000; 
-          const typeWeight = isRoundTrip ? 50000 : 0; 
-          const absoluteScore = colorWeight + typeWeight + Number(holdCount);
+
+      rankResponses.forEach((response, colorIdx) => {
+        const currentColor = colors[colorIdx];
+        const maxHold      = MAX_HOLDS[currentColor.name] ?? 0;
+        const rawList      = extractList(response.data?.data ?? response.data);
+
+        // 랭킹 목록 파싱
+        const mappedList = rawList.map((item: any, i: number) => {
+          const isRoundTrip = String(item.attemptType ?? '').toUpperCase() === 'ROUND_TRIP';
+          // success=true 이거나 maxHoldNo가 없으면 완등으로 처리
+          const holdCount = (item.success === true || !item.maxHoldNo)
+            ? maxHold
+            : Number(item.maxHoldNo);
 
           return {
-            id: item.memberId ?? item.id ?? `temp-beginner-${index}-${itemIndex}`,
-            memberId: item.memberId ?? item.id ?? null, // ✅ memberId 명시적 보존
-            name: item.name || item.nickname || '알 수 없음',
+            id:        item.memberId ?? `rank-beginner-${colorIdx}-${i}`,
+            memberId:  item.memberId ?? null,
+            name:      item.name ?? item.nickname ?? '알 수 없음',
             colorName: currentColor.name,
-            colorHex: currentColor.hex,
-            type: typeStr,
-            hold: holdCount, 
-            rawScore: absoluteScore, 
-            achievedAt: item.achievedAt || item.recordDate ? new Date(item.achievedAt || item.recordDate).getTime() : 9999999999999
+            colorHex:  currentColor.hex,
+            type:      isRoundTrip ? '왕복' : '편도',
+            hold:      holdCount,
+            rawScore:  calcBeginnerScore(currentColor.name, isRoundTrip, holdCount),
+            achievedAt: item.recordDate ? new Date(item.recordDate).getTime() : 9_999_999_999_999,
           };
         });
-        
-        allData = [...allData, ...mappedData];
+
+        // 내 베스트 기록 중 이 색상에 해당하는 것 찾기
+        const myRecord = myBestList
+          .filter(r => r.difficulty === currentColor.enum)
+          .reduce<{ score: number; entry: any } | null>((best, r) => {
+            const isRT    = String(r.attemptType ?? '').toUpperCase() === 'ROUND_TRIP';
+            const hold    = (r.success === true || !r.maxHoldNo) ? maxHold : Number(r.maxHoldNo);
+            const score   = calcBeginnerScore(currentColor.name, isRT, hold);
+            if (!best || score > best.score) return { score, entry: r };
+            return best;
+          }, null);
+
+        let finalList = [...mappedList];
+
+        if (myRecord) {
+          const r     = myRecord.entry as BeginnerRecord;
+          const isRT  = String(r.attemptType ?? '').toUpperCase() === 'ROUND_TRIP';
+          const hold  = (r.success === true || !r.maxHoldNo) ? maxHold : Number(r.maxHoldNo);
+          const score = calcBeginnerScore(currentColor.name, isRT, hold);
+
+          // 기존 랭킹에 내 항목이 있으면 제거 후 내 기록으로 교체
+          finalList = finalList.filter(item =>
+            userData.id
+              ? Number(item.memberId) !== userData.id
+              : item.name !== userData.nickname
+          );
+
+          finalList.push({
+            id:        userData.id ?? `my-beginner-${colorIdx}`,
+            memberId:  userData.id ?? null,
+            name:      userData.nickname,
+            colorName: currentColor.name,
+            colorHex:  currentColor.hex,
+            type:      isRT ? '왕복' : '편도',
+            hold,
+            rawScore:  score,
+            achievedAt: r.recordDate ? new Date(r.recordDate).getTime() : Date.now(),
+          });
+        }
+
+        allData = [...allData, ...finalList];
       });
 
       setBeginnerRankings(allData);
-    } catch (error) {
-      console.error("초보벽 랭킹 로드 실패:", error);
+    } catch (e) {
+      console.error('초보벽 랭킹 로드 실패:', e);
     }
   };
 
-  // 2. 지구력 랭킹 조회
+  // ── 지구력 랭킹 ──
+  // 명세: { id, memberId, name, oneWayCount, additionalBlocks, timeSeconds, totalScore, recordDate, ranking? }
   const fetchEnduranceRankings = async () => {
     try {
-      const response = await axios.get(RANKING_ENDURANCE_DISTANCE_URL);
-      const rawList = extractList(response.data?.data || response.data);
-      
-      const boxSequence = ['1-1','1-2','1-3','1-4','1-5','1-6','2-1','2-2','2-3','2-4','2-5','2-6','2-7','2-8','2-9','2-10','2-11','2-12','3-1','3-2','3-3','3-4','3-5','3-6','4-1','4-2'];
+      const res     = await axios.get(RANKING_ENDURANCE_URL);
+      const rawList = extractList(res.data?.data ?? res.data);
 
-      const mappedData = rawList.map((item: any, index: number) => {
-        const min = Math.floor((item.timeSeconds || 0) / 60).toString().padStart(2, '0');
-        const sec = ((item.timeSeconds || 0) % 60).toString().padStart(2, '0');
-        
-        let sectionStr = '완주';
-        if (item.additionalBlocks > 0 && item.additionalBlocks <= 26) {
-            sectionStr = boxSequence[item.additionalBlocks - 1];
-        } else if (item.additionalBlocks === 0 && item.oneWayCount === 0) {
-            sectionStr = '0';
-        }
+      const mapped = rawList.map((item: EnduranceRankItem, i: number) => ({
+        id:               item.memberId ?? `rank-endurance-${i}`,
+        memberId:         item.memberId ?? null,
+        name:             item.name ?? item.nickname ?? '알 수 없음',
+        laps:             item.oneWayCount  ?? 0,
+        timeSeconds:      item.timeSeconds  ?? 0,
+        time:             formatTime(item.timeSeconds ?? 0),
+        section:          getSectionLabel(item.oneWayCount ?? 0, item.additionalBlocks ?? 0),
+        totalScore:       item.totalScore   ?? 0,
+        rawRank:          item.ranking      ?? i + 1,
+        recordDate:       item.recordDate,
+      }));
 
-        return {
-          id: item.memberId ?? `temp-endurance-${index}`,
-          memberId: item.memberId ?? null, // ✅ memberId 명시적 보존
-          name: item.name || item.nickname || '알 수 없음',
-          laps: item.oneWayCount || 0,
-          time: `${min}:${sec}`,
-          section: sectionStr,
-          rawRank: item.ranking || 0
-        };
-      });
-      setEnduranceRankings(mappedData);
-    } catch (error) {
-      console.error("지구력 랭킹 로드 실패:", error);
+      setEnduranceRankings(mapped);
+    } catch (e) {
+      console.error('지구력 랭킹 로드 실패:', e);
     }
   };
 
-  // 3. 연속 완등 랭킹 조회
+  // ── 연속 완등 랭킹 ──
+  // 명세: { id, memberId, name, sequenceLog: string[], totalScore, recordDate }
   const fetchConsecutiveRankings = async () => {
     try {
-      const response = await axios.get(RANKING_SERIES_URL);
-      const rawData = response.data?.data || response.data;
-      const rawList = extractList(rawData);
-      
-      const mappedData = rawList.map((item: any, index: number) => {
-        const log = item.sequenceLog || [];
-        const mappedColors = log.map((diffEnum: string) => {
-          const krColor = reverseColorMap[diffEnum] || '흰색';
-          return colors.find(c => c.name === krColor)?.hex || '#999999';
+      const res     = await axios.get(RANKING_SERIES_URL);
+      const rawList = extractList(res.data?.data ?? res.data);
+
+      const mapped = rawList.map((item: SeriesRankItem, i: number) => {
+        const colorHexList = (item.sequenceLog ?? []).map(diffEnum => {
+          const krName = ENUM_TO_KR[diffEnum] ?? '흰색';
+          return colors.find(c => c.name === krName)?.hex ?? '#999999';
         });
 
         return {
-          id: item.memberId ?? item.id ?? `temp-series-${index}`,
-          memberId: item.memberId ?? item.id ?? null, // ✅ memberId 명시적 보존
-          name: item.name || item.nickname || '알 수 없음',
-          colors: mappedColors,
-          score: item.totalScore ?? item.score ?? 0, 
+          id:         item.memberId ?? item.id ?? `rank-series-${i}`,
+          memberId:   item.memberId ?? null,
+          name:       item.name ?? item.nickname ?? '알 수 없음',
+          colors:     colorHexList,
+          score:      item.totalScore ?? 0,
+          recordDate: item.recordDate,
         };
       });
-      setConsecutiveRankings(mappedData);
-    } catch (error) {
-      console.error("연속 완등 랭킹 로드 실패:", error);
+
+      setConsecutiveRankings(mapped);
+    } catch (e) {
+      console.error('연속 완등 랭킹 로드 실패:', e);
     }
   };
 
-  const getRankColor = (rank: number) => {
-    if (rank === 1) return '#FFCC00';
-    if (rank === 2) return '#C2C2C2';
-    if (rank === 3) return '#C0580E';
-    return '#666666';
-  };
-
-  const getSectionColor = (section: string) => {
-    if (!section) return '#FFFFFF';
-    if (section.startsWith('1-')) return section === '1-6' ? '#B96BC6' : '#FFFFFF';
-    if (section.startsWith('2-')) {
-      const num = parseInt(section.split('-')[1], 10);
-      if (num <= 4) return '#58CCFF';
-      if (num <= 8) return '#3A4CA8';
-      return '#692498';
-    }
-    if (section.startsWith('3-')) return '#666666';
-    if (section.startsWith('4-')) return '#343434';
-    return '#FFFFFF';
-  };
-
-  // ✅ isMe 판단: memberId가 있으면 ID로, 없으면 이름으로 fallback
+  // ── 내 항목 여부 판별 ──
   const checkIsMe = (item: any): boolean => {
-    if (myMemberId !== null && item.memberId !== null && item.memberId !== undefined) {
+    if (myMemberId !== null && item.memberId != null)
       return Number(item.memberId) === myMemberId;
-    }
-    // memberId를 못 받아온 경우에만 이름으로 fallback
     return item.name === myNickname;
   };
 
+  // ── 필터링 & 정렬 ──
   const filteredList = useMemo(() => {
     let list: any[] = [];
 
     if (mainTab === '초보벽') {
       list = [...beginnerRankings];
 
-      if (colorTab !== '전체') {
-        list = list.filter(r => r.colorName === colorTab);
-      }
+      // 색상 필터
+      if (colorTab !== '전체') list = list.filter(r => r.colorName === colorTab);
 
-      // ✅ 유저별 최고기록 1개 추출 - memberId 기준으로 변경
-      const userMap = new Map();
+      // 유저별 베스트 1개만
+      const userMap = new Map<string, any>();
       list.forEach(item => {
-        // memberId가 있으면 그걸로, 없으면 이름으로 키 설정
-        const key = (item.memberId !== null && item.memberId !== undefined)
-          ? `id_${item.memberId}`
-          : `name_${item.name}`;
-        const existing = userMap.get(key);
-        if (!existing) {
+        const key = item.memberId != null ? `id_${item.memberId}` : `name_${item.name}`;
+        const prev = userMap.get(key);
+        if (!prev) {
           userMap.set(key, item);
-        } else {
-          if (item.rawScore > existing.rawScore) {
-            userMap.set(key, item);
-          } else if (item.rawScore === existing.rawScore && item.achievedAt < existing.achievedAt) {
-            userMap.set(key, item);
-          }
+        } else if (item.rawScore > prev.rawScore) {
+          userMap.set(key, item);
+        } else if (item.rawScore === prev.rawScore && item.achievedAt < prev.achievedAt) {
+          userMap.set(key, item);
         }
       });
       list = Array.from(userMap.values());
-      
-      list.sort((a, b) => {
-        if (b.rawScore !== a.rawScore) return b.rawScore - a.rawScore; 
-        return a.achievedAt - b.achievedAt;
-      });
+
+      // 점수 내림차순 → 달성일 오름차순
+      list.sort((a, b) =>
+        b.rawScore !== a.rawScore
+          ? b.rawScore - a.rawScore
+          : a.achievedAt - b.achievedAt
+      );
 
     } else if (mainTab === '지구력') {
       list = [...enduranceRankings];
-      list.sort((a, b) => {
-         if(a.rawRank && b.rawRank) return a.rawRank - b.rawRank;
-         return b.laps - a.laps; 
-      });
+      // 서버가 준 ranking 값 우선, 없으면 totalScore 내림차순
+      list.sort((a, b) =>
+        a.rawRank !== b.rawRank ? a.rawRank - b.rawRank : b.totalScore - a.totalScore
+      );
+
     } else if (mainTab === '연속') {
       list = [...consecutiveRankings];
-      list.sort((a, b) => (b.score || 0) - (a.score || 0));
+      list.sort((a, b) => b.score - a.score);
     }
 
-    return list.map((item, index) => ({ 
-      ...item, 
-      rank: index + 1,
-      isMe: checkIsMe(item) // ✅ memberId 기반 본인 판별
+    return list.map((item, idx) => ({
+      ...item,
+      rank: idx + 1,
+      isMe: checkIsMe(item),
     }));
   }, [mainTab, colorTab, beginnerRankings, enduranceRankings, consecutiveRankings, myNickname, myMemberId]);
 
-  // ✅ 랭킹에 없으면 '-' 표시 (기록 없는 경우 정확히 처리)
   const myCurrentRank = filteredList.find(r => r.isMe)?.rank ?? '-';
 
+  // ─────────────────────────── 렌더 ───────────────────────────
   return (
     <View style={styles.background}>
-      
+
+      {/* 내 랭킹 카드 */}
       <View style={styles.myRankingWrapper}>
         <View style={styles.myRankingCard}>
           <View style={styles.myRankingContent}>
             <View style={styles.myRankingLeft}>
-              <Image source={require('../assets/profile.png')} style={styles.myProfileImg} defaultSource={undefined} />
+              <Image source={require('../assets/profile.png')} style={styles.myProfileImg} />
               <View>
                 <Text style={styles.myNameText}>{myNickname}</Text>
                 <Text style={styles.myRankSubText}>{mainTab} 나의 순위</Text>
@@ -321,77 +429,114 @@ const RankingScreen = ({ route }: any) => {
         </View>
       </View>
 
+      {/* 메인 탭 */}
       <View style={styles.mainTabContainer}>
-        {mainTabs.map((tab) => (
-          <TouchableOpacity key={tab} style={[styles.mainTabButton, mainTab === tab && styles.activeMainTab]} onPress={() => setMainTab(tab)}>
+        {(['초보벽', '지구력', '연속'] as const).map(tab => (
+          <TouchableOpacity
+            key={tab}
+            style={[styles.mainTabButton, mainTab === tab && styles.activeMainTab]}
+            onPress={() => setMainTab(tab)}
+          >
             <Text style={[styles.mainTabText, mainTab === tab && styles.activeMainTabText]}>{tab}</Text>
           </TouchableOpacity>
         ))}
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        
+
+        {/* 색상 탭 (초보벽 전용) */}
         {mainTab === '초보벽' && (
           <View style={styles.colorTabRow}>
-            <TouchableOpacity style={[styles.colorBtn, colorTab === '전체' ? { backgroundColor: '#A1BE44', borderWidth: 0 } : { borderColor: '#555555' }]} onPress={() => setColorTab('전체')}>
-              <Text style={colorTab === '전체' ? styles.colorBtnTextWhite : styles.colorBtnTextGray}>전체</Text>
+            <TouchableOpacity
+              style={[styles.colorBtn, colorTab === '전체' ? { backgroundColor: '#A1BE44', borderWidth: 0 } : { borderColor: '#555555' }]}
+              onPress={() => setColorTab('전체')}
+            >
+              <Text style={colorTab === '전체' ? styles.colorBtnTextActive : styles.colorBtnTextGray}>전체</Text>
             </TouchableOpacity>
-            {colors.map((c) => (
-              <TouchableOpacity key={c.name} style={[styles.colorBtn, { borderColor: colorTab === c.name ? '#A1BE44' : c.hex }, colorTab === c.name && { backgroundColor: c.hex + '20' }]} onPress={() => setColorTab(c.name)}>
-                <Text style={[styles.colorBtnText, { color: colorTab === c.name ? '#ffffff' : (c.name === '검정' ? '#ffffff' : c.hex) }]}>{c.name}</Text>
+            {colors.map(c => (
+              <TouchableOpacity
+                key={c.name}
+                style={[
+                  styles.colorBtn,
+                  { borderColor: colorTab === c.name ? '#A1BE44' : c.hex },
+                  colorTab === c.name && { backgroundColor: c.hex + '20' },
+                ]}
+                onPress={() => setColorTab(c.name)}
+              >
+                <Text style={[styles.colorBtnText, { color: colorTab === c.name ? '#ffffff' : (c.name === '검정' ? '#ffffff' : c.hex) }]}>
+                  {c.name}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
         )}
 
+        {/* 랭킹 목록 */}
         <View style={styles.rankingListContainer}>
-          {filteredList.map((item: any, index: number) => (
-            <View key={`rank-${mainTab}-${item.id}-${index}`} style={[styles.rankItemCard, item.isMe && styles.myRankItemHighlight]}>
-              
-              <View style={[styles.rankCircle, { borderColor: getRankColor(item.rank) }]}>
-                <Text style={[styles.rankNumberText, { color: getRankColor(item.rank) }]}>{item.rank}</Text>
-              </View>
+          {filteredList.length === 0 ? (
+            <Text style={styles.emptyText}>랭킹 데이터가 없습니다.</Text>
+          ) : (
+            filteredList.map((item, index) => (
+              <View
+                key={`rank-${mainTab}-${item.id}-${index}`}
+                style={[styles.rankItemCard, item.isMe && styles.myRankItemHighlight]}
+              >
+                {/* 순위 원 */}
+                <View style={[styles.rankCircle, { borderColor: getRankColor(item.rank) }]}>
+                  <Text style={[styles.rankNumberText, { color: getRankColor(item.rank) }]}>{item.rank}</Text>
+                </View>
 
-              <View style={styles.rankCenter}>
-                <Image source={require('../assets/profile.png')} style={styles.rankProfileImg} defaultSource={undefined} />
-                <Text style={styles.rankNameText}>{item.name}</Text>
-              </View>
+                {/* 프로필 + 이름 */}
+                <View style={styles.rankCenter}>
+                  <Image source={require('../assets/profile.png')} style={styles.rankProfileImg} />
+                  <Text style={styles.rankNameText}>{item.name}</Text>
+                </View>
 
-              <View style={styles.rankRight}>
-                {mainTab === '연속' ? (
-                  <>
-                    <View style={styles.consecutiveColorsRow}>
-                      {item.colors.map((colorHex: string, idx: number) => (
-                        <View key={`color-${item.id}-${idx}`} style={[styles.miniColorCircle, { backgroundColor: colorHex }]} />
-                      ))}
-                    </View>
-                    <Text style={styles.consecutiveScoreText}>{item.score}점</Text>
-                  </>
-                ) : mainTab === '지구력' ? (
-                  <>
-                    <Text style={styles.enduranceLapsText}>편도 {item.laps}회</Text>
-                    <Text style={styles.enduranceTimeText}>{item.time}</Text>
-                    <View style={styles.enduranceSectionRow}>
-                      {item.laps % 2 === 0 && <Text style={[styles.enduranceSectionArrow, { color: getSectionColor(item.section) }]}>← </Text>}
-                      <Text style={[styles.enduranceSectionText, { color: getSectionColor(item.section) }]}>{item.section}</Text>
-                      {item.laps % 2 !== 0 && <Text style={[styles.enduranceSectionArrow, { color: getSectionColor(item.section) }]}> →</Text>}
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    <Text style={[styles.rankTypeText, { color: item.type === '왕복' ? '#0058CC' : '#FF2528' }]}>{item.type}</Text>
-                    <View style={styles.rankInfoBottomRow}>
-                      <Text style={[styles.rankColorText, { color: item.colorHex === '#000000' ? '#FFFFFF' : item.colorHex }]}>{item.colorName}</Text>
-                      <Text style={styles.rankHoldText}>{item.hold}번</Text>
-                    </View>
-                  </>
-                )}
-              </View>
+                {/* 우측 정보 */}
+                <View style={styles.rankRight}>
+                  {mainTab === '연속' && (
+                    <>
+                      <View style={styles.consecutiveColorsRow}>
+                        {item.colors.map((hex: string, idx: number) => (
+                          <View key={idx} style={[styles.miniColorCircle, { backgroundColor: hex }]} />
+                        ))}
+                      </View>
+                      <Text style={styles.consecutiveScoreText}>{item.score}점</Text>
+                    </>
+                  )}
 
-            </View>
-          ))}
-          {filteredList.length === 0 && (
-             <Text style={{color: '#999', textAlign: 'center', marginTop: 30}}>랭킹 데이터가 없습니다.</Text>
+                  {mainTab === '지구력' && (
+                    <>
+                      <Text style={styles.enduranceLapsText}>편도 {item.laps}회</Text>
+                      <Text style={styles.enduranceTimeText}>{item.time}</Text>
+                      <View style={styles.enduranceSectionRow}>
+                        {item.laps % 2 === 0 && (
+                          <Text style={[styles.enduranceSectionArrow, { color: getSectionColor(item.section) }]}>← </Text>
+                        )}
+                        <Text style={[styles.enduranceSectionText, { color: getSectionColor(item.section) }]}>{item.section}</Text>
+                        {item.laps % 2 !== 0 && (
+                          <Text style={[styles.enduranceSectionArrow, { color: getSectionColor(item.section) }]}> →</Text>
+                        )}
+                      </View>
+                    </>
+                  )}
+
+                  {mainTab === '초보벽' && (
+                    <>
+                      <Text style={[styles.rankTypeText, { color: item.type === '왕복' ? '#0058CC' : '#FF2528' }]}>
+                        {item.type}
+                      </Text>
+                      <View style={styles.rankInfoBottomRow}>
+                        <Text style={[styles.rankColorText, { color: item.colorHex === '#000000' ? '#FFFFFF' : item.colorHex }]}>
+                          {item.colorName}
+                        </Text>
+                        <Text style={styles.rankHoldText}>{item.hold}번</Text>
+                      </View>
+                    </>
+                  )}
+                </View>
+              </View>
+            ))
           )}
         </View>
 
@@ -400,9 +545,11 @@ const RankingScreen = ({ route }: any) => {
   );
 };
 
+// ─────────────────────────── 스타일 ───────────────────────────
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A', paddingHorizontal: 20, paddingTop: 10 },
-  
+
+  // 내 랭킹 카드
   myRankingWrapper: { marginBottom: 20, marginTop: 10 },
   myRankingCard: { height: 100, borderRadius: 16, borderWidth: 1, borderColor: '#718A26', backgroundColor: '#5E731F', justifyContent: 'center' },
   myRankingContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 25 },
@@ -414,6 +561,7 @@ const styles = StyleSheet.create({
   myRankNumText: { color: '#A1BE44', fontSize: 42, fontWeight: '900', marginRight: 4, textShadowColor: 'rgba(0,0,0,0.4)', textShadowOffset: { width: 1, height: 2 }, textShadowRadius: 3 },
   myRankUnitText: { color: '#EBEBEB', fontSize: 18, fontWeight: 'bold', marginBottom: 6 },
 
+  // 메인 탭
   mainTabContainer: { flexDirection: 'row', backgroundColor: '#3A3A3A', borderRadius: 24, padding: 4, marginBottom: 20 },
   mainTabButton: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 20 },
   activeMainTab: { backgroundColor: '#1D1D1D' },
@@ -422,36 +570,45 @@ const styles = StyleSheet.create({
 
   scrollContent: { paddingBottom: 50 },
 
+  // 색상 탭
   colorTabRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
   colorBtn: { flex: 1, borderWidth: 1, borderRadius: 8, paddingVertical: 8, alignItems: 'center', marginHorizontal: 2 },
   colorBtnText: { fontSize: 11, fontWeight: 'bold' },
-  colorBtnTextWhite: { color: '#ffffff', fontSize: 11, fontWeight: 'bold' },
+  colorBtnTextActive: { color: '#ffffff', fontSize: 11, fontWeight: 'bold' },
   colorBtnTextGray: { color: '#999999', fontSize: 11, fontWeight: 'bold' },
 
+  // 랭킹 목록
   rankingListContainer: { paddingBottom: 20 },
+  emptyText: { color: '#999', textAlign: 'center', marginTop: 30 },
   rankItemCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#212121', borderWidth: 1, borderColor: '#333333', borderRadius: 16, paddingVertical: 15, paddingHorizontal: 15, marginBottom: 10 },
-  myRankItemHighlight: { borderColor: '#A1BE44', backgroundColor: '#2A2F1D' }, 
-  
+  myRankItemHighlight: { borderColor: '#A1BE44', backgroundColor: '#2A2F1D' },
+
+  // 순위 원
   rankCircle: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginRight: 15 },
   rankNumberText: { fontSize: 14, fontWeight: '900' },
 
+  // 프로필 + 이름
   rankCenter: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   rankProfileImg: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#444444', marginRight: 12 },
   rankNameText: { color: '#ffffff', fontSize: 15, fontWeight: 'bold' },
 
+  // 우측 정보
   rankRight: { alignItems: 'center', justifyContent: 'center', minWidth: 85 },
-  
+
+  // 초보벽
   rankTypeText: { fontSize: 14, fontWeight: '900', marginBottom: 4, textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
   rankInfoBottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   rankColorText: { fontSize: 15, fontWeight: 'bold', marginRight: 6, textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
   rankHoldText: { color: '#ffffff', fontSize: 15, fontWeight: '600', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
-  
+
+  // 지구력
   enduranceLapsText: { color: '#A1BE44', fontSize: 15, fontWeight: 'bold', marginBottom: 3, textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
   enduranceTimeText: { color: '#ffffff', fontSize: 14, fontWeight: '600', marginBottom: 3, textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
   enduranceSectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   enduranceSectionText: { fontSize: 15, fontWeight: 'bold', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
   enduranceSectionArrow: { fontSize: 15, fontWeight: 'bold', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
 
+  // 연속 완등
   consecutiveColorsRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', maxWidth: 90, marginBottom: 5 },
   miniColorCircle: { width: 14, height: 14, borderRadius: 7, margin: 2, borderWidth: 0.5, borderColor: '#555555' },
   consecutiveScoreText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },

@@ -31,7 +31,7 @@ const resolveMembershipType = (
   const upper = String(typeStr || '').toUpperCase();
 
   if (upper === 'COUNT' || upper.includes('횟수') || upper.includes('COUNT')) {
-    return '횟수권';
+    return '일일권';
   }
 
   if (upper === 'PERIOD' || upper.includes('기간') || upper.includes('PERIOD') || upper.includes('MONTH')) {
@@ -41,16 +41,16 @@ const resolveMembershipType = (
       start.setHours(0, 0, 0, 0);
       end.setHours(0, 0, 0, 0);
       const totalDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-      return totalDays <= 1 ? '일일권' : '기간권';
+      return totalDays <= 1 ? '일일권' : '회원권';
     }
-    return '기간권';
+    return '회원권';
   }
 
   if (remainingCount !== null && remainingCount !== undefined) {
-    return '횟수권';
+    return '일일권';
   }
   if (endDate) {
-    return '기간권';
+    return '회원권';
   }
 
   return '-';
@@ -147,7 +147,6 @@ const ManagerTicket = ({ navigation }: any) => {
     setEditStart('');
   };
 
-  // ✅ 핵심 수정: 에러 응답 상세 로깅 추가
   const handleGrantTicket = async () => {
     if (!selectedUser) return;
 
@@ -187,12 +186,10 @@ const ManagerTicket = ({ navigation }: any) => {
       closeEditModal();
       fetchUsers(token!);
     } catch (error: any) {
-      // ✅ 백엔드 에러 메시지 상세 출력
       const status = error?.response?.status;
       const serverMessage = error?.response?.data?.message || error?.response?.data?.error || JSON.stringify(error?.response?.data);
       console.error('[이용권 등록 실패]', `status: ${status}`, serverMessage);
 
-      // ✅ is_deleted 기본값 누락 에러 안내
       if (serverMessage?.includes("is_deleted") || serverMessage?.includes("default value")) {
         Alert.alert(
           "서버 설정 오류",
@@ -333,7 +330,7 @@ const ManagerTicket = ({ navigation }: any) => {
               item.endDate || '',
               item.remainingCount ?? null
             );
-            const isCountType = displayType === '횟수권';
+            const isCountType = displayType === '일일권';
             const isHolding = item.membershipStatus === 'HOLDING';
 
             return (
@@ -367,14 +364,18 @@ const ManagerTicket = ({ navigation }: any) => {
                 </View>
 
                 <View style={[styles.colAction, styles.rowCenter]}>
-                  <TouchableOpacity
-                    style={[styles.actionBtn, isHolding ? styles.actionBtnUnpause : styles.actionBtnPause]}
-                    onPress={() => togglePauseStatus(item.membershipId, item.membershipStatus)}
-                  >
-                    <Text style={isHolding ? styles.actionTextUnpause : styles.actionTextPause}>
-                      {isHolding ? '해제' : '정지'}
-                    </Text>
-                  </TouchableOpacity>
+                  {displayType !== '일일권' ? (
+                    <TouchableOpacity
+                      style={[styles.actionBtn, isHolding ? styles.actionBtnUnpause : styles.actionBtnPause]}
+                      onPress={() => togglePauseStatus(item.membershipId, item.membershipStatus)}
+                    >
+                      <Text style={isHolding ? styles.actionTextUnpause : styles.actionTextPause}>
+                        {isHolding ? '해제' : '정지'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={{ width: 34 }} /> 
+                  )}
 
                   <TouchableOpacity style={styles.trashBtn} onPress={() => confirmDeleteTicket(item.membershipId)}>
                     <Image source={require('../assets/trash.png')} style={styles.trashIcon} />
@@ -456,13 +457,13 @@ const ManagerTicket = ({ navigation }: any) => {
                     style={[styles.typeBtn, editType === 'PERIOD' && styles.typeBtnActive]}
                     onPress={() => { setEditType('PERIOD'); setAddValue(''); }}
                   >
-                    <Text style={[styles.typeBtnText, editType === 'PERIOD' && styles.typeBtnTextActive]}>기간권 (월권)</Text>
+                    <Text style={[styles.typeBtnText, editType === 'PERIOD' && styles.typeBtnTextActive]}>회원권</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.typeBtn, editType === 'COUNT' && styles.typeBtnActive]}
                     onPress={() => { setEditType('COUNT'); setAddValue(''); }}
                   >
-                    <Text style={[styles.typeBtnText, editType === 'COUNT' && styles.typeBtnTextActive]}>횟수권 (일일권)</Text>
+                    <Text style={[styles.typeBtnText, editType === 'COUNT' && styles.typeBtnTextActive]}>일일권</Text>
                   </TouchableOpacity>
                 </View>
 

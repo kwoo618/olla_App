@@ -14,7 +14,17 @@ import {
   Animated
 } from 'react-native';
 
-const API_BASE_URL = 'http://10.0.2.2:8080/api/v1';
+const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
+
+const MAX_HOLDS: { [key: string]: number } = {
+  "흰색": 26, "노랑": 33, "초록": 28, "파랑": 26, "빨강": 26, "보라": 25, "주황": 28, "검정": 30
+};
+
+const colorOrder = ['흰색', '노랑', '초록', '파랑', '빨강', '보라', '주황', '검정'];
+const reverseColorMap: { [key: string]: string } = {
+  "WHITE": "흰색", "YELLOW": "노랑", "ORANGE": "주황", "GREEN": "초록",
+  "BLUE": "파랑", "RED": "빨강", "PURPLE": "보라", "BLACK": "검정"
+};
 
 const HomeScreen = ({ navigation }: any) => {
   const scrollViewRef = useRef<ScrollView>(null);
@@ -26,17 +36,24 @@ const HomeScreen = ({ navigation }: any) => {
 
   const [userRole, setUserRole] = useState<string | null>(null);
   const [myNickname, setMyNickname] = useState('');
-  const [myMemberId, setMyMemberId] = useState<number | null>(null); // ✅ memberId 상태 추가
+  const [myMemberId, setMyMemberId] = useState<number | null>(null);
+
   const [userStats, setUserStats] = useState({
     monthlyVisits: 0,
     difficultyColor: '없음',
     difficultyType: '',
+    difficultyStatus: '',
     enduranceRank: 0,
     enduranceMinutes: 0,
     enduranceSeconds: 0,
   });
 
-  const [notice, setNotice] = useState({ title: '공지사항을 불러오는 중...', content: '' });
+  const [notice, setNotice] = useState({
+    title: '공지사항을 불러오는 중...',
+    content: '',
+    important: false,
+  });
+
   const [membership, setMembership] = useState({
     membershipType: '-',
     remainingDays: 0,
@@ -53,11 +70,9 @@ const HomeScreen = ({ navigation }: any) => {
     try {
       const userToken = await AsyncStorage.getItem('userToken');
       if (!userToken) return;
-
       const response = await axios.get(`${API_BASE_URL}/visit/qr`, {
         headers: { Authorization: `Bearer ${userToken}` }
       });
-
       if (response.data && response.data.data) {
         setQrToken(response.data.data);
       }
@@ -94,7 +109,6 @@ const HomeScreen = ({ navigation }: any) => {
     return [];
   };
 
-  // ✅ 랭킹 항목에서 본인 여부 판별 - memberId 우선, 없으면 이름 fallback
   const isMyRecord = (item: any, myId: number | null, nickname: string): boolean => {
     if (myId !== null && (item.memberId ?? item.id) !== null && (item.memberId ?? item.id) !== undefined) {
       return Number(item.memberId ?? item.id) === myId;
@@ -102,6 +116,7 @@ const HomeScreen = ({ navigation }: any) => {
     return item.name === nickname || item.nickname === nickname;
   };
 
+  // 횟수권 -> 일일권, 기간권 -> 기간권 명칭 통일
   const resolveMembershipType = (
     typeStr: string,
     startDate: string,
@@ -109,7 +124,7 @@ const HomeScreen = ({ navigation }: any) => {
     remainingCount: number | null
   ): string => {
     const upper = typeStr.toUpperCase();
-    if (upper === 'COUNT' || upper.includes('횟수') || upper.includes('COUNT')) return '횟수권';
+    if (upper === 'COUNT' || upper.includes('횟수') || upper.includes('COUNT')) return '일일권';
     if (upper === 'PERIOD' || upper.includes('기간') || upper.includes('PERIOD') || upper.includes('MONTH')) {
       if (startDate && endDate) {
         const start = new Date(startDate);
@@ -121,7 +136,7 @@ const HomeScreen = ({ navigation }: any) => {
       }
       return '기간권';
     }
-    if (remainingCount !== null && remainingCount !== undefined) return '횟수권';
+    if (remainingCount !== null && remainingCount !== undefined) return '일일권';
     if (endDate) return '기간권';
     return '-';
   };
@@ -142,44 +157,57 @@ const HomeScreen = ({ navigation }: any) => {
 
         // [1] 내 프로필
         let nickname = '';
-        let memberId: number | null = null; // ✅ memberId 로컬 변수
+        let memberId: number | null = null;
         try {
           const profileRes = await axios.get(`${API_BASE_URL}/members/me`, config);
           const pData = profileRes.data?.data || profileRes.data;
           nickname = pData.nickname || pData.name || '';
-          memberId = pData.memberId ?? pData.id ?? null; // ✅ memberId 추출
+          memberId = pData.memberId ?? pData.id ?? null;
           setMyNickname(nickname);
-          setMyMemberId(memberId !== null ? Number(memberId) : null); // ✅ 상태 저장
+          setMyMemberId(memberId !== null ? Number(memberId) : null);
         } catch (e) {
           console.error('프로필 로드 실패');
         }
 
-        // [2] 공지사항
+        // [2] 공지사항 — 중요 공지 최신순 우선, 없으면 일반 공지 최신순
         try {
           const noticeResponse = await axios.get(`${API_BASE_URL}/admin/notices`);
-          const noticeList = noticeResponse.data?.data?.content;
-          if (noticeList && noticeList.length > 0) {
-            const latestNotice = noticeList[noticeList.length - 1];
-            setNotice({ title: latestNotice.title, content: latestNotice.content });
+          const noticeList: any[] = noticeResponse.data?.data?.content ?? noticeResponse.data?.data ?? [];
+
+          if (noticeList.length > 0) {
+            const importantNotices = noticeList
+              .filter((n: any) => n.important === true)
+              .sort((a: any, b: any) =>
+                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+              );
+            const normalNotices = noticeList
+              .filter((n: any) => n.important !== true)
+              .sort((a: any, b: any) =>
+                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+              );
+            const target = importantNotices.length > 0 ? importantNotices[0] : normalNotices[0];
+            setNotice({
+              title: target.title,
+              content: target.content,
+              important: target.important === true,
+            });
           } else {
-            setNotice({ title: '현재 등록된 공지가 없습니다.', content: '' });
+            setNotice({ title: '현재 등록된 공지가 없습니다.', content: '', important: false });
           }
         } catch (e) {
           console.log('공지사항 실패');
+          setNotice({ title: '공지사항을 불러올 수 없습니다.', content: '', important: false });
         }
 
         // [3] 회원권
         try {
           const memResponse = await axios.get(`${API_BASE_URL}/memberships/me`, config);
-          console.log('[membership raw]', JSON.stringify(memResponse.data));
           const data = memResponse.data?.data ?? memResponse.data;
-
           if (data) {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const rawType = String(data.membershipType || '');
             const displayType = resolveMembershipType(rawType, data.startDate || '', data.endDate || '', data.remainingCount ?? null);
-
             let remainingDays = 0;
             if (data.endDate) {
               const end = new Date(data.endDate);
@@ -187,7 +215,6 @@ const HomeScreen = ({ navigation }: any) => {
               const diff = Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
               remainingDays = diff >= 0 ? diff : 0;
             }
-
             setMembership({
               membershipType: displayType,
               remainingDays,
@@ -205,10 +232,8 @@ const HomeScreen = ({ navigation }: any) => {
           setMembership(prev => ({ ...prev, isLoading: false }));
         }
 
-        // [4] 기록 - ✅ memberId 기반으로 본인 기록 탐색
+        // [4] 기록 로드
         if (nickname || memberId !== null) {
-          let bestColor = '없음';
-          let bestType = '';
           let myEndRank = 0;
           let myEndMin = 0;
           let myEndSec = 0;
@@ -216,16 +241,12 @@ const HomeScreen = ({ navigation }: any) => {
           try {
             const endRes = await axios.get(`${API_BASE_URL}/rankings/endurance/distance`, config);
             const endList = extractList(endRes.data?.data || endRes.data);
-
-            // ✅ memberId 기반으로 내 기록 탐색
             const myEndRecord = endList.find((item: any) => isMyRecord(item, memberId, nickname));
-
             if (myEndRecord) {
               endList.sort((a: any, b: any) => {
                 if (a.ranking && b.ranking) return a.ranking - b.ranking;
                 return (b.oneWayCount || 0) - (a.oneWayCount || 0);
               });
-              // ✅ 순위도 memberId 기반으로 탐색
               const myRankIndex = endList.findIndex((item: any) => isMyRecord(item, memberId, nickname));
               myEndRank = myRankIndex !== -1 ? myRankIndex + 1 : 0;
               const totalSec = myEndRecord.timeSeconds || 0;
@@ -236,39 +257,57 @@ const HomeScreen = ({ navigation }: any) => {
             console.log('지구력 기록 로드 실패', e);
           }
 
+          let bestColor = '없음';
+          let bestType = '';
+          let bestStatus = '';
+
           try {
-            const reverseColors = [
-              { name: '검정', enum: 'BLACK' }, { name: '주황', enum: 'ORANGE' },
-              { name: '보라', enum: 'PURPLE' }, { name: '빨강', enum: 'RED' },
-              { name: '파랑', enum: 'BLUE' }, { name: '초록', enum: 'GREEN' },
-              { name: '노랑', enum: 'YELLOW' }, { name: '흰색', enum: 'WHITE' }
-            ];
+            const [bestRes, historyRes, allRes] = await Promise.all([
+              axios.get(`${API_BASE_URL}/records/beginner/best`, config).catch(() => null),
+              axios.get(`${API_BASE_URL}/records/beginner/history`, config).catch(() => null),
+              axios.get(`${API_BASE_URL}/records/beginner`, config).catch(() => null)
+            ]);
 
-            for (const c of reverseColors) {
-              const bRes = await axios.get(`${API_BASE_URL}/rankings/beginner?difficulty=${c.enum}`, config);
-              const bList = extractList(bRes.data?.data || bRes.data);
-
-              // ✅ memberId 기반으로 내 기록 탐색
-              const myBRecord = bList.find((item: any) => isMyRecord(item, memberId, nickname));
-
-              if (myBRecord) {
-                bestColor = c.name;
-                const attemptType = myBRecord.attemptType || myBRecord.attempt_type || myBRecord.type || '';
-                bestType =
-                  String(attemptType).toUpperCase() === 'ROUND_TRIP' || attemptType === '왕복'
-                    ? '왕복'
-                    : '편도';
-                break;
+            let myRealBestRecords: any[] = [];
+            [bestRes, historyRes, allRes].forEach(res => {
+              if (res) {
+                const data = res.data?.data || res.data || [];
+                if (Array.isArray(data)) myRealBestRecords = [...myRealBestRecords, ...data];
+                else if (data.list && Array.isArray(data.list)) myRealBestRecords = [...myRealBestRecords, ...data.list];
               }
-            }
+            });
+
+            let highestScore = -1;
+            myRealBestRecords.forEach((r: any) => {
+              const krColor = reverseColorMap[r.difficulty] || r.color;
+              if (!krColor) return;
+              const colorIdx = colorOrder.indexOf(krColor);
+              if (colorIdx === -1) return;
+              const maxHoldForColor = MAX_HOLDS[krColor] || 0;
+              const attemptType = r.attemptType || r.attempt_type || r.type || r.recordType || '';
+              const isRoundTrip = String(attemptType).toUpperCase().includes('ROUND') || String(attemptType).includes('왕복') || r.isRoundTrip === true;
+              let holdCount = r.maxHoldNo ?? r.total ?? r.score ?? 0;
+              const isSuccess = r.success === true || String(r.success) === 'true' || r.isSuccess === true || String(r.isSuccess) === 'true' || r.isMaster === true || String(r.status) === '완료';
+              if (isSuccess || holdCount === 0) holdCount = maxHoldForColor;
+              const colorWeight = colorIdx * 100000;
+              const typeWeight = isRoundTrip ? 50000 : 0;
+              const score = colorWeight + typeWeight + Number(holdCount);
+              if (score > highestScore) {
+                highestScore = score;
+                bestColor = krColor;
+                bestType = isRoundTrip ? '왕복' : '편도';
+                bestStatus = isSuccess ? '완료' : '진행중';
+              }
+            });
           } catch (e) {
-            console.log('초보벽 기록 로드 실패', e);
+            console.log('초보벽 최고기록 로드 실패', e);
           }
 
           setUserStats(prev => ({
             ...prev,
             difficultyColor: bestColor,
             difficultyType: bestType,
+            difficultyStatus: bestStatus,
             enduranceRank: myEndRank,
             enduranceMinutes: myEndMin,
             enduranceSeconds: myEndSec
@@ -291,21 +330,15 @@ const HomeScreen = ({ navigation }: any) => {
       try {
         const userToken = await AsyncStorage.getItem('userToken');
         if (!userToken) return;
-
         const year = viewDate.getFullYear();
         const month = String(viewDate.getMonth() + 1).padStart(2, '0');
         const yearMonth = `${year}-${month}`;
-
         const response = await axios.get(
           `${API_BASE_URL}/visit/my-history?yearMonth=${yearMonth}`,
           { headers: { Authorization: `Bearer ${userToken}` } }
         );
-
         let rawData = response.data?.data;
-        if (rawData && !Array.isArray(rawData) && rawData.data) {
-          rawData = rawData.data;
-        }
-
+        if (rawData && !Array.isArray(rawData) && rawData.data) rawData = rawData.data;
         let daysAttended: number[] = [];
         if (Array.isArray(rawData)) {
           daysAttended = rawData
@@ -320,9 +353,7 @@ const HomeScreen = ({ navigation }: any) => {
             })
             .filter((day: number) => day > 0 && !isNaN(day));
         }
-
         setAttendedDates(daysAttended);
-
         if (year === today.getFullYear() && viewDate.getMonth() === today.getMonth()) {
           setUserStats(prev => ({ ...prev, monthlyVisits: daysAttended.length }));
         }
@@ -331,7 +362,6 @@ const HomeScreen = ({ navigation }: any) => {
         setAttendedDates([]);
       }
     };
-
     fetchVisitHistory();
   }, [viewDate.getFullYear(), viewDate.getMonth()]);
 
@@ -353,18 +383,30 @@ const HomeScreen = ({ navigation }: any) => {
   for (let i = 1; i <= daysInMonth; i++) days.push(i);
   const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
 
-  const isCountType = membership.membershipType === '횟수권';
+  const isCountType = membership.membershipType === '일일권';
   const hasMembership =
     isCountType
       ? membership.remainingCount > 0
       : !!(membership.startDate && membership.endDate);
+
+  // 오늘 날짜에 출석했는지 여부 확인
+  const isTodayAttended = 
+    viewDate.getFullYear() === today.getFullYear() && 
+    viewDate.getMonth() === today.getMonth() && 
+    attendedDates.includes(today.getDate());
+
+  // 일일권 상태 로직: 스캔(출석)하면 '이용중', 아니면 '미사용' 표시
+  let displayStatus = membership.status;
+  if (isCountType && membership.status === '이용중') {
+    displayStatus = isTodayAttended ? '이용중' : '미사용';
+  }
 
   const handlePopupPress = (title: string) => {
     if (title === '공지사항') {
       navigation.navigate('Notice');
     } else if (title === 'QR') {
       if (!hasMembership) {
-        Alert.alert('입장 불가', '현재 활성화된 회원권이 없습니다. 이용권을 먼저 구매해주세요.', [{ text: '확인' }]);
+        Alert.alert('입장 불가', '현재 활성화된 이용권이 없습니다. 이용권을 먼저 구매해주세요.', [{ text: '확인' }]);
         return;
       }
       openModal('QR');
@@ -384,12 +426,13 @@ const HomeScreen = ({ navigation }: any) => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* 공지사항 */}
         <TouchableOpacity style={styles.noticeCard} onPress={() => handlePopupPress('공지사항')}>
           <View style={styles.noticeHeaderRow}>
-            <View style={styles.noticeBadge}>
-              <Text style={styles.noticeBadgeText}>중요</Text>
-            </View>
+            {notice.important && (
+              <View style={styles.noticeBadge}>
+                <Text style={styles.noticeBadgeText}>중요</Text>
+              </View>
+            )}
             <Text style={styles.noticeHeadline} numberOfLines={1}>{notice.title}</Text>
           </View>
           <Text style={styles.noticeBody} numberOfLines={1}>{notice.content}</Text>
@@ -415,12 +458,11 @@ const HomeScreen = ({ navigation }: any) => {
               </Text>
             </View>
             <Text style={styles.cardTitleCentered}>
-              {hasMembership ? membership.membershipType : '회원권'}
+              {hasMembership ? membership.membershipType : '이용권'}
             </Text>
           </TouchableOpacity>
         </View>
 
-        {/* 기록 및 통계 */}
         <View style={styles.unifiedDataFrame}>
           <TouchableOpacity style={styles.innerTouchableMicro} onPress={() => handlePopupPress('이번달 방문')}>
             <Text style={styles.microSubTitle}>이번달 방문</Text>
@@ -439,7 +481,7 @@ const HomeScreen = ({ navigation }: any) => {
                   {userStats.difficultyColor}
                 </Text>
                 <Text style={styles.microUnit}>
-                  {userStats.difficultyType} <Text style={{ color: '#999999' }}>완료</Text>
+                  {userStats.difficultyType} <Text style={{ color: '#999999' }}>{userStats.difficultyStatus}</Text>
                 </Text>
               </>
             )}
@@ -462,7 +504,6 @@ const HomeScreen = ({ navigation }: any) => {
           </TouchableOpacity>
         </View>
 
-        {/* 캘린더 */}
         <View style={styles.calendarCard}>
           <View style={styles.calendarHeader}>
             <TouchableOpacity onPress={() => changeMonth(-1)} style={styles.monthArrow}>
@@ -539,7 +580,7 @@ const HomeScreen = ({ navigation }: any) => {
               <View style={styles.dragHandle} />
               <View style={styles.sheetHeader}>
                 <Text style={styles.sheetTitle}>
-                  {activeModal === 'QR' ? 'QR 체크인' : (hasMembership ? membership.membershipType : '회원권')}
+                  {activeModal === 'QR' ? 'QR 체크인' : (hasMembership ? membership.membershipType : '이용권')}
                 </Text>
                 <TouchableOpacity onPress={closeModal}>
                   <Text style={styles.closeBtn}>✕</Text>
@@ -618,7 +659,7 @@ const HomeScreen = ({ navigation }: any) => {
                         styles.memHalfValueWhite,
                         !hasMembership && { fontSize: 16, color: '#FF6B6B' }
                       ]} numberOfLines={1} adjustsFontSizeToFit>
-                        {hasMembership ? membership.status : '구매 필요'}
+                        {hasMembership ? displayStatus : '구매 필요'}
                       </Text>
                     </View>
                   </View>
@@ -635,9 +676,14 @@ const HomeScreen = ({ navigation }: any) => {
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
   scrollContent: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 60 },
+
   noticeCard: { width: '100%', backgroundColor: '#2A2A2A', paddingVertical: 18, paddingHorizontal: 20, borderRadius: 12, marginBottom: 20 },
-  noticeHeadline: { color: '#ffffff', fontSize: 16, fontWeight: '600', marginBottom: 6 },
+  noticeHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  noticeBadge: { backgroundColor: '#A1BE44', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 8 },
+  noticeBadgeText: { color: '#1A1A1A', fontSize: 10, fontWeight: 'bold' },
+  noticeHeadline: { color: '#ffffff', fontSize: 16, fontWeight: '600', flex: 1 },
   noticeBody: { color: '#999999', fontSize: 13, fontWeight: '400' },
+
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
   QRCardCentered: { width: '60%', backgroundColor: '#2A2A2A', padding: 20, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   UserCardCentered: { width: '38%', backgroundColor: '#2A2A2A', padding: 20, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
@@ -645,6 +691,7 @@ const styles = StyleSheet.create({
   circleGraphDummy: { width: 50, height: 50, borderRadius: 25, borderWidth: 4, borderColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   circleGraphText: { color: '#ffffff', fontSize: 12, fontWeight: 'bold' },
   cardTitleCentered: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
+  
   unifiedDataFrame: { flexDirection: 'row', backgroundColor: '#2A2A2A', borderRadius: 16, marginBottom: 20, overflow: 'hidden' },
   innerTouchableMicro: { flex: 1, paddingVertical: 18, paddingHorizontal: 2, alignItems: 'center', justifyContent: 'center', minHeight: 90 },
   verticalDivider: { width: 1, backgroundColor: '#3D3D3D', marginVertical: 15 },
@@ -652,6 +699,7 @@ const styles = StyleSheet.create({
   microValue: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', textAlign: 'center' },
   microValuecolor: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', textAlign: 'center' },
   microUnit: { fontSize: 11, color: '#999999' },
+  
   calendarCard: { width: '100%', backgroundColor: '#2A2A2A', borderRadius: 16, padding: 20, marginBottom: 20 },
   calendarHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   monthArrow: { padding: 10 },
@@ -670,9 +718,7 @@ const styles = StyleSheet.create({
   selectedText: { color: '#000000', fontWeight: 'bold' },
   attendedCircle: { backgroundColor: '#3A3A3A', borderWidth: 1.5, borderColor: '#A1BE44' },
   attendedText: { color: '#A1BE44', fontWeight: 'bold' },
-  noticeHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  noticeBadge: { backgroundColor: '#A1BE44', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 8 },
-  noticeBadgeText: { color: '#1A1A1A', fontSize: 10, fontWeight: 'bold' },
+  
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 50, alignItems: 'center' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
@@ -680,11 +726,11 @@ const styles = StyleSheet.create({
   sheetTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginLeft: 10 },
   closeBtn: { color: '#999999', fontSize: 24, paddingHorizontal: 10 },
   qrDesc: { color: '#999999', fontSize: 14 },
+  
   membershipContainer: { width: '100%' },
   memCard: { backgroundColor: '#2A2A2A', borderRadius: 16, padding: 22, marginBottom: 15, width: '100%' },
   memCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   memCardTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
-  memCardBadge: { color: '#999999', fontSize: 14, fontWeight: '500' },
   progressBarBg: { height: 8, backgroundColor: '#444444', borderRadius: 4, marginBottom: 10 },
   progressBarFill: { height: '100%', backgroundColor: '#A1BE44', borderRadius: 4 },
   memCardDates: { flexDirection: 'row', justifyContent: 'space-between' },

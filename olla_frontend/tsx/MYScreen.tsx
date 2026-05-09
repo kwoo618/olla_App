@@ -7,9 +7,9 @@ import {
   Image, Switch, Modal, Animated, TextInput, Alert, ActivityIndicator, Linking
 } from 'react-native';
 
-const API_BASE_URL = 'http://10.0.2.2:8080/api/v1';
+const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
 
-// ✅ HomeScreen과 동일한 타입 해석 함수
+// ✅ 횟수권 -> 일일권 명칭 통일
 const resolveMembershipType = (
   typeStr: string,
   startDate: string,
@@ -19,7 +19,7 @@ const resolveMembershipType = (
   const upper = typeStr.toUpperCase();
 
   if (upper === 'COUNT' || upper.includes('횟수') || upper.includes('COUNT')) {
-    return '횟수권';
+    return '일일권';
   }
 
   if (upper === 'PERIOD' || upper.includes('기간') || upper.includes('PERIOD') || upper.includes('MONTH')) {
@@ -34,8 +34,7 @@ const resolveMembershipType = (
     return '기간권';
   }
 
-  // NONE or unknown → remainingCount 유무로 추론
-  if (remainingCount !== null && remainingCount !== undefined) return '횟수권';
+  if (remainingCount !== null && remainingCount !== undefined) return '일일권';
   if (endDate) return '기간권';
   return '-';
 };
@@ -114,13 +113,39 @@ const MYScreen = ({ navigation }: any) => {
         });
       }
 
-      // [GET] 회원권 정보 조회 ✅ 수정됨
+      // ✅ [GET] 오늘 출석 여부 확인 (일일권 '미사용' / '이용중' 판별용)
+      let attendedToday = false;
+      try {
+        const today = new Date();
+        const yearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+        const visitRes = await axios.get(`${API_BASE_URL}/visit/my-history?yearMonth=${yearMonth}`, { headers });
+        
+        let rawData = visitRes.data?.data;
+        if (rawData && !Array.isArray(rawData) && rawData.data) rawData = rawData.data;
+        
+        if (Array.isArray(rawData)) {
+          const todayDate = today.getDate();
+          const daysAttended = rawData
+            .map((item: any) => {
+              if (typeof item === 'string') {
+                const parts = item.split('-');
+                if (parts.length >= 3) return parseInt(parts[2], 10);
+              } else if (Array.isArray(item) && item.length >= 3) {
+                return parseInt(item[2], 10);
+              }
+              return -1;
+            })
+            .filter((day: number) => day > 0 && !isNaN(day));
+          
+          attendedToday = daysAttended.includes(todayDate);
+        }
+      } catch (e) {
+        console.log('출석 확인 실패:', e);
+      }
+
+      // [GET] 회원권 정보 조회
       try {
         const memRes = await axios.get(`${API_BASE_URL}/memberships/me`, { headers });
-
-        // 응답 구조 확인용 로그 (배포 시 제거)
-        console.log('[MY membership raw]', JSON.stringify(memRes.data));
-
         const memData = memRes.data?.data ?? memRes.data;
 
         if (memData) {
@@ -135,7 +160,7 @@ const MYScreen = ({ navigation }: any) => {
             memData.remainingCount ?? null
           );
 
-          const isCountType = displayType === '횟수권';
+          const isCountType = displayType === '일일권';
 
           let remainingDays = -1;
           if (memData.endDate) {
@@ -151,10 +176,17 @@ const MYScreen = ({ navigation }: any) => {
               ? `${memData.startDate} ~ ${memData.endDate}`
               : '-';
 
+          // ✅ 상태 계산 (일일권의 경우 오늘 출석했으면 이용중, 안했으면 미사용)
+          let currentStatus = memData.status === 'ACTIVE' ? '이용중' : memData.status === 'HOLDING' ? '정지중' : '구매필요';
+          
+          if (isCountType && currentStatus === '이용중') {
+            currentStatus = attendedToday ? '이용중' : '미사용';
+          }
+
           setMemInfo({
             type: displayType,
             period: periodStr,
-            status: memData.status === 'ACTIVE' ? '이용중' : memData.status === 'HOLDING' ? '정지중' : '구매필요',
+            status: currentStatus,
             remainingDays,
             remainingCount: memData.remainingCount ?? -1,
             isCountType,
@@ -325,12 +357,12 @@ const MYScreen = ({ navigation }: any) => {
     );
   };
 
-  // ✅ 횟수권/기간권에 따라 보유 여부 판단
+  // ✅ 보유 여부 확인
   const hasMembership = memInfo.isCountType
     ? memInfo.remainingCount > 0
     : memInfo.remainingDays >= 0;
 
-  // ✅ 멤버십 카드에 표시할 요약 텍스트
+  // ✅ 카드에 표시될 텍스트
   const memSummaryText = hasMembership
     ? memInfo.isCountType
       ? `${memInfo.type} (${memInfo.remainingCount}회 남음)`
@@ -371,7 +403,7 @@ const MYScreen = ({ navigation }: any) => {
           </View>
           <View style={styles.memInfoContainer}>
             <View style={styles.memInfoRow}>
-              <Text style={styles.memInfoLabel}>회원권</Text>
+              <Text style={styles.memInfoLabel}>이용권</Text>
               <Text style={styles.memInfoValue}>{memSummaryText}</Text>
             </View>
             <View style={styles.memInfoRow}>

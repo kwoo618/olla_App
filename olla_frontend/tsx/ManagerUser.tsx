@@ -17,7 +17,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'http://10.0.2.2:8080/api/v1';
+const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
 const MEMBER_LIST_API = `${API_BASE_URL}/admin/memberships/members`; 
 const OFFLINE_REGISTER_API = `${API_BASE_URL}/admin/members/offline`; 
 const MEMBER_DELETE_API = `${API_BASE_URL}/admin/members`; 
