@@ -18,7 +18,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'http://10.0.2.2:8080/api/v1';
+const API_BASE_URL = 'http://192.168.0.8:8080/api/v1';
 const MEMBER_LIST_API = `${API_BASE_URL}/admin/memberships/members`; 
 const OFFLINE_REGISTER_API = `${API_BASE_URL}/admin/members/offline`; 
 const MEMBER_DELETE_API = `${API_BASE_URL}/admin/members`; 
@@ -269,7 +269,7 @@ const ManagerUser = ({ navigation }: any) => {
 
       {/* 등록 플로팅 버튼 */}
       <TouchableOpacity 
-        style={[styles.fab, { bottom: Math.max(insets.bottom + 20, 20) }]} 
+        style={[styles.fab, { bottom: Math.max(insets.bottom + -30, 10) }]} 
         activeOpacity={0.8} 
         onPress={openAddModal} // 💡 애니메이션 함수로 변경
       >

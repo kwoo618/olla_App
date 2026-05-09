@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'http://10.0.2.2:8080/api/v1';
+const API_BASE_URL = 'http://192.168.0.8:8080/api/v1';
 const NOTICE_API = `${API_BASE_URL}/admin/notices`;
 
 interface Notice {
@@ -348,7 +348,7 @@ const styles = StyleSheet.create({
   actionIcon: { width: 18, height: 18, resizeMode: 'contain' },
 
   fab: {
-    position: 'absolute', bottom: 30, right: 20, backgroundColor: '#A1BE44',
+    position: 'absolute', bottom: 15, right: 20, backgroundColor: '#A1BE44',
     paddingHorizontal: 20, paddingVertical: 15, borderRadius: 30, elevation: 5,
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4
   },

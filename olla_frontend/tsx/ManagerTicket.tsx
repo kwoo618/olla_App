@@ -8,7 +8,7 @@ import { Calendar, LocaleConfig } from 'react-native-calendars';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'http://10.0.2.2:8080/api/v1';
+const API_BASE_URL = 'http://192.168.0.8:8080/api/v1';
 const MEMBER_LIST_API = `${API_BASE_URL}/admin/memberships/members`; 
 const MEMBERSHIP_GRANT_API = `${API_BASE_URL}/admin/memberships/grant`; 
 const MEMBERSHIP_BASE_API = `${API_BASE_URL}/admin/memberships`; 
@@ -393,7 +393,7 @@ const ManagerTicket = ({ navigation }: any) => {
 
       {/* 💡 등록 플로팅 버튼 (위치 및 애니메이션 수정) */}
       <TouchableOpacity 
-        style={[styles.fab, { bottom: Math.max(insets.bottom + 20, 20) }]} 
+        style={[styles.fab, { bottom: Math.max(insets.bottom + -30, 10) }]} 
         activeOpacity={0.8} 
         onPress={openEditModal}
       >

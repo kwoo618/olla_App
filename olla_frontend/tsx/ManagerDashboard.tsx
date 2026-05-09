@@ -14,7 +14,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Camera, CameraView } from 'expo-camera';
 
-const API_BASE_URL = 'http://10.0.2.2:8080/api/v1';
+const API_BASE_URL = 'http://192.168.0.8:8080/api/v1';
 
 
 const POST_API_URL = `${API_BASE_URL}/posts`;
@@ -531,7 +531,7 @@ const styles = StyleSheet.create({
   deleteBtn: { backgroundColor: 'rgba(255,77,77,0.1)', borderRadius: 8 },
   actionIcon: { width: 20, height: 20, resizeMode: 'contain' },
 
-  fab: { position: 'absolute', bottom: 30, right: 20, width: 60, height: 60, borderRadius: 30, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4.65 },
+  fab: { position: 'absolute', bottom: 15, right: 20, width: 60, height: 60, borderRadius: 30, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4.65 },
   fabIcon: { width: 30, height: 30, tintColor: '#1A1A1A', resizeMode: 'contain' },
 
   scannerModalOverlay: { flex: 1, backgroundColor: '#1A1A1A' },

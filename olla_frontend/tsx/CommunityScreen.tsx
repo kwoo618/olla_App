@@ -4,8 +4,8 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
 
-const BASE = 'http://10.0.2.2:8080/api/v1';
-const POSTS = `http://10.0.2.2:8080/api/v1/posts`;
+const BASE = 'http://192.168.0.8:8080/api/v1';
+const POSTS = `http://192.168.0.8:8080/api/v1/posts`;
 const MEMBERS = `${BASE}/members`;
 
 const authHeader = async () => {

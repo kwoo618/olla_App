@@ -7,7 +7,7 @@ import {
   Image, Switch, Modal, Animated, TextInput, Alert, ActivityIndicator, Linking
 } from 'react-native';
 
-const API_BASE_URL = 'http://10.0.2.2:8080/api/v1';
+const API_BASE_URL = 'http://192.168.0.8:8080/api/v1';
 
 // ✅ HomeScreen과 동일한 타입 해석 함수
 const resolveMembershipType = (
