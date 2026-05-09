@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   View, Text, StyleSheet, TextInput, TouchableOpacity, 
-  ScrollView, Image, Modal, KeyboardAvoidingView, Platform, Alert, ActivityIndicator 
+  ScrollView, Image, Modal, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Animated 
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -57,11 +57,15 @@ const resolveMembershipType = (
 };
 
 const ManagerTicket = ({ navigation }: any) => {
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   
+  // 💡 애니메이션 설정
   const [isEditModalVisible, setEditModalVisible] = useState(false);
+  const editSlideAnim = useRef(new Animated.Value(800)).current;
+
   const [modalSearch, setModalSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<any>(null);
 
@@ -176,8 +180,6 @@ const ManagerTicket = ({ navigation }: any) => {
             startDate,
           };
 
-      console.log('[이용권 등록 요청]', JSON.stringify(requestBody, null, 2));
-
       await axios.post(MEMBERSHIP_GRANT_API, requestBody, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -197,7 +199,6 @@ const ManagerTicket = ({ navigation }: any) => {
         );
         return;
       }
-
       Alert.alert("오류", `이용권 등록에 실패했습니다.\n\n${serverMessage || '서버 오류가 발생했습니다.'}`);
     }
   };
@@ -264,12 +265,20 @@ const ManagerTicket = ({ navigation }: any) => {
     );
   };
 
+  // 💡 모달 제어 함수 (애니메이션 포함)
+  const openEditModal = () => {
+    setEditModalVisible(true);
+    Animated.timing(editSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+  };
+
   const closeEditModal = () => {
-    setEditModalVisible(false);
-    setSelectedUser(null);
-    setModalSearch('');
-    setAddValue('');
-    setEditStart('');
+    Animated.timing(editSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => {
+      setEditModalVisible(false);
+      setSelectedUser(null);
+      setModalSearch('');
+      setAddValue('');
+      setEditStart('');
+    });
   };
 
   const calendarTheme = {
@@ -296,7 +305,8 @@ const ManagerTicket = ({ navigation }: any) => {
   }
 
   return (
-    <SafeAreaView style={styles.background} edges={[]}>
+    <SafeAreaView style={styles.background} edges={['top', 'left', 'right']}>
+      {/* 상단 검색바 */}
       <View style={styles.searchContainer}>
         <View style={styles.searchBox}>
           <Text style={styles.searchIcon}>🔎</Text>
@@ -310,6 +320,7 @@ const ManagerTicket = ({ navigation }: any) => {
         </View>
       </View>
 
+      {/* 리스트 헤더 */}
       <View style={styles.tableHeader}>
         <Text style={[styles.headerText, styles.colInfo]}>회원/이용권</Text>
         <Text style={[styles.headerText, styles.colDate]}>시작일/종료일</Text>
@@ -319,7 +330,7 @@ const ManagerTicket = ({ navigation }: any) => {
       </View>
       <View style={styles.headerDivider} />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.listContainer}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.listContainer, { paddingBottom: 150 }]}>
         {ticketHolders.length === 0 ? (
           <Text style={styles.emptyText}>보유 중인 이용권이 없습니다.</Text>
         ) : (
@@ -387,126 +398,145 @@ const ManagerTicket = ({ navigation }: any) => {
         )}
       </ScrollView>
 
-      <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={() => setEditModalVisible(true)}>
+      {/* 💡 등록 플로팅 버튼 */}
+      <TouchableOpacity 
+        style={[styles.fab, { bottom: Math.max(insets.bottom + -30, 10) }]} 
+        activeOpacity={0.8} 
+        onPress={openEditModal}
+      >
         <Text style={styles.fabText}>+ 이용권 등록</Text>
       </TouchableOpacity>
 
-      <Modal visible={isEditModalVisible} animationType="slide" transparent={true}>
-        <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.editModalBox}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>이용권 등록</Text>
-              <TouchableOpacity onPress={closeEditModal}><Text style={styles.closeIcon}>✕</Text></TouchableOpacity>
-            </View>
+      {/* 💡 이용권 등록 바텀 시트 모달 */}
+      <Modal visible={isEditModalVisible} transparent={true} animationType="fade">
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeEditModal}>
+          <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: editSlideAnim }] }]}>
+            <TouchableOpacity activeOpacity={1}>
+              <View style={styles.dragHandle} />
+              <View style={styles.sheetHeader}>
+                <Text style={styles.sheetTitle}>이용권 등록</Text>
+                <TouchableOpacity onPress={closeEditModal}><Text style={styles.closeIcon}>✕</Text></TouchableOpacity>
+              </View>
+              <View style={styles.horizontalDivider} />
 
-            <View style={styles.modalSearchBox}>
-              <Text style={styles.searchIcon}>🔎</Text>
-              <TextInput
-                style={styles.modalSearchInput}
-                placeholder="부여할 회원을 검색하세요"
-                placeholderTextColor="#666"
-                value={modalSearch}
-                onChangeText={setModalSearch}
-              />
-            </View>
-
-            <View style={styles.modalTableHeader}>
-              <Text style={[styles.modalHeaderText, { flex: 1.5 }]}>회원정보</Text>
-              <Text style={[styles.modalHeaderText, { flex: 2, textAlign: 'center' }]}>연락처</Text>
-              <Text style={[styles.modalHeaderText, { flex: 1.5, textAlign: 'center' }]}>현재 이용권</Text>
-            </View>
-            <View style={styles.headerDivider} />
-
-            <View style={{ height: 140, marginBottom: 20 }}>
-              <ScrollView style={styles.searchResultTable}>
-                {searchResults.length === 0 ? (
-                  <Text style={styles.modalEmptyText}>검색된 회원이 없습니다.</Text>
-                ) : (
-                  searchResults.map((u: any) => {
-                    const isSelected = selectedUser && selectedUser.memberId === u.memberId;
-                    const ticketTypeStr = resolveMembershipType(
-                      u.membershipType || '',
-                      u.startDate || '',
-                      u.endDate || '',
-                      u.remainingCount ?? null
-                    );
-                    const displayTicket = ticketTypeStr === '-' ? '없음' : ticketTypeStr;
-
-                    return (
-                      <TouchableOpacity
-                        key={u.memberId}
-                        style={[styles.searchResultRow, isSelected && styles.selectedRow]}
-                        onPress={() => handleSelectUser(u)}
-                      >
-                        <Text style={[styles.resultTextName, { flex: 1.5 }]} numberOfLines={1}>{u.name}</Text>
-                        <Text style={[styles.resultTextSub, { flex: 2, textAlign: 'center' }]}>{u.phone}</Text>
-                        <Text style={[styles.resultTextType, { flex: 1.5, textAlign: 'center' }]}>
-                          {displayTicket}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })
-                )}
-              </ScrollView>
-            </View>
-
-            {selectedUser && (
-              <View style={styles.editForm}>
-                <View style={styles.typeToggleRow}>
-                  <TouchableOpacity
-                    style={[styles.typeBtn, editType === 'PERIOD' && styles.typeBtnActive]}
-                    onPress={() => { setEditType('PERIOD'); setAddValue(''); }}
-                  >
-                    <Text style={[styles.typeBtnText, editType === 'PERIOD' && styles.typeBtnTextActive]}>회원권</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.typeBtn, editType === 'COUNT' && styles.typeBtnActive]}
-                    onPress={() => { setEditType('COUNT'); setAddValue(''); }}
-                  >
-                    <Text style={[styles.typeBtnText, editType === 'COUNT' && styles.typeBtnTextActive]}>일일권</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.horizontalDateRow}>
-                  <View style={styles.dateBlock}>
-                    <Text style={styles.inputLabel}>시작일</Text>
-                    <TouchableOpacity style={styles.dateInputBox} onPress={() => setStartCalendarVisible(true)}>
-                      <Text style={styles.dateText}>{editStart || getToday()}</Text>
-                      <Image source={require('../assets/DATE.png')} style={styles.dateIcon} />
-                    </TouchableOpacity>
-                    {editStart && editStart !== getToday() && (
-                      <TouchableOpacity onPress={() => setEditStart('')} style={styles.resetDateBtn}>
-                        <Text style={styles.resetDateText}>오늘로 초기화</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-
-                  <View style={styles.dateSpacer} />
-
-                  <View style={styles.dateBlock}>
-                    <Text style={styles.inputLabel}>
-                      {editType === 'PERIOD' ? '개월 수' : '횟수 (비우면 1회)'}
-                    </Text>
+              <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 50 }}>
+                  
+                  {/* 검색 영역 */}
+                  <View style={styles.modalSearchBox}>
+                    <Text style={styles.searchIcon}>🔎</Text>
                     <TextInput
-                      style={styles.amountInput}
-                      placeholder={editType === 'PERIOD' ? '개월 수 입력' : '기본 1회'}
+                      style={styles.modalSearchInput}
+                      placeholder="부여할 회원을 검색하세요"
                       placeholderTextColor="#666"
-                      keyboardType="numeric"
-                      value={addValue}
-                      onChangeText={setAddValue}
+                      value={modalSearch}
+                      onChangeText={setModalSearch}
                     />
                   </View>
-                </View>
 
-                <TouchableOpacity style={styles.saveBtn} onPress={handleGrantTicket}>
-                  <Text style={styles.saveBtnText}>이용권 등록하기</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </KeyboardAvoidingView>
-        </View>
+                  <View style={styles.modalTableHeader}>
+                    <Text style={[styles.modalHeaderText, { flex: 1.5 }]}>회원정보</Text>
+                    <Text style={[styles.modalHeaderText, { flex: 2, textAlign: 'center' }]}>연락처</Text>
+                    <Text style={[styles.modalHeaderText, { flex: 1.5, textAlign: 'center' }]}>현재 이용권</Text>
+                  </View>
+                  <View style={styles.headerDivider} />
+
+                  <View style={{ height: 140, marginBottom: 20 }}>
+                    <ScrollView style={styles.searchResultTable} nestedScrollEnabled={true}>
+                      {searchResults.length === 0 ? (
+                        <Text style={styles.modalEmptyText}>검색된 회원이 없습니다.</Text>
+                      ) : (
+                        searchResults.map((u: any) => {
+                          const isSelected = selectedUser && selectedUser.memberId === u.memberId;
+                          const ticketTypeStr = resolveMembershipType(
+                            u.membershipType || '',
+                            u.startDate || '',
+                            u.endDate || '',
+                            u.remainingCount ?? null
+                          );
+                          const displayTicket = ticketTypeStr === '-' ? '없음' : ticketTypeStr;
+
+                          return (
+                            <TouchableOpacity
+                              key={u.memberId}
+                              style={[styles.searchResultRow, isSelected && styles.selectedRow]}
+                              onPress={() => handleSelectUser(u)}
+                            >
+                              <Text style={[styles.resultTextName, { flex: 1.5 }]} numberOfLines={1}>{u.name}</Text>
+                              <Text style={[styles.resultTextSub, { flex: 2, textAlign: 'center' }]}>{u.phone}</Text>
+                              <Text style={[styles.resultTextType, { flex: 1.5, textAlign: 'center' }]}>
+                                {displayTicket}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })
+                      )}
+                    </ScrollView>
+                  </View>
+
+                  {/* 입력 폼 영역 */}
+                  {selectedUser && (
+                    <View style={styles.formContainer}>
+                      <Text style={styles.inputLabel}>이용권 종류</Text>
+                      <View style={styles.typeToggleRow}>
+                        <TouchableOpacity
+                          style={[styles.typeBtn, editType === 'PERIOD' && styles.typeBtnActive]}
+                          onPress={() => { setEditType('PERIOD'); setAddValue(''); }}
+                        >
+                          <Text style={[styles.typeBtnText, editType === 'PERIOD' && styles.typeBtnTextActive]}>기간권 (월권)</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.typeBtn, editType === 'COUNT' && styles.typeBtnActive]}
+                          onPress={() => { setEditType('COUNT'); setAddValue(''); }}
+                        >
+                          <Text style={[styles.typeBtnText, editType === 'COUNT' && styles.typeBtnTextActive]}>횟수권 (일일권)</Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      <View style={styles.horizontalDateRow}>
+                        <View style={styles.dateBlock}>
+                          <Text style={styles.inputLabel}>시작일</Text>
+                          <TouchableOpacity style={styles.dateInputBox} onPress={() => setStartCalendarVisible(true)}>
+                            <Text style={styles.dateText}>{editStart || getToday()}</Text>
+                            <Image source={require('../assets/DATE.png')} style={styles.dateIcon} />
+                          </TouchableOpacity>
+                          {editStart && editStart !== getToday() && (
+                            <TouchableOpacity onPress={() => setEditStart('')} style={styles.resetDateBtn}>
+                              <Text style={styles.resetDateText}>오늘로 초기화</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+
+                        <View style={styles.dateSpacer} />
+
+                        <View style={styles.dateBlock}>
+                          <Text style={styles.inputLabel}>
+                            {editType === 'PERIOD' ? '개월 수' : '횟수 (비우면 1회)'}
+                          </Text>
+                          <TextInput
+                            style={styles.amountInput}
+                            placeholder={editType === 'PERIOD' ? '개월 수 입력' : '기본 1회'}
+                            placeholderTextColor="#666"
+                            keyboardType="numeric"
+                            value={addValue}
+                            onChangeText={setAddValue}
+                          />
+                        </View>
+                      </View>
+
+                      <TouchableOpacity style={styles.submitBtn} onPress={handleGrantTicket}>
+                        <Text style={styles.submitBtnText}>등록 완료</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </ScrollView>
+              </KeyboardAvoidingView>
+            </TouchableOpacity>
+          </Animated.View>
+        </TouchableOpacity>
       </Modal>
 
+      {/* 시작일 달력 모달 */}
       <Modal visible={isStartCalendarVisible} animationType="fade" transparent={true}>
         <View style={styles.calendarOverlay}>
           <View style={styles.calendarBox}>
@@ -533,17 +563,17 @@ const ManagerTicket = ({ navigation }: any) => {
 };
 
 const styles = StyleSheet.create({
-  background: { flex: 1, backgroundColor: '#1A1A1A', paddingHorizontal: 15, paddingTop: 15 },
-  searchContainer: { marginBottom: 20 },
+  background: { flex: 1, backgroundColor: '#1A1A1A' },
+  searchContainer: { paddingHorizontal: 20, marginTop: 15, marginBottom: 20 },
   searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2C2C2C', borderRadius: 12, paddingHorizontal: 15, height: 50 },
   searchIcon: { fontSize: 16, marginRight: 10 },
   searchInput: { flex: 1, color: '#fff', fontSize: 14 },
 
-  tableHeader: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 5 },
+  tableHeader: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 20 },
   headerText: { color: '#ffffff', fontSize: 12, fontWeight: 'bold', textAlign: 'center' },
-  headerDivider: { height: 1, backgroundColor: '#333333', marginBottom: 10 },
+  headerDivider: { height: 1, backgroundColor: '#333333', marginHorizontal: 20, marginBottom: 10 },
 
-  listContainer: { paddingBottom: 100 },
+  listContainer: { paddingHorizontal: 20 },
 
   tableRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#212121', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 5, marginBottom: 8, borderWidth: 1, borderColor: '#2A2A2A' },
 
@@ -577,49 +607,53 @@ const styles = StyleSheet.create({
   trashBtn: { padding: 4 },
   trashIcon: { width: 16, height: 16, tintColor: '#FF4D4D', resizeMode: 'contain' },
 
-  fab: { position: 'absolute', bottom: 30, right: 20, backgroundColor: '#A1BE44', paddingHorizontal: 20, paddingVertical: 15, borderRadius: 30, elevation: 5 },
+  fab: { position: 'absolute', right: 20, backgroundColor: '#A1BE44', paddingHorizontal: 20, paddingVertical: 15, borderRadius: 30, elevation: 5 },
   fabText: { color: '#000', fontSize: 16, fontWeight: 'bold' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
-  editModalBox: { width: '95%', backgroundColor: '#212121', borderRadius: 20, padding: 20, maxHeight: '90%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
-  modalTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  closeIcon: { color: '#666', fontSize: 22 },
+  // 💡 바텀 시트 스타일
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
+  bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%', maxHeight: '90%' },
+  dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
+  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, paddingHorizontal: 5 },
+  sheetTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' },
+  closeIcon: { color: '#999999', fontSize: 24, paddingHorizontal: 10 },
+  horizontalDivider: { height: 1, backgroundColor: '#333333', width: '100%', marginBottom: 20 },
 
-  modalSearchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A1A', borderRadius: 10, paddingHorizontal: 15, height: 45, marginBottom: 10, borderWidth: 1, borderColor: '#333' },
+  modalSearchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#000', borderRadius: 10, paddingHorizontal: 15, height: 45, marginBottom: 15, borderWidth: 1, borderColor: '#333' },
   modalSearchInput: { flex: 1, color: '#fff' },
 
   modalTableHeader: { flexDirection: 'row', paddingVertical: 8, paddingHorizontal: 5 },
   modalHeaderText: { color: '#999', fontSize: 11, fontWeight: 'bold' },
 
-  searchResultTable: { backgroundColor: '#1A1A1A', borderRadius: 10 },
-  searchResultRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 5, borderBottomWidth: 1, borderBottomColor: '#2A2A2A' },
+  searchResultTable: { backgroundColor: '#000', borderRadius: 10, borderWidth: 1, borderColor: '#333' },
+  searchResultRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 5, borderBottomWidth: 1, borderBottomColor: '#2A2A2A' },
   selectedRow: { backgroundColor: 'rgba(161, 190, 68, 0.15)', borderColor: '#A1BE44', borderWidth: 1, borderRadius: 8 },
-  resultTextName: { color: '#fff', fontSize: 13, fontWeight: 'bold', paddingLeft: 5 },
+  resultTextName: { color: '#fff', fontSize: 13, fontWeight: 'bold', paddingLeft: 10 },
   resultTextSub: { color: '#aaa', fontSize: 12 },
   resultTextType: { color: '#A1BE44', fontSize: 12, fontWeight: 'bold' },
   modalEmptyText: { color: '#666', textAlign: 'center', paddingVertical: 20 },
 
-  editForm: { marginTop: 10, borderTopWidth: 1, borderTopColor: '#333', paddingTop: 15 },
+  // 💡 입력 폼 스타일
+  formContainer: { backgroundColor: '#262626', borderRadius: 16, padding: 20, marginTop: 10 },
   typeToggleRow: { flexDirection: 'row', marginBottom: 20 },
-  typeBtn: { flex: 1, height: 45, backgroundColor: '#1A1A1A', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginHorizontal: 5, borderWidth: 1, borderColor: '#333' },
+  typeBtn: { flex: 1, height: 45, backgroundColor: '#000', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginHorizontal: 5, borderWidth: 1, borderColor: '#333' },
   typeBtnActive: { borderColor: '#A1BE44', backgroundColor: 'rgba(161, 190, 68, 0.1)' },
-  typeBtnText: { color: '#666', fontWeight: 'bold' },
+  typeBtnText: { color: '#999', fontWeight: 'bold' },
   typeBtnTextActive: { color: '#A1BE44' },
 
   horizontalDateRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
   dateBlock: { flex: 1 },
   dateSpacer: { width: 15 },
-  inputLabel: { color: '#fff', fontSize: 12, marginBottom: 8, marginLeft: 2 },
-  dateInputBox: { height: 45, backgroundColor: '#1A1A1A', borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, borderWidth: 1, borderColor: '#444' },
-  dateText: { color: '#fff', fontSize: 13 },
+  inputLabel: { color: '#fff', fontSize: 14, fontWeight: 'bold', marginBottom: 10, marginLeft: 2 },
+  dateInputBox: { height: 45, backgroundColor: '#000', borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, borderWidth: 1, borderColor: '#333' },
+  dateText: { color: '#fff', fontSize: 14 },
   dateIcon: { width: 18, height: 18, tintColor: '#A1BE44' },
   resetDateBtn: { marginTop: 6, alignSelf: 'flex-start' },
   resetDateText: { color: '#A1BE44', fontSize: 11 },
-  amountInput: { height: 45, backgroundColor: '#1A1A1A', borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#444', color: '#fff' },
+  amountInput: { height: 45, backgroundColor: '#000', borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#333', color: '#fff', fontSize: 14 },
 
-  saveBtn: { backgroundColor: '#A1BE44', height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  saveBtnText: { color: '#000', fontSize: 16, fontWeight: 'bold' },
+  submitBtn: { backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 10 },
+  submitBtnText: { color: '#000', fontSize: 16, fontWeight: 'bold' },
 
   calendarOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
   calendarBox: { width: '90%', backgroundColor: '#212121', borderRadius: 16, padding: 15 },

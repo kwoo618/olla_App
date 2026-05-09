@@ -82,11 +82,17 @@ const MYScreen = ({ navigation }: any) => {
       const userRes = await axios.get(`${API_BASE_URL}/members/me`, { headers });
       const data = userRes.data.data || userRes.data;
 
+      // 💡 저장된 값이나 서버에서 온 값에 'ADMIN'이라는 글자가 포함되어 있으면 무조건 true!
+      const checkStored = String(storedRole || '').toUpperCase();
+      const checkDataRole = String(data.role || '').toUpperCase();
+      const checkAuth = String(data.authority || '').toUpperCase();
+      const checkMemRole = String(data.memberRole || '').toUpperCase();
+
       setIsAdmin(
-        storedRole === 'ADMIN' ||
-        data.role === 'ADMIN' ||
-        data.authority === 'ROLE_ADMIN' ||
-        data.memberRole === 'ADMIN'
+        checkStored.includes('ADMIN') || 
+        checkDataRole.includes('ADMIN') || 
+        checkAuth.includes('ADMIN') || 
+        checkMemRole.includes('ADMIN')
       );
 
       setProfileData({
@@ -429,7 +435,7 @@ const MYScreen = ({ navigation }: any) => {
         {/* 내 활동 */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Image source={require('../assets/Vector.png')} style={styles.cardHeaderIcon} />
+            <Image source={require('../assets/FilmScript.png')} style={styles.cardHeaderIcon} />
             <Text style={styles.cardHeaderTitle}>내 활동</Text>
           </View>
           <TouchableOpacity style={styles.activityRow} onPress={() => navigation.navigate('Community', { filter: 'MY_WRITTEN' })}>

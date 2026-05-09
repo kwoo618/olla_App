@@ -14,7 +14,7 @@ const NOTICE_API_URL      = `${API_BASE_URL}/admin/notices`;
 const MEMBER_API_URL      = `${API_BASE_URL}/admin/memberships/members`;
 const MEMBERSHIP_API_URL  = `${API_BASE_URL}/admin/memberships`;
 const VISIT_TODAY_API_URL = `${API_BASE_URL}/admin/visits/today`;
-const QR_SCAN_API_URL     = `${API_BASE_URL}/admin/visits/scan`; // ✅ 수정
+const QR_SCAN_API_URL     = `${API_BASE_URL}/admin/visits/scan`; 
 
 const ManagerDashboard = ({ navigation }: any) => {
   const [loading, setLoading] = useState(true);
@@ -491,7 +491,7 @@ const ManagerDashboard = ({ navigation }: any) => {
       </ScrollView>
 
       <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={openScanner}>
-        <Image source={require('../assets/QR.png')} style={styles.fabIcon} />
+        <Image source={require('../assets/Camera.png')} style={styles.fabIcon} />
       </TouchableOpacity>
 
       <Modal
@@ -585,7 +585,7 @@ const styles = StyleSheet.create({
   deleteBtn: { backgroundColor: 'rgba(255,77,77,0.1)', borderRadius: 8 },
   actionIcon: { width: 20, height: 20, resizeMode: 'contain' },
 
-  fab: { position: 'absolute', bottom: 30, right: 20, width: 60, height: 60, borderRadius: 30, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4.65 },
+  fab: { position: 'absolute', bottom: 15, right: 20, width: 60, height: 60, borderRadius: 30, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4.65 },
   fabIcon: { width: 30, height: 30, tintColor: '#1A1A1A', resizeMode: 'contain' },
 
   scannerModalOverlay: { flex: 1, backgroundColor: '#1A1A1A' },
