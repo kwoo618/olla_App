@@ -14,8 +14,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
+import { API_BASE_URL } from '../src/constants/Config';
 
-const API_BASE_URL = 'http://192.168.0.8:8080/api/v1';
 const POSTS_API = `${API_BASE_URL}/posts`;
 const MEMBERS_API = `${API_BASE_URL}/members`;
 

@@ -14,6 +14,7 @@ import {
   Keyboard
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '../src/constants/Config';
 
 const LoginScreen = ({ navigation }: any) => {
   const [loginId, setLoginId] = useState('');
@@ -42,7 +43,7 @@ const LoginScreen = ({ navigation }: any) => {
     }
 
     try {
-      const response = await axios.post('http://192.168.0.8:8080/api/v1/auth/login', {
+      const response = await axios.post(`${API_BASE_URL}/auth/login`, {
         loginId: loginId,
         password: password,
       });
@@ -181,7 +182,7 @@ const LoginScreen = ({ navigation }: any) => {
 
 const styles = StyleSheet.create({
   flex1: { flex: 1, backgroundColor: '#1A1A1A' },
-  scrollContent: { flexGrow: 1 },
+  scrollContent: { flexGrow: 1, justifyContent: 'center' },
   innerContainer: { 
     alignItems: 'center', 
     paddingHorizontal: 20,

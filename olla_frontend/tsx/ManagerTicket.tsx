@@ -7,8 +7,8 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '../src/constants/Config';
 
-const API_BASE_URL = 'http://192.168.0.8:8080/api/v1';
 const MEMBER_LIST_API = `${API_BASE_URL}/admin/memberships/members`; 
 const MEMBERSHIP_GRANT_API = `${API_BASE_URL}/admin/memberships/grant`; 
 const MEMBERSHIP_BASE_API = `${API_BASE_URL}/admin/memberships`; 

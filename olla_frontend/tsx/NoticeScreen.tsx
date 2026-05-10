@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Modal } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const API_BASE_URL = 'http://192.168.0.8:8080/api/v1';
+import { API_BASE_URL } from '../src/constants/Config';
 
 interface Notice {
   id: number;

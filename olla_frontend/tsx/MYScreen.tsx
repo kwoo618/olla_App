@@ -6,8 +6,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Image, Switch, Modal, Animated, TextInput, ActivityIndicator, Linking
 } from 'react-native';
-
-const API_BASE_URL = 'http://192.168.0.8:8080/api/v1';
+import { API_BASE_URL } from '../src/constants/Config';
 
 // ✅ 횟수권 -> 일일권 명칭 통일
 const resolveMembershipType = (

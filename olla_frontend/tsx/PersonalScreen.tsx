@@ -10,8 +10,7 @@ import {
   ScrollView, 
   Modal 
 } from 'react-native';
-
-const API_BASE_URL = 'http://192.168.0.8:8080/api/v1';
+import { API_BASE_URL } from '../src/constants/Config';
 
 const PersonalScreen = ({ navigation, route }: any) => {
   const { accountData } = route.params || {};

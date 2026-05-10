@@ -3,9 +3,10 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Ani
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
+import { API_BASE_URL } from '../src/constants/Config';
 
-const BASE = 'http://192.168.0.8:8080/api/v1';
-const POSTS = `http://192.168.0.8:8080/api/v1/posts`;
+const BASE = `${API_BASE_URL}`;
+const POSTS = `${API_BASE_URL}/posts`;
 const MEMBERS = `${BASE}/members`;
 
 const authHeader = async () => {
@@ -410,7 +411,15 @@ const CommunityScreen = ({ route, navigation }: any) => {
                   <Text style={[s.badgeText, { color: isPast ? '#888' : (isOut ? '#2CDE00' : '#009DFF') }]}>{post.type}</Text>
                 </View>
                 <View style={s.statsRow}>
-                  <Text style={s.stat}>👁 {post.viewCount}</Text>
+                  {/* 💡 조회수 디자인 수정: 이모지 -> Eye.png */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10 }}>
+                    <Image 
+                      source={require('../assets/Eye.png')} 
+                      style={{ width: 15, height: 15, tintColor: '#999', marginRight: 4 }} 
+                    />
+                    <Text style={s.stat}>{post.viewCount}</Text>
+                  </View>
+
                   <TouchableOpacity onPress={() => toggleLike(post.id,post.isLiked)}>
                     <Text style={[s.stat, post.isLiked&&{color:'#FF4D4D'}]}>{post.isLiked?'♥':'♡'} {post.likeCount}</Text>
                   </TouchableOpacity>
@@ -453,7 +462,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
                       <TouchableOpacity style={s.editBtn} onPress={() => openEditModal(post)}><Text style={s.editText}>수정</Text></TouchableOpacity>
                     )}
                     <TouchableOpacity style={s.trashBtn} onPress={() => setDeleteTarget(post.id)}>
-                      <Image source={require('../assets/trash.png')} style={[s.trashIcon, isPast && { tintColor: '#666' }]}/>
+                      <Image source={require('../assets/trash.png')} style={[s.trashIcon, isPast && { tintColor: '#A1BE44' }]}/>
                     </TouchableOpacity>
                   </View>
                 )}

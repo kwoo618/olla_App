@@ -2,14 +2,14 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '../src/constants/Config';
 
 // ─────────────────────────── API URLs ───────────────────────────
-const BASE_URL = 'http://192.168.0.8:8080/api/v1';
-const RANKING_BEGINNER_URL      = `${BASE_URL}/rankings/beginner`;
-const RANKING_ENDURANCE_URL     = `${BASE_URL}/rankings/endurance/distance`;
-const RANKING_SERIES_URL        = `${BASE_URL}/rankings/series`;
-const MY_PROFILE_URL            = `${BASE_URL}/members/me`;
-const MY_BEGINNER_BEST_URL      = `${BASE_URL}/records/beginner/best`;
+const RANKING_BEGINNER_URL      = `${API_BASE_URL}/rankings/beginner`;
+const RANKING_ENDURANCE_URL     = `${API_BASE_URL}/rankings/endurance/distance`;
+const RANKING_SERIES_URL        = `${API_BASE_URL}/rankings/series`;
+const MY_PROFILE_URL            = `${API_BASE_URL}/members/me`;
+const MY_BEGINNER_BEST_URL      = `${API_BASE_URL}/records/beginner/best`;
 
 // ─────────────────────────── Axios 인터셉터 ───────────────────────────
 axios.interceptors.request.use(

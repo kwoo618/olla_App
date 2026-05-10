@@ -7,9 +7,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '../src/constants/Config';
 
 // API 설정 및 토큰 인터셉터 (기존 로직 유지)
-const API_BASE_URL = 'http://192.168.0.8:8080/api/v1';
 const NOTICE_API   = `${API_BASE_URL}/admin/notices`;
 
 axios.interceptors.request.use(

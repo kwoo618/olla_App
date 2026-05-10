@@ -12,8 +12,7 @@ import {
   Modal,
   Animated
 } from 'react-native';
-
-const API_BASE_URL = 'http://192.168.0.8:8080/api/v1';
+import { API_BASE_URL } from '../src/constants/Config';
 
 const MAX_HOLDS: { [key: string]: number } = {
   "흰색": 26, "노랑": 33, "초록": 28, "파랑": 26, "빨강": 26, "보라": 25, "주황": 28, "검정": 30

@@ -6,8 +6,7 @@ import {
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Camera } from 'react-native-camera-kit';
-
-const API_BASE_URL = 'http://192.168.0.8:8080/api/v1';
+import { API_BASE_URL } from '../src/constants/Config';
 
 const POST_API_URL        = `${API_BASE_URL}/posts`;
 const NOTICE_API_URL      = `${API_BASE_URL}/admin/notices`;

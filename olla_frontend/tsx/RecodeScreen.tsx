@@ -3,12 +3,12 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Ani
 import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '../src/constants/Config';
 
 // ─────────────────────────── API URLs ───────────────────────────
-const BASE_URL          = 'http://192.168.0.8:8080/api/v1/records/beginner';
-const ENDURANCE_BASE_URL = 'http://192.168.0.8:8080/api/v1/records/endurance';
-const SERIES_BASE_URL   = 'http://192.168.0.8:8080/api/v1/records/series';
-const MEMBERSHIP_URL    = 'http://192.168.0.8:8080/api/v1/memberships/me';
+const ENDURANCE_BASE_URL = '${API_BASE_URL}records/endurance';
+const SERIES_BASE_URL   = '${API_BASE_URL}records/series';
+const MEMBERSHIP_URL    = '${API_BASE_URL}memberships/me';
 
 // ─────────────────────────── Axios 인터셉터 ───────────────────────────
 axios.interceptors.request.use(
@@ -157,7 +157,7 @@ const RecodeScreen = ({
   // ── 초보벽 최고기록 조회 ──
   const fetchBestRecords = async () => {
     try {
-      const res  = await axios.get(`${BASE_URL}/best`);
+      const res  = await axios.get(`${API_BASE_URL}/best`);
       const raw  = res.data?.data ?? res.data ?? [];
       const list: BeginnerRecord[] = Array.isArray(raw) ? raw
         : Array.isArray(raw?.list) ? raw.list : [];
@@ -267,7 +267,7 @@ const RecodeScreen = ({
     if (!itemToDelete) return;
     try {
       const id = Number(itemToDelete.id);
-      if      (itemToDelete.type === 'difficulty')  { await axios.delete(`${BASE_URL}/${id}`);           await fetchBestRecords();       }
+      if      (itemToDelete.type === 'difficulty')  { await axios.delete(`${API_BASE_URL}/${id}`);       await fetchBestRecords();       }
       else if (itemToDelete.type === 'endurance')   { await axios.delete(`${ENDURANCE_BASE_URL}/${id}`); await fetchEnduranceRecords();  }
       else if (itemToDelete.type === 'consecutive') { await axios.delete(`${SERIES_BASE_URL}/${id}`);    await fetchSeriesRecords();     }
       setDeleteModalVisible(false);
@@ -331,7 +331,7 @@ const RecodeScreen = ({
     };
 
     try {
-      await axios.post(BASE_URL, payload);
+      await axios.post(API_BASE_URL, payload);
       await fetchBestRecords();
       closeRecordModal();
       setTimeout(() => showResultModal('성공', '등반 기록이 저장되었습니다.', 'success'), 300);
