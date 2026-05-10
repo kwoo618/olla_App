@@ -8,10 +8,10 @@ import {
   TextInput, 
   TouchableOpacity, 
   ScrollView, 
-  Alert 
+  Modal 
 } from 'react-native';
 
-const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
+const API_BASE_URL = 'http://192.168.0.8:8080/api/v1';
 
 const PersonalScreen = ({ navigation, route }: any) => {
   const { accountData } = route.params || {};
@@ -28,10 +28,18 @@ const PersonalScreen = ({ navigation, route }: any) => {
   const [isArmPublic, setIsArmPublic] = useState(true);
   const [isFootPublic, setIsFootPublic] = useState(true);
 
+  // ─── 커스텀 알림 모달 상태 추가 ───
+  const [resultModalVisible, setResultModalVisible] = useState(false);
+  const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info', onConfirm: () => {} });
+
+  const showResultModal = (title: string, message: string, type: 'info' | 'success' | 'error' = 'info', onConfirm: () => void = () => {}) => {
+    setResultModalConfig({ title, message, type, onConfirm });
+    setResultModalVisible(true);
+  };
+
   const handleFinalSignup = async () => {
     if (!accountData) {
-      Alert.alert('오류', '계정 정보가 유실되었습니다. 다시 가입해주세요.');
-      navigation.goBack();
+      showResultModal('오류', '계정 정보가 유실되었습니다. 다시 가입해주세요.', 'error', () => navigation.goBack());
       return;
     }
 
@@ -83,7 +91,7 @@ const PersonalScreen = ({ navigation, route }: any) => {
     } catch (error: any) {
       console.error("회원가입 에러:", error.response?.data);
       const errorMsg = error.response?.data?.message || '서버와의 통신 중 오류가 발생했습니다.';
-      Alert.alert('가입 실패', errorMsg);
+      showResultModal('가입 실패', errorMsg, 'error');
     }
   };
 
@@ -148,6 +156,26 @@ const PersonalScreen = ({ navigation, route }: any) => {
           <Text style={{ color: '#888' }}>이전 단계로</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* ─── 커스텀 알림 결과 모달 ─── */}
+      <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
+        <View style={styles.resultModalOverlay}>
+          <View style={styles.resultModalBox}>
+            <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>
+              {resultModalConfig.title}
+            </Text>
+            <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
+            <TouchableOpacity style={styles.resultModalBtn} onPress={() => {
+              setResultModalVisible(false);
+              if (typeof resultModalConfig.onConfirm === 'function') {
+                resultModalConfig.onConfirm();
+              }
+            }}>
+              <Text style={styles.resultModalBtnText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -226,6 +254,14 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
   },
+
+  // ─── 커스텀 알림 모달 전용 스타일 ───
+  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
+  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
+  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 },
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
 });
 
 export default PersonalScreen;

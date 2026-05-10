@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   View, Text, StyleSheet, TextInput, TouchableOpacity, 
-  ScrollView, Image, Modal, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Animated 
+  ScrollView, Image, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Animated 
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
+const API_BASE_URL = 'http://192.168.0.8:8080/api/v1';
 const MEMBER_LIST_API = `${API_BASE_URL}/admin/memberships/members`; 
 const MEMBERSHIP_GRANT_API = `${API_BASE_URL}/admin/memberships/grant`; 
 const MEMBERSHIP_BASE_API = `${API_BASE_URL}/admin/memberships`; 
@@ -62,6 +62,26 @@ const ManagerTicket = ({ navigation }: any) => {
   const [users, setUsers] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   
+  // ─── 단일 버튼 커스텀 결과 알림 모달 상태 ───
+  const [resultModalVisible, setResultModalVisible] = useState(false);
+  const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info', onConfirm: () => {} });
+
+  const showResultModal = (title: string, message: string, type: 'info' | 'success' | 'error' = 'info', onConfirm: () => void = () => {}) => {
+    setResultModalConfig({ title, message, type, onConfirm });
+    setResultModalVisible(true);
+  };
+
+  // ─── 투 버튼 커스텀 확인(Confirm) 모달 상태 ───
+  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
+  const [confirmModalConfig, setConfirmModalConfig] = useState({
+    title: '', message: '', confirmText: '확인', cancelText: '취소', onConfirm: () => {}, isDestructive: false
+  });
+
+  const showConfirmModal = (title: string, message: string, onConfirm: () => void, isDestructive: boolean = false, confirmText: string = '확인') => {
+    setConfirmModalConfig({ title, message, confirmText, cancelText: '취소', onConfirm, isDestructive });
+    setConfirmModalVisible(true);
+  };
+
   // 💡 애니메이션 설정
   const [isEditModalVisible, setEditModalVisible] = useState(false);
   const editSlideAnim = useRef(new Animated.Value(800)).current;
@@ -85,8 +105,7 @@ const ManagerTicket = ({ navigation }: any) => {
       const token = await AsyncStorage.getItem('userToken');
 
       if (!token || role !== 'ADMIN') {
-        Alert.alert("권한 오류", "관리자만 접근할 수 있는 페이지입니다.");
-        navigation.goBack();
+        showResultModal('권한 오류', '관리자만 접근할 수 있는 페이지입니다.', 'error', () => navigation.goBack());
         return;
       }
       await fetchUsers(token);
@@ -106,7 +125,7 @@ const ManagerTicket = ({ navigation }: any) => {
       const memberList = response.data?.data?.content || response.data?.data || [];
       setUsers(memberList);
     } catch (error) {
-      Alert.alert("오류", "회원 목록을 불러오는데 실패했습니다.");
+      showResultModal('오류', '회원 목록을 불러오는데 실패했습니다.', 'error');
     }
   };
 
@@ -155,7 +174,7 @@ const ManagerTicket = ({ navigation }: any) => {
     if (!selectedUser) return;
 
     if (editType === 'PERIOD' && (!addValue || isNaN(Number(addValue)) || Number(addValue) <= 0)) {
-      Alert.alert("알림", "추가할 개월 수를 입력해주세요.");
+      showResultModal('알림', '추가할 개월 수를 입력해주세요.', 'info');
       return;
     }
 
@@ -184,7 +203,7 @@ const ManagerTicket = ({ navigation }: any) => {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      Alert.alert("성공", "이용권이 성공적으로 등록되었습니다.");
+      showResultModal('성공', '이용권이 성공적으로 등록되었습니다.', 'success');
       closeEditModal();
       fetchUsers(token!);
     } catch (error: any) {
@@ -193,46 +212,42 @@ const ManagerTicket = ({ navigation }: any) => {
       console.error('[이용권 등록 실패]', `status: ${status}`, serverMessage);
 
       if (serverMessage?.includes("is_deleted") || serverMessage?.includes("default value")) {
-        Alert.alert(
-          "서버 설정 오류",
-          "Membership 엔티티의 is_deleted 필드에 기본값이 없습니다.\n\n백엔드 Membership.java에서 아래를 수정하세요:\n\nprivate boolean isDeleted = false;"
+        showResultModal(
+          '서버 설정 오류',
+          'Membership 엔티티의 is_deleted 필드에 기본값이 없습니다.\n백엔드 서버를 수정해주세요.',
+          'error'
         );
         return;
       }
-      Alert.alert("오류", `이용권 등록에 실패했습니다.\n\n${serverMessage || '서버 오류가 발생했습니다.'}`);
+      showResultModal('오류', `이용권 등록에 실패했습니다.\n\n${serverMessage || '서버 오류가 발생했습니다.'}`, 'error');
     }
   };
 
   const togglePauseStatus = (membershipId: number, currentStatus: string) => {
     if (!membershipId) {
-      Alert.alert("오류", "이용권 ID를 확인할 수 없습니다.");
+      showResultModal('오류', '이용권 ID를 확인할 수 없습니다.', 'error');
       return;
     }
     const isCurrentlyHolding = currentStatus === 'HOLDING';
     const actionText = isCurrentlyHolding ? '정지 해제' : '일시정지';
     const endpoint = isCurrentlyHolding ? 'unpause' : 'pause';
 
-    Alert.alert(
+    showConfirmModal(
       `${actionText} 확인`,
       `해당 이용권을 ${actionText} 하시겠습니까?`,
-      [
-        { text: "취소", style: "cancel" },
-        {
-          text: "확인",
-          onPress: async () => {
-            try {
-              const token = await AsyncStorage.getItem('userToken');
-              await axios.patch(`${MEMBERSHIP_BASE_API}/${membershipId}/${endpoint}`, {}, {
-                headers: { Authorization: `Bearer ${token}` }
-              });
-              Alert.alert("성공", `이용권이 ${actionText} 되었습니다.`);
-              fetchUsers(token!);
-            } catch (error) {
-              Alert.alert("오류", "상태 변경에 실패했습니다.");
-            }
-          }
+      async () => {
+        setConfirmModalVisible(false);
+        try {
+          const token = await AsyncStorage.getItem('userToken');
+          await axios.patch(`${MEMBERSHIP_BASE_API}/${membershipId}/${endpoint}`, {}, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          showResultModal('성공', `이용권이 ${actionText} 되었습니다.`, 'success');
+          fetchUsers(token!);
+        } catch (error) {
+          showResultModal('오류', '상태 변경에 실패했습니다.', 'error');
         }
-      ]
+      }
     );
   };
 
@@ -242,26 +257,28 @@ const ManagerTicket = ({ navigation }: any) => {
       await axios.delete(`${MEMBERSHIP_BASE_API}/${membershipId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      Alert.alert("성공", "이용권이 삭제되었습니다.");
+      showResultModal('성공', '이용권이 삭제되었습니다.', 'success');
       fetchUsers(token!);
     } catch (error: any) {
       console.error(error);
-      Alert.alert("오류", "이용권 삭제에 실패했습니다.");
+      showResultModal('오류', '이용권 삭제에 실패했습니다.', 'error');
     }
   };
 
   const confirmDeleteTicket = (membershipId: number) => {
     if (!membershipId) {
-      Alert.alert("오류", "이용권 ID를 확인할 수 없습니다.");
+      showResultModal('오류', '이용권 ID를 확인할 수 없습니다.', 'error');
       return;
     }
-    Alert.alert(
-      "이용권 삭제 확인",
-      "해당 이용권을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.",
-      [
-        { text: "취소", style: "cancel" },
-        { text: "삭제", onPress: () => executeDeleteTicket(membershipId), style: "destructive" }
-      ]
+    showConfirmModal(
+      '이용권 삭제 확인',
+      '해당 이용권을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.',
+      () => {
+        setConfirmModalVisible(false);
+        executeDeleteTicket(membershipId);
+      },
+      true, // isDestructive = true (빨간색 버튼)
+      '삭제'
     );
   };
 
@@ -406,6 +423,47 @@ const ManagerTicket = ({ navigation }: any) => {
       >
         <Text style={styles.fabText}>+ 이용권 등록</Text>
       </TouchableOpacity>
+
+      {/* ─── 커스텀 알림 결과 모달 ─── */}
+      <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
+        <View style={styles.resultModalOverlay}>
+          <View style={styles.resultModalBox}>
+            <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>
+              {resultModalConfig.title}
+            </Text>
+            <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
+            <TouchableOpacity style={styles.resultModalBtn} onPress={() => {
+              setResultModalVisible(false);
+              if (typeof resultModalConfig.onConfirm === 'function') {
+                resultModalConfig.onConfirm();
+              }
+            }}>
+              <Text style={styles.resultModalBtnText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── 투 버튼 확인(Confirm) 모달 ─── */}
+      <Modal visible={confirmModalVisible} animationType="fade" transparent onRequestClose={() => setConfirmModalVisible(false)}>
+        <View style={styles.resultModalOverlay}>
+          <View style={styles.deleteModalBox}>
+            <Text style={styles.deleteTitle}>{confirmModalConfig.title}</Text>
+            <Text style={[styles.resultModalMessage, { marginBottom: 25 }]}>{confirmModalConfig.message}</Text>
+            <View style={styles.deleteBtnRow}>
+              <TouchableOpacity 
+                style={[styles.btnYes, confirmModalConfig.isDestructive && { backgroundColor: '#FF4D4D' }]} 
+                onPress={confirmModalConfig.onConfirm}
+              >
+                <Text style={styles.btnTextBlack}>{confirmModalConfig.confirmText}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.btnNo} onPress={() => setConfirmModalVisible(false)}>
+                <Text style={styles.btnTextWhite}>{confirmModalConfig.cancelText}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* 💡 이용권 등록 바텀 시트 모달 */}
       <Modal visible={isEditModalVisible} transparent={true} animationType="fade">
@@ -660,6 +718,23 @@ const styles = StyleSheet.create({
   calendarTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
   calendarCloseBtn: { marginTop: 15, paddingVertical: 12, backgroundColor: '#333333', borderRadius: 10, alignItems: 'center' },
   calendarCloseText: { color: '#ffffff', fontSize: 15, fontWeight: 'bold' },
+
+  // ─── 커스텀 알림 모달 전용 스타일 ───
+  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
+  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
+  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 },
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+
+  // 투 버튼 확인 모달 관련 스타일 추가
+  deleteModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
+  deleteTitle: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+  deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  btnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
+  btnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
+  btnTextBlack: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  btnTextWhite: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
 });
 
 export default ManagerTicket;

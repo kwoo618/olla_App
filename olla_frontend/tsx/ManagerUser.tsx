@@ -1,24 +1,13 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react'; // 💡 useRef 추가
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TextInput, 
-  TouchableOpacity, 
-  ScrollView, 
-  Image, 
-  Modal, 
-  KeyboardAvoidingView, 
-  Platform,
-  Alert,
-  ActivityIndicator,
-  Animated // 💡 Animated 추가
+  View, Text, StyleSheet, TextInput, TouchableOpacity, 
+  ScrollView, Image, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Animated 
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
+const API_BASE_URL = 'http://192.168.0.8:8080/api/v1';
 const MEMBER_LIST_API = `${API_BASE_URL}/admin/memberships/members`; 
 const OFFLINE_REGISTER_API = `${API_BASE_URL}/admin/members/offline`; 
 const MEMBER_DELETE_API = `${API_BASE_URL}/admin/members`; 
@@ -28,6 +17,26 @@ const ManagerUser = ({ navigation }: any) => {
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<any[]>([]); 
   const [searchQuery, setSearchQuery] = useState('');
+
+  // ─── 커스텀 알림 결과 모달 상태 ───
+  const [resultModalVisible, setResultModalVisible] = useState(false);
+  const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info', onConfirm: () => {} });
+
+  const showResultModal = (title: string, message: string, type: 'info' | 'success' | 'error' = 'info', onConfirm: () => void = () => {}) => {
+    setResultModalConfig({ title, message, type, onConfirm });
+    setResultModalVisible(true);
+  };
+
+  // ─── 투 버튼 커스텀 확인(Confirm) 모달 상태 ───
+  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
+  const [confirmModalConfig, setConfirmModalConfig] = useState({
+    title: '', message: '', confirmText: '확인', cancelText: '취소', onConfirm: () => {}, isDestructive: false
+  });
+
+  const showConfirmModal = (title: string, message: string, onConfirm: () => void, isDestructive: boolean = false, confirmText: string = '확인') => {
+    setConfirmModalConfig({ title, message, confirmText, cancelText: '취소', onConfirm, isDestructive });
+    setConfirmModalVisible(true);
+  };
   
   // 💡 애니메이션 설정
   const [isAddModalVisible, setAddModalVisible] = useState(false);
@@ -48,8 +57,7 @@ const ManagerUser = ({ navigation }: any) => {
       const token = await AsyncStorage.getItem('userToken');
 
       if (!token || role !== 'ADMIN') {
-        Alert.alert("권한 오류", "관리자만 접근할 수 있는 페이지입니다.");
-        navigation.goBack();
+        showResultModal("권한 오류", "관리자만 접근할 수 있는 페이지입니다.", "error", () => navigation.goBack());
         return;
       }
       await fetchUsers(token);
@@ -69,7 +77,7 @@ const ManagerUser = ({ navigation }: any) => {
       const memberList = response.data?.data?.content || response.data?.data || [];
       setUsers(memberList);
     } catch (error) {
-      Alert.alert("오류", "회원 목록을 불러오는데 실패했습니다.");
+      showResultModal("오류", "회원 목록을 불러오는데 실패했습니다.", "error");
     }
   };
 
@@ -83,11 +91,11 @@ const ManagerUser = ({ navigation }: any) => {
 
   const handleRegister = async () => {
     if (!newName || !newGender || newBirth.length < 10 || newPhone.length < 12) {
-      Alert.alert("알림", "모든 정보를 형식에 맞게 입력해주세요.");
+      showResultModal("알림", "모든 정보를 형식에 맞게 입력해주세요.", "info");
       return;
     }
     if (!isValidBirthDate(newBirth)) {
-      Alert.alert("오류", "존재하지 않는 생년월일입니다.");
+      showResultModal("오류", "존재하지 않는 생년월일입니다.", "error");
       return;
     }
     try {
@@ -101,11 +109,11 @@ const ManagerUser = ({ navigation }: any) => {
       await axios.post(OFFLINE_REGISTER_API, requestBody, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      Alert.alert("성공", "신규 회원이 등록되었습니다.");
+      showResultModal("성공", "신규 회원이 등록되었습니다.", "success");
       closeAddModal();
       fetchUsers(token!); 
     } catch (error: any) {
-      Alert.alert("오류", "회원 등록 중 오류가 발생했습니다.");
+      showResultModal("오류", "회원 등록 중 오류가 발생했습니다.", "error");
     }
   };
 
@@ -115,25 +123,27 @@ const ManagerUser = ({ navigation }: any) => {
       await axios.delete(`${MEMBER_DELETE_API}/${memberId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      Alert.alert("성공", "회원이 삭제되었습니다.");
+      showResultModal("성공", "회원이 삭제되었습니다.", "success");
       fetchUsers(token!); 
     } catch (error: any) {
-      Alert.alert("오류", "회원 삭제에 실패했습니다.");
+      showResultModal("오류", "회원 삭제에 실패했습니다.", "error");
     }
   };
 
   const confirmDelete = (memberId: number | string) => { 
-    Alert.alert(
+    showConfirmModal(
       "회원 삭제 확인",
       "해당 회원을 삭제하시겠습니까?",
-      [
-        { text: "취소", style: "cancel" },
-        { text: "삭제", onPress: () => executeDelete(memberId), style: "destructive" }
-      ]
+      () => {
+        setConfirmModalVisible(false);
+        executeDelete(memberId);
+      },
+      true, // isDestructive = true (빨간색 버튼)
+      "삭제"
     );
   };
 
-  // 💡 모달 제어 함수 (애니메이션 포함)
+  // 모달 제어 함수
   const openAddModal = () => {
     setAddModalVisible(true);
     Animated.timing(addSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
@@ -269,26 +279,73 @@ const ManagerUser = ({ navigation }: any) => {
 
       {/* 등록 플로팅 버튼 */}
       <TouchableOpacity 
-        style={[styles.fab, { bottom: Math.max(insets.bottom + -30, 10) }]} 
+        style={[styles.fab, { bottom: Math.max(insets.bottom + 5, 15) }]} 
         activeOpacity={0.8} 
-        onPress={openAddModal} // 💡 애니메이션 함수로 변경
+        onPress={openAddModal}
       >
         <Text style={styles.fabText}>+ 등록</Text>
       </TouchableOpacity>
 
-      {/* 💡 신규 회원 등록 모달 (바텀 시트 디자인 적용) */}
+      {/* ─── 커스텀 알림 결과 모달 ─── */}
+      <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
+        <View style={styles.resultModalOverlay}>
+          <View style={styles.resultModalBox}>
+            <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>
+              {resultModalConfig.title}
+            </Text>
+            <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
+            <TouchableOpacity style={styles.resultModalBtn} onPress={() => {
+              setResultModalVisible(false);
+              if (typeof resultModalConfig.onConfirm === 'function') {
+                resultModalConfig.onConfirm();
+              }
+            }}>
+              <Text style={styles.resultModalBtnText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── 투 버튼 확인(Confirm) 모달 ─── */}
+      <Modal visible={confirmModalVisible} animationType="fade" transparent onRequestClose={() => setConfirmModalVisible(false)}>
+        <View style={styles.resultModalOverlay}>
+          <View style={styles.deleteModalBox}>
+            <Text style={styles.deleteTitle}>{confirmModalConfig.title}</Text>
+            <Text style={[styles.resultModalMessage, { marginBottom: 25 }]}>{confirmModalConfig.message}</Text>
+            <View style={styles.deleteBtnRow}>
+              <TouchableOpacity 
+                style={[styles.btnYes, confirmModalConfig.isDestructive && { backgroundColor: '#FF4D4D' }]} 
+                onPress={confirmModalConfig.onConfirm}
+              >
+                <Text style={styles.btnTextBlack}>{confirmModalConfig.confirmText}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.btnNo} onPress={() => setConfirmModalVisible(false)}>
+                <Text style={styles.btnTextWhite}>{confirmModalConfig.cancelText}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 신규 회원 등록 모달 */}
       <Modal visible={isAddModalVisible} transparent={true} animationType="fade">
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeAddModal}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={closeAddModal} />
+          
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: addSlideAnim }] }]}>
-            <TouchableOpacity activeOpacity={1}>
-              <View style={styles.dragHandle} />
-              <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle}>신규 회원 등록</Text>
-                <TouchableOpacity onPress={closeAddModal}><Text style={styles.closeIcon}>✕</Text></TouchableOpacity>
-              </View>
-              <View style={styles.horizontalDivider} />
-              
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 50 }}>
+            <View style={styles.dragHandle} />
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>신규 회원 등록</Text>
+              <TouchableOpacity onPress={closeAddModal}><Text style={styles.closeIcon}>✕</Text></TouchableOpacity>
+            </View>
+            <View style={styles.horizontalDivider} />
+            
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+              <ScrollView 
+                showsVerticalScrollIndicator={false} 
+                contentContainerStyle={{ paddingBottom: 30 }}
+                keyboardShouldPersistTaps="handled"
+              >
                 <View style={styles.formContainer}>
                   <Text style={styles.inputLabel}>이름</Text>
                   <View style={styles.inputWrap}>
@@ -324,9 +381,9 @@ const ManagerUser = ({ navigation }: any) => {
                   </TouchableOpacity>
                 </View>
               </ScrollView>
-            </TouchableOpacity>
+            </KeyboardAvoidingView>
           </Animated.View>
-        </TouchableOpacity>
+        </View>
       </Modal>
 
     </SafeAreaView>
@@ -367,7 +424,7 @@ const styles = StyleSheet.create({
   fab: { position: 'absolute', right: 20, backgroundColor: '#A1BE44', paddingHorizontal: 25, paddingVertical: 15, borderRadius: 30, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4 },
   fabText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
   
-  // 💡 바텀 시트 스타일 (MYScreen과 동일하게)
+  // 모달 레이아웃 뷰 변경
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%', maxHeight: '85%' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
@@ -389,6 +446,23 @@ const styles = StyleSheet.create({
   
   submitBtn: { backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 10 },
   submitBtnText: { color: '#000', fontSize: 16, fontWeight: 'bold' },
+
+  // ─── 커스텀 알림 모달 전용 스타일 ───
+  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
+  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
+  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 },
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+
+  // 투 버튼 확인 모달 관련 스타일 추가
+  deleteModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
+  deleteTitle: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+  deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  btnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
+  btnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
+  btnTextBlack: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  btnTextWhite: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
 });
 
 export default ManagerUser;

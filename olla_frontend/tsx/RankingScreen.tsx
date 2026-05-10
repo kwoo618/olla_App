@@ -4,7 +4,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ─────────────────────────── API URLs ───────────────────────────
-const BASE_URL = 'http://192.168.0.23:8080/api/v1';
+const BASE_URL = 'http://192.168.0.8:8080/api/v1';
 const RANKING_BEGINNER_URL      = `${BASE_URL}/rankings/beginner`;
 const RANKING_ENDURANCE_URL     = `${BASE_URL}/rankings/endurance/distance`;
 const RANKING_SERIES_URL        = `${BASE_URL}/rankings/series`;

@@ -10,11 +10,10 @@ import {
   ScrollView,
   Image,
   Modal,
-  Alert,
   Animated
 } from 'react-native';
 
-const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
+const API_BASE_URL = 'http://192.168.0.8:8080/api/v1';
 
 const MAX_HOLDS: { [key: string]: number } = {
   "흰색": 26, "노랑": 33, "초록": 28, "파랑": 26, "빨강": 26, "보라": 25, "주황": 28, "검정": 30
@@ -31,6 +30,15 @@ const HomeScreen = ({ navigation }: any) => {
 
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const slideAnim = useRef(new Animated.Value(500)).current;
+
+  // ─── 커스텀 알림 모달 상태 추가 ───
+  const [resultModalVisible, setResultModalVisible] = useState(false);
+  const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info' });
+
+  const showResultModal = (title: string, message: string, type: 'info' | 'success' | 'error' = 'info') => {
+    setResultModalConfig({ title, message, type });
+    setResultModalVisible(true);
+  };
 
   const [qrToken, setQrToken] = useState<string | null>(null);
 
@@ -116,7 +124,6 @@ const HomeScreen = ({ navigation }: any) => {
     return item.name === nickname || item.nickname === nickname;
   };
 
-  // 횟수권 -> 일일권, 기간권 -> 기간권 명칭 통일
   const resolveMembershipType = (
     typeStr: string,
     startDate: string,
@@ -155,7 +162,6 @@ const HomeScreen = ({ navigation }: any) => {
 
         const config = { headers: { Authorization: `Bearer ${userToken}` } };
 
-        // [1] 내 프로필
         let nickname = '';
         let memberId: number | null = null;
         try {
@@ -169,7 +175,6 @@ const HomeScreen = ({ navigation }: any) => {
           console.error('프로필 로드 실패');
         }
 
-        // [2] 공지사항 — 중요 공지 최신순 우선, 없으면 일반 공지 최신순
         try {
           const noticeResponse = await axios.get(`${API_BASE_URL}/admin/notices`);
           const noticeList: any[] = noticeResponse.data?.data?.content ?? noticeResponse.data?.data ?? [];
@@ -199,7 +204,6 @@ const HomeScreen = ({ navigation }: any) => {
           setNotice({ title: '공지사항을 불러올 수 없습니다.', content: '', important: false });
         }
 
-        // [3] 회원권
         try {
           const memResponse = await axios.get(`${API_BASE_URL}/memberships/me`, config);
           const data = memResponse.data?.data ?? memResponse.data;
@@ -232,7 +236,6 @@ const HomeScreen = ({ navigation }: any) => {
           setMembership(prev => ({ ...prev, isLoading: false }));
         }
 
-        // [4] 기록 로드
         if (nickname || memberId !== null) {
           let myEndRank = 0;
           let myEndMin = 0;
@@ -389,13 +392,11 @@ const HomeScreen = ({ navigation }: any) => {
       ? membership.remainingCount > 0
       : !!(membership.startDate && membership.endDate);
 
-  // 오늘 날짜에 출석했는지 여부 확인
   const isTodayAttended = 
     viewDate.getFullYear() === today.getFullYear() && 
     viewDate.getMonth() === today.getMonth() && 
     attendedDates.includes(today.getDate());
 
-  // 일일권 상태 로직: 스캔(출석)하면 '이용중', 아니면 '미사용' 표시
   let displayStatus = membership.status;
   if (isCountType && membership.status === '이용중') {
     displayStatus = isTodayAttended ? '이용중' : '미사용';
@@ -406,7 +407,7 @@ const HomeScreen = ({ navigation }: any) => {
       navigation.navigate('Notice');
     } else if (title === 'QR') {
       if (!hasMembership) {
-        Alert.alert('입장 불가', '현재 활성화된 이용권이 없습니다. 이용권을 먼저 구매해주세요.', [{ text: '확인' }]);
+        showResultModal('입장 불가', '현재 활성화된 이용권이 없습니다. 이용권을 먼저 구매해주세요.', 'info');
         return;
       }
       openModal('QR');
@@ -568,6 +569,22 @@ const HomeScreen = ({ navigation }: any) => {
         </View>
       </ScrollView>
 
+      {/* ─── 커스텀 알림 결과 모달 ─── */}
+      <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
+        <View style={styles.resultModalOverlay}>
+          <View style={styles.resultModalBox}>
+            <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>
+              {resultModalConfig.title}
+            </Text>
+            <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
+            <TouchableOpacity style={styles.resultModalBtn} onPress={() => setResultModalVisible(false)}>
+              <Text style={styles.resultModalBtnText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── 하단 팝업 모달 ─── */}
       <Modal
         visible={activeModal !== null}
         animationType="fade"
@@ -740,6 +757,14 @@ const styles = StyleSheet.create({
   memHalfTitle: { color: '#ffffff', fontSize: 15, fontWeight: '600', marginBottom: 12 },
   memHalfValueGreen: { color: '#A1BE44', fontSize: 24, fontWeight: 'bold' },
   memHalfValueWhite: { color: '#ffffff', fontSize: 24, fontWeight: 'bold' },
+
+  // ─── 커스텀 알림 모달 전용 스타일 ───
+  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
+  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
+  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 },
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
 });
 
 export default HomeScreen;

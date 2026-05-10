@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Image, Alert, ActivityIndicator, Modal, Platform, PermissionsAndroid
+  Image, ActivityIndicator, Modal, Platform, PermissionsAndroid
 } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Camera } from 'react-native-camera-kit';
 
-const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
+const API_BASE_URL = 'http://192.168.0.8:8080/api/v1';
 
 const POST_API_URL        = `${API_BASE_URL}/posts`;
 const NOTICE_API_URL      = `${API_BASE_URL}/admin/notices`;
@@ -21,6 +21,23 @@ const ManagerDashboard = ({ navigation }: any) => {
   const [notices, setNotices] = useState<any[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
   const [recentMembers, setRecentMembers] = useState<any[]>([]);
+
+  // ─── 커스텀 알림 모달 상태 추가 ───
+  const [resultModalVisible, setResultModalVisible] = useState(false);
+  const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info', onConfirm: () => {} });
+
+  const showResultModal = (title: string, message: string, type: 'info' | 'success' | 'error' = 'info', onConfirm: () => void = () => {}) => {
+    setResultModalConfig({ title, message, type, onConfirm });
+    setResultModalVisible(true);
+  };
+
+  // ─── 삭제 확인 모달 상태 ───
+  const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<{ type: 'notice' | 'post', id: number } | null>(null);
+
+  // ─── QR 에러 모달 상태 (다시 스캔 / 닫기 투버튼) ───
+  const [qrErrorVisible, setQrErrorVisible] = useState(false);
+  const [qrErrorMsg, setQrErrorMsg] = useState('');
 
   const [metrics, setMetrics] = useState({
     totalMembers: 0,
@@ -52,8 +69,7 @@ const ManagerDashboard = ({ navigation }: any) => {
       const token = await AsyncStorage.getItem('userToken');
 
       if (!token || role !== 'ADMIN') {
-        Alert.alert('권한 오류', '관리자만 접근할 수 있는 페이지입니다.');
-        navigation.goBack();
+        showResultModal('권한 오류', '관리자만 접근할 수 있는 페이지입니다.', 'error', () => navigation.goBack());
         return;
       }
 
@@ -181,40 +197,28 @@ const ManagerDashboard = ({ navigation }: any) => {
   };
 
   const confirmDelete = (type: 'notice' | 'post', id: number) => {
-    Alert.alert(
-      '삭제 확인',
-      `해당 ${type === 'notice' ? '공지사항' : '게시글'}을 정말 삭제하시겠습니까?`,
-      [
-        { text: '취소', style: 'cancel' },
-        {
-          text: '삭제', style: 'destructive',
-          onPress: () => type === 'notice' ? executeDeleteNotice(id) : executeDeletePost(id),
-        },
-      ]
-    );
+    setItemToDelete({ type, id });
+    setDeleteModalVisible(true);
   };
 
-  const executeDeleteNotice = async (id: number) => {
+  const executeDelete = async () => {
+    if (!itemToDelete) return;
     try {
       const token = await AsyncStorage.getItem('userToken');
-      await axios.delete(`${NOTICE_API_URL}/${id}`, { headers: { Authorization: `Bearer ${token}` } });
-      Alert.alert('알림', '공지사항이 삭제되었습니다.');
-      fetchNotices(token!);
+      if (itemToDelete.type === 'notice') {
+        await axios.delete(`${NOTICE_API_URL}/${itemToDelete.id}`, { headers: { Authorization: `Bearer ${token}` } });
+        showResultModal('성공', '공지사항이 삭제되었습니다.', 'success');
+        fetchNotices(token!);
+      } else {
+        await axios.delete(`${POST_API_URL}/${itemToDelete.id}`, { headers: { Authorization: `Bearer ${token}` } });
+        showResultModal('성공', '게시글이 삭제되었습니다.', 'success');
+        fetchPosts(token!);
+      }
     } catch (error: any) {
-      Alert.alert('오류', error?.response?.data?.message || '공지사항 삭제에 실패했습니다.');
+      showResultModal('오류', error?.response?.data?.message || '삭제에 실패했습니다.', 'error');
     }
-  };
-
-  const executeDeletePost = async (id: number) => {
-    try {
-      const token = await AsyncStorage.getItem('userToken');
-      if (!token) return;
-      await axios.delete(`${POST_API_URL}/${id}`, { headers: { Authorization: `Bearer ${token}` } });
-      Alert.alert('알림', '게시글이 삭제되었습니다.');
-      fetchPosts(token);
-    } catch (error: any) {
-      Alert.alert('오류', error?.response?.data?.message || '게시글 삭제에 실패했습니다.');
-    }
+    setDeleteModalVisible(false);
+    setItemToDelete(null);
   };
 
   const handleEditNotice = (noticeId: number) => {
@@ -253,7 +257,7 @@ const ManagerDashboard = ({ navigation }: any) => {
     const hasPermission = await requestCameraPermission();
 
     if (!hasPermission) {
-      Alert.alert('권한 오류', '카메라 접근 권한을 허용해주세요.');
+      showResultModal('권한 오류', '카메라 접근 권한을 허용해주세요.', 'error');
       return;
     }
 
@@ -276,8 +280,7 @@ const ManagerDashboard = ({ navigation }: any) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
       if (!token) {
-        Alert.alert('오류', '로그인 정보가 없습니다.');
-        closeScanner();
+        showResultModal('오류', '로그인 정보가 없습니다.', 'error', () => closeScanner());
         return;
       }
 
@@ -297,46 +300,26 @@ const ManagerDashboard = ({ navigation }: any) => {
       const remainingInfo = result.remainingInfo || '';
       const message       = result.message || '정상적으로 출석 처리되었습니다.';
 
-      Alert.alert(
+      showResultModal(
         '출석 완료! 🎉',
         `${memberName}님 환영합니다.\n${remainingInfo ? `\n${remainingInfo}` : ''}\n\n${message}`,
-        [
-          {
-            text: '확인',
-            onPress: () => {
-              closeScanner();
-              AsyncStorage.getItem('userToken').then(t => {
-                if (t) fetchVisits(t);
-              });
-            },
-          },
-        ]
+        'success',
+        () => {
+          closeScanner();
+          AsyncStorage.getItem('userToken').then(t => {
+            if (t) fetchVisits(t);
+          });
+        }
       );
     } catch (error: any) {
       console.error('QR 스캔 실패:', error?.response?.data || error.message);
       const errorMsg =
         error?.response?.data?.message ||
         error?.response?.data?.error ||
-        '출석 처리에 실패했습니다. 유효한 QR 코드인지 확인해주세요.';
+        '출석 처리에 실패했습니다.\n유효한 QR 코드인지 확인해주세요.';
 
-      Alert.alert(
-        '출석 실패',
-        errorMsg,
-        [
-          {
-            text: '다시 스캔',
-            onPress: () => {
-              scannedRef.current = false;
-              setIsProcessing(false);
-            },
-          },
-          {
-            text: '닫기',
-            style: 'cancel',
-            onPress: closeScanner,
-          },
-        ]
-      );
+      setQrErrorMsg(errorMsg);
+      setQrErrorVisible(true);
     }
   };
 
@@ -494,6 +477,63 @@ const ManagerDashboard = ({ navigation }: any) => {
         <Image source={require('../assets/Camera.png')} style={styles.fabIcon} />
       </TouchableOpacity>
 
+      {/* ─── 커스텀 알림 결과 모달 ─── */}
+      <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
+        <View style={styles.resultModalOverlay}>
+          <View style={styles.resultModalBox}>
+            <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>
+              {resultModalConfig.title}
+            </Text>
+            <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
+            <TouchableOpacity style={styles.resultModalBtn} onPress={() => {
+              setResultModalVisible(false);
+              if (typeof resultModalConfig.onConfirm === 'function') {
+                resultModalConfig.onConfirm();
+              }
+            }}>
+              <Text style={styles.resultModalBtnText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── 삭제 확인 모달 ─── */}
+      <Modal visible={isDeleteModalVisible} animationType="fade" transparent onRequestClose={() => setDeleteModalVisible(false)}>
+        <View style={styles.deleteModalOverlay}>
+          <View style={styles.deleteModalBox}>
+            <Text style={styles.deleteModalText}>
+              해당 {itemToDelete?.type === 'notice' ? '공지사항' : '게시글'}을 정말 삭제하시겠습니까?
+            </Text>
+            <View style={styles.deleteBtnRow}>
+              <TouchableOpacity style={styles.deleteBtnYes} onPress={executeDelete}>
+                <Text style={styles.deleteBtnYesText}>예</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.deleteBtnNo} onPress={() => setDeleteModalVisible(false)}>
+                <Text style={styles.deleteBtnNoText}>아니오</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── QR 에러 확인 모달 (투버튼) ─── */}
+      <Modal visible={qrErrorVisible} animationType="fade" transparent onRequestClose={() => setQrErrorVisible(false)}>
+        <View style={styles.deleteModalOverlay}>
+          <View style={styles.deleteModalBox}>
+            <Text style={[styles.resultModalTitle, { color: '#FF4D4D', marginBottom: 15 }]}>출석 실패</Text>
+            <Text style={styles.resultModalMessage}>{qrErrorMsg}</Text>
+            <View style={styles.deleteBtnRow}>
+              <TouchableOpacity style={styles.deleteBtnYes} onPress={() => { setQrErrorVisible(false); scannedRef.current = false; setIsProcessing(false); }}>
+                <Text style={styles.deleteBtnYesText}>다시 스캔</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.deleteBtnNo} onPress={() => { setQrErrorVisible(false); closeScanner(); }}>
+                <Text style={styles.deleteBtnNoText}>닫기</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Modal
         visible={isScannerVisible}
         animationType="slide"
@@ -607,6 +647,23 @@ const styles = StyleSheet.create({
   processingText: { color: '#ffffff', fontSize: 16, marginTop: 12, fontWeight: 'bold' },
   scannerFooter: { padding: 40, alignItems: 'center', backgroundColor: '#1A1A1A' },
   scannerDesc: { color: '#ffffff', fontSize: 16, marginTop: 5 },
+
+  // ─── 커스텀 알림 모달 전용 스타일 ───
+  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
+  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
+  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 },
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+
+  deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  deleteModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
+  deleteModalText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 25, textAlign: 'center', lineHeight: 22 },
+  deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  deleteBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
+  deleteBtnYesText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
+  deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
+  deleteBtnNoText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
 });
 
 export default ManagerDashboard;

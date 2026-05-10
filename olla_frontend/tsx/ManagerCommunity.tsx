@@ -8,7 +8,6 @@ import {
   Image, 
   Modal, 
   Animated, 
-  Alert, 
   ActivityIndicator 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,7 +15,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
 
-const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
+const API_BASE_URL = 'http://192.168.0.8:8080/api/v1';
 const POSTS_API = `${API_BASE_URL}/posts`;
 const MEMBERS_API = `${API_BASE_URL}/members`;
 
@@ -33,6 +32,15 @@ const ManagerCommunity = ({ navigation }: any) => {
   const [posts, setPosts] = useState<any[]>([]);
   const [selectedTab, setSelectedTab] = useState('전체');
   const tabs = ['전체', '센터', '아웃도어'];
+
+  // ─── 커스텀 알림 모달 상태 추가 ───
+  const [resultModalVisible, setResultModalVisible] = useState(false);
+  const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info' });
+
+  const showResultModal = (title: string, message: string, type: 'info' | 'success' | 'error' = 'info') => {
+    setResultModalConfig({ title, message, type });
+    setResultModalVisible(true);
+  };
 
   useEffect(() => {
     if (isFocused) {
@@ -80,7 +88,7 @@ const ManagerCommunity = ({ navigation }: any) => {
 
       setPosts(sortPosts(mappedList));
     } catch (error) {
-      Alert.alert('오류', '게시글 목록을 불러오지 못했습니다.');
+      showResultModal('오류', '게시글 목록을 불러오지 못했습니다.', 'error');
       console.log('ManagerCommunity Fetch Error:', error);
     } finally {
       setLoading(false);
@@ -101,10 +109,10 @@ const ManagerCommunity = ({ navigation }: any) => {
         const headers = await authHeader();
         // 💡 POSTS_API 사용
         await axios.delete(`${POSTS_API}/${itemToDelete}`, { headers });
-        Alert.alert("알림", "게시글이 삭제되었습니다.");
+        showResultModal('성공', '게시글이 삭제되었습니다.', 'success');
         fetchPosts(); 
       } catch (error) {
-        Alert.alert("오류", "게시글 삭제에 실패했습니다.");
+        showResultModal('오류', '게시글 삭제에 실패했습니다.', 'error');
       }
     }
     setDeleteModalVisible(false); 
@@ -128,7 +136,7 @@ const ManagerCommunity = ({ navigation }: any) => {
       const d = data?.data?.data || data?.data || data; 
       
       if (!d) { 
-        Alert.alert('프로필 조회 불가','정보를 불러올 수 없습니다.'); 
+        showResultModal('프로필 조회 불가', '정보를 불러올 수 없습니다.', 'error'); 
         return; 
       }
       
@@ -155,7 +163,7 @@ const ManagerCommunity = ({ navigation }: any) => {
       setDetailVisible(true);
       setTimeout(() => { Animated.timing(detailSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(); }, 50);
     } catch (error) {
-      Alert.alert('프로필 조회 불가', '해당 회원의 정보를 불러올 수 없습니다.');
+      showResultModal('프로필 조회 불가', '해당 회원의 정보를 불러올 수 없습니다.', 'error');
       console.log('Profile Fetch Error:', error);
     }
   };
@@ -238,10 +246,6 @@ const ManagerCommunity = ({ navigation }: any) => {
                     <Text style={styles.infoText}>{post.people}</Text>
                   </View>
                 </View>
-                
-                <TouchableOpacity style={styles.trashBtn} onPress={() => confirmDelete(post.id)}>
-                  <Image source={require('../assets/trash.png')} style={[styles.trashIcon, isPast && { tintColor: '#666666' }]} />
-                </TouchableOpacity>
               </View>
 
               <View style={styles.divider} />
@@ -257,6 +261,11 @@ const ManagerCommunity = ({ navigation }: any) => {
                   )}
                   <Text style={[styles.authorText, isPast && { color: '#666666' }]}>{post.author}</Text>
                 </TouchableOpacity>
+
+                {/* 💡 쓰레기통(삭제) 버튼이 위치하는 곳! 프로필과 같은 줄의 오른쪽 끝으로 이동됨 */}
+                <TouchableOpacity style={styles.trashBtn} onPress={() => confirmDelete(post.id)}>
+                  <Image source={require('../assets/trash.png')} style={[styles.trashIcon, isPast && { tintColor: '#666666' }]} />
+                </TouchableOpacity>
             
               </View>
             </View>
@@ -266,6 +275,21 @@ const ManagerCommunity = ({ navigation }: any) => {
           <Text style={{ color: '#999', textAlign: 'center', marginTop: 30 }}>등록된 커뮤니티 글이 없습니다.</Text>
         )}
       </ScrollView>
+
+      {/* ─── 커스텀 알림 결과 모달 ─── */}
+      <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
+        <View style={styles.resultModalOverlay}>
+          <View style={styles.resultModalBox}>
+            <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>
+              {resultModalConfig.title}
+            </Text>
+            <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
+            <TouchableOpacity style={styles.resultModalBtn} onPress={() => setResultModalVisible(false)}>
+              <Text style={styles.resultModalBtnText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={isDeleteModalVisible} animationType="fade" transparent={true} onRequestClose={cancelDelete}>
         <View style={styles.deleteModalOverlay}>
@@ -346,17 +370,17 @@ const styles = StyleSheet.create({
   postDesc: { color: '#999999', fontSize: 14, lineHeight: 20, marginBottom: 15 },
   
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  infoItemGroup: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  infoItem: { flexDirection: 'row', alignItems: 'center', marginRight: 8 },
+  infoItemGroup: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }, // flexWrap 추가로 내용이 많아도 줄바꿈됨
+  infoItem: { flexDirection: 'row', alignItems: 'center', marginRight: 8, marginVertical: 2 },
   infoIcon: { width: 14, height: 14, resizeMode: 'contain', marginRight: 4, tintColor: '#999999' },
   infoText: { color: '#999999', fontSize: 12 },
   
-  trashBtn: { padding: 4, marginLeft: 5 },
-  trashIcon: { width: 18, height: 18, resizeMode: 'contain', tintColor: '#A1BE44' }, 
+  trashBtn: { padding: 8, marginRight: -8 }, // 터치 영역을 넉넉하게 주기 위해 padding 조정
+  trashIcon: { width: 20, height: 20, resizeMode: 'contain', tintColor: '#A1BE44' }, 
   
   divider: { height: 1, backgroundColor: '#333333', marginBottom: 15 },
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  profileRow: { flexDirection: 'row', alignItems: 'center' },
+  profileRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   profileImg: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#444444', marginRight: 10 },
   textProfileImg: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#444444', marginRight: 10, justifyContent: 'center', alignItems: 'center' },
   textProfileText: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
@@ -387,6 +411,14 @@ const styles = StyleSheet.create({
   detailValue: { color: '#ffffff', fontSize: 15, fontWeight: 'bold' },
   closeFullBtn: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
   closeFullBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+
+  // ─── 커스텀 알림 모달 전용 스타일 ───
+  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
+  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
+  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 },
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
 });
 
 export default ManagerCommunity;

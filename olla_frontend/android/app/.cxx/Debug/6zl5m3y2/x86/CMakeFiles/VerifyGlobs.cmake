@@ -36,6 +36,30 @@ if(NOT "${NEW_GLOB}" STREQUAL "${OLD_GLOB}")
   file(TOUCH_NOCREATE "C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/x86/CMakeFiles/cmake.verify_globs")
 endif()
 
+# react_codegen_SRCS at C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-camera-kit/android/build/generated/source/codegen/jni/CMakeLists.txt:9 (file)
+file(GLOB NEW_GLOB LIST_DIRECTORIES true "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-camera-kit/android/build/generated/source/codegen/jni/*.cpp")
+set(OLD_GLOB
+  "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-camera-kit/android/build/generated/source/codegen/jni/NativeCameraKitSpec-generated.cpp"
+  )
+if(NOT "${NEW_GLOB}" STREQUAL "${OLD_GLOB}")
+  message("-- GLOB mismatch!")
+  file(TOUCH_NOCREATE "C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/x86/CMakeFiles/cmake.verify_globs")
+endif()
+
+# react_codegen_SRCS at C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-camera-kit/android/build/generated/source/codegen/jni/CMakeLists.txt:9 (file)
+file(GLOB NEW_GLOB LIST_DIRECTORIES true "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-camera-kit/android/build/generated/source/codegen/jni/react/renderer/components/NativeCameraKitSpec/*.cpp")
+set(OLD_GLOB
+  "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-camera-kit/android/build/generated/source/codegen/jni/react/renderer/components/NativeCameraKitSpec/ComponentDescriptors.cpp"
+  "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-camera-kit/android/build/generated/source/codegen/jni/react/renderer/components/NativeCameraKitSpec/EventEmitters.cpp"
+  "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-camera-kit/android/build/generated/source/codegen/jni/react/renderer/components/NativeCameraKitSpec/Props.cpp"
+  "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-camera-kit/android/build/generated/source/codegen/jni/react/renderer/components/NativeCameraKitSpec/ShadowNodes.cpp"
+  "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-camera-kit/android/build/generated/source/codegen/jni/react/renderer/components/NativeCameraKitSpec/States.cpp"
+  )
+if(NOT "${NEW_GLOB}" STREQUAL "${OLD_GLOB}")
+  message("-- GLOB mismatch!")
+  file(TOUCH_NOCREATE "C:/Users/82103/olla_App/olla_frontend/android/app/.cxx/Debug/6zl5m3y2/x86/CMakeFiles/cmake.verify_globs")
+endif()
+
 # LIB_CUSTOM_SRCS at C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-safe-area-context/android/src/main/jni/CMakeLists.txt:12 (file)
 file(GLOB NEW_GLOB LIST_DIRECTORIES true "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-safe-area-context/android/src/main/jni/*.cpp")
 set(OLD_GLOB

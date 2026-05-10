@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, TextInput } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
 
-const BASE = 'http://192.168.0.23:8080/api/v1';
-const POSTS = `http://192.168.0.23:8080/api/v1/posts`;
+const BASE = 'http://192.168.0.8:8080/api/v1';
+const POSTS = `http://192.168.0.8:8080/api/v1/posts`;
 const MEMBERS = `${BASE}/members`;
 
 const authHeader = async () => {
@@ -18,6 +18,15 @@ const p = (n: number) => String(n).padStart(2, '0');
 const CommunityScreen = ({ route, navigation }: any) => {
   const isFocused = useIsFocused();
   const currentFilter = route?.params?.filter || 'ALL';
+
+  // ─── 커스텀 알림 모달 상태 추가 ───
+  const [resultModalVisible, setResultModalVisible] = useState(false);
+  const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info' });
+
+  const showResultModal = (title: string, message: string, type: 'info' | 'success' | 'error' = 'info') => {
+    setResultModalConfig({ title, message, type });
+    setResultModalVisible(true);
+  };
 
   const [posts, setPosts] = useState<any[]>([]);
   const [myNickname, setMyNickname] = useState('');
@@ -93,7 +102,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
         setPosts(sortPosts(mappedList));
       }
     } catch (e: any) {
-      Alert.alert('불러오기 실패', e?.response?.data?.message || '게시글을 가져오지 못했습니다.');
+      showResultModal('불러오기 실패', e?.response?.data?.message || '게시글을 가져오지 못했습니다.', 'error');
     }
   };
 
@@ -120,7 +129,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
     });
 
   const searchPosts = async () => {
-    if (!searchKeyword.trim()) { Alert.alert('알림', '검색어를 입력해주세요.'); return; }
+    if (!searchKeyword.trim()) { showResultModal('알림', '검색어를 입력해주세요.', 'info'); return; }
     setIsSearching(true);
     const kw = searchKeyword.trim().toLowerCase();
     try {
@@ -141,7 +150,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
       const mappedList = mapPosts(Array.from(map.values()), '', myNickname, myUserId);
       setPosts(sortPosts(mappedList));
     } catch (e: any) {
-      Alert.alert('검색 실패', e?.response?.data?.message || '검색에 실패했습니다.');
+      showResultModal('검색 실패', e?.response?.data?.message || '검색에 실패했습니다.', 'error');
     }
   };
 
@@ -163,11 +172,10 @@ const CommunityScreen = ({ route, navigation }: any) => {
     updatePost(id, { isLiked: !liked, likeCount: (post: any) => liked ? Math.max(post.likeCount-1,0) : post.likeCount+1 });
     try {
       const headers = await authHeader();
-      // DELETE 대신 POST로 토글 처리 (서버 에러 방지)
       await axios.post(`${POSTS}/${id}/like`, {}, { headers });
     } catch {
       updatePost(id, { isLiked: liked, likeCount: (post: any) => liked ? post.likeCount+1 : post.likeCount-1 });
-      Alert.alert('알림','좋아요 요청을 처리할 수 없습니다.');
+      showResultModal('알림', '좋아요 요청을 처리할 수 없습니다.', 'error');
     }
   };
 
@@ -182,7 +190,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
       }
     } catch (e: any) {
       updatePeople(id, joined);
-      Alert.alert('알림', e?.response?.data?.message || '참여 요청을 처리할 수 없습니다.');
+      showResultModal('알림', e?.response?.data?.message || '참여 요청을 처리할 수 없습니다.', 'error');
     }
   };
 
@@ -199,9 +207,10 @@ const CommunityScreen = ({ route, navigation }: any) => {
     try {
       const headers = await authHeader();
       await axios.delete(`${POSTS}/${deleteTarget}`, { headers });
-      Alert.alert('알림','게시글이 삭제되었습니다.'); initData(currentFilter);
+      showResultModal('성공', '게시글이 삭제되었습니다.', 'success');
+      initData(currentFilter);
     } catch (e: any) {
-      Alert.alert('삭제 실패', e?.response?.data?.message||'삭제할 수 없습니다.');
+      showResultModal('삭제 실패', e?.response?.data?.message || '삭제할 수 없습니다.', 'error');
     }
     setDeleteTarget(null);
   };
@@ -214,7 +223,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
       
       const d = data?.data?.data || data?.data || data; 
       
-      if (!d) { Alert.alert('프로필 조회 불가','정보를 불러올 수 없습니다.'); return; }
+      if (!d) { showResultModal('프로필 조회 불가', '정보를 불러올 수 없습니다.', 'error'); return; }
       
       if (isMine) {
         const detail = d.detail || {};
@@ -261,7 +270,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
       }
       setTimeout(() => Animated.timing(detailAnim,{toValue:0,duration:300,useNativeDriver:true}).start(), 50);
     } catch (e) {
-      Alert.alert('프로필 조회 불가','정보를 불러올 수 없습니다.');
+      showResultModal('프로필 조회 불가', '정보를 불러올 수 없습니다.', 'error');
     }
   };
 
@@ -295,31 +304,31 @@ const CommunityScreen = ({ route, navigation }: any) => {
     const { category, title, desc, date, time, people, location } = form;
     
     if (!title || !desc || !date || !time) { 
-      Alert.alert('알림', '모든 항목을 입력해주세요.'); 
+      showResultModal('알림', '모든 항목을 입력해주세요.', 'info'); 
       return; 
     }
     if (category === '아웃도어' && (!location || !location.trim())) {
-      Alert.alert('알림', '아웃도어 장소 정보를 입력해주세요.');
+      showResultModal('알림', '아웃도어 장소 정보를 입력해주세요.', 'info');
       return;
     }
     if (date.length !== 10 || time.length !== 5) { 
-      Alert.alert('알림', '날짜(YYYY/MM/DD)와 시간(HH:MM)을 올바르게 입력해주세요.'); 
+      showResultModal('알림', '날짜(YYYY/MM/DD)와 시간(HH:MM)을 올바르게 입력해주세요.', 'info'); 
       return; 
     }
     
     const [yr, mo, dy] = date.split('/').map(Number);
     const [hr, mn] = time.split(':').map(Number);
     
-    if (mo < 1 || mo > 12) { Alert.alert('알림', '올바른 월을 입력해주세요.'); return; }
-    if (dy < 1 || dy > new Date(yr, mo, 0).getDate()) { Alert.alert('알림', `${mo}월은 ${new Date(yr, mo, 0).getDate()}일까지입니다.`); return; }
-    if (hr > 23 || mn > 59) { Alert.alert('알림', '올바른 시간을 입력해주세요.'); return; }
+    if (mo < 1 || mo > 12) { showResultModal('알림', '올바른 월을 입력해주세요.', 'info'); return; }
+    if (dy < 1 || dy > new Date(yr, mo, 0).getDate()) { showResultModal('알림', `${mo}월은 ${new Date(yr, mo, 0).getDate()}일까지입니다.`, 'info'); return; }
+    if (hr > 23 || mn > 59) { showResultModal('알림', '올바른 시간을 입력해주세요.', 'info'); return; }
     
     const dt = new Date(yr, mo - 1, dy, hr, mn);
-    if (dt < new Date()) { Alert.alert('알림', '과거 시간으로 등록할 수 없습니다.'); return; }
+    if (dt < new Date()) { showResultModal('알림', '과거 시간으로 등록할 수 없습니다.', 'info'); return; }
     
     const max3 = new Date(); 
     max3.setMonth(max3.getMonth() + 3);
-    if (dt > max3) { Alert.alert('알림', '최대 3개월 이내 날짜만 가능합니다.'); return; }
+    if (dt > max3) { showResultModal('알림', '최대 3개월 이내 날짜만 가능합니다.', 'info'); return; }
     
     const formattedDateTime = `${yr}-${p(mo)}-${p(dy)}T${p(hr)}:${p(mn)}:00`;
 
@@ -340,11 +349,11 @@ const CommunityScreen = ({ route, navigation }: any) => {
         await axios.post(POSTS, payload, { headers });
       }
       
-      Alert.alert('알림', isEditMode ? '게시글이 수정되었습니다.' : '모집 글이 작성되었습니다.');
+      showResultModal('성공', isEditMode ? '게시글이 수정되었습니다.' : '모집 글이 작성되었습니다.', 'success');
       closeCreateModal(); 
       initData(currentFilter);
     } catch (e: any) {
-      Alert.alert(`${isEditMode ? '수정' : '작성'} 실패`, e?.response?.data?.message || '처리에 실패했습니다.');
+      showResultModal(`${isEditMode ? '수정' : '작성'} 실패`, e?.response?.data?.message || '처리에 실패했습니다.', 'error');
     }
   };
 
@@ -466,6 +475,21 @@ const CommunityScreen = ({ route, navigation }: any) => {
               <TouchableOpacity style={s.btnYes} onPress={executeDelete}><Text style={s.btnYesText}>예</Text></TouchableOpacity>
               <TouchableOpacity style={s.btnNo} onPress={() => setDeleteTarget(null)}><Text style={s.btnNoText}>아니오</Text></TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── 커스텀 알림 결과 모달 ─── */}
+      <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
+        <View style={s.resultModalOverlay}>
+          <View style={s.resultModalBox}>
+            <Text style={[s.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>
+              {resultModalConfig.title}
+            </Text>
+            <Text style={s.resultModalMessage}>{resultModalConfig.message}</Text>
+            <TouchableOpacity style={s.resultModalBtn} onPress={() => setResultModalVisible(false)}>
+              <Text style={s.resultModalBtnText}>확인</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -661,6 +685,14 @@ const s = StyleSheet.create({
   counterUnit:{color:'#999',fontSize:16,fontWeight:'bold',marginLeft:2},
   submitBtn:{width:'100%',backgroundColor:'#A1BE44',borderRadius:12,paddingVertical:16,alignItems:'center',marginTop:20},
   submitText:{color:'#000',fontSize:16,fontWeight:'bold'},
+
+  // ─── 커스텀 알림 모달 전용 스타일 ───
+  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
+  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
+  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 },
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
 });
 
 export default CommunityScreen;

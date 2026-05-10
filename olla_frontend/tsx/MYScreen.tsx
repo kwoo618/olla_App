@@ -4,10 +4,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Image, Switch, Modal, Animated, TextInput, Alert, ActivityIndicator, Linking
+  Image, Switch, Modal, Animated, TextInput, ActivityIndicator, Linking
 } from 'react-native';
 
-const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
+const API_BASE_URL = 'http://192.168.0.8:8080/api/v1';
 
 // ✅ 횟수권 -> 일일권 명칭 통일
 const resolveMembershipType = (
@@ -43,6 +43,15 @@ const MYScreen = ({ navigation }: any) => {
   const isFocused = useIsFocused();
   const [loading, setLoading] = useState(true);
 
+  // ─── 커스텀 알림 모달 상태 추가 ───
+  const [resultModalVisible, setResultModalVisible] = useState(false);
+  const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info' });
+
+  const showResultModal = (title: string, message: string, type: 'info' | 'success' | 'error' = 'info') => {
+    setResultModalConfig({ title, message, type });
+    setResultModalVisible(true);
+  };
+
   const [memInfo, setMemInfo] = useState({
     type: '구매 필요',
     period: '-',
@@ -70,8 +79,8 @@ const MYScreen = ({ navigation }: any) => {
     try {
       const userToken = await AsyncStorage.getItem('userToken');
       if (!userToken) {
-        Alert.alert('인증 오류', '로그인이 필요합니다.');
-        navigation.replace('Login');
+        showResultModal('인증 오류', '로그인이 필요합니다.', 'error');
+        setTimeout(() => navigation.replace('Login'), 1500);
         return;
       }
 
@@ -119,7 +128,7 @@ const MYScreen = ({ navigation }: any) => {
         });
       }
 
-      // ✅ [GET] 오늘 출석 여부 확인 (일일권 '미사용' / '이용중' 판별용)
+      // ✅ [GET] 오늘 출석 여부 확인
       let attendedToday = false;
       try {
         const today = new Date();
@@ -182,7 +191,7 @@ const MYScreen = ({ navigation }: any) => {
               ? `${memData.startDate} ~ ${memData.endDate}`
               : '-';
 
-          // ✅ 상태 계산 (일일권의 경우 오늘 출석했으면 이용중, 안했으면 미사용)
+          // ✅ 상태 계산
           let currentStatus = memData.status === 'ACTIVE' ? '이용중' : memData.status === 'HOLDING' ? '정지중' : '구매필요';
           
           if (isCountType && currentStatus === '이용중') {
@@ -238,11 +247,11 @@ const MYScreen = ({ navigation }: any) => {
       };
 
       await axios.patch(`${API_BASE_URL}/members/me`, requestBody, { headers });
-      Alert.alert('알림', '정보가 저장되었습니다.');
+      showResultModal('성공', '정보가 저장되었습니다.', 'success');
       fetchMyInfo();
       closeProfileModal();
     } catch (error) {
-      Alert.alert('오류', '저장에 실패했습니다.');
+      showResultModal('오류', '저장에 실패했습니다.', 'error');
     }
   };
 
@@ -272,15 +281,17 @@ const MYScreen = ({ navigation }: any) => {
       const userToken = await AsyncStorage.getItem('userToken');
       if (!userToken) return;
       await axios.delete(`${API_BASE_URL}/members/me`, { headers: { Authorization: `Bearer ${userToken}` } });
-      Alert.alert('알림', '회원탈퇴가 완료되었습니다.');
+      showResultModal('성공', '회원탈퇴가 완료되었습니다.', 'success');
     } catch (error: any) {
       console.log('회원탈퇴 실패:', error);
-      Alert.alert('오류', error.response?.data?.message || '회원탈퇴에 실패했습니다.');
+      showResultModal('오류', error.response?.data?.message || '회원탈퇴에 실패했습니다.', 'error');
       return;
     } finally {
       await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole']);
       setDeleteModalVisible(false);
-      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+      setTimeout(() => {
+        navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+      }, 1500); // 사용자가 알림을 확인할 시간을 약간 부여
     }
   };
 
@@ -328,7 +339,7 @@ const MYScreen = ({ navigation }: any) => {
     try {
       await Linking.openURL('tel:053-851-3322');
     } catch (err) {
-      Alert.alert('알림', '이 기기에서는 전화 연결을 지원하지 않습니다. (실제 폰에서 테스트해주세요)');
+      showResultModal('알림', '이 기기에서는 전화 연결을 지원하지 않습니다.\n(실제 폰에서 테스트해주세요)', 'info');
     }
     closeContactModal();
   };
@@ -363,12 +374,10 @@ const MYScreen = ({ navigation }: any) => {
     );
   };
 
-  // ✅ 보유 여부 확인
   const hasMembership = memInfo.isCountType
     ? memInfo.remainingCount > 0
     : memInfo.remainingDays >= 0;
 
-  // ✅ 카드에 표시될 텍스트
   const memSummaryText = hasMembership
     ? memInfo.isCountType
       ? `${memInfo.type} (${memInfo.remainingCount}회 남음)`
@@ -503,6 +512,21 @@ const MYScreen = ({ navigation }: any) => {
 
       </ScrollView>
 
+      {/* ─── 커스텀 알림 결과 모달 ─── */}
+      <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
+        <View style={styles.resultModalOverlay}>
+          <View style={styles.resultModalBox}>
+            <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>
+              {resultModalConfig.title}
+            </Text>
+            <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
+            <TouchableOpacity style={styles.resultModalBtn} onPress={() => setResultModalVisible(false)}>
+              <Text style={styles.resultModalBtnText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* 로그아웃 모달 */}
       <Modal visible={isLogoutModalVisible} transparent={true} animationType="fade">
         <View style={styles.centerModalOverlay}>
@@ -539,37 +563,37 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 멤버십 일시정지 모달 */}
+      {/* 💡 멤버십 일시정지 모달 (터치 가로채기 차단 구조 적용) */}
       <Modal visible={isPauseModalVisible} transparent={true} animationType="fade">
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closePauseModal}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={closePauseModal} />
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: pauseSlideAnim }] }]}>
-            <TouchableOpacity activeOpacity={1} style={{ width: '100%' }}>
-              <View style={styles.dragHandle} />
-              <Text style={styles.sheetTitleCenter}>멤버십 일시정지</Text>
-              <View style={styles.horizontalDivider} />
-              <View style={styles.pauseInfoBox}>
-                <Text style={styles.pauseInfoText}>
-                  멤버십 일시정지는 관리자 승인이 필요합니다.{'\n'}프론트 데스크에 문의하시겠습니까?
-                </Text>
-              </View>
-              <View style={styles.modalBtnRow}>
-                <TouchableOpacity style={styles.modalBtnCancel} onPress={closePauseModal}>
-                  <Text style={styles.modalBtnCancelText}>취소</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.modalBtnSubmit} onPress={handleInquireClick}>
-                  <Text style={styles.modalBtnSubmitText}>문의하기</Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableOpacity>
+            <View style={styles.dragHandle} />
+            <Text style={styles.sheetTitleCenter}>멤버십 일시정지</Text>
+            <View style={styles.horizontalDivider} />
+            <View style={styles.pauseInfoBox}>
+              <Text style={styles.pauseInfoText}>
+                멤버십 일시정지는 관리자 승인이 필요합니다.{'\n'}프론트 데스크에 문의하시겠습니까?
+              </Text>
+            </View>
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity style={styles.modalBtnCancel} onPress={closePauseModal}>
+                <Text style={styles.modalBtnCancelText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalBtnSubmit} onPress={handleInquireClick}>
+                <Text style={styles.modalBtnSubmitText}>문의하기</Text>
+              </TouchableOpacity>
+            </View>
           </Animated.View>
-        </TouchableOpacity>
+        </View>
       </Modal>
 
-      {/* 문의하기 모달 */}
+      {/* 💡 문의하기 모달 (터치 가로채기 차단 구조 적용) */}
       <Modal visible={isContactModalVisible} transparent={true} animationType="fade">
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeContactModal}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={closeContactModal} />
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: contactSlideAnim }] }]}>
-            <TouchableOpacity activeOpacity={1} style={{ width: '100%', alignItems: 'center' }}>
+            <View style={{ width: '100%', alignItems: 'center' }}>
               <View style={styles.dragHandle} />
               <Text style={styles.sheetTitleCenter}>프론트 데스크 문의</Text>
               <View style={styles.horizontalDivider} />
@@ -588,96 +612,99 @@ const MYScreen = ({ navigation }: any) => {
                   <Text style={styles.modalBtnSubmitText}>전화하기</Text>
                 </TouchableOpacity>
               </View>
-            </TouchableOpacity>
+            </View>
           </Animated.View>
-        </TouchableOpacity>
+        </View>
       </Modal>
 
-      {/* 프로필 수정 모달 */}
+      {/* 💡 프로필 수정 모달 (터치 가로채기 차단 구조 적용) */}
       <Modal visible={isProfileModalVisible} transparent={true} animationType="fade">
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeProfileModal}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={closeProfileModal} />
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: profileSlideAnim }], maxHeight: '90%' }]}>
-            <TouchableOpacity activeOpacity={1}>
-              <View style={styles.dragHandle} />
-              <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle}>프로필 수정</Text>
-                <TouchableOpacity onPress={closeProfileModal}>
-                  <Text style={styles.closeBtn}>✕</Text>
+            <View style={styles.dragHandle} />
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>프로필 수정</Text>
+              <TouchableOpacity onPress={closeProfileModal}>
+                <Text style={styles.closeBtn}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.horizontalDivider} />
+            <ScrollView 
+              showsVerticalScrollIndicator={false} 
+              contentContainerStyle={{ paddingBottom: 30 }}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.profileEditContainer}>
+                <TouchableOpacity style={styles.profileImageEditWrapper} activeOpacity={0.7}>
+                  <Image source={require('../assets/profile.png')} style={styles.profileImageLarge} />
+                  <View style={styles.profileImageEditOverlay}>
+                    <Text style={styles.profileImageEditText}>수정</Text>
+                  </View>
+                </TouchableOpacity>
+
+                {renderEditField('이름', 'name', '')}
+
+                <View style={styles.editFieldWrapper}>
+                  <View style={styles.editFieldHeader}>
+                    <Text style={styles.editFieldTitle}>성별</Text>
+                  </View>
+                  <View style={styles.genderRow}>
+                    <TouchableOpacity
+                      style={[styles.genderBtn, profileData.gender === '남' && styles.genderBtnActive]}
+                      onPress={() => setProfileData({ ...profileData, gender: '남' })}
+                    >
+                      <Text style={[styles.genderBtnText, profileData.gender === '남' && styles.genderBtnTextActive]}>남자</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.genderBtn, profileData.gender === '여' && styles.genderBtnActive]}
+                      onPress={() => setProfileData({ ...profileData, gender: '여' })}
+                    >
+                      <Text style={[styles.genderBtnText, profileData.gender === '여' && styles.genderBtnTextActive]}>여자</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <View style={styles.editFieldWrapper}>
+                  <View style={styles.editFieldHeader}>
+                    <Text style={styles.editFieldTitle}>생년월일</Text>
+                  </View>
+                  <View style={styles.editInputBox}>
+                    <TextInput
+                      style={styles.editInput}
+                      value={profileData.birthDate}
+                      onChangeText={(txt) => {
+                        const cleaned = txt.replace(/[^0-9]/g, '');
+                        let formatted = cleaned;
+                        if (cleaned.length > 4 && cleaned.length <= 6) {
+                          formatted = `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`;
+                        } else if (cleaned.length > 6) {
+                          formatted = `${cleaned.slice(0, 4)}-${cleaned.slice(4, 6)}-${cleaned.slice(6, 8)}`;
+                        }
+                        setProfileData({ ...profileData, birthDate: formatted });
+                      }}
+                      placeholder="YYYY-MM-DD"
+                      placeholderTextColor="#666666"
+                      keyboardType="number-pad"
+                      maxLength={10}
+                    />
+                  </View>
+                </View>
+
+                {renderEditField('전화번호', 'phone', '')}
+                {renderEditField('나이', 'age', '세')}
+                {renderEditField('키', 'height', 'cm')}
+                {renderEditField('몸무게', 'weight', 'kg')}
+                {renderEditField('팔길이', 'arm', 'cm')}
+                {renderEditField('암벽화 사이즈', 'shoe', 'mm')}
+
+                <TouchableOpacity style={styles.saveProfileButton} onPress={handleSaveProfile}>
+                  <Text style={styles.saveProfileButtonText}>저장하기</Text>
                 </TouchableOpacity>
               </View>
-              <View style={styles.horizontalDivider} />
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
-                <View style={styles.profileEditContainer}>
-                  <TouchableOpacity style={styles.profileImageEditWrapper} activeOpacity={0.7}>
-                    <Image source={require('../assets/profile.png')} style={styles.profileImageLarge} />
-                    <View style={styles.profileImageEditOverlay}>
-                      <Text style={styles.profileImageEditText}>수정</Text>
-                    </View>
-                  </TouchableOpacity>
-
-                  {renderEditField('이름', 'name', '')}
-
-                  <View style={styles.editFieldWrapper}>
-                    <View style={styles.editFieldHeader}>
-                      <Text style={styles.editFieldTitle}>성별</Text>
-                    </View>
-                    <View style={styles.genderRow}>
-                      <TouchableOpacity
-                        style={[styles.genderBtn, profileData.gender === '남' && styles.genderBtnActive]}
-                        onPress={() => setProfileData({ ...profileData, gender: '남' })}
-                      >
-                        <Text style={[styles.genderBtnText, profileData.gender === '남' && styles.genderBtnTextActive]}>남자</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.genderBtn, profileData.gender === '여' && styles.genderBtnActive]}
-                        onPress={() => setProfileData({ ...profileData, gender: '여' })}
-                      >
-                        <Text style={[styles.genderBtnText, profileData.gender === '여' && styles.genderBtnTextActive]}>여자</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  <View style={styles.editFieldWrapper}>
-                    <View style={styles.editFieldHeader}>
-                      <Text style={styles.editFieldTitle}>생년월일</Text>
-                    </View>
-                    <View style={styles.editInputBox}>
-                      <TextInput
-                        style={styles.editInput}
-                        value={profileData.birthDate}
-                        onChangeText={(txt) => {
-                          const cleaned = txt.replace(/[^0-9]/g, '');
-                          let formatted = cleaned;
-                          if (cleaned.length > 4 && cleaned.length <= 6) {
-                            formatted = `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`;
-                          } else if (cleaned.length > 6) {
-                            formatted = `${cleaned.slice(0, 4)}-${cleaned.slice(4, 6)}-${cleaned.slice(6, 8)}`;
-                          }
-                          setProfileData({ ...profileData, birthDate: formatted });
-                        }}
-                        placeholder="YYYY-MM-DD"
-                        placeholderTextColor="#666666"
-                        keyboardType="number-pad"
-                        maxLength={10}
-                      />
-                    </View>
-                  </View>
-
-                  {renderEditField('전화번호', 'phone', '')}
-                  {renderEditField('나이', 'age', '세')}
-                  {renderEditField('키', 'height', 'cm')}
-                  {renderEditField('몸무게', 'weight', 'kg')}
-                  {renderEditField('팔길이', 'arm', 'cm')}
-                  {renderEditField('암벽화 사이즈', 'shoe', 'mm')}
-
-                  <TouchableOpacity style={styles.saveProfileButton} onPress={handleSaveProfile}>
-                    <Text style={styles.saveProfileButtonText}>저장하기</Text>
-                  </TouchableOpacity>
-                </View>
-              </ScrollView>
-            </TouchableOpacity>
+            </ScrollView>
           </Animated.View>
-        </TouchableOpacity>
+        </View>
       </Modal>
     </View>
   );
@@ -729,6 +756,8 @@ const styles = StyleSheet.create({
   centerBtnYesText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
   centerBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
   centerBtnNoText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
+  
+  // 모달 레이아웃
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
@@ -769,6 +798,14 @@ const styles = StyleSheet.create({
   genderBtnActive: { borderColor: '#A1BE44', backgroundColor: 'rgba(161, 190, 68, 0.1)' },
   genderBtnText: { color: '#999999', fontSize: 16, fontWeight: 'bold' },
   genderBtnTextActive: { color: '#A1BE44' },
+
+  // ─── 커스텀 알림 모달 전용 스타일 ───
+  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
+  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
+  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 },
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
 });
 
 export default MYScreen;

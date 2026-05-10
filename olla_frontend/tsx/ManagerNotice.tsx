@@ -2,14 +2,14 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, Modal, TextInput, KeyboardAvoidingView, Platform,
-  ActivityIndicator, Alert, Animated
+  ActivityIndicator, Animated
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // API 설정 및 토큰 인터셉터 (기존 로직 유지)
-const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
+const API_BASE_URL = 'http://192.168.0.8:8080/api/v1';
 const NOTICE_API   = `${API_BASE_URL}/admin/notices`;
 
 axios.interceptors.request.use(
@@ -45,6 +45,15 @@ interface NoticeBody {
 const ManagerNotice = ({ route, navigation }: any) => {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // ─── 커스텀 알림 모달 상태 추가 ───
+  const [resultModalVisible, setResultModalVisible] = useState(false);
+  const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info', onConfirm: () => {} });
+
+  const showResultModal = (title: string, message: string, type: 'info' | 'success' | 'error' = 'info', onConfirm: () => void = () => {}) => {
+    setResultModalConfig({ title, message, type, onConfirm });
+    setResultModalVisible(true);
+  };
 
   // 💡 작성/수정 모달 상태 및 바텀 시트 애니메이션
   const [isWriteModalVisible, setWriteModalVisible] = useState(false);
@@ -91,7 +100,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
       const list: Notice[] = res.data?.data?.content ?? res.data?.content ?? [];
       setNotices(list);
     } catch {
-      Alert.alert('오류', '공지사항을 불러오는데 실패했습니다.');
+      showResultModal('오류', '공지사항을 불러오는데 실패했습니다.', 'error');
     } finally {
       setLoading(false);
     }
@@ -102,7 +111,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
       const res = await axios.get(`${NOTICE_API}/${id}`);
       return res.data?.data ?? res.data ?? null;
     } catch {
-      Alert.alert('오류', '공지 정보를 불러오는데 실패했습니다.');
+      showResultModal('오류', '공지 정보를 불러오는데 실패했습니다.', 'error');
       return null;
     }
   };
@@ -171,10 +180,11 @@ const ManagerNotice = ({ route, navigation }: any) => {
       }
 
       closeWriteModal(); // 💡 저장 성공 시 스르륵 닫히도록 변경
+      showResultModal('성공', modalMode === 'create' ? '새 공지가 등록되었습니다.' : '공지가 수정되었습니다.', 'success');
       await fetchNotices();
     } catch (error: any) {
       const msg = error?.response?.data?.message ?? '저장에 실패했습니다.';
-      Alert.alert('오류', msg);
+      showResultModal('오류', msg, 'error');
     } finally {
       setSaving(false);
     }
@@ -195,9 +205,10 @@ const ManagerNotice = ({ route, navigation }: any) => {
     try {
       await axios.delete(`${NOTICE_API}/${noticeToDelete}`);
       cancelDelete();
+      showResultModal('성공', '공지사항이 삭제되었습니다.', 'success');
       await fetchNotices();
     } catch {
-      Alert.alert('오류', '삭제에 실패했습니다.');
+      showResultModal('오류', '삭제에 실패했습니다.', 'error');
     }
   };
 
@@ -249,6 +260,26 @@ const ManagerNotice = ({ route, navigation }: any) => {
       <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={openWriteModal}>
         <Text style={styles.fabText}>+ 작성</Text>
       </TouchableOpacity>
+
+      {/* ─── 커스텀 알림 결과 모달 ─── */}
+      <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
+        <View style={styles.resultModalOverlay}>
+          <View style={styles.resultModalBox}>
+            <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>
+              {resultModalConfig.title}
+            </Text>
+            <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
+            <TouchableOpacity style={styles.resultModalBtn} onPress={() => {
+              setResultModalVisible(false);
+              if (typeof resultModalConfig.onConfirm === 'function') {
+                resultModalConfig.onConfirm();
+              }
+            }}>
+              <Text style={styles.resultModalBtnText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* 💡 작성 / 수정 바텀 시트 모달 (디자인 적용) */}
       <Modal visible={isWriteModalVisible} animationType="fade" transparent={true}>
@@ -410,6 +441,14 @@ const styles = StyleSheet.create({
   btnNo:          { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
   btnTextBlack:   { color: '#000000', fontSize: 16, fontWeight: 'bold' },
   btnTextWhite:   { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
+
+  // ─── 커스텀 알림 모달 전용 스타일 ───
+  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
+  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
+  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 },
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
 });
 
 export default ManagerNotice;

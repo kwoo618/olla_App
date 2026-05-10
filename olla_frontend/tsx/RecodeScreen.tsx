@@ -1,14 +1,14 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ─────────────────────────── API URLs ───────────────────────────
-const BASE_URL          = 'http://192.168.0.23:8080/api/v1/records/beginner';
-const ENDURANCE_BASE_URL = 'http://192.168.0.23:8080/api/v1/records/endurance';
-const SERIES_BASE_URL   = 'http://192.168.0.23:8080/api/v1/records/series';
-const MEMBERSHIP_URL    = 'http://192.168.0.23:8080/api/v1/memberships/me';
+const BASE_URL          = 'http://192.168.0.8:8080/api/v1/records/beginner';
+const ENDURANCE_BASE_URL = 'http://192.168.0.8:8080/api/v1/records/endurance';
+const SERIES_BASE_URL   = 'http://192.168.0.8:8080/api/v1/records/series';
+const MEMBERSHIP_URL    = 'http://192.168.0.8:8080/api/v1/memberships/me';
 
 // ─────────────────────────── Axios 인터셉터 ───────────────────────────
 axios.interceptors.request.use(
@@ -53,17 +53,15 @@ const BOX_SEQUENCE = [
 ];
 
 // ─────────────────────────── 타입 ───────────────────────────
-// 명세: { id, difficulty, attemptType, maxHoldNo, recordDate, success }
 interface BeginnerRecord {
   id: number;
-  difficulty: string;   // WHITE | YELLOW | ...
-  attemptType: string;  // ONE_WAY | ROUND_TRIP
+  difficulty: string;
+  attemptType: string;
   maxHoldNo: number;
   recordDate: string;
   success: boolean;
 }
 
-// 명세: { id, oneWayCount, additionalBlocks, timeSeconds, recordDate }
 interface EnduranceRecord {
   id: number;
   oneWayCount: number;
@@ -72,7 +70,6 @@ interface EnduranceRecord {
   recordDate: string;
 }
 
-// 명세: { id, sequenceLog: string[], totalScore, recordDate }
 interface SeriesRecord {
   id: number;
   sequenceLog: string[];
@@ -81,14 +78,12 @@ interface SeriesRecord {
 }
 
 // ─────────────────────────── 헬퍼 ───────────────────────────
-/** 초 → mm:ss */
 const formatTime = (totalSecs: number): string => {
   const m = Math.floor(totalSecs / 60).toString().padStart(2, '0');
   const s = (totalSecs % 60).toString().padStart(2, '0');
   return `${m}:${s}`;
 };
 
-/** 지구력 구간 문자열 */
 const getSectionLabel = (oneWayCount: number, additionalBlocks: number): string => {
   if (oneWayCount === 0 && additionalBlocks === 0) return '0';
   if (additionalBlocks > 0 && additionalBlocks <= BOX_SEQUENCE.length)
@@ -107,6 +102,15 @@ const RecodeScreen = ({
     route?.params?.openSection ?? null
   );
   const [hasValidMembership, setHasValidMembership] = useState(false);
+
+  // ─── 커스텀 알림 모달 상태 추가 ───
+  const [resultModalVisible, setResultModalVisible] = useState(false);
+  const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info' });
+
+  const showResultModal = (title: string, message: string, type: 'info' | 'success' | 'error' = 'info') => {
+    setResultModalConfig({ title, message, type });
+    setResultModalVisible(true);
+  };
 
   useEffect(() => {
     setEnduranceData([]);
@@ -144,17 +148,15 @@ const RecodeScreen = ({
 
   const requireMembership = (action: () => void) => {
     if (!hasValidMembership) {
-      Alert.alert('알림', '이용권을 먼저 구매해주세요.', [{ text: '확인' }]);
+      showResultModal('알림', '이용권을 먼저 구매해주세요.', 'info');
       return;
     }
     action();
   };
 
   // ── 초보벽 최고기록 조회 ──
-  // 명세: GET /records/beginner/best → { id, difficulty, attemptType, maxHoldNo, recordDate, success }[]
   const fetchBestRecords = async () => {
     try {
-      // ✅ /best 단일 endpoint만 사용 (기존: /best + /history + / 3개 중복 호출 제거)
       const res  = await axios.get(`${BASE_URL}/best`);
       const raw  = res.data?.data ?? res.data ?? [];
       const list: BeginnerRecord[] = Array.isArray(raw) ? raw
@@ -165,18 +167,12 @@ const RecodeScreen = ({
           const enumColor = KR_TO_ENUM[item.color];
           const maxHold   = MAX_HOLDS[item.color] ?? item.total ?? 0;
 
-          // 이 색상에 해당하는 기록 필터
           const recordsForColor = list.filter(r => r.difficulty === enumColor);
-
-          // 점수 기준 베스트 1개 선택
-          // 점수: 왕복 > 편도, 같은 유형이면 maxHoldNo 높은 것
           let bestRecord: BeginnerRecord | null = null;
           let highestScore = -1;
 
           recordsForColor.forEach(r => {
-            // ✅ attemptType 명확히 비교 (기존: includes('ROUND') 추측 방식 제거)
             const isRoundTrip = r.attemptType === 'ROUND_TRIP';
-            // ✅ success boolean 직접 사용 (기존: String(r.success)==='true' 제거)
             const holdCount = r.success ? maxHold : (r.maxHoldNo ?? 0);
             const score     = (isRoundTrip ? 50_000 : 0) + holdCount;
 
@@ -207,7 +203,6 @@ const RecodeScreen = ({
   };
 
   // ── 지구력 기록 조회 ──
-  // 명세: GET /records/endurance/history → { id, oneWayCount, additionalBlocks, timeSeconds, recordDate }[]
   const fetchEnduranceRecords = async () => {
     try {
       const res  = await axios.get(`${ENDURANCE_BASE_URL}/history`);
@@ -217,10 +212,9 @@ const RecodeScreen = ({
       const mapped = list.map((item: EnduranceRecord) => ({
         id:      item.id,
         type:    '편도',
-        // ✅ laps % 2 기준 방향 표시 (편도 횟수 홀수=→, 짝수=←)
         arrow:   item.oneWayCount % 2 !== 0 ? '->' : '<-',
         laps:    String(item.oneWayCount),
-        time:    formatTime(item.timeSeconds),  // ✅ 헬퍼 함수 사용
+        time:    formatTime(item.timeSeconds),
         section: getSectionLabel(item.oneWayCount, item.additionalBlocks),
       }));
 
@@ -231,7 +225,6 @@ const RecodeScreen = ({
   };
 
   // ── 연속 완등 기록 조회 ──
-  // 명세: GET /records/series/history → { id, sequenceLog: string[], totalScore, recordDate }[]
   const fetchSeriesRecords = async () => {
     try {
       const res  = await axios.get(`${SERIES_BASE_URL}/history`);
@@ -240,7 +233,7 @@ const RecodeScreen = ({
 
       const mapped = list.map((item: SeriesRecord) => ({
         id:    item.id,
-        score: item.totalScore ?? 0,  // ✅ 기존: totalScore 아예 안 받아서 점수 표시 불가했던 것 수정
+        score: item.totalScore ?? 0,
         colors: (item.sequenceLog ?? []).map(diffEnum => {
           const krName = ENUM_TO_KR[diffEnum] ?? '흰색';
           const found  = difficultyData.find((d: any) => d.color === krName);
@@ -280,7 +273,7 @@ const RecodeScreen = ({
       setDeleteModalVisible(false);
       setItemToDelete(null);
     } catch {
-      Alert.alert('Error', '기록 삭제에 실패했습니다.');
+      showResultModal('오류', '기록 삭제에 실패했습니다.', 'error');
     }
   };
 
@@ -320,10 +313,9 @@ const RecodeScreen = ({
   }, [selectedDifficulty]);
 
   // ── 초보벽 기록 저장 ──
-  // 명세: POST /records/beginner → { difficulty, attemptType, maxHoldNo, recordDate, success }
   const handleSaveBeginnerRecord = async () => {
     if (!selectedType || !selectedResult) {
-      Alert.alert('알림', '모든 항목을 선택해주세요.');
+      showResultModal('알림', '모든 항목을 선택해주세요.', 'info');
       return;
     }
     const isSuccess    = selectedResult === '완등';
@@ -334,7 +326,6 @@ const RecodeScreen = ({
       difficulty:  enumDifficulty,
       attemptType: selectedType === '편도' ? 'ONE_WAY' : 'ROUND_TRIP',
       maxHoldNo:   finalHold,
-      // ✅ 명세 필드명 success (기존: isSuccess 로 잘못 전송하던 것 수정)
       success:     isSuccess,
       recordDate:  new Date().toISOString().split('T')[0],
     };
@@ -343,9 +334,9 @@ const RecodeScreen = ({
       await axios.post(BASE_URL, payload);
       await fetchBestRecords();
       closeRecordModal();
-      setTimeout(() => Alert.alert('성공', '등반 기록이 저장되었습니다.'), 300);
+      setTimeout(() => showResultModal('성공', '등반 기록이 저장되었습니다.', 'success'), 300);
     } catch {
-      Alert.alert('오류', '데이터 저장 실패');
+      showResultModal('오류', '데이터 저장에 실패했습니다.', 'error');
     }
   };
 
@@ -432,14 +423,13 @@ const RecodeScreen = ({
   }, [enduranceLaps, selectedMapNode, mapElements]);
 
   // ── 지구력 기록 저장 ──
-  // 명세: POST /records/endurance → { oneWayCount, additionalBlocks, timeSeconds, recordDate }
   const handleSaveEnduranceRecord = async () => {
     if (!effectiveSection && enduranceLaps === 0) {
-      Alert.alert('알림', '기록할 바퀴 수나 지도 구간을 선택해주세요.');
+      showResultModal('알림', '기록할 바퀴 수나 지도 구간을 선택해주세요.', 'info');
       return;
     }
     const additionalBlocks = effectiveSection
-      ? Math.max(0, BOX_SEQUENCE.indexOf(effectiveSection) + 1)  // ✅ indexOf가 -1 일 때 0 처리
+      ? Math.max(0, BOX_SEQUENCE.indexOf(effectiveSection) + 1)
       : 0;
     const timeSeconds = ((parseInt(enduranceMin, 10) || 0) * 60) + (parseInt(enduranceSec, 10) || 0);
 
@@ -454,13 +444,12 @@ const RecodeScreen = ({
       await axios.post(ENDURANCE_BASE_URL, payload);
       await fetchEnduranceRecords();
       closeEnduranceModal();
-      setTimeout(() => Alert.alert('성공', '지구력 기록이 저장되었습니다.'), 300);
+      setTimeout(() => showResultModal('성공', '지구력 기록이 저장되었습니다.', 'success'), 300);
     } catch {
-      Alert.alert('오류', '지구력 기록 저장에 실패했습니다.');
+      showResultModal('오류', '지구력 기록 저장에 실패했습니다.', 'error');
     }
   };
 
-  // 타이머
   const [timerRunning,  setTimerRunning]  = useState(false);
   const [timerSeconds,  setTimerSeconds]  = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -529,10 +518,9 @@ const RecodeScreen = ({
   );
 
   // ── 연속 완등 기록 저장 ──
-  // 명세: POST /records/series → { sequenceLog: string[], recordDate }
   const handleSaveConsecutiveRecord = async () => {
     if (selectedConsecutiveList.length === 0) {
-      Alert.alert('알림', '연속으로 완등한 난이도를 1개 이상 입력해주세요.');
+      showResultModal('알림', '연속으로 완등한 난이도를 1개 이상 입력해주세요.', 'info');
       return;
     }
     const payload = {
@@ -544,9 +532,9 @@ const RecodeScreen = ({
       await axios.post(SERIES_BASE_URL, payload);
       await fetchSeriesRecords();
       closeConsecutiveModal();
-      setTimeout(() => Alert.alert('성공', '연속 완등 기록이 저장되었습니다.'), 300);
+      setTimeout(() => showResultModal('성공', '연속 완등 기록이 저장되었습니다.', 'success'), 300);
     } catch {
-      Alert.alert('오류', '연속 완등 기록 저장에 실패했습니다.');
+      showResultModal('오류', '연속 완등 기록 저장에 실패했습니다.', 'error');
     }
   };
 
@@ -601,7 +589,6 @@ const RecodeScreen = ({
             <View style={styles.outerContainer}>
               {difficultyData.map((item: any, index: number) => (
                 <View key={item.color} style={styles.recordItemCard}>
-                  {/* ✅ 기존: recordIdLarge에 item.color(색 이름 문자열)를 표시 → 순서 번호로 수정 */}
                   <Text style={styles.recordIdLarge}>{index + 1}</Text>
                   <View style={styles.colorAndTypeColumn}>
                     <Text style={[styles.colorNameText, { color: item.hex }]}>{item.color}</Text>
@@ -698,6 +685,21 @@ const RecodeScreen = ({
         </View>
 
       </ScrollView>
+
+      {/* ─── 커스텀 알림 결과 모달 ─── */}
+      <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
+        <View style={styles.resultModalOverlay}>
+          <View style={styles.resultModalBox}>
+            <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>
+              {resultModalConfig.title}
+            </Text>
+            <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
+            <TouchableOpacity style={styles.resultModalBtn} onPress={() => setResultModalVisible(false)}>
+              <Text style={styles.resultModalBtnText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* ─── 삭제 확인 모달 ─── */}
       <Modal visible={isDeleteModalVisible} animationType="fade" transparent onRequestClose={cancelDelete}>
@@ -1077,6 +1079,14 @@ const styles = StyleSheet.create({
   detailButton: { borderWidth: 1, borderColor: '#A1BE44', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
   detailButtonText: { color: '#999999', fontSize: 13, fontWeight: '600' },
   totalScoreText: { color: '#A1BE44', fontSize: 36, fontWeight: 'bold', marginBottom: 10 },
+
+  // ─── 커스텀 알림 모달 전용 스타일 ───
+  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
+  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 }, // ✅ 15에서 8로 줄여서 제목과 내용 사이 간격을 좁힘
+  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 }, // ✅ 버튼과의 간격(25)은 유지, 글씨 줄간격을 22에서 20으로 줄임
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
 
   deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   deleteModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
