@@ -66,12 +66,17 @@ const CommunityScreen = ({ route, navigation }: any) => {
     try {
       const headers = await authHeader();
       const { data } = await axios.get(`${MEMBERS}/me`, { headers });
-      const d = data?.data?.data || data?.data || data;
-      uName = d.name || ''; 
-      uNick = d.nickname || d.name || ''; 
-      uId = d.id || d.memberId || null;
-      setMyNickname(uNick || uName); setMyUserId(uId);
-    } catch {}
+      // ✅ Depth 1단계 추가 적용
+      const d = data?.data?.data;
+      if (d) {
+        uName = d.name || ''; 
+        uNick = d.nickname || d.name || ''; 
+        uId = d.id || d.memberId || null;
+        setMyNickname(uNick || uName); setMyUserId(uId);
+      }
+    } catch (e: any) {
+      console.log('내 정보 로드 실패:', e.response?.data?.message || e.message);
+    }
     await fetchPosts(uName, uNick, uId, filterToUse);
   };
 
@@ -98,8 +103,9 @@ const CommunityScreen = ({ route, navigation }: any) => {
       const url = `${urlMap[filterToUse] || POSTS}?page=0&size=100`;
       
       const { data } = await axios.get(url, { headers });
-      const raw = data?.data?.data || data?.data || data;
-      let list = raw?.content || raw || [];
+      
+      // ✅ Depth 1단계 추가 적용
+      let list = data?.data?.data?.content ?? data?.data?.data ?? [];
 
       if (filterToUse === 'MY_APPLIED') {
         list = list.filter((item: any) => {
@@ -113,7 +119,9 @@ const CommunityScreen = ({ route, navigation }: any) => {
         setPosts(sortPosts(mappedList));
       }
     } catch (e: any) {
-      showResultModal('불러오기 실패', e?.response?.data?.message || '게시글을 가져오지 못했습니다.', 'error');
+      // ✅ 에러 메시지 처리 적용
+      const errorMessage = e.response?.data?.message || '게시글을 가져오지 못했습니다.';
+      showResultModal('불러오기 실패', errorMessage, 'error');
     }
   };
 
@@ -148,20 +156,25 @@ const CommunityScreen = ({ route, navigation }: any) => {
       let backendRes: any[] = [];
       try {
         const { data } = await axios.get(`${POSTS}/search?keyword=${encodeURIComponent(searchKeyword)}&page=0&size=100`, { headers });
-        const d = data?.data?.data || data?.data || data;
-        backendRes = Array.isArray(d?.content||d) ? d?.content||d : [];
-      } catch {}
-      const { data } = await axios.get(`${POSTS}?page=0&size=100`, { headers });
-      const d = data?.data?.data || data?.data || data;
-      const all: any[] = Array.isArray(d?.content||d) ? d?.content||d : [];
+        const resList = data?.data?.content ?? data?.data ?? [];
+        backendRes = Array.isArray(resList) ? resList : [];
+      } catch (e: any) {
+        console.log('백엔드 검색 오류:', e.response?.data?.message || e.message);
+      }
+      
+      const { data: allData } = await axios.get(`${POSTS}?page=0&size=100`, { headers });
+      const rawAll = allData?.data?.content ?? allData?.data ?? [];
+      const all: any[] = Array.isArray(rawAll) ? rawAll : [];
       const filtered = all.filter(i => [i.title,i.content,i.writerName,i.gymPlace].some(v => (v||'').toLowerCase().includes(kw)));
+      
       const map = new Map();
       [...backendRes, ...filtered].forEach(i => i?.id != null && map.set(i.id, i));
       
       const mappedList = mapPosts(Array.from(map.values()), '', myNickname, myUserId);
       setPosts(sortPosts(mappedList));
     } catch (e: any) {
-      showResultModal('검색 실패', e?.response?.data?.message || '검색에 실패했습니다.', 'error');
+      const errorMessage = e.response?.data?.message || '검색에 실패했습니다.';
+      showResultModal('검색 실패', errorMessage, 'error');
     }
   };
 
@@ -184,9 +197,10 @@ const CommunityScreen = ({ route, navigation }: any) => {
     try {
       const headers = await authHeader();
       await axios.post(`${POSTS}/${id}/like`, {}, { headers });
-    } catch {
+    } catch (e: any) {
       updatePost(id, { isLiked: liked, likeCount: (post: any) => liked ? post.likeCount+1 : post.likeCount-1 });
-      showResultModal('알림', '좋아요 요청을 처리할 수 없습니다.', 'error');
+      const errorMessage = e.response?.data?.message || '좋아요 요청을 처리할 수 없습니다.';
+      showResultModal('알림', errorMessage, 'error');
     }
   };
 
@@ -201,7 +215,8 @@ const CommunityScreen = ({ route, navigation }: any) => {
       }
     } catch (e: any) {
       updatePeople(id, joined);
-      showResultModal('알림', e?.response?.data?.message || '참여 요청을 처리할 수 없습니다.', 'error');
+      const errorMessage = e.response?.data?.message || '참여 요청을 처리할 수 없습니다.';
+      showResultModal('알림', errorMessage, 'error');
     }
   };
 
@@ -221,7 +236,8 @@ const CommunityScreen = ({ route, navigation }: any) => {
       showResultModal('성공', '게시글이 삭제되었습니다.', 'success');
       initData(currentFilter);
     } catch (e: any) {
-      showResultModal('삭제 실패', e?.response?.data?.message || '삭제할 수 없습니다.', 'error');
+      const errorMessage = e.response?.data?.message || '삭제할 수 없습니다.';
+      showResultModal('삭제 실패', errorMessage, 'error');
     }
     setDeleteTarget(null);
   };
@@ -232,7 +248,8 @@ const CommunityScreen = ({ route, navigation }: any) => {
       const url = isMine ? `${MEMBERS}/me` : `${MEMBERS}/${authorId}/profile`;
       const { data } = await axios.get(url, { headers });
       
-      const d = data?.data?.data || data?.data || data; 
+      // ✅ Depth 1단계 추가 적용
+      const d = data?.data; 
       
       if (!d) { showResultModal('프로필 조회 불가', '정보를 불러올 수 없습니다.', 'error'); return; }
       
@@ -280,8 +297,9 @@ const CommunityScreen = ({ route, navigation }: any) => {
         });
       }
       setTimeout(() => Animated.timing(detailAnim,{toValue:0,duration:300,useNativeDriver:true}).start(), 50);
-    } catch (e) {
-      showResultModal('프로필 조회 불가', '정보를 불러올 수 없습니다.', 'error');
+    } catch (e: any) {
+      const errorMessage = e.response?.data?.message || '정보를 불러올 수 없습니다.';
+      showResultModal('프로필 조회 불가', errorMessage, 'error');
     }
   };
 
@@ -364,7 +382,8 @@ const CommunityScreen = ({ route, navigation }: any) => {
       closeCreateModal(); 
       initData(currentFilter);
     } catch (e: any) {
-      showResultModal(`${isEditMode ? '수정' : '작성'} 실패`, e?.response?.data?.message || '처리에 실패했습니다.', 'error');
+      const errorMessage = e.response?.data?.message || '처리에 실패했습니다.';
+      showResultModal(`${isEditMode ? '수정' : '작성'} 실패`, errorMessage, 'error');
     }
   };
 

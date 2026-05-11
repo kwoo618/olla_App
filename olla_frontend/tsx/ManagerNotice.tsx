@@ -100,10 +100,13 @@ const ManagerNotice = ({ route, navigation }: any) => {
       const res = await axios.get(NOTICE_API, {
         params: { page: 0, size: 100, sort: 'createdAt,desc' },
       });
-      const list: Notice[] = res.data?.data?.content ?? res.data?.content ?? [];
+      // ✅ ApiResponse Depth 1단계 추가 적용
+      const list: Notice[] = res.data?.data?.data?.content ?? res.data?.data?.data ?? [];
       setNotices(list);
-    } catch {
-      showResultModal('오류', '공지사항을 불러오는데 실패했습니다.', 'error');
+    } catch (error: any) {
+      // ✅ 에러 메시지 처리 적용
+      const errorMessage = error.response?.data?.message || '공지사항을 불러오는데 실패했습니다.';
+      showResultModal('오류', errorMessage, 'error');
     } finally {
       if (!isRefresh) setLoading(false);
     }
@@ -118,9 +121,12 @@ const ManagerNotice = ({ route, navigation }: any) => {
   const fetchNoticeDetail = async (id: number): Promise<Notice | null> => {
     try {
       const res = await axios.get(`${NOTICE_API}/${id}`);
-      return res.data?.data ?? res.data ?? null;
-    } catch {
-      showResultModal('오류', '공지 정보를 불러오는데 실패했습니다.', 'error');
+      // ✅ ApiResponse Depth 1단계 추가 적용
+      return res.data?.data?.data ?? null;
+    } catch (error: any) {
+      // ✅ 에러 메시지 처리 적용
+      const errorMessage = error.response?.data?.message || '공지 정보를 불러오는데 실패했습니다.';
+      showResultModal('오류', errorMessage, 'error');
       return null;
     }
   };
@@ -190,6 +196,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
       showResultModal('성공', modalMode === 'create' ? '새 공지가 등록되었습니다.' : '공지가 수정되었습니다.', 'success');
       await fetchNotices(true); // 저장 후에도 부드러운 갱신을 위해 중앙 로딩 생략
     } catch (error: any) {
+      // ✅ 에러 메시지 처리 적용
       const msg = error?.response?.data?.message ?? '저장에 실패했습니다.';
       showResultModal('오류', msg, 'error');
     } finally {
@@ -214,8 +221,10 @@ const ManagerNotice = ({ route, navigation }: any) => {
       cancelDelete();
       showResultModal('성공', '공지사항이 삭제되었습니다.', 'success');
       await fetchNotices(true); // 삭제 후에도 부드러운 갱신
-    } catch {
-      showResultModal('오류', '삭제에 실패했습니다.', 'error');
+    } catch (error: any) {
+      // ✅ 에러 메시지 처리 적용
+      const errorMessage = error.response?.data?.message || '삭제에 실패했습니다.';
+      showResultModal('오류', errorMessage, 'error');
     }
   };
 

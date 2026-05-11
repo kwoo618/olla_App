@@ -52,6 +52,7 @@ const ManagerUser = ({ navigation }: any) => {
   useEffect(() => {
     checkAdminAndFetchUsers();
   }, []);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await checkAdminAndFetchUsers(true); // 새로고침 시에는 중앙 로딩 스피너 무시
@@ -82,10 +83,13 @@ const ManagerUser = ({ navigation }: any) => {
         headers: { Authorization: `Bearer ${token}` },
         params: { size: 1000, sort: 'id,desc' } 
       });
-      const memberList = response.data?.data?.content || response.data?.data || [];
-      setUsers(memberList);
-    } catch (error) {
-      showResultModal("오류", "회원 목록을 불러오는데 실패했습니다.", "error");
+      // ✅ ApiResponse Depth 1단계 추가 적용
+      const raw = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
+      setUsers(Array.isArray(raw) ? raw : []);
+    } catch (error: any) {
+      // ✅ 에러 메시지 처리 적용
+      const errorMessage = error.response?.data?.message || "회원 목록을 불러오는데 실패했습니다.";
+      showResultModal("오류", errorMessage, "error");
     }
   };
 
@@ -121,7 +125,9 @@ const ManagerUser = ({ navigation }: any) => {
       closeAddModal();
       fetchUsers(token!); 
     } catch (error: any) {
-      showResultModal("오류", "회원 등록 중 오류가 발생했습니다.", "error");
+      // ✅ 에러 메시지 처리 적용 (예: "이미 등록된 전화번호입니다.")
+      const errorMessage = error.response?.data?.message || "회원 등록 중 오류가 발생했습니다.";
+      showResultModal("오류", errorMessage, "error");
     }
   };
 
@@ -134,7 +140,9 @@ const ManagerUser = ({ navigation }: any) => {
       showResultModal("성공", "회원이 삭제되었습니다.", "success");
       fetchUsers(token!); 
     } catch (error: any) {
-      showResultModal("오류", "회원 삭제에 실패했습니다.", "error");
+      // ✅ 에러 메시지 처리 적용
+      const errorMessage = error.response?.data?.message || "회원 삭제에 실패했습니다.";
+      showResultModal("오류", errorMessage, "error");
     }
   };
 

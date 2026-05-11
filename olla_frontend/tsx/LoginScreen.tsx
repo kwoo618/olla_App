@@ -48,17 +48,24 @@ const LoginScreen = ({ navigation }: any) => {
         password: password,
       });
 
-      const token = response.data?.data?.accessToken;
-      const role = response.data?.data?.role;
+      console.log('=== 로그인 응답 전체 ===');
+      console.log(JSON.stringify(response.data, null, 2));
+
+      const token = response.data?.data?.data?.accessToken;
+      const refreshToken = response.data?.data?.data?.refreshToken;
+      const role = response.data?.data?.data?.role;
 
       if (token) {
         await AsyncStorage.setItem('userToken', token);
+        if (refreshToken) await AsyncStorage.setItem('refreshToken', refreshToken);
         if (role) await AsyncStorage.setItem('userRole', role);
+        
         navigation.replace('Home');
       } else {
         showResultModal('로그인 오류', '인증 정보를 찾을 수 없습니다.', 'error');
       }
     } catch (error: any) {
+      // ✅ 에러 메시지 처리 통일
       const errorMessage = error.response?.data?.message || '아이디 또는 비밀번호를 확인해주세요.';
       showResultModal('로그인 실패', errorMessage, 'error');
     }
@@ -73,7 +80,7 @@ const LoginScreen = ({ navigation }: any) => {
     }, 100);
   };
 
-  // 💡 포커스를 잃었을 때 호출 (키보드 닫기 및 스크롤 비활성화)
+  // 포커스를 잃었을 때 호출 (키보드 닫기 및 스크롤 비활성화)
   const handleBlur = () => {
     setFocusedField(null);
     setIsScrollEnabled(false);
@@ -91,7 +98,7 @@ const LoginScreen = ({ navigation }: any) => {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        // 💡 입력창을 눌렀을 때만 스크롤이 가능하게 설정
+        // 입력창을 눌렀을 때만 스크롤이 가능하게 설정
         scrollEnabled={isScrollEnabled}
       >
         <View style={styles.innerContainer}>
@@ -116,7 +123,7 @@ const LoginScreen = ({ navigation }: any) => {
               onSubmitEditing={goToPassword}
               onFocus={() => {
                 setFocusedField('loginId');
-                setIsScrollEnabled(true); // 💡 포커스 시 스크롤 활성화
+                setIsScrollEnabled(true);
                 setTimeout(() => {
                   scrollViewRef.current?.scrollTo({ y: 120, animated: true });
                 }, 100);
@@ -137,7 +144,7 @@ const LoginScreen = ({ navigation }: any) => {
               onSubmitEditing={handleLogin}
               onFocus={() => {
                 setFocusedField('password');
-                setIsScrollEnabled(true); // 💡 포커스 시 스크롤 활성화
+                setIsScrollEnabled(true);
                 setTimeout(() => {
                   scrollViewRef.current?.scrollTo({ y: 220, animated: true });
                 }, 100);
@@ -158,7 +165,7 @@ const LoginScreen = ({ navigation }: any) => {
           </View>
         </View>
 
-        {/* 💡 하단 여백: 키보드 공간 확보용 */}
+        {/* 하단 여백: 키보드 공간 확보용 */}
         <View style={{ height: 50 }} />
       </ScrollView>
 
@@ -201,8 +208,11 @@ const styles = StyleSheet.create({
   middleText: { color: '#888888', fontSize: 14, alignSelf: 'flex-start', marginBottom: 8, marginLeft: 5 },
   input: { width: '100%', height: 50, borderWidth: 1, borderColor: '#444444', color: '#ffffff', borderRadius: 10, paddingHorizontal: 15, marginBottom: 15 },
   focusedInput: { borderColor: '#A1BE44' },
+  
   button: { width: '100%', height: 50, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', borderRadius: 10, marginTop: 10 },
-  buttonText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
+  // 버튼 텍스트 색상을 검정색으로 수정하여 다른 화면들과 통일하고 대비를 높임
+  buttonText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
+  
   signupContainer: { flexDirection: 'row', marginTop: 30 },
   signupText: { color: '#888888', fontSize: 14 },
   signupLink: { color: '#2ecc71', fontSize: 14, fontWeight: 'bold' },

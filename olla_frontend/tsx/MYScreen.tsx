@@ -39,9 +39,7 @@ const resolveMembershipType = (
 };
 
 const MYScreen = ({ navigation }: any) => {
-  // 새로고침 상태 추가
   const [refreshing, setRefreshing] = useState(false);
-
   const isFocused = useIsFocused();
   const [loading, setLoading] = useState(true);
 
@@ -91,9 +89,11 @@ const MYScreen = ({ navigation }: any) => {
 
       // [GET] 내 정보 조회
       const userRes = await axios.get(`${API_BASE_URL}/members/me`, { headers });
-      const data = userRes.data.data || userRes.data;
+      // ✅ Depth 1단계 추가 적용
+      const data = userRes.data?.data?.data;
 
-      // 💡 저장된 값이나 서버에서 온 값에 'ADMIN'이라는 글자가 포함되어 있으면 무조건 true!
+      if (!data) return;
+
       const checkStored = String(storedRole || '').toUpperCase();
       const checkDataRole = String(data.role || '').toUpperCase();
       const checkAuth = String(data.authority || '').toUpperCase();
@@ -130,14 +130,15 @@ const MYScreen = ({ navigation }: any) => {
         });
       }
 
-      // ✅ [GET] 오늘 출석 여부 확인
+      // [GET] 오늘 출석 여부 확인
       let attendedToday = false;
       try {
         const today = new Date();
         const yearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
         const visitRes = await axios.get(`${API_BASE_URL}/visit/my-history?yearMonth=${yearMonth}`, { headers });
         
-        let rawData = visitRes.data?.data;
+        // ✅ Depth 1단계 추가 적용
+        let rawData = visitRes.data?.data?.data;
         if (rawData && !Array.isArray(rawData) && rawData.data) rawData = rawData.data;
         
         if (Array.isArray(rawData)) {
@@ -156,14 +157,15 @@ const MYScreen = ({ navigation }: any) => {
           
           attendedToday = daysAttended.includes(todayDate);
         }
-      } catch (e) {
-        console.log('출석 확인 실패:', e);
+      } catch (error: any) {
+        console.log('출석 확인 실패:', error.response?.data?.message || error.message);
       }
 
       // [GET] 회원권 정보 조회
       try {
         const memRes = await axios.get(`${API_BASE_URL}/memberships/me`, { headers });
-        const memData = memRes.data?.data ?? memRes.data;
+        // ✅ Depth 1단계 추가 적용
+        const memData = memRes.data?.data?.data;
 
         if (memData) {
           const today = new Date();
@@ -193,7 +195,6 @@ const MYScreen = ({ navigation }: any) => {
               ? `${memData.startDate} ~ ${memData.endDate}`
               : '-';
 
-          // ✅ 상태 계산
           let currentStatus = memData.status === 'ACTIVE' ? '이용중' : memData.status === 'HOLDING' ? '정지중' : '구매필요';
           
           if (isCountType && currentStatus === '이용중') {
@@ -211,18 +212,20 @@ const MYScreen = ({ navigation }: any) => {
         } else {
           setMemInfo({ type: '구매 필요', period: '-', status: '비회원', remainingDays: -1, remainingCount: -1, isCountType: false });
         }
-      } catch (e) {
-        console.log('이용권 정보 로드 실패', e);
+      } catch (error: any) {
+        console.log('이용권 정보 로드 실패:', error.response?.data?.message || error.message);
         setMemInfo({ type: '구매 필요', period: '-', status: '비회원', remainingDays: -1, remainingCount: -1, isCountType: false });
       }
 
-    } catch (error) {
-      console.error('데이터 로드 실패:', error);
+    } catch (error: any) {
+      // ✅ 에러 메시지 처리 적용
+      const errorMessage = error.response?.data?.message || '데이터를 불러오는데 실패했습니다.';
+      console.error('데이터 로드 실패:', errorMessage);
     } finally {
       setLoading(false);
     }
   };
-  // onRefresh 작성
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchMyInfo();
@@ -258,8 +261,10 @@ const MYScreen = ({ navigation }: any) => {
       showResultModal('성공', '정보가 저장되었습니다.', 'success');
       fetchMyInfo();
       closeProfileModal();
-    } catch (error) {
-      showResultModal('오류', '저장에 실패했습니다.', 'error');
+    } catch (error: any) {
+      // ✅ 에러 메시지 처리 적용
+      const errorMessage = error.response?.data?.message || '저장에 실패했습니다.';
+      showResultModal('오류', errorMessage, 'error');
     }
   };
 
@@ -275,8 +280,9 @@ const MYScreen = ({ navigation }: any) => {
           headers: { Authorization: `Bearer ${accessToken}` }, timeout: 3000
         });
       }
-    } catch (error) {
-      console.log('서버 로그아웃 실패:', error);
+    } catch (error: any) {
+      // ✅ 에러 메시지 처리 적용
+      console.log('서버 로그아웃 실패:', error.response?.data?.message || error.message);
     } finally {
       await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole']);
       setLogoutModalVisible(false);
@@ -291,15 +297,17 @@ const MYScreen = ({ navigation }: any) => {
       await axios.delete(`${API_BASE_URL}/members/me`, { headers: { Authorization: `Bearer ${userToken}` } });
       showResultModal('성공', '회원탈퇴가 완료되었습니다.', 'success');
     } catch (error: any) {
-      console.log('회원탈퇴 실패:', error);
-      showResultModal('오류', error.response?.data?.message || '회원탈퇴에 실패했습니다.', 'error');
+      // ✅ 에러 메시지 처리 적용
+      const errorMessage = error.response?.data?.message || '회원탈퇴에 실패했습니다.';
+      console.log('회원탈퇴 실패:', errorMessage);
+      showResultModal('오류', errorMessage, 'error');
       return;
     } finally {
       await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole']);
       setDeleteModalVisible(false);
       setTimeout(() => {
         navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
-      }, 1500); // 사용자가 알림을 확인할 시간을 약간 부여
+      }, 1500);
     }
   };
 
@@ -405,7 +413,6 @@ const MYScreen = ({ navigation }: any) => {
       <ScrollView 
         showsVerticalScrollIndicator={false} 
         contentContainerStyle={styles.scrollContent}
-        // RefreshControl 추가
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
         }
@@ -577,7 +584,7 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 💡 멤버십 일시정지 모달 (터치 가로채기 차단 구조 적용) */}
+      {/* 멤버십 일시정지 모달 */}
       <Modal visible={isPauseModalVisible} transparent={true} animationType="fade">
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={closePauseModal} />
@@ -602,7 +609,7 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 💡 문의하기 모달 (터치 가로채기 차단 구조 적용) */}
+      {/* 문의하기 모달 */}
       <Modal visible={isContactModalVisible} transparent={true} animationType="fade">
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={closeContactModal} />
@@ -631,7 +638,7 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 💡 프로필 수정 모달 (터치 가로채기 차단 구조 적용) */}
+      {/* 프로필 수정 모달 */}
       <Modal visible={isProfileModalVisible} transparent={true} animationType="fade">
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={closeProfileModal} />

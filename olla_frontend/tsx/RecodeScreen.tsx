@@ -96,7 +96,7 @@ const RecodeScreen = ({
   consecutiveData, setConsecutiveData,
 }: any) => {
 
-  const [refreshing, setRefreshing] = useState(false); // 새로고침 
+  const [refreshing, setRefreshing] = useState(false);
   
   const loadAllData = async () => {
     setEnduranceData([]);
@@ -108,7 +108,6 @@ const RecodeScreen = ({
       fetchSeriesRecords()
     ]);
   };
-
 
   const [expandedSection, setExpandedSection] = useState<string | null>(
     route?.params?.openSection ?? null
@@ -125,7 +124,7 @@ const RecodeScreen = ({
   };
 
   useEffect(() => {
-    loadAllData(); // 기존 개별 호출 대신 묶은 함수 호출
+    loadAllData();
     if (route?.params?.openSection) setExpandedSection(route.params.openSection);
   }, [route?.params?.openSection]);
 
@@ -139,8 +138,10 @@ const RecodeScreen = ({
   // ── 멤버십 확인 ──
   const checkMembership = async () => {
     try {
-      const res  = await axios.get(MEMBERSHIP_URL).catch(() => null);
-      const data = res?.data?.data ?? res?.data;
+      const res = await axios.get(MEMBERSHIP_URL);
+      // Depth 적용: res.data.data
+      const data = res.data?.data?.data; 
+      
       if (data) {
         const typeStr = String(data.membershipType ?? '').toUpperCase();
         if (typeStr.includes('COUNT') || typeStr.includes('횟수')) {
@@ -171,10 +172,10 @@ const RecodeScreen = ({
   // ── 초보벽 최고기록 조회 ──
   const fetchBestRecords = async () => {
     try {
-      const res  = await axios.get(`${API_BASE_URL}/records/beginner/best`);
-      const raw  = res.data?.data ?? res.data ?? [];
-      const list: BeginnerRecord[] = Array.isArray(raw) ? raw
-        : Array.isArray(raw?.list) ? raw.list : [];
+      const res = await axios.get(`${API_BASE_URL}/records/beginner/best`);
+      // Depth 적용
+      const raw = res.data?.data?.data ?? [];
+      const list: BeginnerRecord[] = Array.isArray(raw) ? raw : Array.isArray(raw?.list) ? raw.list : [];
 
       setDifficultyData((prevData: any[]) =>
         prevData.map((item: any) => {
@@ -211,16 +212,17 @@ const RecodeScreen = ({
           return { ...item, type: null, current: 0, status: '미기록' };
         })
       );
-    } catch (error) {
-      console.error('최고 기록 로드 실패:', error);
+    } catch (error: any) {
+      console.error('최고 기록 로드 실패:', error.response?.data?.message || error.message);
     }
   };
 
   // ── 지구력 기록 조회 ──
   const fetchEnduranceRecords = async () => {
     try {
-      const res  = await axios.get(`${ENDURANCE_BASE_URL}/history`);
-      const raw  = res.data?.data ?? res.data ?? [];
+      const res = await axios.get(`${ENDURANCE_BASE_URL}/history`);
+      // Depth 적용
+      const raw = res.data?.data ?? [];
       const list: EnduranceRecord[] = Array.isArray(raw) ? raw : [];
 
       const mapped = list.map((item: EnduranceRecord) => ({
@@ -233,16 +235,17 @@ const RecodeScreen = ({
       }));
 
       setEnduranceData(mapped);
-    } catch (error) {
-      console.error('지구력 기록 로드 실패:', error);
+    } catch (error: any) {
+      console.error('지구력 기록 로드 실패:', error.response?.data?.message || error.message);
     }
   };
 
   // ── 연속 완등 기록 조회 ──
   const fetchSeriesRecords = async () => {
     try {
-      const res  = await axios.get(`${SERIES_BASE_URL}/history`);
-      const raw  = res.data?.data ?? res.data ?? [];
+      const res = await axios.get(`${SERIES_BASE_URL}/history`);
+      // Depth 적용
+      const raw = res.data?.data ?? [];
       const list: SeriesRecord[] = Array.isArray(raw) ? raw : [];
 
       const mapped = list.map((item: SeriesRecord) => ({
@@ -256,8 +259,8 @@ const RecodeScreen = ({
       }));
 
       setConsecutiveData(mapped);
-    } catch (error) {
-      console.error('연속 완등 기록 로드 실패:', error);
+    } catch (error: any) {
+      console.error('연속 완등 기록 로드 실패:', error.response?.data?.message || error.message);
     }
   };
 
@@ -286,8 +289,10 @@ const RecodeScreen = ({
       else if (itemToDelete.type === 'consecutive') { await axios.delete(`${SERIES_BASE_URL}/${id}`);    await fetchSeriesRecords();     }
       setDeleteModalVisible(false);
       setItemToDelete(null);
-    } catch {
-      showResultModal('오류', '기록 삭제에 실패했습니다.', 'error');
+    } catch (error: any) {
+      // 에러 메시지 적용
+      const errorMessage = error.response?.data?.message || '기록 삭제에 실패했습니다.';
+      showResultModal('오류', errorMessage, 'error');
     }
   };
 
@@ -349,8 +354,10 @@ const RecodeScreen = ({
       await fetchBestRecords();
       closeRecordModal();
       setTimeout(() => showResultModal('성공', '등반 기록이 저장되었습니다.', 'success'), 300);
-    } catch {
-      showResultModal('오류', '데이터 저장에 실패했습니다.', 'error');
+    } catch (error: any) {
+      // 에러 메시지 적용
+      const errorMessage = error.response?.data?.message || '데이터 저장에 실패했습니다.';
+      showResultModal('오류', errorMessage, 'error');
     }
   };
 
@@ -459,8 +466,10 @@ const RecodeScreen = ({
       await fetchEnduranceRecords();
       closeEnduranceModal();
       setTimeout(() => showResultModal('성공', '지구력 기록이 저장되었습니다.', 'success'), 300);
-    } catch {
-      showResultModal('오류', '지구력 기록 저장에 실패했습니다.', 'error');
+    } catch (error: any) {
+      // 에러 메시지 적용
+      const errorMessage = error.response?.data?.message || '지구력 기록 저장에 실패했습니다.';
+      showResultModal('오류', errorMessage, 'error');
     }
   };
 
@@ -547,8 +556,10 @@ const RecodeScreen = ({
       await fetchSeriesRecords();
       closeConsecutiveModal();
       setTimeout(() => showResultModal('성공', '연속 완등 기록이 저장되었습니다.', 'success'), 300);
-    } catch {
-      showResultModal('오류', '연속 완등 기록 저장에 실패했습니다.', 'error');
+    } catch (error: any) {
+      // 에러 메시지 적용
+      const errorMessage = error.response?.data?.message || '연속 완등 기록 저장에 실패했습니다.';
+      showResultModal('오류', errorMessage, 'error');
     }
   };
 

@@ -43,6 +43,7 @@ const PersonalScreen = ({ navigation, route }: any) => {
     }
 
     try {
+      // 1. 회원가입 요청
       const response = await axios.post(`${API_BASE_URL}/auth/signup`, {
         ...accountData,
         role: 'USER',
@@ -63,33 +64,35 @@ const PersonalScreen = ({ navigation, route }: any) => {
         }
       });
 
-      if (response.status === 200 || response.status === 201) {
-        
-        try {
-          const loginResponse = await axios.post(`${API_BASE_URL}/auth/login`, {
-            loginId: accountData.loginId,
-            password: accountData.password
-          });
+      // Axios는 2xx 응답일 때 예외를 던지지 않으므로, 여기까지 왔으면 성공입니다.
+      try {
+        // 2. 자동 로그인 요청
+        const loginResponse = await axios.post(`${API_BASE_URL}/auth/login`, {
+          loginId: accountData.loginId,
+          password: accountData.password
+        });
 
-          const accessToken = loginResponse.data?.data?.accessToken || loginResponse.data?.accessToken;
-          const refreshToken = loginResponse.data?.data?.refreshToken || loginResponse.data?.refreshToken;
+        // ✅ ApiResponse Depth 1단계 추가 반영 (loginResponse.data.data)
+        const accessToken = loginResponse.data?.data?.data?.accessToken;
+        const refreshToken = loginResponse.data?.data?.data?.refreshToken;
 
-          if (accessToken) {
-            await AsyncStorage.setItem('userToken', accessToken);
-            if (refreshToken) {
-              await AsyncStorage.setItem('refreshToken', refreshToken);
-            }
+        if (accessToken) {
+          await AsyncStorage.setItem('userToken', accessToken);
+          if (refreshToken) {
+            await AsyncStorage.setItem('refreshToken', refreshToken);
           }
-        } catch (loginError) {
-          console.error("자동 로그인 에러:", loginError);
         }
-
-        // ✅ Alert 제거 후 바로 화면 이동
-        navigation.replace('Loading', { type: 'signup' });
+      } catch (loginError: any) {
+        console.error("자동 로그인 에러:", loginError.response?.data?.message || loginError.message);
       }
+
+      // ✅ Alert 제거 후 바로 화면 이동
+      navigation.replace('Loading', { type: 'signup' });
+      
     } catch (error: any) {
-      console.error("회원가입 에러:", error.response?.data);
+      // ✅ 에러 메시지 처리 반영 (error.response.data.message)
       const errorMsg = error.response?.data?.message || '서버와의 통신 중 오류가 발생했습니다.';
+      console.error("회원가입 에러:", errorMsg);
       showResultModal('가입 실패', errorMsg, 'error');
     }
   };

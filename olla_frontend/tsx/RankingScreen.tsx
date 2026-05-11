@@ -153,6 +153,7 @@ const formatTime = (seconds: number): string => {
 const RankingScreen = ({ route }: any) => {
   // 새로고침 상태 추가
   const [refreshing, setRefreshing] = useState(false);
+  
   // 최초 데이터 로드 부분을 함수로 묶고 onRefresh 작성
   const loadAllData = async () => {
     const userData = await fetchMyProfile();
@@ -180,7 +181,7 @@ const RankingScreen = ({ route }: any) => {
 
   // 최초 데이터 로드
   useEffect(() => {
-    loadAllData(); // 기존 익명 async 함수 호출 대신
+    loadAllData();
   }, []);
 
   const onRefresh = useCallback(async () => {
@@ -192,8 +193,10 @@ const RankingScreen = ({ route }: any) => {
   // ── 내 프로필 ──
   const fetchMyProfile = async (): Promise<{ id: number | null; nickname: string }> => {
     try {
-      const res  = await axios.get(MY_PROFILE_URL);
-      const data = res.data?.data ?? res.data;
+      const res = await axios.get(MY_PROFILE_URL);
+      // ✅ 1. Depth 1단계 추가: res.data.data
+      const data = res.data?.data?.data; 
+      
       if (data) {
         const nickname = data.nickname ?? data.name ?? '알 수 없음';
         const id       = data.memberId ?? data.id ?? null;
@@ -201,8 +204,8 @@ const RankingScreen = ({ route }: any) => {
         if (id !== null) setMyMemberId(Number(id));
         return { id: id !== null ? Number(id) : null, nickname };
       }
-    } catch (e) {
-      console.log('내 프로필 로드 실패', e);
+    } catch (error: any) {
+      console.log('내 프로필 로드 실패:', error.response?.data?.message || error.message);
     }
     return { id: null, nickname: '알 수 없음' };
   };
@@ -222,10 +225,11 @@ const RankingScreen = ({ route }: any) => {
       let myBestList: BeginnerRecord[] = [];
       try {
         const res = await axios.get(MY_BEGINNER_BEST_URL);
-        const raw = res.data?.data ?? res.data;
+        // ✅ 1. Depth 1단계 추가
+        const raw = res.data?.data?.data;
         myBestList = Array.isArray(raw) ? raw : (Array.isArray(raw?.list) ? raw.list : []);
-      } catch (e) {
-        console.log('내 초보벽 베스트 기록 로드 실패', e);
+      } catch (error: any) {
+        console.log('내 초보벽 베스트 기록 로드 실패:', error.response?.data?.message || error.message);
       }
 
       let allData: any[] = [];
@@ -233,7 +237,9 @@ const RankingScreen = ({ route }: any) => {
       rankResponses.forEach((response, colorIdx) => {
         const currentColor = colors[colorIdx];
         const maxHold      = MAX_HOLDS[currentColor.name] ?? 0;
-        const rawList      = extractList(response.data?.data ?? response.data);
+        
+        // ✅ 1. Depth 1단계 추가
+        const rawList = extractList(response.data?.data);
 
         // 랭킹 목록 파싱
         const mappedList = rawList.map((item: any, i: number) => {
@@ -299,8 +305,9 @@ const RankingScreen = ({ route }: any) => {
       });
 
       setBeginnerRankings(allData);
-    } catch (e) {
-      console.error('초보벽 랭킹 로드 실패:', e);
+    } catch (error: any) {
+      // ✅ 2. 에러 메시지 처리
+      console.error('초보벽 랭킹 로드 실패:', error.response?.data?.message || error.message);
     }
   };
 
@@ -308,8 +315,9 @@ const RankingScreen = ({ route }: any) => {
   // 명세: { id, memberId, name, oneWayCount, additionalBlocks, timeSeconds, totalScore, recordDate, ranking? }
   const fetchEnduranceRankings = async () => {
     try {
-      const res     = await axios.get(RANKING_ENDURANCE_URL);
-      const rawList = extractList(res.data?.data ?? res.data);
+      const res = await axios.get(RANKING_ENDURANCE_URL);
+      // ✅ 1. Depth 1단계 추가
+      const rawList = extractList(res.data?.data);
 
       const mapped = rawList.map((item: EnduranceRankItem, i: number) => ({
         id:               item.memberId ?? `rank-endurance-${i}`,
@@ -325,8 +333,9 @@ const RankingScreen = ({ route }: any) => {
       }));
 
       setEnduranceRankings(mapped);
-    } catch (e) {
-      console.error('지구력 랭킹 로드 실패:', e);
+    } catch (error: any) {
+      // ✅ 2. 에러 메시지 처리
+      console.error('지구력 랭킹 로드 실패:', error.response?.data?.message || error.message);
     }
   };
 
@@ -334,8 +343,9 @@ const RankingScreen = ({ route }: any) => {
   // 명세: { id, memberId, name, sequenceLog: string[], totalScore, recordDate }
   const fetchConsecutiveRankings = async () => {
     try {
-      const res     = await axios.get(RANKING_SERIES_URL);
-      const rawList = extractList(res.data?.data ?? res.data);
+      const res = await axios.get(RANKING_SERIES_URL);
+      // ✅ 1. Depth 1단계 추가
+      const rawList = extractList(res.data?.data);
 
       const mapped = rawList.map((item: SeriesRankItem, i: number) => {
         const colorHexList = (item.sequenceLog ?? []).map(diffEnum => {
@@ -354,8 +364,9 @@ const RankingScreen = ({ route }: any) => {
       });
 
       setConsecutiveRankings(mapped);
-    } catch (e) {
-      console.error('연속 완등 랭킹 로드 실패:', e);
+    } catch (error: any) {
+      // ✅ 2. 에러 메시지 처리
+      console.error('연속 완등 랭킹 로드 실패:', error.response?.data?.message || error.message);
     }
   };
 

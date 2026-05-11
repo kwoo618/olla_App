@@ -16,7 +16,7 @@ const VISIT_TODAY_API_URL = `${API_BASE_URL}/admin/visits/today`;
 const QR_SCAN_API_URL     = `${API_BASE_URL}/admin/visits/scan`; 
 
 const ManagerDashboard = ({ navigation }: any) => {
-  const [refreshing, setRefreshing] = useState(false); // 새로고침
+  const [refreshing, setRefreshing] = useState(false);
   
   const [loading, setLoading] = useState(true);
   const [notices, setNotices] = useState<any[]>([]);
@@ -64,7 +64,6 @@ const ManagerDashboard = ({ navigation }: any) => {
     checkAdminAndFetchData();
   }, []);
 
-  // onRefresh  
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await checkAdminAndFetchData();
@@ -88,8 +87,8 @@ const ManagerDashboard = ({ navigation }: any) => {
         fetchVisits(token),
         fetchActiveMemberships(token),
       ]);
-    } catch (error) {
-      console.error('데이터 로딩 실패:', error);
+    } catch (error: any) {
+      console.error('데이터 로딩 실패:', error.response?.data?.message || error.message);
     } finally {
       setLoading(false);
     }
@@ -101,10 +100,11 @@ const ManagerDashboard = ({ navigation }: any) => {
         headers: { Authorization: `Bearer ${token}` },
         params: { page: 0, size: 2, sort: 'id,desc' },
       });
-      const noticeList = response.data?.data?.content || response.data?.data || [];
+      // ✅ Depth 1단계 추가 반영
+      const noticeList = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
       setNotices(Array.isArray(noticeList) ? noticeList : []);
-    } catch (error) {
-      console.error('공지사항 로드 실패', error);
+    } catch (error: any) {
+      console.error('공지사항 로드 실패:', error.response?.data?.message || error.message);
     }
   };
 
@@ -122,16 +122,10 @@ const ManagerDashboard = ({ navigation }: any) => {
         params: { page: 0, size: 20, sort: 'id,desc' },
       });
 
-      const raw =
-        response.data?.data?.data?.content ||
-        response.data?.data?.content ||
-        response.data?.data ||
-        [];
+      // ✅ Depth 1단계 추가 반영 (복잡한 껍데기 제거)
+      const raw = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
       const list = Array.isArray(raw) ? raw : [];
-      const totalElements =
-        response.data?.data?.data?.totalElements ??
-        response.data?.data?.totalElements ??
-        list.length;
+      const totalElements = response.data?.data?.totalElements ?? list.length;
 
       const mappedList = list.map((item: any) => ({
         ...item,
@@ -141,7 +135,7 @@ const ManagerDashboard = ({ navigation }: any) => {
       setPosts(sortPosts(mappedList).slice(0, 2));
       setMetrics(prev => ({ ...prev, totalPosts: totalElements }));
     } catch (error: any) {
-      console.error('게시글 로드 실패', error?.response?.data || error.message);
+      console.error('게시글 로드 실패:', error.response?.data?.message || error.message);
     }
   };
 
@@ -151,38 +145,39 @@ const ManagerDashboard = ({ navigation }: any) => {
         headers: { Authorization: `Bearer ${token}` },
         params: { page: 0, size: 2, sort: 'id,desc' },
       });
-      const memberList    = response.data?.data?.content || response.data?.data || [];
+      // ✅ Depth 1단계 추가 반영
+      const memberList = response.data?.data?.content ?? response.data?.data ?? [];
       const totalElements = response.data?.data?.totalElements ?? memberList.length;
+      
       setRecentMembers(Array.isArray(memberList) ? memberList : []);
       setMetrics(prev => ({ ...prev, totalMembers: totalElements }));
-    } catch (error) {
-      console.error('회원 데이터 로드 실패', error);
+    } catch (error: any) {
+      console.error('회원 데이터 로드 실패:', error.response?.data?.message || error.message);
     }
   };
 
-  // ✅ 방문자 수 중복 카운트 방지 처리 (회원 목록에서 고유 방문자 수 필터링)
   const fetchVisits = async (token: string) => {
     try {
       const response = await axios.get(MEMBER_API_URL, {
         headers: { Authorization: `Bearer ${token}` },
-        params: { size: 1000 } // 전체 회원을 불러와서 직접 필터링
+        params: { size: 1000 }
       });
-      const list = response.data?.data?.content || response.data?.data || [];
+      // ✅ Depth 1단계 추가 반영
+      const list = response.data?.data?.content ?? response.data?.data ?? [];
       
-      // 방문 플래그가 있는 고유 인원만 카운트
       const uniqueVisitors = list.filter((item: any) => {
         const member = item.member || item;
         return member.visitedToday === true || member.todayVisit === true || member.hasVisited === true;
       }).length;
 
       setMetrics(prev => ({ ...prev, todayVisitors: uniqueVisitors }));
-    } catch (error) {
-      console.error('고유 방문자 데이터 로드 실패, 기존 API로 폴백', error);
+    } catch (error: any) {
+      console.error('고유 방문자 데이터 로드 실패, 기존 API로 폴백:', error.response?.data?.message || error.message);
       try {
         const fallbackRes = await axios.get(VISIT_TODAY_API_URL, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        const todayCount = fallbackRes.data?.data?.totalVisitsToday ?? 0;
+        const todayCount = fallbackRes.data?.data?.totalVisitsToday ?? fallbackRes.data?.data ?? 0;
         setMetrics(prev => ({ ...prev, todayVisitors: todayCount }));
       } catch (err) {}
     }
@@ -193,7 +188,8 @@ const ManagerDashboard = ({ navigation }: any) => {
       const response = await axios.get(`${MEMBERSHIP_API_URL}/active`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const d = response.data?.data;
+      // ✅ Depth 1단계 추가 반영
+      const d = response.data?.data?.data;
       let activeCount = 0;
       if (typeof d === 'number') activeCount = d;
       else if (typeof d?.totalElements === 'number') activeCount = d.totalElements;
@@ -201,7 +197,6 @@ const ManagerDashboard = ({ navigation }: any) => {
       else if (typeof d?.total === 'number') activeCount = d.total;
       else if (Array.isArray(d)) activeCount = d.length;
       else if (Array.isArray(d?.content)) activeCount = d.totalElements ?? d.content.length;
-      else if (typeof response.data === 'number') activeCount = response.data;
 
       setMetrics(prev => ({ ...prev, activeMemberships: activeCount }));
     } catch (error: any) {
@@ -211,7 +206,7 @@ const ManagerDashboard = ({ navigation }: any) => {
           headers: { Authorization: `Bearer ${token}` },
           params: { size: 1000 }
         });
-        const list = fallbackRes.data?.data?.content || fallbackRes.data?.data || [];
+        const list = fallbackRes.data?.data?.content ?? fallbackRes.data?.data ?? [];
         const count = list.filter((m: any) => m.membershipStatus === 'ACTIVE' || m.status === 'ACTIVE').length;
         setMetrics(prev => ({ ...prev, activeMemberships: count }));
       } catch (fallbackError) {
@@ -239,7 +234,9 @@ const ManagerDashboard = ({ navigation }: any) => {
         fetchPosts(token!);
       }
     } catch (error: any) {
-      showResultModal('오류', error?.response?.data?.message || '삭제에 실패했습니다.', 'error');
+      // ✅ 에러 메시지 처리 적용
+      const errorMessage = error.response?.data?.message || '삭제에 실패했습니다.';
+      showResultModal('오류', errorMessage, 'error');
     }
     setDeleteModalVisible(false);
     setItemToDelete(null);
@@ -299,12 +296,12 @@ const ManagerDashboard = ({ navigation }: any) => {
   const handleBarCodeScanned = async (qrData: string) => {
     if (scannedRef.current) return;
     scannedRef.current = true;
-    setIsProcessing(true); // 로딩 시작
+    setIsProcessing(true); 
 
     try {
       const token = await AsyncStorage.getItem('userToken');
       if (!token) {
-        setIsProcessing(false); // 에러 시 로딩 종료
+        setIsProcessing(false);
         showResultModal('오류', '로그인 정보가 없습니다.', 'error', () => closeScanner());
         return;
       }
@@ -320,14 +317,15 @@ const ManagerDashboard = ({ navigation }: any) => {
         }
       );
 
-      setIsProcessing(false); // 로딩 종료
+      setIsProcessing(false); 
 
-      const result = response.data?.data || response.data || {};
+      // ✅ Depth 1단계 추가 반영
+      const result = response.data?.data ?? response.data ?? {};
       const memberName    = result.memberName || '회원';
       const remainingInfo = result.remainingInfo || '';
       const message       = result.message || '정상적으로 출석 처리되었습니다.';
 
-      closeScanner(); // 스캐너 모달 닫기
+      closeScanner(); 
 
       setTimeout(() => {
         showResultModal(
@@ -337,8 +335,8 @@ const ManagerDashboard = ({ navigation }: any) => {
           () => {
             AsyncStorage.getItem('userToken').then(t => {
               if (t) {
-                fetchVisits(t); // 고유 방문자 수 업데이트
-                fetchMembers(t); // 최근 가입회원(출석 뱃지 등) 갱신
+                fetchVisits(t); 
+                fetchMembers(t); 
               }
             });
           }
@@ -346,14 +344,11 @@ const ManagerDashboard = ({ navigation }: any) => {
       }, 300);
 
     } catch (error: any) {
-      console.error('QR 스캔 실패:', error?.response?.data || error.message);
-      const errorMsg =
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        '출석 처리에 실패했습니다.\n유효한 QR 코드인지 확인해주세요.';
+      console.error('QR 스캔 실패:', error.response?.data?.message || error.message);
+      // ✅ 에러 메시지 처리 적용
+      const errorMsg = error.response?.data?.message || '출석 처리에 실패했습니다.\n유효한 QR 코드인지 확인해주세요.';
 
-      setIsProcessing(false); // 에러 시에도 무조건 로딩 끄기
-      
+      setIsProcessing(false); 
       setQrErrorMsg(errorMsg);
       setQrErrorVisible(true);
     }
@@ -372,7 +367,6 @@ const ManagerDashboard = ({ navigation }: any) => {
       <ScrollView 
         showsVerticalScrollIndicator={false} 
         contentContainerStyle={styles.scrollContent}
-        // RefreshControl 추가
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
         }

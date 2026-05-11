@@ -73,7 +73,8 @@ const ManagerCommunity = ({ navigation }: any) => {
       const headers = await authHeader();
       const response = await axios.get(`${POSTS_API}?page=0&size=100&sort=id,desc`, { headers });
       
-      const raw = response.data?.data?.data?.content || response.data?.data?.content || response.data?.data || [];
+      // ✅ Depth 1단계 추가 반영 및 껍데기 제거
+      const raw = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
       const list = Array.isArray(raw) ? raw : [];
 
       const mappedList = list.map((item: any) => {
@@ -98,9 +99,11 @@ const ManagerCommunity = ({ navigation }: any) => {
       });
 
       setPosts(sortPosts(mappedList));
-    } catch (error) {
-      showResultModal('오류', '게시글 목록을 불러오지 못했습니다.', 'error');
-      console.log('ManagerCommunity Fetch Error:', error);
+    } catch (error: any) {
+      // ✅ 에러 메시지 처리 적용
+      const errorMessage = error.response?.data?.message || '게시글 목록을 불러오지 못했습니다.';
+      showResultModal('오류', errorMessage, 'error');
+      console.log('ManagerCommunity Fetch Error:', errorMessage);
     } finally {
       if (!isRefresh) setLoading(false); // 새로고침이 아닐 때만 중앙 로딩 끔
     }
@@ -121,8 +124,10 @@ const ManagerCommunity = ({ navigation }: any) => {
         await axios.delete(`${POSTS_API}/${itemToDelete}`, { headers });
         showResultModal('성공', '게시글이 삭제되었습니다.', 'success');
         fetchPosts(true); // 💡 삭제 후 새로고침 시에도 부드럽게 갱신
-      } catch (error) {
-        showResultModal('오류', '게시글 삭제에 실패했습니다.', 'error');
+      } catch (error: any) {
+        // ✅ 에러 메시지 처리 적용
+        const errorMessage = error.response?.data?.message || '게시글 삭제에 실패했습니다.';
+        showResultModal('오류', errorMessage, 'error');
       }
     }
     setDeleteModalVisible(false); 
@@ -141,8 +146,10 @@ const ManagerCommunity = ({ navigation }: any) => {
   const openDetailModal = async (authorId: number, authorName: string) => {
     try {
       const headers = await authHeader();
-      const { data } = await axios.get(`${MEMBERS_API}/${authorId}/profile`, { headers });
-      const d = data?.data?.data || data?.data || data; 
+      const response = await axios.get(`${MEMBERS_API}/${authorId}/profile`, { headers });
+      
+      // ✅ Depth 1단계 추가 반영
+      const d = response.data?.data; 
       
       if (!d) { 
         showResultModal('프로필 조회 불가', '정보를 불러올 수 없습니다.', 'error'); 
@@ -170,9 +177,11 @@ const ManagerCommunity = ({ navigation }: any) => {
       });
       setDetailVisible(true);
       setTimeout(() => { Animated.timing(detailSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(); }, 50);
-    } catch (error) {
-      showResultModal('프로필 조회 불가', '해당 회원의 정보를 불러올 수 없습니다.', 'error');
-      console.log('Profile Fetch Error:', error);
+    } catch (error: any) {
+      // ✅ 에러 메시지 처리 적용
+      const errorMessage = error.response?.data?.message || '해당 회원의 정보를 불러올 수 없습니다.';
+      showResultModal('프로필 조회 불가', errorMessage, 'error');
+      console.log('Profile Fetch Error:', errorMessage);
     }
   };
 

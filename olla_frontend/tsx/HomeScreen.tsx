@@ -88,11 +88,16 @@ const HomeScreen = ({ navigation }: any) => {
       const response = await axios.get(`${API_BASE_URL}/visit/qr`, {
         headers: { Authorization: `Bearer ${userToken}` }
       });
-      if (response.data && response.data.data) {
-        setQrToken(response.data.data);
+      // ✅ Depth 1단계 추가 적용
+      const qrData = response.data?.data?.data;
+      if (qrData) {
+        setQrToken(qrData);
       }
-    } catch (error) {
-      console.error('QR 토큰 발급 실패:', error);
+    } catch (error: any) {
+      // ✅ 에러 메시지 처리 적용
+      const errorMessage = error.response?.data?.message || 'QR 코드 발급에 실패했습니다.';
+      console.error('QR 토큰 발급 실패:', errorMessage);
+      showResultModal('오류', errorMessage, 'error');
     }
   };
 
@@ -171,19 +176,26 @@ const HomeScreen = ({ navigation }: any) => {
 
       let nickname = '';
       let memberId: number | null = null;
+      
+      // [1] 내 정보(프로필) 로드
       try {
         const profileRes = await axios.get(`${API_BASE_URL}/members/me`, config);
-        const pData = profileRes.data?.data || profileRes.data;
-        nickname = pData.nickname || pData.name || '';
-        memberId = pData.memberId ?? pData.id ?? null;
-        setMyNickname(nickname);
-        setMyMemberId(memberId !== null ? Number(memberId) : null);
-      } catch (e) {
-        console.error('프로필 로드 실패');
+        // ✅ Depth 1단계 추가 적용
+        const pData = profileRes.data?.data;
+        if (pData) {
+          nickname = pData.nickname || pData.name || '';
+          memberId = pData.memberId ?? pData.id ?? null;
+          setMyNickname(nickname);
+          setMyMemberId(memberId !== null ? Number(memberId) : null);
+        }
+      } catch (error: any) {
+        console.error('프로필 로드 실패:', error.response?.data?.message || error.message);
       }
 
+      // [2] 공지사항 로드
       try {
         const noticeResponse = await axios.get(`${API_BASE_URL}/admin/notices`);
+        // ✅ Depth 1단계 추가 적용
         const noticeList: any[] = noticeResponse.data?.data?.content ?? noticeResponse.data?.data ?? [];
 
         if (noticeList.length > 0) {
@@ -206,14 +218,16 @@ const HomeScreen = ({ navigation }: any) => {
         } else {
           setNotice({ title: '현재 등록된 공지가 없습니다.', content: '', important: false });
         }
-      } catch (e) {
-        console.log('공지사항 실패');
+      } catch (error: any) {
+        console.log('공지사항 로드 실패:', error.response?.data?.message || error.message);
         setNotice({ title: '공지사항을 불러올 수 없습니다.', content: '', important: false });
       }
 
+      // [3] 회원권 로드
       try {
         const memResponse = await axios.get(`${API_BASE_URL}/memberships/me`, config);
-        const data = memResponse.data?.data ?? memResponse.data;
+        // ✅ Depth 1단계 추가 적용
+        const data = memResponse.data?.data;
         if (data) {
           const currentDate = new Date();
           currentDate.setHours(0, 0, 0, 0);
@@ -238,11 +252,12 @@ const HomeScreen = ({ navigation }: any) => {
         } else {
           setMembership(prev => ({ ...prev, isLoading: false }));
         }
-      } catch (e) {
-        console.error('회원권 로드 실패', e);
+      } catch (error: any) {
+        console.error('회원권 로드 실패:', error.response?.data?.message || error.message);
         setMembership(prev => ({ ...prev, isLoading: false }));
       }
 
+      // [4] 랭킹 및 기록 로드 (프로필이 있을 경우)
       if (nickname || memberId !== null) {
         let myEndRank = 0;
         let myEndMin = 0;
@@ -250,7 +265,8 @@ const HomeScreen = ({ navigation }: any) => {
 
         try {
           const endRes = await axios.get(`${API_BASE_URL}/rankings/endurance/distance`, config);
-          const endList = extractList(endRes.data?.data || endRes.data);
+          // ✅ Depth 1단계 추가 적용
+          const endList = extractList(endRes.data?.data);
           const myEndRecord = endList.find((item: any) => isMyRecord(item, memberId, nickname));
           if (myEndRecord) {
             endList.sort((a: any, b: any) => {
@@ -263,8 +279,8 @@ const HomeScreen = ({ navigation }: any) => {
             myEndMin = Math.floor(totalSec / 60);
             myEndSec = totalSec % 60;
           }
-        } catch (e) {
-          console.log('지구력 기록 로드 실패', e);
+        } catch (error: any) {
+          console.log('지구력 기록 로드 실패:', error.response?.data?.message || error.message);
         }
 
         let bestColor = '없음';
@@ -281,9 +297,10 @@ const HomeScreen = ({ navigation }: any) => {
           let myRealBestRecords: any[] = [];
           [bestRes, historyRes, allRes].forEach(res => {
             if (res) {
-              const data = res.data?.data || res.data || [];
+              // ✅ Depth 1단계 추가 적용
+              const data = res.data?.data;
               if (Array.isArray(data)) myRealBestRecords = [...myRealBestRecords, ...data];
-              else if (data.list && Array.isArray(data.list)) myRealBestRecords = [...myRealBestRecords, ...data.list];
+              else if (data?.list && Array.isArray(data.list)) myRealBestRecords = [...myRealBestRecords, ...data.list];
             }
           });
 
@@ -309,8 +326,8 @@ const HomeScreen = ({ navigation }: any) => {
               bestStatus = isSuccess ? '완료' : '진행중';
             }
           });
-        } catch (e) {
-          console.log('초보벽 최고기록 로드 실패', e);
+        } catch (error: any) {
+          console.log('초보벽 최고기록 로드 실패:', error.response?.data?.message || error.message);
         }
 
         setUserStats(prev => ({
@@ -336,12 +353,16 @@ const HomeScreen = ({ navigation }: any) => {
       const year = viewDate.getFullYear();
       const month = String(viewDate.getMonth() + 1).padStart(2, '0');
       const yearMonth = `${year}-${month}`;
+      
       const response = await axios.get(
         `${API_BASE_URL}/visit/my-history?yearMonth=${yearMonth}`,
         { headers: { Authorization: `Bearer ${userToken}` } }
       );
+      
+      // ✅ Depth 1단계 추가 적용
       let rawData = response.data?.data;
       if (rawData && !Array.isArray(rawData) && rawData.data) rawData = rawData.data;
+      
       let daysAttended: number[] = [];
       if (Array.isArray(rawData)) {
         daysAttended = rawData
@@ -357,11 +378,12 @@ const HomeScreen = ({ navigation }: any) => {
           .filter((day: number) => day > 0 && !isNaN(day));
       }
       setAttendedDates(daysAttended);
+      
       if (year === today.getFullYear() && viewDate.getMonth() === today.getMonth()) {
         setUserStats(prev => ({ ...prev, monthlyVisits: daysAttended.length }));
       }
-    } catch (error) {
-      console.error('출석 내역 로드 실패:', error);
+    } catch (error: any) {
+      console.error('출석 내역 로드 실패:', error.response?.data?.message || error.message);
       setAttendedDates([]);
     }
   };

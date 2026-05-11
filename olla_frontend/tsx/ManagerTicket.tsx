@@ -132,10 +132,13 @@ const ManagerTicket = ({ navigation }: any) => {
         headers: { Authorization: `Bearer ${token}` },
         params: { size: 1000, sort: 'id,desc' }
       });
-      const memberList = response.data?.data?.content || response.data?.data || [];
-      setUsers(memberList);
-    } catch (error) {
-      showResultModal('오류', '회원 목록을 불러오는데 실패했습니다.', 'error');
+      // ✅ ApiResponse Depth 1단계 추가 적용
+      const raw = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
+      setUsers(Array.isArray(raw) ? raw : []);
+    } catch (error: any) {
+      // ✅ 에러 메시지 처리 적용
+      const errorMessage = error.response?.data?.message || '회원 목록을 불러오는데 실패했습니다.';
+      showResultModal('오류', errorMessage, 'error');
     }
   };
 
@@ -217,10 +220,9 @@ const ManagerTicket = ({ navigation }: any) => {
       closeEditModal();
       fetchUsers(token!);
     } catch (error: any) {
-      const status = error?.response?.status;
-      const serverMessage = error?.response?.data?.message || error?.response?.data?.error || JSON.stringify(error?.response?.data);
-      console.error('[이용권 등록 실패]', `status: ${status}`, serverMessage);
-
+      // ✅ 에러 메시지 처리 적용
+      const serverMessage = error.response?.data?.message || '이용권 등록에 실패했습니다.';
+      
       if (serverMessage?.includes("is_deleted") || serverMessage?.includes("default value")) {
         showResultModal(
           '서버 설정 오류',
@@ -229,7 +231,7 @@ const ManagerTicket = ({ navigation }: any) => {
         );
         return;
       }
-      showResultModal('오류', `이용권 등록에 실패했습니다.\n\n${serverMessage || '서버 오류가 발생했습니다.'}`, 'error');
+      showResultModal('오류', serverMessage, 'error');
     }
   };
 
@@ -254,8 +256,10 @@ const ManagerTicket = ({ navigation }: any) => {
           });
           showResultModal('성공', `이용권이 ${actionText} 되었습니다.`, 'success');
           fetchUsers(token!);
-        } catch (error) {
-          showResultModal('오류', '상태 변경에 실패했습니다.', 'error');
+        } catch (error: any) {
+          // ✅ 에러 메시지 처리 적용
+          const errorMessage = error.response?.data?.message || '상태 변경에 실패했습니다.';
+          showResultModal('오류', errorMessage, 'error');
         }
       }
     );
@@ -270,8 +274,9 @@ const ManagerTicket = ({ navigation }: any) => {
       showResultModal('성공', '이용권이 삭제되었습니다.', 'success');
       fetchUsers(token!);
     } catch (error: any) {
-      console.error(error);
-      showResultModal('오류', '이용권 삭제에 실패했습니다.', 'error');
+      // ✅ 에러 메시지 처리 적용
+      const errorMessage = error.response?.data?.message || '이용권 삭제에 실패했습니다.';
+      showResultModal('오류', errorMessage, 'error');
     }
   };
 
