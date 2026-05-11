@@ -49,7 +49,13 @@ public class PostParticipantService {
         participantRepository.save(new PostParticipant(post, member));
 
         // [알림] 모임 방장에게 참여 알림 발송 (isJoin = true)
-        notificationService.sendParticipantNotification(post.getMember(), member, post, true);
+        notificationService.sendParticipantNotification(
+                post.getMember().getId(),
+                member.getName(),
+                post.getTitle(),
+                post.getId(),
+                true // 취소일 때는 false
+        );
     }
 
     @Transactional
@@ -75,6 +81,12 @@ public class PostParticipantService {
         participantRepository.delete(participant);
 
         // [알림] 모임 방장에게 취소 알림 발송 (isJoin = false)
-        notificationService.sendParticipantNotification(post.getMember(), member, post, false);
+        notificationService.sendParticipantNotification(
+                post.getMember().getId(),
+                member.getName(),
+                post.getTitle(),
+                post.getId(),
+                true // 취소일 때는 false
+        );
     }
 }

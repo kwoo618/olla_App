@@ -8,6 +8,7 @@ import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.entity.MemberNotification;
 import com.olla.olla_climbing.domain.member.entity.NotificationSetting;
 import com.olla.olla_climbing.domain.member.repository.MemberNotificationRepository;
+import com.olla.olla_climbing.domain.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -23,6 +24,7 @@ import org.springframework.util.StringUtils;
 public class NotificationService {
 
     private final MemberNotificationRepository notificationRepository;
+    private final MemberRepository memberRepository;
 
     @Async
     @Transactional
@@ -40,13 +42,15 @@ public class NotificationService {
 
     @Async
     @Transactional
-    public void sendParticipantNotification(Member receiver, Member sender, Post post, boolean isJoin) {
-        if (isNotificationDisabled(receiver, "CREW")) return;
+    public void sendParticipantNotification(Long receiverId, String senderName, String postTitle, Long postId, boolean isJoin) {
+        Member receiver = memberRepository.findById(receiverId).orElse(null);
+
+        if (receiver == null || isNotificationDisabled(receiver, "CREW")) return;
 
         String title = isJoin ? "새로운 참여자 🧗" : "참여 취소 알림 😢";
-        String content = sender.getName() + "님이 [" + post.getTitle() + "] 모임에 " + (isJoin ? "참여 신청했습니다." : "참여를 취소했습니다.");
+        String content = senderName + "님이 [" + postTitle + "] 모임에 " + (isJoin ? "참여 신청했습니다." : "참여를 취소했습니다.");
 
-        saveAndSendPush(receiver, title, content, "CREW", String.valueOf(post.getId()));
+        saveAndSendPush(receiver, title, content, "CREW", String.valueOf(postId));
     }
 
     // --- 공통 체크 로직 ---

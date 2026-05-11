@@ -47,6 +47,13 @@ public class AdminMembershipController {
         return ResponseEntity.ok(ApiResponse.success("이용권이 성공적으로 부여되었습니다."));
     }
 
+    @DeleteMapping("/{id}")
+    @Operation(summary = "이용권 삭제 (관리자)")
+    public ResponseEntity<ApiResponse<String>> deleteMembership(@PathVariable Long id) {
+        membershipAdminService.deleteMembership(id);
+        return ResponseEntity.ok(ApiResponse.success("이용권이 삭제되었습니다."));
+    }
+
     @GetMapping("/members")
     @Operation(summary = "관리자용 회원 리스트 조회", description = "전체 회원 목록을 페이징 및 정렬하여 조회합니다.")
     public ResponseEntity<Page<AdminMemberResponse>> getMemberList(
