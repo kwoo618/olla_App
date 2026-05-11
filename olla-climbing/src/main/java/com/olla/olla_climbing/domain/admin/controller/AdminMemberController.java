@@ -35,4 +35,11 @@ public class AdminMemberController {
         memberService.updateMemberByAdmin(memberId, request);
         return ResponseEntity.ok("회원 정보가 성공적으로 수정되었습니다.");
     }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "회원 강제 삭제 (관리자)")
+    public ResponseEntity<ApiResponse<String>> deleteMember(@PathVariable Long id) {
+        memberService.withdrawMemberById(id);
+        return ResponseEntity.ok(ApiResponse.success("회원이 성공적으로 삭제되었습니다."));
+    }
 }

@@ -154,14 +154,27 @@ public class MemberService {
         return OtherMemberProfileResponse.of(member);
     }
 
+    @Transactional(readOnly = true)
+    public boolean existsByEmail(String email) {
+        return memberRepository.existsByEmail(email); // 이메일 중복 확인용
+    }
+
     @Transactional
     public void withdrawMember(String loginId) {
         Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않거나 이미 탈퇴한 회원입니다."));
 
-        // 엔티티 내부의 withdraw() 호출 (isDeleted = true, loginId/phone 변조 수행)
+        member.withdraw(); // 엔티티 내부의 데이터 변조 로직 실행
+        log.info("회원 탈퇴 완료: loginId={}", loginId);
+    }
+
+
+    @Transactional
+    public void withdrawMemberById(Long memberId) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
         member.withdraw();
-        log.info("회원 탈퇴 완료: {}", member.getId());
+        log.info("관리자에 의한 회원 강제 탈퇴 완료: {}", memberId);
     }
 
     @Transactional
@@ -169,5 +182,10 @@ public class MemberService {
         Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("회원 정보가 없습니다."));
         member.updateFcmToken(fcmToken);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean existsByPhone(String phone) {
+        return memberRepository.existsByPhone(phone);
     }
 }

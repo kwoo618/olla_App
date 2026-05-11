@@ -46,7 +46,6 @@ public class Notice extends BaseTimeEntity {
         this.isImportant = isImportant;
     }
 
-    // 수정 로직
     public void updateNotice(String title, String content, String imageUrl, boolean isImportant) {
         this.title = title;
         this.content = content;
