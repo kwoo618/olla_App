@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
   View, Text, StyleSheet, TextInput, TouchableOpacity, 
-  ScrollView, Image, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Animated 
+  ScrollView, Image, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Animated, RefreshControl 
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
@@ -57,6 +57,9 @@ const resolveMembershipType = (
 };
 
 const ManagerTicket = ({ navigation }: any) => {
+  // 새로고침 상태 추가
+  const [refreshing, setRefreshing] = useState(false);
+
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<any[]>([]);
@@ -115,6 +118,13 @@ const ManagerTicket = ({ navigation }: any) => {
       setLoading(false);
     }
   };
+  
+  // onRefresh 작성
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await checkAdminAndFetchUsers();
+    setRefreshing(false);
+  }, []);
 
   const fetchUsers = async (token: string) => {
     try {
@@ -323,6 +333,15 @@ const ManagerTicket = ({ navigation }: any) => {
 
   return (
     <SafeAreaView style={styles.background} edges={['top', 'left', 'right']}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={[styles.listContainer, { paddingBottom: 150 }]}
+        // RefreshControl 추가
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
+        }
+      >
+        
       {/* 상단 검색바 */}
       <View style={styles.searchContainer}>
         <View style={styles.searchBox}>
@@ -347,7 +366,8 @@ const ManagerTicket = ({ navigation }: any) => {
       </View>
       <View style={styles.headerDivider} />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.listContainer, { paddingBottom: 150 }]}>
+      
+
         {ticketHolders.length === 0 ? (
           <Text style={styles.emptyText}>보유 중인 이용권이 없습니다.</Text>
         ) : (

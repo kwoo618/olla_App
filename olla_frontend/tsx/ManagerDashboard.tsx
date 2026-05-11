@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Image, ActivityIndicator, Modal, Platform, PermissionsAndroid
+  Image, ActivityIndicator, Modal, Platform, PermissionsAndroid, RefreshControl
 } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -16,6 +16,8 @@ const VISIT_TODAY_API_URL = `${API_BASE_URL}/admin/visits/today`;
 const QR_SCAN_API_URL     = `${API_BASE_URL}/admin/visits/scan`; 
 
 const ManagerDashboard = ({ navigation }: any) => {
+  const [refreshing, setRefreshing] = useState(false); // 새로고침
+  
   const [loading, setLoading] = useState(true);
   const [notices, setNotices] = useState<any[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
@@ -60,6 +62,13 @@ const ManagerDashboard = ({ navigation }: any) => {
 
   useEffect(() => {
     checkAdminAndFetchData();
+  }, []);
+
+  // onRefresh  
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await checkAdminAndFetchData();
+    setRefreshing(false);
   }, []);
 
   const checkAdminAndFetchData = async () => {
@@ -360,8 +369,14 @@ const ManagerDashboard = ({ navigation }: any) => {
 
   return (
     <View style={styles.background}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={styles.scrollContent}
+        // RefreshControl 추가
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
+        }
+      >
         <View style={styles.metricsRow}>
           <View style={styles.metricBox}>
             <Text style={styles.metricTitle}>총 회원 수</Text>

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -8,7 +8,8 @@ import {
   Image, 
   Modal, 
   Animated, 
-  ActivityIndicator 
+  ActivityIndicator,
+  RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
@@ -27,6 +28,8 @@ const authHeader = async () => {
 };
 
 const ManagerCommunity = ({ navigation }: any) => {
+  const [refreshing, setRefreshing] = useState(false); // 새로고침 
+
   const isFocused = useIsFocused();
   const [loading, setLoading] = useState(true);
   const [posts, setPosts] = useState<any[]>([]);
@@ -44,9 +47,16 @@ const ManagerCommunity = ({ navigation }: any) => {
 
   useEffect(() => {
     if (isFocused) {
-      fetchPosts();
+      fetchPosts(); // 탭 이동 등 초기 접근 시에는 중앙 로딩 스피너 표시
     }
   }, [isFocused]);
+
+  // onRefresh
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchPosts(true); // 새로고침 시에는 true를 전달하여 중앙 로딩 방지
+    setRefreshing(false);
+  }, []);
 
   const sortPosts = (list: any[]) => {
     return list.sort((a, b) => {
@@ -56,10 +66,11 @@ const ManagerCommunity = ({ navigation }: any) => {
     });
   };
 
-  const fetchPosts = async () => {
+  // 💡 isRefresh 파라미터 추가
+  const fetchPosts = async (isRefresh = false) => {
     try {
+      if (!isRefresh) setLoading(true); // 새로고침이 아닐 때만 중앙 로딩 켬
       const headers = await authHeader();
-      // 💡 POSTS_API 사용
       const response = await axios.get(`${POSTS_API}?page=0&size=100&sort=id,desc`, { headers });
       
       const raw = response.data?.data?.data?.content || response.data?.data?.content || response.data?.data || [];
@@ -91,7 +102,7 @@ const ManagerCommunity = ({ navigation }: any) => {
       showResultModal('오류', '게시글 목록을 불러오지 못했습니다.', 'error');
       console.log('ManagerCommunity Fetch Error:', error);
     } finally {
-      setLoading(false);
+      if (!isRefresh) setLoading(false); // 새로고침이 아닐 때만 중앙 로딩 끔
     }
   };
 
@@ -107,10 +118,9 @@ const ManagerCommunity = ({ navigation }: any) => {
     if (itemToDelete !== null) {
       try {
         const headers = await authHeader();
-        // 💡 POSTS_API 사용
         await axios.delete(`${POSTS_API}/${itemToDelete}`, { headers });
         showResultModal('성공', '게시글이 삭제되었습니다.', 'success');
-        fetchPosts(); 
+        fetchPosts(true); // 💡 삭제 후 새로고침 시에도 부드럽게 갱신
       } catch (error) {
         showResultModal('오류', '게시글 삭제에 실패했습니다.', 'error');
       }
@@ -131,7 +141,6 @@ const ManagerCommunity = ({ navigation }: any) => {
   const openDetailModal = async (authorId: number, authorName: string) => {
     try {
       const headers = await authHeader();
-      // 💡 MEMBERS_API 사용! 이제 404 에러가 발생하지 않습니다.
       const { data } = await axios.get(`${MEMBERS_API}/${authorId}/profile`, { headers });
       const d = data?.data?.data || data?.data || data; 
       
@@ -140,7 +149,6 @@ const ManagerCommunity = ({ navigation }: any) => {
         return; 
       }
       
-      // 💡 API 명세서에 맞게 변수명 매핑 (armSpan, footSize, profileImageUrl)
       setSelectedUser({
         name: d.name || authorName,
         phone: '-', // 개인정보 보호
@@ -198,6 +206,14 @@ const ManagerCommunity = ({ navigation }: any) => {
   return (
     <SafeAreaView style={styles.background} edges={[]}>
       
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
+        }
+      >
+      
       <View style={styles.tabContainer}>
         {tabs.map((tab) => (
           <TouchableOpacity 
@@ -211,7 +227,6 @@ const ManagerCommunity = ({ navigation }: any) => {
         ))}
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {filteredPosts.map((post: any) => {
           const isOutdoor = post.type === '아웃도어';
           const isPast = post.isPast; 
@@ -262,7 +277,6 @@ const ManagerCommunity = ({ navigation }: any) => {
                   <Text style={[styles.authorText, isPast && { color: '#666666' }]}>{post.author}</Text>
                 </TouchableOpacity>
 
-                {/* 💡 쓰레기통(삭제) 버튼이 위치하는 곳! 프로필과 같은 줄의 오른쪽 끝으로 이동됨 */}
                 <TouchableOpacity style={styles.trashBtn} onPress={() => confirmDelete(post.id)}>
                   <Image source={require('../assets/trash.png')} style={[styles.trashIcon, isPast && { tintColor: '#666666' }]} />
                 </TouchableOpacity>
@@ -316,7 +330,6 @@ const ManagerCommunity = ({ navigation }: any) => {
               {selectedUser && (
                 <View style={styles.detailContainer}>
                   <View style={styles.detailProfileWrapper}>
-                    {/* 💡 API에서 프로필 이미지가 넘어오면 적용, 없으면 기본/텍스트 렌더링 */}
                     {selectedUser.profileImageUrl ? (
                        <Image source={{ uri: selectedUser.profileImageUrl }} style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#444444' }} />
                     ) : selectedUser.name === '최강우' ? (

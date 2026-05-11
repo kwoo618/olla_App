@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
   View, Text, StyleSheet, TextInput, TouchableOpacity, 
-  ScrollView, Image, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Animated 
+  ScrollView, Image, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Animated, RefreshControl
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import axios from 'axios';
@@ -13,6 +13,8 @@ const OFFLINE_REGISTER_API = `${API_BASE_URL}/admin/members/offline`;
 const MEMBER_DELETE_API = `${API_BASE_URL}/admin/members`; 
 
 const ManagerUser = ({ navigation }: any) => {
+  const [refreshing, setRefreshing] = useState(false); // 새로고침 
+    
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<any[]>([]); 
@@ -50,8 +52,14 @@ const ManagerUser = ({ navigation }: any) => {
   useEffect(() => {
     checkAdminAndFetchUsers();
   }, []);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await checkAdminAndFetchUsers(true); // 새로고침 시에는 중앙 로딩 스피너 무시
+    setRefreshing(false);
+  }, []);
 
-  const checkAdminAndFetchUsers = async () => {
+  const checkAdminAndFetchUsers = async (isRefresh = false) => {
+    if (!isRefresh) setLoading(true); // 새로고침이 아닐 때만 화면 전체 로딩 활성화
     try {
       const role = await AsyncStorage.getItem('userRole');
       const token = await AsyncStorage.getItem('userToken');
@@ -203,6 +211,13 @@ const ManagerUser = ({ navigation }: any) => {
 
   return (
     <SafeAreaView style={styles.background} edges={['top', 'left', 'right']}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={[styles.listContainer, { paddingBottom: 150 }]}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
+        }
+      >
       
       {/* 상단 검색바 - 여백 제거됨 */}
       <View style={styles.searchContainer}>
@@ -227,10 +242,7 @@ const ManagerUser = ({ navigation }: any) => {
       </View>
       <View style={styles.headerDivider} />
 
-      <ScrollView 
-        showsVerticalScrollIndicator={false} 
-        contentContainerStyle={[styles.listContainer, { paddingBottom: 150 }]}
-      >
+      
         {filteredAndSortedUsers.length === 0 ? (
           <Text style={styles.emptyText}>검색 결과가 없습니다.</Text>
         ) : (

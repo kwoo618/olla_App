@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated } from 'react-native';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -26,25 +26,21 @@ axios.interceptors.request.use(
 
 // ─────────────────────────── 상수 ───────────────────────────
 
-// 난이도별 최대 홀드 개수
 const MAX_HOLDS: Record<string, number> = {
   '흰색': 26, '노랑': 33, '초록': 28, '파랑': 26,
   '빨강': 26, '보라': 25, '주황': 28, '검정': 30,
 };
 
-// 한글 색 → 서버 enum
 const KR_TO_ENUM: Record<string, string> = {
   '흰색': 'WHITE', '노랑': 'YELLOW', '주황': 'ORANGE', '초록': 'GREEN',
   '파랑': 'BLUE',  '빨강': 'RED',    '보라': 'PURPLE', '검정': 'BLACK',
 };
 
-// 서버 enum → 한글 색
 const ENUM_TO_KR: Record<string, string> = {
   WHITE: '흰색', YELLOW: '노랑', ORANGE: '주황', GREEN: '초록',
   BLUE: '파랑',  RED: '빨강',   PURPLE: '보라', BLACK: '검정',
 };
 
-// 지구력 구간 순서 (additionalBlocks 값 → 구간명, 1-based index)
 const BOX_SEQUENCE = [
   '1-1','1-2','1-3','1-4','1-5','1-6',
   '2-1','2-2','2-3','2-4','2-5','2-6','2-7','2-8','2-9','2-10','2-11','2-12',
@@ -92,18 +88,34 @@ const getSectionLabel = (oneWayCount: number, additionalBlocks: number): string 
 };
 
 // ─────────────────────────── 컴포넌트 ───────────────────────────
+
 const RecodeScreen = ({
   route, navigation,
   difficultyData, setDifficultyData,
   enduranceData,  setEnduranceData,
   consecutiveData, setConsecutiveData,
 }: any) => {
+
+  const [refreshing, setRefreshing] = useState(false); // 새로고침 
+  
+  const loadAllData = async () => {
+    setEnduranceData([]);
+    setConsecutiveData([]);
+    await Promise.all([
+      checkMembership(),
+      fetchBestRecords(),
+      fetchEnduranceRecords(),
+      fetchSeriesRecords()
+    ]);
+  };
+
+
   const [expandedSection, setExpandedSection] = useState<string | null>(
     route?.params?.openSection ?? null
   );
   const [hasValidMembership, setHasValidMembership] = useState(false);
 
-  // ─── 커스텀 알림 모달 상태 추가 ───
+  // ─── 커스텀 알림 모달 상태 ───
   const [resultModalVisible, setResultModalVisible] = useState(false);
   const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info' });
 
@@ -113,14 +125,16 @@ const RecodeScreen = ({
   };
 
   useEffect(() => {
-    setEnduranceData([]);
-    setConsecutiveData([]);
-    checkMembership();
-    fetchBestRecords();
-    fetchEnduranceRecords();
-    fetchSeriesRecords();
+    loadAllData(); // 기존 개별 호출 대신 묶은 함수 호출
     if (route?.params?.openSection) setExpandedSection(route.params.openSection);
   }, [route?.params?.openSection]);
+
+  // ─── 새로고침 핸들러 ───
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadAllData();
+    setRefreshing(false);
+  }, []);
 
   // ── 멤버십 확인 ──
   const checkMembership = async () => {
@@ -541,7 +555,18 @@ const RecodeScreen = ({
   // ─────────────────────────── 렌더 ───────────────────────────
   return (
     <View style={styles.background}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#A1BE44"
+            colors={['#A1BE44']}
+          />
+        }
+      >
 
         {/* 기록 추가 버튼 카드 */}
         <View style={styles.summaryContainer}>
@@ -1083,8 +1108,8 @@ const styles = StyleSheet.create({
   // ─── 커스텀 알림 모달 전용 스타일 ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 }, // ✅ 15에서 8로 줄여서 제목과 내용 사이 간격을 좁힘
-  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 }, // ✅ 버튼과의 간격(25)은 유지, 글씨 줄간격을 22에서 20으로 줄임
+  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
+  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 },
   resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
   resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
 

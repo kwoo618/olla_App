@@ -1,15 +1,15 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, Modal, TextInput, KeyboardAvoidingView, Platform,
-  ActivityIndicator, Animated
+  ActivityIndicator, Animated, RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../src/constants/Config';
 
-// API 설정 및 토큰 인터셉터 (기존 로직 유지)
+// API 설정 및 토큰 인터셉터
 const NOTICE_API   = `${API_BASE_URL}/admin/notices`;
 
 axios.interceptors.request.use(
@@ -43,6 +43,8 @@ interface NoticeBody {
 }
 
 const ManagerNotice = ({ route, navigation }: any) => {
+  const [refreshing, setRefreshing] = useState(false);
+
   const [notices, setNotices] = useState<Notice[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -72,7 +74,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
   const [noticeToDelete, setNoticeToDelete] = useState<number | null>(null);
 
   useEffect(() => {
-    fetchNotices();
+    fetchNotices(); // 초기 로딩 시에는 파라미터 없음 (중앙 로딩 스피너 표시)
   }, []);
 
   useEffect(() => {
@@ -91,9 +93,10 @@ const ManagerNotice = ({ route, navigation }: any) => {
     [notices]
   );
 
-  const fetchNotices = async () => {
+  // isRefresh 파라미터를 추가하여 새로고침 시에는 중앙 로딩 스피너를 무시하도록 처리
+  const fetchNotices = async (isRefresh = false) => {
     try {
-      setLoading(true);
+      if (!isRefresh) setLoading(true);
       const res = await axios.get(NOTICE_API, {
         params: { page: 0, size: 100, sort: 'createdAt,desc' },
       });
@@ -102,9 +105,15 @@ const ManagerNotice = ({ route, navigation }: any) => {
     } catch {
       showResultModal('오류', '공지사항을 불러오는데 실패했습니다.', 'error');
     } finally {
-      setLoading(false);
+      if (!isRefresh) setLoading(false);
     }
   };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchNotices(true); // 새로고침 시에는 true를 전달하여 중앙 로딩 방지
+    setRefreshing(false);
+  }, []);
 
   const fetchNoticeDetail = async (id: number): Promise<Notice | null> => {
     try {
@@ -118,7 +127,6 @@ const ManagerNotice = ({ route, navigation }: any) => {
 
   const formatDate = (isoString: string) => isoString?.split('T')[0] ?? '-';
 
-  // 💡 작성/수정 모달 제어 함수 (애니메이션 포함)
   const openWriteModal = () => {
     setModalMode('create');
     setSelectedNoticeId(null);
@@ -129,7 +137,6 @@ const ManagerNotice = ({ route, navigation }: any) => {
     Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
   };
 
-  // 기존 상세 조회 로직과 디자인 애니메이션 병합
   const openEditModal = async (notice: Notice) => {
     const detail = await fetchNoticeDetail(notice.id);
     if (!detail) return;
@@ -179,9 +186,9 @@ const ManagerNotice = ({ route, navigation }: any) => {
         await axios.put(`${NOTICE_API}/${selectedNoticeId}`, body);
       }
 
-      closeWriteModal(); // 💡 저장 성공 시 스르륵 닫히도록 변경
+      closeWriteModal();
       showResultModal('성공', modalMode === 'create' ? '새 공지가 등록되었습니다.' : '공지가 수정되었습니다.', 'success');
-      await fetchNotices();
+      await fetchNotices(true); // 저장 후에도 부드러운 갱신을 위해 중앙 로딩 생략
     } catch (error: any) {
       const msg = error?.response?.data?.message ?? '저장에 실패했습니다.';
       showResultModal('오류', msg, 'error');
@@ -206,12 +213,13 @@ const ManagerNotice = ({ route, navigation }: any) => {
       await axios.delete(`${NOTICE_API}/${noticeToDelete}`);
       cancelDelete();
       showResultModal('성공', '공지사항이 삭제되었습니다.', 'success');
-      await fetchNotices();
+      await fetchNotices(true); // 삭제 후에도 부드러운 갱신
     } catch {
       showResultModal('오류', '삭제에 실패했습니다.', 'error');
     }
   };
 
+  // 초기 로딩 시에만 렌더링
   if (loading) {
     return (
       <View style={[styles.background, styles.center]}>
@@ -223,7 +231,14 @@ const ManagerNotice = ({ route, navigation }: any) => {
   return (
     <SafeAreaView style={styles.background} edges={[]}>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
+        }
+      >
+
         {sortedNotices.length === 0 ? (
           <Text style={styles.emptyText}>등록된 공지사항이 없습니다.</Text>
         ) : (
@@ -281,7 +296,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 💡 작성 / 수정 바텀 시트 모달 (디자인 적용) */}
+      {/* 💡 작성 / 수정 바텀 시트 모달 */}
       <Modal visible={isWriteModalVisible} animationType="fade" transparent={true}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeWriteModal}>
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: slideAnim }] }]}>
@@ -349,7 +364,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
         </TouchableOpacity>
       </Modal>
 
-      {/* 삭제 확인 모달 (중앙 알림창 형태 유지) */}
+      {/* 삭제 확인 모달 */}
       <Modal visible={isDeleteModalVisible} animationType="fade" transparent={true}>
         <View style={styles.centerModalOverlay}>
           <View style={styles.deleteModalBox}>
@@ -432,7 +447,7 @@ const styles = StyleSheet.create({
   registerBtn:  { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 15, borderRadius: 10, alignItems: 'center', marginLeft: 6 },
   registerBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
 
-  // 삭제 모달 스타일 (기존 중앙 팝업)
+  // 삭제 모달 스타일
   centerModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   deleteModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
   deleteTitle:    { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 25, textAlign: 'center' },
@@ -442,7 +457,7 @@ const styles = StyleSheet.create({
   btnTextBlack:   { color: '#000000', fontSize: 16, fontWeight: 'bold' },
   btnTextWhite:   { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
 
-  // ─── 커스텀 알림 모달 전용 스타일 ───
+  // 커스텀 알림 모달 전용 스타일
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
   resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },

@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image } from 'react-native';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, RefreshControl } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../src/constants/Config';
@@ -151,6 +151,18 @@ const formatTime = (seconds: number): string => {
 
 // ─────────────────────────── 컴포넌트 ───────────────────────────
 const RankingScreen = ({ route }: any) => {
+  // 새로고침 상태 추가
+  const [refreshing, setRefreshing] = useState(false);
+  // 최초 데이터 로드 부분을 함수로 묶고 onRefresh 작성
+  const loadAllData = async () => {
+    const userData = await fetchMyProfile();
+    await Promise.all([
+      fetchBeginnerRankings(userData),
+      fetchEnduranceRankings(),
+      fetchConsecutiveRankings()
+    ]);
+  };
+
   const [mainTab, setMainTab]   = useState<string>(route?.params?.targetTab ?? '초보벽');
   const [colorTab, setColorTab] = useState<string>('전체');
 
@@ -168,12 +180,13 @@ const RankingScreen = ({ route }: any) => {
 
   // 최초 데이터 로드
   useEffect(() => {
-    (async () => {
-      const userData = await fetchMyProfile();
-      fetchBeginnerRankings(userData);
-      fetchEnduranceRankings();
-      fetchConsecutiveRankings();
-    })();
+    loadAllData(); // 기존 익명 async 함수 호출 대신
+  }, []);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadAllData();
+    setRefreshing(false);
   }, []);
 
   // ── 내 프로필 ──
@@ -409,6 +422,13 @@ const RankingScreen = ({ route }: any) => {
   // ─────────────────────────── 렌더 ───────────────────────────
   return (
     <View style={styles.background}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
+        }
+      >
 
       {/* 내 랭킹 카드 */}
       <View style={styles.myRankingWrapper}>
@@ -441,8 +461,6 @@ const RankingScreen = ({ route }: any) => {
           </TouchableOpacity>
         ))}
       </View>
-
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
 
         {/* 색상 탭 (초보벽 전용) */}
         {mainTab === '초보벽' && (

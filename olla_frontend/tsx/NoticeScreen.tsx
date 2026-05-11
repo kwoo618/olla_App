@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Modal } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Modal, RefreshControl } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../src/constants/Config';
 
@@ -13,6 +13,9 @@ interface Notice {
 }
 
 const NoticeScreen = ({ navigation }: any) => {
+  // 새로고침 상태 추가
+  const [refreshing, setRefreshing] = useState(false);
+
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [notices, setNotices] = useState<Notice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,6 +70,13 @@ const NoticeScreen = ({ navigation }: any) => {
     fetchNotices();
   }, []);
 
+  // onRefresh 작성
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchNotices();
+    setRefreshing(false);
+  }, []);
+
   const toggleExpand = (id: number) => {
     setExpandedId(expandedId === id ? null : id);
   };
@@ -94,6 +104,9 @@ const NoticeScreen = ({ navigation }: any) => {
         keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={ // refresh 추가 
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
+        }
         ListEmptyComponent={
           <Text style={styles.emptyText}>등록된 공지사항이 없습니다.</Text>
         }

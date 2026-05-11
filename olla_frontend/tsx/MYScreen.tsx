@@ -1,10 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Image, Switch, Modal, Animated, TextInput, ActivityIndicator, Linking
+  Image, Switch, Modal, Animated, TextInput, ActivityIndicator, Linking, RefreshControl
 } from 'react-native';
 import { API_BASE_URL } from '../src/constants/Config';
 
@@ -39,6 +39,9 @@ const resolveMembershipType = (
 };
 
 const MYScreen = ({ navigation }: any) => {
+  // 새로고침 상태 추가
+  const [refreshing, setRefreshing] = useState(false);
+
   const isFocused = useIsFocused();
   const [loading, setLoading] = useState(true);
 
@@ -219,6 +222,12 @@ const MYScreen = ({ navigation }: any) => {
       setLoading(false);
     }
   };
+  // onRefresh 작성
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchMyInfo();
+    setRefreshing(false);
+  }, []);
 
   useEffect(() => { fetchMyInfo(); }, [isFocused]);
 
@@ -393,8 +402,14 @@ const MYScreen = ({ navigation }: any) => {
 
   return (
     <View style={styles.background}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={styles.scrollContent}
+        // RefreshControl 추가
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
+        }
+      >
         {/* 상단 프로필 */}
         <TouchableOpacity style={styles.profileCard} activeOpacity={0.8} onPress={openProfileModal}>
           <View style={styles.profileLeft}>

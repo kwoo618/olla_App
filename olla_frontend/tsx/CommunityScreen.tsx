@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, TextInput } from 'react-native';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, TextInput, RefreshControl} from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
@@ -17,6 +17,8 @@ const authHeader = async () => {
 const p = (n: number) => String(n).padStart(2, '0');
 
 const CommunityScreen = ({ route, navigation }: any) => {
+  const [refreshing, setRefreshing] = useState(false); // 새로고침 상태
+  
   const isFocused = useIsFocused();
   const currentFilter = route?.params?.filter || 'ALL';
 
@@ -52,6 +54,13 @@ const CommunityScreen = ({ route, navigation }: any) => {
     }
   }, [isFocused, currentFilter]);
 
+  // ✅ 당겨서 새로고침 기능 추가
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await initData(currentFilter);
+    setRefreshing(false);
+  }, [currentFilter]);
+
   const initData = async (filterToUse: string) => {
     let uName = '', uNick = '', uId = null;
     try {
@@ -63,7 +72,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
       uId = d.id || d.memberId || null;
       setMyNickname(uNick || uName); setMyUserId(uId);
     } catch {}
-    fetchPosts(uName, uNick, uId, filterToUse);
+    await fetchPosts(uName, uNick, uId, filterToUse);
   };
 
   const sortPosts = (list: any[]) => {
@@ -80,6 +89,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
     }
     return writerName === uName || writerName === uNick;
   };
+  
 
   const fetchPosts = async (uName: string, uNick: string, uId: number | null, filterToUse: string) => {
     try {
@@ -393,8 +403,14 @@ const CommunityScreen = ({ route, navigation }: any) => {
         </View>
       )}
 
-      {/* 게시글 목록 */}
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
+      {/* 게시글 목록 - ✅ RefreshControl 추가 */}
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={s.scroll}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
+        }
+      >
         {filteredPosts.map(post => {
           const isOut = post.type==='아웃도어';
           const isPast = post.isPast;
