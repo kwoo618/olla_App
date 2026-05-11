@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, StatusBar, Modal } from 'react-native';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -8,7 +8,6 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 type RootParamList = {
   Login: undefined; Signup: undefined; PersonalInfo: undefined; Loading: undefined;
   Home: undefined; Notice: undefined; Recode: undefined; Ranking: undefined;
-  // Community에 데이터를 넘길 수 있도록 수정 // 내 정보 조회 
   Community: { filter?: 'ALL' | 'MY_WRITTEN' | 'MY_APPLIED' } | undefined; 
   MY: undefined; ManagerDashboard: undefined;
   ManagerUser: undefined; ManagerTicket: undefined; ManagerNotice: undefined; ManagerCommunity: undefined;
@@ -33,7 +32,10 @@ import ManagerCommunity from './tsx/ManagerCommunity';
 
 const Stack = createNativeStackNavigator<RootParamList>();
 
-// 하단 내비게이션 아이템
+// 💡 하단 탭의 순서를 정의합니다. 이 순서에 따라 애니메이션 방향이 결정됩니다.
+const USER_TAB_ORDER = ['Home', 'Recode', 'Ranking', 'Community', 'MY'];
+const ADMIN_TAB_ORDER = ['ManagerDashboard', 'ManagerUser', 'ManagerTicket', 'ManagerNotice', 'ManagerCommunity'];
+
 interface BottomNavItemProps {
   name: keyof RootParamList;
   label: string;
@@ -63,6 +65,10 @@ const AppContent = () => {
   const navigationRef = useNavigationContainerRef<RootParamList>();
   const insets = useSafeAreaInsets(); 
   const [routeName, setRouteName] = useState<string>('');
+  
+  // 💡 애니메이션 방향을 관리하기 위한 상태 (기본값: 오른쪽에서 나옴)
+  const [slideDirection, setSlideDirection] = useState<'slide_from_right' | 'slide_from_left'>('slide_from_right');
+  const prevRouteName = useRef<string>('Home'); // 이전 라우트 이름을 저장
 
   const [isExitModalVisible, setExitModalVisible] = useState(false);
 
@@ -89,14 +95,45 @@ const AppContent = () => {
   const adminScreens = ['ManagerDashboard', 'ManagerUser', 'ManagerTicket', 'ManagerNotice', 'ManagerCommunity'];
   const isAdminMode = adminScreens.includes(routeName);
 
+  // 💡 라우트(화면)가 변경될 때마다 방향을 계산합니다.
+  const handleStateChange = () => {
+    const currentRoute = navigationRef.getCurrentRoute()?.name;
+    if (!currentRoute) return;
+
+    // 현재 관리자 모드인지 일반 유저 모드인지 파악하여 사용할 배열 결정
+    const currentOrder = isAdminMode ? ADMIN_TAB_ORDER : USER_TAB_ORDER;
+    
+    const prevIndex = currentOrder.indexOf(prevRouteName.current);
+    const currentIndex = currentOrder.indexOf(currentRoute);
+
+    // 하단 탭 내에서의 이동일 경우에만 방향을 계산 (다른 화면들은 기본 오른쪽 슬라이드)
+    if (prevIndex !== -1 && currentIndex !== -1) {
+      if (currentIndex > prevIndex) {
+        setSlideDirection('slide_from_right'); // 오른쪽 탭을 누르면 오른쪽에서 나옴
+      } else if (currentIndex < prevIndex) {
+        setSlideDirection('slide_from_left');  // 왼쪽 탭을 누르면 왼쪽에서 나옴
+      }
+    } else {
+       // 하단 탭에 속하지 않은 화면(예: 공지사항 등)으로 이동할 때는 기본 오른쪽
+       setSlideDirection('slide_from_right');
+    }
+
+    setRouteName(currentRoute);
+    prevRouteName.current = currentRoute; // 현재 라우트를 다음 번의 '이전 라우트'로 저장
+  };
+
   return (
     <View style={styles.globalContainer}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
       
       <NavigationContainer 
         ref={navigationRef} 
-        onReady={() => setRouteName(navigationRef.getCurrentRoute()?.name || '')} 
-        onStateChange={() => setRouteName(navigationRef.getCurrentRoute()?.name || '')}
+        onReady={() => {
+          const initRoute = navigationRef.getCurrentRoute()?.name || 'Home';
+          setRouteName(initRoute);
+          prevRouteName.current = initRoute;
+        }} 
+        onStateChange={handleStateChange} // 💡 상태 변화 감지 함수 연결
       >
         {shouldShowNav && (
           <View style={[styles.topNav, { paddingTop: Math.max(insets.top, 10) }]}>
@@ -120,12 +157,13 @@ const AppContent = () => {
                   </TouchableOpacity>
                 </>
               )}
-            </View>
+            </View> 
           </View>
         )}
 
         <View style={styles.mainContent}>
-          <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+          {/* 💡 계산된 애니메이션 방향(slideDirection)을 Navigator 옵션에 주입 */}
+          <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false, animation: slideDirection }}>
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Signup" component={SignupScreen} />
             <Stack.Screen name="PersonalInfo" component={PersonalScreen} />

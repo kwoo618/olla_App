@@ -447,7 +447,8 @@ const HomeScreen = ({ navigation }: any) => {
 
           <TouchableOpacity style={styles.UserCardCentered} onPress={() => handlePopupPress('회원권')}>
             <View style={[styles.circleGraphDummy, !hasMembership && { borderColor: '#444444' }]}>
-              <Text style={[styles.circleGraphText, !hasMembership && { color: '#999999', fontSize: 13 }]}>
+              {/* 💡 크기 확대 */}
+              <Text style={[styles.circleGraphText, !hasMembership && { color: '#999999', fontSize: 15 }]}>
                 {membership.isLoading
                   ? ''
                   : hasMembership
@@ -615,7 +616,7 @@ const HomeScreen = ({ navigation }: any) => {
                     )}
                   </View>
                   <Text style={styles.qrDesc}>QR 코드를 출입기계 카메라에 맞춰주세요</Text>
-                  <Text style={{ color: '#FF6B6B', fontSize: 12, marginTop: 10 }}>
+                  <Text style={{ color: '#FF6B6B', fontSize: 14, marginTop: 10 }}>
                     ※ 발급된 QR 코드는 3분 뒤 만료됩니다.
                   </Text>
                 </>
@@ -639,7 +640,8 @@ const HomeScreen = ({ navigation }: any) => {
                     <View style={[styles.memCardDates, !hasMembership && { justifyContent: 'center' }]}>
                       {hasMembership ? (
                         isCountType ? (
-                          <Text style={[styles.memDateText, { fontSize: 16, color: '#A1BE44' }]}>
+                          // 💡 크기 확대
+                          <Text style={[styles.memDateText, { fontSize: 18, color: '#A1BE44' }]}>
                             {membership.remainingCount}회 남음
                           </Text>
                         ) : (
@@ -660,7 +662,8 @@ const HomeScreen = ({ navigation }: any) => {
                       </Text>
                       <Text style={[
                         styles.memHalfValueGreen,
-                        !hasMembership && { color: '#999999', fontSize: 16 }
+                        // 💡 크기 확대
+                        !hasMembership && { color: '#999999', fontSize: 18 }
                       ]} numberOfLines={1} adjustsFontSizeToFit>
                         {hasMembership
                           ? isCountType
@@ -673,7 +676,8 @@ const HomeScreen = ({ navigation }: any) => {
                       <Text style={styles.memHalfTitle}>상태</Text>
                       <Text style={[
                         styles.memHalfValueWhite,
-                        !hasMembership && { fontSize: 16, color: '#FF6B6B' }
+                        // 💡 크기 확대
+                        !hasMembership && { fontSize: 18, color: '#FF6B6B' }
                       ]} numberOfLines={1} adjustsFontSizeToFit>
                         {hasMembership ? displayStatus : '구매 필요'}
                       </Text>
@@ -689,6 +693,7 @@ const HomeScreen = ({ navigation }: any) => {
   );
 };
 
+// 💡 전체적으로 fontSize +2~3씩 확대
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
   scrollContent: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 60 },
@@ -696,37 +701,37 @@ const styles = StyleSheet.create({
   noticeCard: { width: '100%', backgroundColor: '#2A2A2A', paddingVertical: 18, paddingHorizontal: 20, borderRadius: 12, marginBottom: 20 },
   noticeHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   noticeBadge: { backgroundColor: '#A1BE44', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 8 },
-  noticeBadgeText: { color: '#1A1A1A', fontSize: 10, fontWeight: 'bold' },
-  noticeHeadline: { color: '#ffffff', fontSize: 16, fontWeight: '600', flex: 1 },
-  noticeBody: { color: '#999999', fontSize: 13, fontWeight: '400' },
+  noticeBadgeText: { color: '#1A1A1A', fontSize: 12, fontWeight: 'bold' },
+  noticeHeadline: { color: '#ffffff', fontSize: 18, fontWeight: '600', flex: 1 },
+  noticeBody: { color: '#999999', fontSize: 15, fontWeight: '400' },
 
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
   QRCardCentered: { width: '60%', backgroundColor: '#2A2A2A', padding: 20, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   UserCardCentered: { width: '38%', backgroundColor: '#2A2A2A', padding: 20, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  largeIcon: { width: 45, height: 45, marginBottom: 12, resizeMode: 'contain' },
+  largeIcon: { width: 45, height: 45, marginBottom: 10, resizeMode: 'contain', tintColor: '#A1BE44' },
   circleGraphDummy: { width: 50, height: 50, borderRadius: 25, borderWidth: 4, borderColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-  circleGraphText: { color: '#ffffff', fontSize: 12, fontWeight: 'bold' },
-  cardTitleCentered: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
+  circleGraphText: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
+  cardTitleCentered: { color: '#ffffff', fontSize: 18, fontWeight: '600' },
   
   unifiedDataFrame: { flexDirection: 'row', backgroundColor: '#2A2A2A', borderRadius: 16, marginBottom: 20, overflow: 'hidden' },
   innerTouchableMicro: { flex: 1, paddingVertical: 18, paddingHorizontal: 2, alignItems: 'center', justifyContent: 'center', minHeight: 90 },
   verticalDivider: { width: 1, backgroundColor: '#3D3D3D', marginVertical: 15 },
-  microSubTitle: { color: '#999999', fontSize: 10, fontWeight: '500', marginBottom: 10, textAlign: 'center' },
-  microValue: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', textAlign: 'center' },
-  microValuecolor: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', textAlign: 'center' },
-  microUnit: { fontSize: 11, color: '#999999' },
+  microSubTitle: { color: '#999999', fontSize: 12, fontWeight: '500', marginBottom: 10, textAlign: 'center' },
+  microValue: { color: '#ffffff', fontSize: 21, fontWeight: 'bold', textAlign: 'center' },
+  microValuecolor: { color: '#ffffff', fontSize: 21, fontWeight: 'bold', textAlign: 'center' },
+  microUnit: { fontSize: 13, color: '#999999' },
   
   calendarCard: { width: '100%', backgroundColor: '#2A2A2A', borderRadius: 16, padding: 20, marginBottom: 20 },
   calendarHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   monthArrow: { padding: 10 },
-  arrowText: { color: '#A1BE44', fontSize: 20, fontWeight: 'bold' },
-  calendarMonthText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
+  arrowText: { color: '#A1BE44', fontSize: 22, fontWeight: 'bold' },
+  calendarMonthText: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' },
   weekRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  weekDayText: { color: '#999999', fontSize: 13, width: '14.28%', textAlign: 'center', fontWeight: '600' },
+  weekDayText: { color: '#999999', fontSize: 15, width: '14.28%', textAlign: 'center', fontWeight: '600' },
   daysGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start' },
   dayCell: { width: '14.28%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center', marginBottom: 5 },
-  dayCircle: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  dayText: { color: '#ffffff', fontSize: 14, fontWeight: '500' },
+  dayCircle: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  dayText: { color: '#ffffff', fontSize: 16, fontWeight: '500' },
   sundayText: { color: '#FF6B6B' },
   todayCircle: { backgroundColor: '#A1BE44' },
   todayText: { color: '#1A1A1A', fontWeight: 'bold' },
@@ -739,25 +744,24 @@ const styles = StyleSheet.create({
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 50, alignItems: 'center' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
   sheetHeader: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
-  sheetTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginLeft: 10 },
-  closeBtn: { color: '#999999', fontSize: 24, paddingHorizontal: 10 },
-  qrDesc: { color: '#999999', fontSize: 14 },
+  sheetTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold', marginLeft: 10 },
+  closeBtn: { color: '#999999', fontSize: 28, paddingHorizontal: 10 },
+  qrDesc: { color: '#999999', fontSize: 16 },
   
   membershipContainer: { width: '100%' },
   memCard: { backgroundColor: '#2A2A2A', borderRadius: 16, padding: 22, marginBottom: 15, width: '100%' },
   memCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  memCardTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
+  memCardTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' },
   progressBarBg: { height: 8, backgroundColor: '#444444', borderRadius: 4, marginBottom: 10 },
   progressBarFill: { height: '100%', backgroundColor: '#A1BE44', borderRadius: 4 },
   memCardDates: { flexDirection: 'row', justifyContent: 'space-between' },
-  memDateText: { color: '#999999', fontSize: 13 },
+  memDateText: { color: '#999999', fontSize: 15 },
   memRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%' },
   memHalfCard: { backgroundColor: '#2A2A2A', borderRadius: 16, paddingVertical: 25, width: '48%', alignItems: 'center', justifyContent: 'center' },
-  memHalfTitle: { color: '#ffffff', fontSize: 15, fontWeight: '600', marginBottom: 12 },
-  memHalfValueGreen: { color: '#A1BE44', fontSize: 24, fontWeight: 'bold' },
-  memHalfValueWhite: { color: '#ffffff', fontSize: 24, fontWeight: 'bold' },
+  memHalfTitle: { color: '#ffffff', fontSize: 17, fontWeight: '600', marginBottom: 12 },
+  memHalfValueGreen: { color: '#A1BE44', fontSize: 28, fontWeight: 'bold' },
+  memHalfValueWhite: { color: '#ffffff', fontSize: 28, fontWeight: 'bold' },
 
-  // ─── 커스텀 알림 모달 전용 스타일 ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
   resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },

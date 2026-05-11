@@ -311,6 +311,9 @@ const ManagerTicket = ({ navigation }: any) => {
     textDayFontWeight: '500' as const,
     textMonthFontWeight: 'bold' as const,
     textDayHeaderFontWeight: '500' as const,
+    textDayFontSize: 16,
+    textMonthFontSize: 18,
+    textDayHeaderFontSize: 14,
   };
 
   if (loading) {
@@ -376,7 +379,7 @@ const ManagerTicket = ({ navigation }: any) => {
                 </View>
 
                 <View style={styles.colDday}>
-                  <Text style={styles.rowTextDday}>
+                  <Text style={styles.rowTextDday} numberOfLines={1} adjustsFontSizeToFit>
                     {isCountType
                       ? `${item.remainingCount ?? 0}회`
                       : calculateDDay(item.endDate)}
@@ -402,7 +405,7 @@ const ManagerTicket = ({ navigation }: any) => {
                       </Text>
                     </TouchableOpacity>
                   ) : (
-                    <View style={{ width: 34 }} /> 
+                    <View style={{ width: 42 }} /> 
                   )}
 
                   <TouchableOpacity style={styles.trashBtn} onPress={() => confirmDeleteTicket(item.membershipId)}>
@@ -417,7 +420,7 @@ const ManagerTicket = ({ navigation }: any) => {
 
       {/* 💡 등록 플로팅 버튼 */}
       <TouchableOpacity 
-        style={[styles.fab, { bottom: Math.max(insets.bottom + -30, 10) }]} 
+        style={[styles.fab, { bottom: Math.max(insets.bottom + 5, 20) }]} 
         activeOpacity={0.8} 
         onPress={openEditModal}
       >
@@ -499,7 +502,7 @@ const ManagerTicket = ({ navigation }: any) => {
                   </View>
                   <View style={styles.headerDivider} />
 
-                  <View style={{ height: 140, marginBottom: 20 }}>
+                  <View style={{ height: 160, marginBottom: 20 }}>
                     <ScrollView style={styles.searchResultTable} nestedScrollEnabled={true}>
                       {searchResults.length === 0 ? (
                         <Text style={styles.modalEmptyText}>검색된 회원이 없습니다.</Text>
@@ -620,20 +623,21 @@ const ManagerTicket = ({ navigation }: any) => {
   );
 };
 
+// ─────────────────────────── 스타일 (글씨 크기 및 여백 확대 적용) ───────────────────────────
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
   searchContainer: { paddingHorizontal: 20, marginTop: 15, marginBottom: 20 },
-  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2C2C2C', borderRadius: 12, paddingHorizontal: 15, height: 50 },
-  searchIcon: { fontSize: 16, marginRight: 10 },
-  searchInput: { flex: 1, color: '#fff', fontSize: 14 },
+  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2C2C2C', borderRadius: 12, paddingHorizontal: 20, height: 60 }, // 💡 50 -> 60, 패딩 15 -> 20
+  searchIcon: { fontSize: 20, marginRight: 10 }, // 💡 16 -> 20
+  searchInput: { flex: 1, color: '#fff', fontSize: 17 }, // 💡 14 -> 17
 
   tableHeader: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 20 },
-  headerText: { color: '#ffffff', fontSize: 12, fontWeight: 'bold', textAlign: 'center' },
+  headerText: { color: '#ffffff', fontSize: 15, fontWeight: 'bold', textAlign: 'center' }, // 💡 12 -> 15
   headerDivider: { height: 1, backgroundColor: '#333333', marginHorizontal: 20, marginBottom: 10 },
 
   listContainer: { paddingHorizontal: 20 },
 
-  tableRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#212121', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 5, marginBottom: 8, borderWidth: 1, borderColor: '#2A2A2A' },
+  tableRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#212121', borderRadius: 12, paddingVertical: 18, paddingHorizontal: 5, marginBottom: 10, borderWidth: 1, borderColor: '#2A2A2A' }, // 💡 패딩 14 -> 18
 
   colInfo: { flex: 2.2, paddingLeft: 5 },
   colDate: { flex: 2.8 },
@@ -641,100 +645,100 @@ const styles = StyleSheet.create({
   colStatus: { flex: 1.6 },
   colAction: { flex: 2.0 },
 
-  rowTextName: { color: '#fff', fontSize: 13, fontWeight: 'bold', marginBottom: 2 },
-  rowTextSub: { color: '#999', fontSize: 10 },
-  rowTextDate: { color: '#ccc', fontSize: 10, textAlign: 'center' },
-  rowTextDday: { color: '#A1BE44', fontSize: 13, fontWeight: 'bold', textAlign: 'center' },
-  emptyText: { color: '#666', fontSize: 15, textAlign: 'center', marginTop: 40 },
+  rowTextName: { color: '#fff', fontSize: 17, fontWeight: 'bold', marginBottom: 4 }, // 💡 13 -> 17
+  rowTextSub: { color: '#999', fontSize: 13 }, // 💡 10 -> 13
+  rowTextDate: { color: '#ccc', fontSize: 13, textAlign: 'center' }, // 💡 10 -> 13
+  rowTextDday: { color: '#A1BE44', fontSize: 17, fontWeight: 'bold', textAlign: 'center' }, // 💡 13 -> 17
+  emptyText: { color: '#666', fontSize: 17, textAlign: 'center', marginTop: 40 }, // 💡 15 -> 17
 
   center: { alignItems: 'center', justifyContent: 'center' },
   rowCenter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly' },
 
-  badge: { paddingHorizontal: 6, paddingVertical: 4, borderRadius: 12 },
+  badge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 }, // 💡 패딩 6,4 -> 10,6
   badgeActive: { backgroundColor: 'rgba(161, 190, 68, 0.2)' },
   badgeHolding: { backgroundColor: 'rgba(255, 153, 0, 0.2)' },
-  badgeTextActive: { color: '#A1BE44', fontSize: 10, fontWeight: 'bold' },
-  badgeTextHolding: { color: '#FF9900', fontSize: 10, fontWeight: 'bold' },
+  badgeTextActive: { color: '#A1BE44', fontSize: 13, fontWeight: 'bold' }, // 💡 10 -> 13
+  badgeTextHolding: { color: '#FF9900', fontSize: 13, fontWeight: 'bold' }, // 💡 10 -> 13
 
-  actionBtn: { paddingHorizontal: 8, paddingVertical: 6, borderRadius: 6, borderWidth: 1 },
+  actionBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6, borderWidth: 1 }, // 💡 패딩 8,6 -> 12,8
   actionBtnPause: { borderColor: '#FF4D4D', backgroundColor: 'rgba(255, 77, 77, 0.1)' },
   actionBtnUnpause: { borderColor: '#A1BE44', backgroundColor: 'rgba(161, 190, 68, 0.1)' },
-  actionTextPause: { color: '#FF4D4D', fontSize: 10, fontWeight: 'bold' },
-  actionTextUnpause: { color: '#A1BE44', fontSize: 10, fontWeight: 'bold' },
+  actionTextPause: { color: '#FF4D4D', fontSize: 13, fontWeight: 'bold' }, // 💡 10 -> 13
+  actionTextUnpause: { color: '#A1BE44', fontSize: 13, fontWeight: 'bold' }, // 💡 10 -> 13
 
-  trashBtn: { padding: 4 },
-  trashIcon: { width: 16, height: 16, tintColor: '#FF4D4D', resizeMode: 'contain' },
+  trashBtn: { padding: 6 },
+  trashIcon: { width: 22, height: 22, tintColor: '#FF4D4D', resizeMode: 'contain' }, // 💡 16 -> 22
 
-  fab: { position: 'absolute', right: 20, backgroundColor: '#A1BE44', paddingHorizontal: 20, paddingVertical: 15, borderRadius: 30, elevation: 5 },
-  fabText: { color: '#000', fontSize: 16, fontWeight: 'bold' },
+  fab: { position: 'absolute', right: 20, backgroundColor: '#A1BE44', paddingHorizontal: 25, paddingVertical: 18, borderRadius: 30, elevation: 5 }, // 💡 패딩 20,15 -> 25,18
+  fabText: { color: '#000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
 
-  // 💡 바텀 시트 스타일
+  // 💡 바텀 시트 모달
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%', maxHeight: '90%' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, paddingHorizontal: 5 },
-  sheetTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' },
-  closeIcon: { color: '#999999', fontSize: 24, paddingHorizontal: 10 },
+  sheetTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' }, // 💡 20 -> 23
+  closeIcon: { color: '#999999', fontSize: 28, paddingHorizontal: 10 }, // 💡 24 -> 28
   horizontalDivider: { height: 1, backgroundColor: '#333333', width: '100%', marginBottom: 20 },
 
-  modalSearchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#000', borderRadius: 10, paddingHorizontal: 15, height: 45, marginBottom: 15, borderWidth: 1, borderColor: '#333' },
-  modalSearchInput: { flex: 1, color: '#fff' },
+  modalSearchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#000', borderRadius: 10, paddingHorizontal: 15, height: 55, marginBottom: 15, borderWidth: 1, borderColor: '#333' }, // 💡 높이 45 -> 55
+  modalSearchInput: { flex: 1, color: '#fff', fontSize: 17 }, // 💡 14 -> 17
 
   modalTableHeader: { flexDirection: 'row', paddingVertical: 8, paddingHorizontal: 5 },
-  modalHeaderText: { color: '#999', fontSize: 11, fontWeight: 'bold' },
+  modalHeaderText: { color: '#999', fontSize: 14, fontWeight: 'bold' }, // 💡 11 -> 14
 
   searchResultTable: { backgroundColor: '#000', borderRadius: 10, borderWidth: 1, borderColor: '#333' },
-  searchResultRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 5, borderBottomWidth: 1, borderBottomColor: '#2A2A2A' },
+  searchResultRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 5, borderBottomWidth: 1, borderBottomColor: '#2A2A2A' }, // 💡 패딩 14 -> 16
   selectedRow: { backgroundColor: 'rgba(161, 190, 68, 0.15)', borderColor: '#A1BE44', borderWidth: 1, borderRadius: 8 },
-  resultTextName: { color: '#fff', fontSize: 13, fontWeight: 'bold', paddingLeft: 10 },
-  resultTextSub: { color: '#aaa', fontSize: 12 },
-  resultTextType: { color: '#A1BE44', fontSize: 12, fontWeight: 'bold' },
-  modalEmptyText: { color: '#666', textAlign: 'center', paddingVertical: 20 },
+  resultTextName: { color: '#fff', fontSize: 16, fontWeight: 'bold', paddingLeft: 10 }, // 💡 13 -> 16
+  resultTextSub: { color: '#aaa', fontSize: 15 }, // 💡 12 -> 15
+  resultTextType: { color: '#A1BE44', fontSize: 15, fontWeight: 'bold' }, // 💡 12 -> 15
+  modalEmptyText: { color: '#666', textAlign: 'center', paddingVertical: 20, fontSize: 16 }, // 💡 14 -> 16
 
-  // 💡 입력 폼 스타일
+  // 💡 입력 폼 영역
   formContainer: { backgroundColor: '#262626', borderRadius: 16, padding: 20, marginTop: 10 },
   typeToggleRow: { flexDirection: 'row', marginBottom: 20 },
-  typeBtn: { flex: 1, height: 45, backgroundColor: '#000', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginHorizontal: 5, borderWidth: 1, borderColor: '#333' },
+  typeBtn: { flex: 1, height: 55, backgroundColor: '#000', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginHorizontal: 5, borderWidth: 1, borderColor: '#333' }, // 💡 45 -> 55
   typeBtnActive: { borderColor: '#A1BE44', backgroundColor: 'rgba(161, 190, 68, 0.1)' },
-  typeBtnText: { color: '#999', fontWeight: 'bold' },
+  typeBtnText: { color: '#999', fontWeight: 'bold', fontSize: 16 }, // 💡 14 -> 16
   typeBtnTextActive: { color: '#A1BE44' },
 
   horizontalDateRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
   dateBlock: { flex: 1 },
   dateSpacer: { width: 15 },
-  inputLabel: { color: '#fff', fontSize: 14, fontWeight: 'bold', marginBottom: 10, marginLeft: 2 },
-  dateInputBox: { height: 45, backgroundColor: '#000', borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, borderWidth: 1, borderColor: '#333' },
-  dateText: { color: '#fff', fontSize: 14 },
-  dateIcon: { width: 18, height: 18, tintColor: '#A1BE44' },
+  inputLabel: { color: '#fff', fontSize: 17, fontWeight: 'bold', marginBottom: 10, marginLeft: 2 }, // 💡 14 -> 17
+  dateInputBox: { height: 55, backgroundColor: '#000', borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, borderWidth: 1, borderColor: '#333' }, // 💡 45 -> 55
+  dateText: { color: '#fff', fontSize: 17 }, // 💡 14 -> 17
+  dateIcon: { width: 20, height: 20, tintColor: '#A1BE44' }, // 💡 18 -> 20
   resetDateBtn: { marginTop: 6, alignSelf: 'flex-start' },
-  resetDateText: { color: '#A1BE44', fontSize: 11 },
-  amountInput: { height: 45, backgroundColor: '#000', borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#333', color: '#fff', fontSize: 14 },
+  resetDateText: { color: '#A1BE44', fontSize: 13 }, // 💡 11 -> 13
+  amountInput: { height: 55, backgroundColor: '#000', borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#333', color: '#fff', fontSize: 17 }, // 💡 45 -> 55, 14 -> 17
 
-  submitBtn: { backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 10 },
-  submitBtnText: { color: '#000', fontSize: 16, fontWeight: 'bold' },
+  submitBtn: { backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 18, alignItems: 'center', marginTop: 10 }, // 💡 패딩 16 -> 18
+  submitBtnText: { color: '#000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
 
   calendarOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
   calendarBox: { width: '90%', backgroundColor: '#212121', borderRadius: 16, padding: 15 },
-  calendarTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
-  calendarCloseBtn: { marginTop: 15, paddingVertical: 12, backgroundColor: '#333333', borderRadius: 10, alignItems: 'center' },
-  calendarCloseText: { color: '#ffffff', fontSize: 15, fontWeight: 'bold' },
+  calendarTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 }, // 💡 16 -> 18
+  calendarCloseBtn: { marginTop: 15, paddingVertical: 16, backgroundColor: '#333333', borderRadius: 10, alignItems: 'center' }, // 💡 패딩 12 -> 16
+  calendarCloseText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, // 💡 15 -> 18
 
-  // ─── 커스텀 알림 모달 전용 스타일 ───
+  // ─── 커스텀 알림 모달 전용 스타일 (통일) ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
-  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 },
-  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, // 💡 300 -> 320
+  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, // 💡 18 -> 20
+  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 24 }, // 💡 15 -> 17, 20 -> 24
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, // 💡 14 -> 16
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
 
   // 투 버튼 확인 모달 관련 스타일 추가
-  deleteModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
-  deleteTitle: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+  deleteModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' }, // 💡 300 -> 320
+  deleteTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' }, // 💡 16 -> 20
   deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  btnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
-  btnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
-  btnTextBlack: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
-  btnTextWhite: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
+  btnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginRight: 5 }, // 💡 12 -> 16
+  btnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginLeft: 5 }, // 💡 12 -> 16
+  btnTextBlack: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  btnTextWhite: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
 });
 
 export default ManagerTicket;

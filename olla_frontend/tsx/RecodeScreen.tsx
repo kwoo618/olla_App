@@ -6,9 +6,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../src/constants/Config';
 
 // ─────────────────────────── API URLs ───────────────────────────
-const ENDURANCE_BASE_URL = '${API_BASE_URL}records/endurance';
-const SERIES_BASE_URL   = '${API_BASE_URL}records/series';
-const MEMBERSHIP_URL    = '${API_BASE_URL}memberships/me';
+const ENDURANCE_BASE_URL = `${API_BASE_URL}/records/endurance`;
+const SERIES_BASE_URL   = `${API_BASE_URL}/records/series`;
+const MEMBERSHIP_URL    = `${API_BASE_URL}/memberships/me`;
 
 // ─────────────────────────── Axios 인터셉터 ───────────────────────────
 axios.interceptors.request.use(
@@ -157,7 +157,7 @@ const RecodeScreen = ({
   // ── 초보벽 최고기록 조회 ──
   const fetchBestRecords = async () => {
     try {
-      const res  = await axios.get(`${API_BASE_URL}/best`);
+      const res  = await axios.get(`${API_BASE_URL}/records/beginner/best`);
       const raw  = res.data?.data ?? res.data ?? [];
       const list: BeginnerRecord[] = Array.isArray(raw) ? raw
         : Array.isArray(raw?.list) ? raw.list : [];
@@ -267,7 +267,7 @@ const RecodeScreen = ({
     if (!itemToDelete) return;
     try {
       const id = Number(itemToDelete.id);
-      if      (itemToDelete.type === 'difficulty')  { await axios.delete(`${API_BASE_URL}/${id}`);       await fetchBestRecords();       }
+      if      (itemToDelete.type === 'difficulty')  { await axios.delete(`${API_BASE_URL}/records/beginner/${id}`);       await fetchBestRecords();       }
       else if (itemToDelete.type === 'endurance')   { await axios.delete(`${ENDURANCE_BASE_URL}/${id}`); await fetchEnduranceRecords();  }
       else if (itemToDelete.type === 'consecutive') { await axios.delete(`${SERIES_BASE_URL}/${id}`);    await fetchSeriesRecords();     }
       setDeleteModalVisible(false);
@@ -331,7 +331,7 @@ const RecodeScreen = ({
     };
 
     try {
-      await axios.post(API_BASE_URL, payload);
+      await axios.post(`${API_BASE_URL}/records/beginner`, payload);
       await fetchBestRecords();
       closeRecordModal();
       setTimeout(() => showResultModal('성공', '등반 기록이 저장되었습니다.', 'success'), 300);
@@ -347,7 +347,14 @@ const RecodeScreen = ({
   const [selectedMapNode,  setSelectedMapNode]  = useState<string | null>(null);
   const [enduranceMin,     setEnduranceMin]     = useState('');
   const [enduranceSec,     setEnduranceSec]     = useState('');
+  
+  // 💡 스톱워치 / 타이머 관련 상태
   const [isTimerActive,    setIsTimerActive]    = useState(false);
+  const [timerMode, setTimerMode] = useState<'stopwatch' | 'timer'>('stopwatch');
+  const [initialTimerValue, setInitialTimerValue] = useState(600); // 타이머용 기본 10분(600초)
+  const [timerRunning,  setTimerRunning]  = useState(false);
+  const [timerSeconds,  setTimerSeconds]  = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const openEnduranceModal = () => {
     requireMembership(() => {
@@ -450,31 +457,59 @@ const RecodeScreen = ({
     }
   };
 
-  const [timerRunning,  setTimerRunning]  = useState(false);
-  const [timerSeconds,  setTimerSeconds]  = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
+  // 💡 시작 / 일시정지 (스톱워치 & 타이머 로직 분리)
   const toggleTimer = () => {
     if (timerRunning) {
       setTimerRunning(false);
       if (timerRef.current) clearInterval(timerRef.current);
     } else {
+      if (timerMode === 'timer' && timerSeconds <= 0) return; // 타이머가 0일 땐 시작 불가
+      
       setTimerRunning(true);
       if (timerRef.current) clearInterval(timerRef.current);
-      timerRef.current = setInterval(() => setTimerSeconds(prev => prev + 1), 1000);
+      timerRef.current = setInterval(() => {
+        setTimerSeconds(prev => {
+          if (timerMode === 'stopwatch') {
+            return prev + 1; // 스톱워치는 1초씩 증가
+          } else {
+            if (prev <= 1) { // 타이머는 1초씩 감소
+              if (timerRef.current) clearInterval(timerRef.current);
+              setTimerRunning(false);
+              return 0;
+            }
+            return prev - 1;
+          }
+        });
+      }, 1000);
     }
   };
 
-  const stopTimer = () => {
+  // 💡 측정 완료 시 경과시간 계산 후 입력창에 세팅
+  const stopTimerAndSave = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     setTimerRunning(false);
-    const [m, s] = formatTime(timerSeconds).split(':');
+    
+    let elapsed = 0;
+    if (timerMode === 'stopwatch') {
+      elapsed = timerSeconds; // 스톱워치는 흘러간 시간 그대로
+    } else {
+      elapsed = initialTimerValue - timerSeconds; // 타이머는 (설정한 시간 - 남은 시간)
+    }
+    
+    const [m, s] = formatTime(elapsed).split(':');
     setEnduranceMin(m);
     setEnduranceSec(s);
     setIsTimerActive(false);
   };
 
-  const openTimerModal = () => { setTimerSeconds(0); setTimerRunning(false); setIsTimerActive(true); };
+  // 처음 모달 열 때 스톱워치 모드로 초기화
+  const openTimerModal = () => { 
+    setTimerMode('stopwatch');
+    setTimerSeconds(0); 
+    setTimerRunning(false); 
+    setIsTimerActive(true); 
+  };
+  
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
   const renderMapNode = (item: any) => {
@@ -800,24 +835,83 @@ const RecodeScreen = ({
         </TouchableOpacity>
       </Modal>
 
-      {/* ─── 지구력 모달 ─── */}
+      {/* ─── 지구력 스톱워치 / 타이머 모달 ─── */}
       <Modal visible={isEnduranceModalVisible} animationType="fade" transparent onRequestClose={closeEnduranceModal}>
         {isTimerActive ? (
           <SafeAreaView style={[StyleSheet.absoluteFill, styles.timerModalBackground, { zIndex: 1000 }]}>
             <View style={styles.timerHeader}>
-              <Text style={styles.timerHeaderTitle}>지구력 측정 타이머</Text>
+              <Text style={styles.timerHeaderTitle}>지구력 측정</Text>
               <TouchableOpacity onPress={() => { if (timerRef.current) clearInterval(timerRef.current); setTimerRunning(false); setIsTimerActive(false); }}>
                 <Text style={styles.closeBtn}>✕</Text>
               </TouchableOpacity>
             </View>
+
+            {/* 💡 스톱워치 / 타이머 선택 탭 */}
+            <View style={styles.timerModeContainer}>
+              <TouchableOpacity 
+                style={[styles.timerModeBtn, timerMode === 'stopwatch' && styles.timerModeBtnActive]}
+                onPress={() => { 
+                  if (!timerRunning) { 
+                    setTimerMode('stopwatch'); 
+                    setTimerSeconds(0); 
+                  } 
+                }}
+                activeOpacity={timerRunning ? 1 : 0.7}
+              >
+                <Text style={[styles.timerModeBtnText, timerMode === 'stopwatch' && styles.timerModeBtnTextActive]}>
+                  스톱워치
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.timerModeBtn, timerMode === 'timer' && styles.timerModeBtnActive]}
+                onPress={() => { 
+                  if (!timerRunning) { 
+                    setTimerMode('timer'); 
+                    setTimerSeconds(600); // 타이머 기본 10분
+                    setInitialTimerValue(600); 
+                  } 
+                }}
+                activeOpacity={timerRunning ? 1 : 0.7}
+              >
+                <Text style={[styles.timerModeBtnText, timerMode === 'timer' && styles.timerModeBtnTextActive]}>
+                  타이머
+                </Text>
+              </TouchableOpacity>
+            </View>
+
             <View style={styles.timerCenterArea}>
               <Text style={styles.hugeTimerText}>{formatTime(timerSeconds)}</Text>
+              
+              {/* 💡 타이머 모드일 때만 보이는 10분 단위 설정 버튼 */}
+              {timerMode === 'timer' && !timerRunning && (
+                <View style={styles.timerAdjustRow}>
+                  <TouchableOpacity 
+                    onPress={() => {
+                      setTimerSeconds(prev => Math.max(600, prev - 600)); // 최소 10분은 유지
+                      setInitialTimerValue(prev => Math.max(600, prev - 600));
+                    }} 
+                    style={styles.adjustBtn}
+                  >
+                    <Text style={styles.adjustBtnText}>- 10분</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    onPress={() => {
+                      setTimerSeconds(prev => prev + 600);
+                      setInitialTimerValue(prev => prev + 600);
+                    }} 
+                    style={styles.adjustBtn}
+                  >
+                    <Text style={styles.adjustBtnText}>+ 10분</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
+
             <View style={styles.timerControlRow}>
               <TouchableOpacity style={[styles.timerCircleBtn, { backgroundColor: timerRunning ? '#FFB74D' : '#A1BE44' }]} onPress={toggleTimer}>
-                <Text style={styles.timerCircleBtnText}>{timerRunning ? '일시정지' : '재생'}</Text>
+                <Text style={styles.timerCircleBtnText}>{timerRunning ? '일시정지' : '시작'}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.timerCircleBtn, { backgroundColor: '#FF4D4D' }]} onPress={stopTimer}>
+              <TouchableOpacity style={[styles.timerCircleBtn, { backgroundColor: '#FF4D4D' }]} onPress={stopTimerAndSave}>
                 <Text style={styles.timerCircleBtnText}>완료</Text>
               </TouchableOpacity>
             </View>
@@ -873,7 +967,7 @@ const RecodeScreen = ({
                     </Text>
                   </View>
 
-                  <Text style={styles.sectionTitle}>타이머 기록 (직접 입력 불가)</Text>
+                  <Text style={styles.sectionTitle}>시간 기록 (타이머 기능 제공)</Text>
                   <View style={styles.timerInputRow}>
                     <TouchableOpacity onPress={openTimerModal} style={styles.timerPlayBtn}>
                       <Text style={styles.timerPlayIcon}>▶</Text>
@@ -968,7 +1062,7 @@ const RecodeScreen = ({
   );
 };
 
-// ─────────────────────────── 스타일 ───────────────────────────
+// ─────────────────────────── 스타일 (글씨 크기 확대 적용) ───────────────────────────
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
   scrollContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 20 },
@@ -980,122 +1074,135 @@ const styles = StyleSheet.create({
   summaryIconVertical2: { width: 32, height: 32, tintColor: '#2CDA00', marginRight: 15 },
   summaryIconVertical3: { width: 32, height: 32, tintColor: '#FFCC00', marginRight: 15 },
   summaryTextColumn: { flexDirection: 'column', justifyContent: 'center' },
-  summaryLabelVertical: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
-  summarySubLabelVertical: { color: '#999999', fontSize: 13, fontWeight: '500', marginTop: 4 },
+  summaryLabelVertical: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
+  summarySubLabelVertical: { color: '#999999', fontSize: 15, fontWeight: '500', marginTop: 4 }, 
 
   simpleAccordionWrapper: { marginBottom: 10 },
   simpleAccordionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 5 },
-  simpleAccordionTitle: { color: '#999999', fontSize: 15, fontWeight: '500' },
-  chevronIcon: { color: '#999999', fontSize: 16, fontWeight: 'bold' },
+  simpleAccordionTitle: { color: '#999999', fontSize: 17, fontWeight: '500' }, 
+  chevronIcon: { color: '#999999', fontSize: 18, fontWeight: 'bold' }, 
   outerContainer: { paddingVertical: 5 },
 
   recordItemCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2A2A2A', paddingVertical: 15, paddingHorizontal: 20, borderRadius: 16, marginBottom: 10 },
-  recordIdLarge: { color: '#999999', fontSize: 22, fontWeight: 'bold', width: 35 },
-  colorAndTypeColumn: { width: 60, flexDirection: 'column', justifyContent: 'center' },
-  colorNameText: { fontSize: 15, fontWeight: 'bold', marginBottom: 4 },
+  recordIdLarge: { color: '#999999', fontSize: 25, fontWeight: 'bold', width: 40 }, 
+  colorAndTypeColumn: { width: 65, flexDirection: 'column', justifyContent: 'center' }, 
+  colorNameText: { fontSize: 17, fontWeight: 'bold', marginBottom: 4 }, 
   typeBadgeRoundTrip: { backgroundColor: '#1A5276', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, alignSelf: 'flex-start' },
-  typeTextRoundTrip: { color: '#85C1E9', fontSize: 11, fontWeight: 'bold' },
+  typeTextRoundTrip: { color: '#85C1E9', fontSize: 13, fontWeight: 'bold' }, 
   typeBadgeOneWay: { backgroundColor: '#7B241C', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, alignSelf: 'flex-start' },
-  typeTextOneWay: { color: '#CCCCCC', fontSize: 11, fontWeight: 'bold' },
-  recordHoldsLeft: { flex: 1, color: '#ffffff', fontSize: 15, fontWeight: 'bold', marginLeft: 10 },
-  recordStatus: { fontSize: 14, fontWeight: 'bold', width: 45, textAlign: 'right' },
+  typeTextOneWay: { color: '#CCCCCC', fontSize: 13, fontWeight: 'bold' }, 
+  recordHoldsLeft: { flex: 1, color: '#ffffff', fontSize: 17, fontWeight: 'bold', marginLeft: 10 }, 
+  recordStatus: { fontSize: 16, fontWeight: 'bold', width: 55, textAlign: 'right' }, 
   statusSuccess: { color: '#A1BE44' },
   statusIng: { color: '#999999' },
 
   rowCardWithTrash: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#2A2A2A', paddingVertical: 18, paddingHorizontal: 15, borderRadius: 16, marginBottom: 10 },
   enduranceCol: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  enduranceTopText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
-  enduranceBottomText: { color: '#999999', fontSize: 12 },
+  enduranceTopText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 4 }, 
+  enduranceBottomText: { color: '#999999', fontSize: 14 }, 
   verticalDivider: { width: 1, height: 30, backgroundColor: '#444444', marginHorizontal: 5 },
   circleContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingLeft: 10, flexWrap: 'wrap' },
   colorCircle: { width: 30, height: 30, borderRadius: 15, marginRight: 10, marginBottom: 5 },
   trashButton: { padding: 10, marginLeft: 5 },
-  trashIcon: { width: 22, height: 22, tintColor: '#A1BE44', resizeMode: 'contain' },
-  emptyText: { color: '#999999', fontSize: 14, textAlign: 'center', width: '100%' },
+  trashIcon: { width: 24, height: 24, tintColor: '#A1BE44', resizeMode: 'contain' }, 
+  emptyText: { color: '#999999', fontSize: 16, textAlign: 'center', width: '100%' }, 
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
-  bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 20, maxHeight: '85%', width: '100%' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)', justifyContent: 'flex-end' },
+  bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 50, alignItems: 'center' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
-  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  sheetTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' },
-  closeBtn: { color: '#999999', fontSize: 24, paddingHorizontal: 10 },
-  sectionTitle: { color: '#999999', fontSize: 14, fontWeight: '600', marginTop: 5, marginBottom: 10 },
+  sheetHeader: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
+  sheetTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold', marginLeft: 10 }, 
+  closeBtn: { color: '#999999', fontSize: 28, paddingHorizontal: 10 }, 
+  sectionTitle: { color: '#999999', fontSize: 16, fontWeight: '600', marginTop: 5, marginBottom: 10 }, 
 
   colorButtonContainer: { borderWidth: 1, borderColor: '#444444', borderRadius: 16, paddingHorizontal: 12, paddingTop: 12, paddingBottom: 2, marginBottom: 15 },
   colorButtonRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   diffButton: { width: '23%', borderWidth: 1.5, backgroundColor: 'transparent', borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginBottom: 10 },
-  diffButtonText: { color: '#ffffff', fontSize: 13, fontWeight: '500' },
+  diffButtonText: { color: '#ffffff', fontSize: 15, fontWeight: '500' }, 
   choiceRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
   choiceButton: { flex: 1, borderWidth: 1.5, backgroundColor: 'transparent', borderRadius: 12, paddingVertical: 14, marginHorizontal: 4, alignItems: 'center' },
-  choiceButtonText: { color: '#ffffff', fontSize: 15, fontWeight: '600' },
+  choiceButtonText: { color: '#ffffff', fontSize: 17, fontWeight: '600' }, 
   saveRecordButton: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 20 },
-  saveRecordButtonText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  saveRecordButtonText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
 
   failContainer: { width: '100%', alignItems: 'center', marginTop: 5 },
-  failLabel: { color: '#CCCCCC', fontSize: 14, marginBottom: 10 },
+  failLabel: { color: '#CCCCCC', fontSize: 16, marginBottom: 10 }, 
   counterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  counterBtn: { width: 45, height: 45, backgroundColor: '#333333', borderRadius: 22.5, alignItems: 'center', justifyContent: 'center', marginHorizontal: 15 },
-  counterBtnText: { color: '#ffffff', fontSize: 24, fontWeight: 'bold' },
+  counterBtn: { width: 50, height: 50, backgroundColor: '#333333', borderRadius: 25, alignItems: 'center', justifyContent: 'center', marginHorizontal: 15 }, 
+  counterBtnText: { color: '#ffffff', fontSize: 28, fontWeight: 'bold' }, 
   inputWrapper: { flexDirection: 'row', alignItems: 'flex-end', borderBottomWidth: 2, borderBottomColor: '#A1BE44', paddingBottom: 5 },
-  holdInput: { color: '#ffffff', fontSize: 28, fontWeight: 'bold', padding: 0, minWidth: 45, textAlign: 'center' },
-  holdMaxText: { color: '#999999', fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
+  holdInput: { color: '#ffffff', fontSize: 32, fontWeight: 'bold', padding: 0, minWidth: 55, textAlign: 'center' }, 
+  holdMaxText: { color: '#999999', fontSize: 20, fontWeight: 'bold', marginBottom: 4 }, 
 
   enduranceCounterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   inputWrapperSmall: { borderBottomWidth: 2, borderBottomColor: '#A1BE44', paddingBottom: 2, marginHorizontal: 20 },
-  lapsInputText: { color: '#ffffff', fontSize: 32, fontWeight: 'bold', padding: 0, minWidth: 60, textAlign: 'center' },
+  lapsInputText: { color: '#ffffff', fontSize: 36, fontWeight: 'bold', padding: 0, minWidth: 70, textAlign: 'center' }, 
 
   mapSuperContainer: { alignItems: 'flex-start', width: '100%', paddingLeft: 0 },
   mapScrollWrapper: { flexGrow: 1, justifyContent: 'flex-start', paddingTop: 5, paddingBottom: 0, paddingHorizontal: 0 },
   mapInnerWrapper: { backgroundColor: '#1E1E1E', paddingTop: 20, paddingBottom: 10, paddingLeft: 10, paddingRight: 40, borderRadius: 16, alignSelf: 'flex-start' },
   mapAbsBox: { position: 'absolute', width: 20, height: 20, borderRadius: 6, zIndex: 2 },
-  mapAbsText: { position: 'absolute', width: 30, textAlign: 'center', fontSize: 10, color: '#999999', fontWeight: 'bold', zIndex: 1 },
+  mapAbsText: { position: 'absolute', width: 30, textAlign: 'center', fontSize: 12, color: '#999999', fontWeight: 'bold', zIndex: 1 }, 
   headMarker: { position: 'absolute', width: 20, height: 20, borderRadius: 10, borderWidth: 3, borderColor: '#FFFFFF', zIndex: 20 },
   selectedSectionBox: { backgroundColor: '#2A2A2A', padding: 15, borderRadius: 12, alignItems: 'center', marginBottom: 10 },
-  selectedSectionText: { color: '#A1BE44', fontSize: 16, fontWeight: 'bold' },
+  selectedSectionText: { color: '#A1BE44', fontSize: 18, fontWeight: 'bold' }, 
 
   timerInputRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
-  timerPlayBtn: { width: 45, height: 45, backgroundColor: '#333333', borderRadius: 22.5, alignItems: 'center', justifyContent: 'center', marginRight: 15 },
-  timerPlayIcon: { color: '#A1BE44', fontSize: 18, marginLeft: 4 },
+  timerPlayBtn: { width: 50, height: 50, backgroundColor: '#333333', borderRadius: 25, alignItems: 'center', justifyContent: 'center', marginRight: 15 },
+  timerPlayIcon: { color: '#A1BE44', fontSize: 20, marginLeft: 4 }, 
   timerDisplayWrapper: { flexDirection: 'row', alignItems: 'flex-end', borderBottomWidth: 2, borderBottomColor: '#A1BE44', paddingBottom: 5, paddingHorizontal: 10 },
-  timerDisplayText: { color: '#ffffff', fontSize: 28, fontWeight: 'bold', minWidth: 40, textAlign: 'center' },
-  timerLabel: { color: '#999999', fontSize: 16, fontWeight: 'bold', marginBottom: 4, marginRight: 8, marginLeft: 4 },
+  timerDisplayText: { color: '#ffffff', fontSize: 32, fontWeight: 'bold', minWidth: 45, textAlign: 'center' }, 
+  timerLabel: { color: '#999999', fontSize: 18, fontWeight: 'bold', marginBottom: 4, marginRight: 8, marginLeft: 4 }, 
 
   timerModalBackground: { flex: 1, backgroundColor: '#1A1A1A', padding: 20 },
   timerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20 },
-  timerHeaderTitle: { color: '#A1BE44', fontSize: 22, fontWeight: 'bold' },
+  timerHeaderTitle: { color: '#A1BE44', fontSize: 24, fontWeight: 'bold' }, 
   timerCenterArea: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  hugeTimerText: { color: '#ffffff', fontSize: 80, fontWeight: '900' },
+  hugeTimerText: { color: '#ffffff', fontSize: 86, fontWeight: '900' }, 
+  
+  // 💡 상단 스톱워치 / 타이머 탭 스타일
+  timerModeContainer: { flexDirection: 'row', backgroundColor: '#333333', borderRadius: 12, padding: 4, marginHorizontal: 20, marginTop: 20 },
+  timerModeBtn: { flex: 1, paddingVertical: 14, alignItems: 'center', borderRadius: 8 },
+  timerModeBtnActive: { backgroundColor: '#555555' },
+  timerModeBtnText: { color: '#999999', fontSize: 18, fontWeight: 'bold' },
+  timerModeBtnTextActive: { color: '#ffffff' },
+
+  // 💡 타이머 10분 단위 조절 버튼 스타일
+  timerAdjustRow: { flexDirection: 'row', marginTop: 40, justifyContent: 'center', alignItems: 'center' },
+  adjustBtn: { backgroundColor: '#333333', paddingVertical: 14, paddingHorizontal: 20, borderRadius: 12, marginHorizontal: 10 },
+  adjustBtnText: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' },
+
   timerControlRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 50 },
-  timerCircleBtn: { width: 100, height: 100, borderRadius: 50, justifyContent: 'center', alignItems: 'center' },
-  timerCircleBtnText: { color: '#1A1A1A', fontSize: 18, fontWeight: 'bold' },
+  timerCircleBtn: { width: 110, height: 110, borderRadius: 55, justifyContent: 'center', alignItems: 'center' }, 
+  timerCircleBtnText: { color: '#1A1A1A', fontSize: 20, fontWeight: 'bold' }, 
 
   consecutiveInputBox: { backgroundColor: '#111111', minHeight: 60, borderRadius: 12, padding: 10, flexDirection: 'row', flexWrap: 'wrap', marginBottom: 15 },
-  consecutiveEmptyText: { color: '#666666', fontSize: 14, alignSelf: 'center', marginLeft: 5 },
+  consecutiveEmptyText: { color: '#666666', fontSize: 16, alignSelf: 'center', marginLeft: 5 }, 
   filledDiffBox: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, margin: 4, alignItems: 'center', justifyContent: 'center' },
-  filledDiffText: { color: '#ffffff', fontSize: 13, fontWeight: 'bold', textShadowColor: 'rgba(0, 0, 0, 0.7)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
+  filledDiffText: { color: '#ffffff', fontSize: 15, fontWeight: 'bold', textShadowColor: 'rgba(0, 0, 0, 0.7)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }, 
   horizontalDivider: { height: 1, backgroundColor: '#333333', marginVertical: 20 },
   scoreHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  scoreTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginRight: 15 },
+  scoreTitle: { color: '#ffffff', fontSize: 22, fontWeight: 'bold', marginRight: 15 }, 
   detailButton: { borderWidth: 1, borderColor: '#A1BE44', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
-  detailButtonText: { color: '#999999', fontSize: 13, fontWeight: '600' },
-  totalScoreText: { color: '#A1BE44', fontSize: 36, fontWeight: 'bold', marginBottom: 10 },
+  detailButtonText: { color: '#999999', fontSize: 15, fontWeight: '600' }, 
+  totalScoreText: { color: '#A1BE44', fontSize: 40, fontWeight: 'bold', marginBottom: 10 }, 
 
   // ─── 커스텀 알림 모달 전용 스타일 ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 }, // ✅ 15에서 8로 줄여서 제목과 내용 사이 간격을 좁힘
-  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 }, // ✅ 버튼과의 간격(25)은 유지, 글씨 줄간격을 22에서 20으로 줄임
+  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, 
+  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, 
   resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
 
   deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   deleteModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
-  deleteModalText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 25 },
+  deleteModalText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25 }, 
   deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
   deleteBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
-  deleteBtnYesText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
+  deleteBtnYesText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
   deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
-  deleteBtnNoText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
+  deleteBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
 });
 
 export default RecodeScreen;

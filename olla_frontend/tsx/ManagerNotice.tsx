@@ -248,7 +248,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
                 <TouchableOpacity style={styles.actionBtn} onPress={() => openEditModal(notice)}>
                   <Image source={require('../assets/fix.png')} style={[styles.actionIcon, { tintColor: '#A1BE44' }]} />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.actionBtn} onPress={() => confirmDelete(notice.id)}>
+                <TouchableOpacity style={[styles.actionBtn, styles.deleteBtn]} onPress={() => confirmDelete(notice.id)}>
                   <Image source={require('../assets/trash.png')} style={[styles.actionIcon, { tintColor: '#FF4D4D' }]} />
                 </TouchableOpacity>
               </View>
@@ -349,7 +349,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
         </TouchableOpacity>
       </Modal>
 
-      {/* 삭제 확인 모달 (중앙 알림창 형태 유지) */}
+      {/* 삭제 확인 모달 */}
       <Modal visible={isDeleteModalVisible} animationType="fade" transparent={true}>
         <View style={styles.centerModalOverlay}>
           <View style={styles.deleteModalBox}>
@@ -370,85 +370,87 @@ const ManagerNotice = ({ route, navigation }: any) => {
   );
 };
 
+// ─────────────────────────── 스타일 (글씨 크기 및 여백 확대 적용) ───────────────────────────
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A', paddingHorizontal: 20, paddingTop: 20 },
   center:     { justifyContent: 'center', alignItems: 'center' },
   scrollContent: { paddingBottom: 100 },
-  emptyText: { color: '#666', fontSize: 15, textAlign: 'center', marginTop: 60 },
+  emptyText: { color: '#666', fontSize: 17, textAlign: 'center', marginTop: 60 }, // 💡 15 -> 17
 
   noticeCard: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#2C2C2C', borderRadius: 12,
-    paddingVertical: 14, paddingHorizontal: 16,
-    marginBottom: 12, borderWidth: 1, borderColor: '#333333',
+    backgroundColor: '#2C2C2C', borderRadius: 16, // 💡 12 -> 16
+    paddingVertical: 18, paddingHorizontal: 20, // 💡 패딩 14, 16 -> 18, 20
+    marginBottom: 15, borderWidth: 1, borderColor: '#333333', // 💡 마진 12 -> 15
   },
 
   noticeContent: { flex: 1, flexDirection: 'column', alignItems: 'flex-start', paddingRight: 10 },
 
-  noticeHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  noticeBadge: { backgroundColor: '#A1BE44', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 8 },
-  noticeBadgeText: { color: '#1A1A1A', fontSize: 10, fontWeight: 'bold' },
-  noticeTitle: { color: '#ffffff', fontSize: 15, fontWeight: 'bold', flex: 1 },
+  noticeHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 }, // 💡 4 -> 6
+  noticeBadge: { backgroundColor: '#A1BE44', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, marginRight: 8 }, // 💡 6, 2 -> 8, 4
+  noticeBadgeText: { color: '#1A1A1A', fontSize: 12, fontWeight: 'bold' }, // 💡 10 -> 12
+  noticeTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', flex: 1 }, // 💡 15 -> 18
 
-  noticeDate:   { color: '#999999', fontSize: 12 },
-  noticeAuthor: { color: '#666666', fontSize: 11, marginTop: 2 },
+  noticeDate:   { color: '#999999', fontSize: 14 }, // 💡 12 -> 14
+  noticeAuthor: { color: '#666666', fontSize: 13, marginTop: 4 }, // 💡 11 -> 13
 
   noticeActions: { flexDirection: 'row', alignItems: 'center' },
-  actionBtn:  { padding: 6, marginLeft: 2 },
-  actionIcon: { width: 18, height: 18, resizeMode: 'contain' },
+  actionBtn:  { padding: 8, marginLeft: 4 }, // 💡 6, 2 -> 8, 4
+  deleteBtn: { backgroundColor: 'rgba(255,77,77,0.1)', borderRadius: 8 }, // 💡 삭제 버튼 강조
+  actionIcon: { width: 22, height: 22, resizeMode: 'contain' }, // 💡 18 -> 22
 
   fab: {
     position: 'absolute', bottom: 15, right: 20, backgroundColor: '#A1BE44',
-    paddingHorizontal: 20, paddingVertical: 15, borderRadius: 30, elevation: 5,
+    paddingHorizontal: 25, paddingVertical: 18, borderRadius: 35, elevation: 5, // 💡 패딩 및 라운드 확대
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4
   },
-  fabText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  fabText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
 
   // 💡 바텀 시트 모달 스타일
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%', maxHeight: '90%' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, paddingHorizontal: 5 },
-  sheetTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' },
-  closeIcon: { color: '#999999', fontSize: 24, paddingHorizontal: 10 },
+  sheetTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' }, // 💡 20 -> 23
+  closeIcon: { color: '#999999', fontSize: 28, paddingHorizontal: 10 }, // 💡 24 -> 28
   horizontalDivider: { height: 1, backgroundColor: '#333333', width: '100%', marginBottom: 20 },
 
-  inputLabel: { color: '#ffffff', fontSize: 14, fontWeight: '600', marginBottom: 8, marginLeft: 2 },
+  inputLabel: { color: '#ffffff', fontSize: 16, fontWeight: '600', marginBottom: 10, marginLeft: 2 }, // 💡 14 -> 16
   textInput: {
     backgroundColor: '#000', borderWidth: 1, borderColor: '#333333',
-    borderRadius: 12, color: '#ffffff', padding: 14, fontSize: 15, marginBottom: 16
+    borderRadius: 12, color: '#ffffff', padding: 16, fontSize: 17, marginBottom: 20 // 💡 패딩 14 -> 16, 15 -> 17
   },
-  contentInput: { height: 140, paddingTop: 14 },
+  contentInput: { height: 160, paddingTop: 16 }, // 💡 140 -> 160
 
-  checkboxRow:     { flexDirection: 'row', alignItems: 'center', marginBottom: 24, marginTop: 5 },
-  checkbox:        { width: 22, height: 22, borderWidth: 2, borderColor: '#666666', borderRadius: 6, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  checkboxRow:     { flexDirection: 'row', alignItems: 'center', marginBottom: 25, marginTop: 5 }, // 💡 24 -> 25
+  checkbox:        { width: 24, height: 24, borderWidth: 2, borderColor: '#666666', borderRadius: 6, alignItems: 'center', justifyContent: 'center', marginRight: 10 }, // 💡 22 -> 24
   checkboxChecked: { backgroundColor: '#A1BE44', borderColor: '#A1BE44' },
-  checkmark:       { color: '#000000', fontSize: 14, fontWeight: 'bold' },
-  checkboxLabel:   { color: '#ffffff', fontSize: 15 },
+  checkmark:       { color: '#000000', fontSize: 16, fontWeight: 'bold' }, // 💡 14 -> 16
+  checkboxLabel:   { color: '#ffffff', fontSize: 17 }, // 💡 15 -> 17
 
   btnRow:       { flexDirection: 'row', justifyContent: 'space-between' },
-  cancelBtn:    { flex: 1, backgroundColor: '#333333', paddingVertical: 15, borderRadius: 10, alignItems: 'center', marginRight: 6 },
-  cancelBtnText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
-  registerBtn:  { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 15, borderRadius: 10, alignItems: 'center', marginLeft: 6 },
-  registerBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  cancelBtn:    { flex: 1, backgroundColor: '#333333', paddingVertical: 18, borderRadius: 12, alignItems: 'center', marginRight: 6 }, // 💡 15 -> 18
+  cancelBtnText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  registerBtn:  { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 18, borderRadius: 12, alignItems: 'center', marginLeft: 6 }, // 💡 15 -> 18
+  registerBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
 
-  // 삭제 모달 스타일 (기존 중앙 팝업)
+  // 삭제 모달 스타일 (기존 중앙 팝업 통일)
   centerModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  deleteModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
-  deleteTitle:    { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 25, textAlign: 'center' },
+  deleteModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' }, // 💡 300 -> 320
+  deleteTitle:    { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginBottom: 25, textAlign: 'center' }, // 💡 16 -> 20
   deleteBtnRow:   { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  btnYes:         { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
-  btnNo:          { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
-  btnTextBlack:   { color: '#000000', fontSize: 16, fontWeight: 'bold' },
-  btnTextWhite:   { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
+  btnYes:         { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginRight: 5 }, // 💡 12 -> 16
+  btnNo:          { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginLeft: 5 }, // 💡 12 -> 16
+  btnTextBlack:   { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  btnTextWhite:   { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
 
-  // ─── 커스텀 알림 모달 전용 스타일 ───
+  // ─── 커스텀 알림 모달 전용 스타일 (통일) ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
-  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 },
-  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, // 💡 300 -> 320
+  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, // 💡 18 -> 20
+  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, // 💡 15 -> 17
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, // 💡 14 -> 16
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
 });
 
 export default ManagerNotice;

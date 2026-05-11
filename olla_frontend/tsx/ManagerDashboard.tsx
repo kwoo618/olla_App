@@ -420,7 +420,7 @@ const ManagerDashboard = ({ navigation }: any) => {
                   <TouchableOpacity style={styles.actionBtn} onPress={() => handleEditNotice(notice.id)}>
                     <Image source={require('../assets/fix.png')} style={[styles.actionIcon, { tintColor: '#A1BE44' }]} />
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionBtn} onPress={() => confirmDelete('notice', notice.id)}>
+                  <TouchableOpacity style={[styles.actionBtn, styles.deleteBtn]} onPress={() => confirmDelete('notice', notice.id)}>
                     <Image source={require('../assets/trash.png')} style={[styles.actionIcon, { tintColor: '#FF0000' }]} />
                   </TouchableOpacity>
                 </View>
@@ -452,8 +452,9 @@ const ManagerDashboard = ({ navigation }: any) => {
                     <View style={[styles.badge, { backgroundColor: badgeBgColor, alignSelf: 'flex-start', marginBottom: 8 }]}>
                       <Text style={[styles.badgeText, { color: badgeTextColor }]}>{postType}</Text>
                     </View>
+                    {/* 💡 폰트 확대: 인라인 스타일도 적용 */}
                     <Text style={[styles.noticeTitle, isPast && { color: '#888888' }]} numberOfLines={1}>{post.title}</Text>
-                    <Text style={[styles.subText, { color: isPast ? '#666666' : '#ffffff', fontSize: 12 }]}>
+                    <Text style={[styles.subText, { color: isPast ? '#666666' : '#ffffff', fontSize: 14 }]}>
                       {post.writerName}  {formatDate(post.createdAt)} {isPast ? '(마감됨)' : ''}
                     </Text>
                   </View>
@@ -585,52 +586,53 @@ const ManagerDashboard = ({ navigation }: any) => {
   );
 };
 
+// ─────────────────────────── 스타일 (글씨 크기 확대 적용) ───────────────────────────
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A', paddingHorizontal: 20, paddingTop: 10 },
   scrollContent: { paddingBottom: 80 },
 
-  metricsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-  metricBox: { flex: 1, backgroundColor: '#2C2C2C', borderRadius: 12, paddingVertical: 18, alignItems: 'center', marginHorizontal: 4 },
-  metricTitle: { color: '#999999', fontSize: 11, fontWeight: 'bold', marginBottom: 8 },
-  metricValue: { color: '#ffffff', fontSize: 15, fontWeight: '900' },
+  metricsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 25 }, // 💡 20 -> 25
+  metricBox: { flex: 1, backgroundColor: '#2C2C2C', borderRadius: 12, paddingVertical: 20, alignItems: 'center', marginHorizontal: 4 }, // 💡 18 -> 20
+  metricTitle: { color: '#999999', fontSize: 13, fontWeight: 'bold', marginBottom: 8 }, // 💡 11 -> 13
+  metricValue: { color: '#ffffff', fontSize: 19, fontWeight: '900' }, // 💡 15 -> 19
 
   card: { backgroundColor: '#2C2C2C', borderRadius: 16, padding: 20, marginBottom: 20 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardTitle: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
-  viewAllBtn: { borderWidth: 1, borderColor: '#A1BE44', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
-  viewAllBtnText: { color: '#999999', fontSize: 12, fontWeight: 'bold' },
+  cardTitle: { color: '#ffffff', fontSize: 19, fontWeight: 'bold' }, // 💡 16 -> 19
+  viewAllBtn: { borderWidth: 1, borderColor: '#A1BE44', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 }, // 💡 14, 6 -> 16, 8
+  viewAllBtnText: { color: '#999999', fontSize: 14, fontWeight: 'bold' }, // 💡 12 -> 14
   divider: { height: 1, backgroundColor: '#444444', marginVertical: 15 },
-  emptyText: { color: '#999', textAlign: 'center', marginVertical: 10 },
+  emptyText: { color: '#999', textAlign: 'center', marginVertical: 10, fontSize: 16 }, // 💡 16 추가
 
   rowItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  profileImg: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#444444', marginRight: 15 },
+  profileImg: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#444444', marginRight: 15 }, // 💡 40 -> 48
   infoCol: { flex: 1 },
-  nameText: { color: '#ffffff', fontSize: 15, fontWeight: 'bold', marginBottom: 4 },
-  subText: { color: '#999999', fontSize: 13 },
+  nameText: { color: '#ffffff', fontSize: 17, fontWeight: 'bold', marginBottom: 4 }, // 💡 15 -> 17
+  subText: { color: '#999999', fontSize: 15 }, // 💡 13 -> 15
 
-  badge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
-  badgeText: { fontSize: 12, fontWeight: 'bold', textAlign: 'center' },
+  badge: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 }, // 💡 12, 4 -> 14, 6
+  badgeText: { fontSize: 14, fontWeight: 'bold', textAlign: 'center' }, // 💡 12 -> 14
 
   noticeListItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   noticeTextContent: { flex: 1, paddingRight: 10 },
 
   noticeHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  noticeBadge: { backgroundColor: '#A1BE44', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 8 },
-  noticeBadgeText: { color: '#1A1A1A', fontSize: 10, fontWeight: 'bold' },
-  noticeTitle: { color: '#ffffff', fontSize: 15, fontWeight: 'bold', flex: 1 },
+  noticeBadge: { backgroundColor: '#A1BE44', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, marginRight: 8 }, // 💡 6, 2 -> 8, 4
+  noticeBadgeText: { color: '#1A1A1A', fontSize: 12, fontWeight: 'bold' }, // 💡 10 -> 12
+  noticeTitle: { color: '#ffffff', fontSize: 17, fontWeight: 'bold', flex: 1 }, // 💡 15 -> 17
 
   noticeActions: { flexDirection: 'row', alignItems: 'center' },
   actionBtn: { padding: 6, marginLeft: 6 },
-  deleteBtn: { backgroundColor: 'rgba(255,77,77,0.1)', borderRadius: 8 },
-  actionIcon: { width: 20, height: 20, resizeMode: 'contain' },
+  deleteBtn: { backgroundColor: 'rgba(255,77,77,0.1)', borderRadius: 8, padding: 8 }, // 💡 여백 추가
+  actionIcon: { width: 24, height: 24, resizeMode: 'contain' }, // 💡 20 -> 24
 
-  fab: { position: 'absolute', bottom: 15, right: 20, width: 60, height: 60, borderRadius: 30, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4.65 },
-  fabIcon: { width: 30, height: 30, tintColor: '#1A1A1A', resizeMode: 'contain' },
+  fab: { position: 'absolute', bottom: 15, right: 20, width: 70, height: 70, borderRadius: 35, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4.65 }, // 💡 60 -> 70
+  fabIcon: { width: 35, height: 35, tintColor: '#1A1A1A', resizeMode: 'contain' }, // 💡 30 -> 35
 
   scannerModalOverlay: { flex: 1, backgroundColor: '#1A1A1A' },
   scannerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: 60, backgroundColor: '#1A1A1A' },
-  scannerTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' },
-  closeIcon: { color: '#999999', fontSize: 28 },
+  scannerTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' }, // 💡 20 -> 23
+  closeIcon: { color: '#999999', fontSize: 32 }, // 💡 28 -> 32
   scannerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
   processingOverlay: {
     position: 'absolute',
@@ -643,26 +645,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 20,
   },
-  processingText: { color: '#ffffff', fontSize: 16, marginTop: 12, fontWeight: 'bold' },
+  processingText: { color: '#ffffff', fontSize: 18, marginTop: 12, fontWeight: 'bold' }, // 💡 16 -> 18
   scannerFooter: { padding: 40, alignItems: 'center', backgroundColor: '#1A1A1A' },
-  scannerDesc: { color: '#ffffff', fontSize: 16, marginTop: 5 },
+  scannerDesc: { color: '#ffffff', fontSize: 18, marginTop: 5 }, // 💡 16 -> 18
 
-  // ─── 커스텀 알림 모달 전용 스타일 ───
+  // ─── 커스텀 알림 모달 전용 스타일 (통일) ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
-  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 },
-  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, // 💡 300 -> 320
+  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, // 💡 18 -> 20
+  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, // 💡 15 -> 17
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, // 💡 14 -> 16
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
 
   deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  deleteModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
-  deleteModalText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 25, textAlign: 'center', lineHeight: 22 },
+  deleteModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' }, // 💡 300 -> 320
+  deleteModalText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center', lineHeight: 26 }, // 💡 16 -> 18
   deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
   deleteBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
-  deleteBtnYesText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
+  deleteBtnYesText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
   deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
-  deleteBtnNoText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
+  deleteBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
 });
 
 export default ManagerDashboard;

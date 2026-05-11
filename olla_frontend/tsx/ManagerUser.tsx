@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   View, Text, StyleSheet, TextInput, TouchableOpacity, 
   ScrollView, Image, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Animated 
@@ -390,79 +390,82 @@ const ManagerUser = ({ navigation }: any) => {
   );
 };
 
+// ─────────────────────────── 스타일 (글씨 및 레이아웃 확대 적용) ───────────────────────────
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
   searchContainer: { paddingHorizontal: 20, marginTop: 15, marginBottom: 20 },
-  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2C2C2C', borderRadius: 12, paddingHorizontal: 15, height: 50 },
-  searchIcon: { fontSize: 18, marginRight: 10 },
-  searchInput: { flex: 1, color: '#ffffff', fontSize: 15 },
+  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2C2C2C', borderRadius: 12, paddingHorizontal: 20, height: 60 }, // 💡 높이 및 여백 확대
+  searchIcon: { fontSize: 22, marginRight: 10 }, // 💡 18 -> 22
+  searchInput: { flex: 1, color: '#ffffff', fontSize: 17 }, // 💡 15 -> 17
   
   tableHeader: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 25 },
-  headerText: { color: '#ffffff', fontSize: 13, fontWeight: 'bold' },
+  headerText: { color: '#ffffff', fontSize: 15, fontWeight: 'bold' }, // 💡 13 -> 15
   headerDivider: { height: 1, backgroundColor: '#333333', marginHorizontal: 20, marginBottom: 10 },
   listContainer: { paddingHorizontal: 20 },
-  tableRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#212121', borderRadius: 12, paddingVertical: 16, marginBottom: 10, borderWidth: 1, borderColor: '#2A2A2A' },
-  rowTextBold: { color: '#ffffff', fontSize: 15, fontWeight: 'bold' },
-  rowText: { color: '#CCCCCC', fontSize: 14 },
+  tableRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#212121', borderRadius: 12, paddingVertical: 20, marginBottom: 12, borderWidth: 1, borderColor: '#2A2A2A' }, // 💡 패딩 확대
+  rowTextBold: { color: '#ffffff', fontSize: 17, fontWeight: 'bold' }, // 💡 15 -> 17
+  rowText: { color: '#CCCCCC', fontSize: 16 }, // 💡 14 -> 16
   centerAlign: { alignItems: 'center', justifyContent: 'center' },
-  emptyText: { color: '#666666', fontSize: 15, textAlign: 'center', marginTop: 40 },
+  emptyText: { color: '#666666', fontSize: 17, textAlign: 'center', marginTop: 50 }, // 💡 15 -> 17, 마진 40->50
+  
   colName: { flex: 2, paddingLeft: 15 },
   colPhone: { flex: 3 },
   colStatus: { flex: 2 },
   colAction: { flex: 1 },
-  badge: { width: 65, paddingVertical: 6, borderRadius: 20, alignItems: 'center' },
+  
+  badge: { width: 75, paddingVertical: 8, borderRadius: 20, alignItems: 'center' }, // 💡 너비 65->75, 패딩 6->8
   badgePeriod: { backgroundColor: 'rgba(161, 190, 68, 0.2)' },
   badgeCount: { backgroundColor: 'rgba(0, 157, 255, 0.2)' },
   badgeInactive: { backgroundColor: 'rgba(142, 142, 142, 0.2)' },
-  badgeTextPeriod: { color: '#A1BE44', fontSize: 11, fontWeight: 'bold' },
-  badgeTextCount: { color: '#009DFF', fontSize: 11, fontWeight: 'bold' },
-  badgeTextInactive: { color: '#8E8E8E', fontSize: 11, fontWeight: 'bold' },
+  badgeTextPeriod: { color: '#A1BE44', fontSize: 13, fontWeight: 'bold' }, // 💡 11 -> 13
+  badgeTextCount: { color: '#009DFF', fontSize: 13, fontWeight: 'bold' }, // 💡 11 -> 13
+  badgeTextInactive: { color: '#8E8E8E', fontSize: 13, fontWeight: 'bold' }, // 💡 11 -> 13
   
   trashBtn: { padding: 6 },
-  trashIcon: { width: 18, height: 18, tintColor: '#FF4D4D', resizeMode: 'contain' },
+  trashIcon: { width: 22, height: 22, tintColor: '#FF4D4D', resizeMode: 'contain' }, // 💡 18 -> 22
   
-  fab: { position: 'absolute', right: 20, backgroundColor: '#A1BE44', paddingHorizontal: 25, paddingVertical: 15, borderRadius: 30, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4 },
-  fabText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  fab: { position: 'absolute', right: 20, backgroundColor: '#A1BE44', paddingHorizontal: 30, paddingVertical: 18, borderRadius: 35, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4 }, // 💡 패딩 및 라운드 확대
+  fabText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
   
-  // 모달 레이아웃 뷰 변경
+  // 모달 레이아웃
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%', maxHeight: '85%' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, paddingHorizontal: 5 },
-  sheetTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' },
-  closeIcon: { color: '#999999', fontSize: 24, paddingHorizontal: 10 },
+  sheetTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' }, // 💡 20 -> 23
+  closeIcon: { color: '#999999', fontSize: 28, paddingHorizontal: 10 }, // 💡 24 -> 28
   horizontalDivider: { height: 1, backgroundColor: '#333333', width: '100%', marginBottom: 20 },
   
   formContainer: { backgroundColor: '#262626', borderRadius: 16, padding: 20 },
-  inputLabel: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 10, marginLeft: 2 },
-  inputWrap: { backgroundColor: '#000', borderRadius: 10, paddingHorizontal: 15, paddingVertical: 14, marginBottom: 20 },
-  modalInput: { color: '#fff', fontSize: 16, padding: 0 },
+  inputLabel: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 12, marginLeft: 2 }, // 💡 16 -> 18, 마진 조절
+  inputWrap: { backgroundColor: '#000', borderRadius: 10, paddingHorizontal: 15, paddingVertical: 16, marginBottom: 20 }, // 💡 패딩 조절 14 -> 16
+  modalInput: { color: '#fff', fontSize: 18, padding: 0 }, // 💡 16 -> 18
   
   genderRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-  genderBtn: { flex: 1, backgroundColor: '#000', borderWidth: 1, borderColor: '#444', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginHorizontal: 4 },
+  genderBtn: { flex: 1, backgroundColor: '#000', borderWidth: 1, borderColor: '#444', borderRadius: 10, paddingVertical: 16, alignItems: 'center', marginHorizontal: 4 }, // 💡 패딩 확대
   genderBtnActive: { borderColor: '#A1BE44', backgroundColor: 'rgba(161, 190, 68, 0.1)' },
-  genderBtnText: { color: '#999', fontSize: 16, fontWeight: 'bold' },
+  genderBtnText: { color: '#999', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
   genderBtnTextActive: { color: '#A1BE44' },
   
-  submitBtn: { backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 10 },
-  submitBtnText: { color: '#000', fontSize: 16, fontWeight: 'bold' },
+  submitBtn: { backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 18, alignItems: 'center', marginTop: 10 }, // 💡 패딩 확대
+  submitBtnText: { color: '#000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
 
-  // ─── 커스텀 알림 모달 전용 스타일 ───
+  // ─── 커스텀 알림 모달 전용 스타일 (통일) ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
-  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 },
-  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, // 💡 300 -> 320
+  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, // 💡 18 -> 20
+  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 24 }, // 💡 15 -> 17, 행간 20 -> 24
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, // 💡 14 -> 16
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
 
-  // 투 버튼 확인 모달 관련 스타일 추가
-  deleteModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
-  deleteTitle: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+  // 투 버튼 확인 모달 관련 스타일
+  deleteModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' }, // 💡 300 -> 320
+  deleteTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' }, // 💡 16 -> 20
   deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  btnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
-  btnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
-  btnTextBlack: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
-  btnTextWhite: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
+  btnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginRight: 5 }, // 💡 12 -> 16
+  btnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginLeft: 5 }, // 💡 12 -> 16
+  btnTextBlack: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  btnTextWhite: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
 });
 
 export default ManagerUser;

@@ -20,12 +20,10 @@ const LoginScreen = ({ navigation }: any) => {
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
 
+  // 💡 삭제되었던 포커스 상태(State) 복구
   const [focusedField, setFocusedField] = useState<string | null>(null);
-  // 💡 입력창을 눌렀을 때만 스크롤을 허용하기 위한 상태
-  const [isScrollEnabled, setIsScrollEnabled] = useState(false);
 
   const passwordRef = useRef<TextInput>(null);
-  const scrollViewRef = useRef<ScrollView>(null);
 
   // ─── 커스텀 알림 결과 모달 상태 ───
   const [resultModalVisible, setResultModalVisible] = useState(false);
@@ -64,103 +62,86 @@ const LoginScreen = ({ navigation }: any) => {
     }
   };
 
-  // 다음 버튼 클릭 시 실행
   const goToPassword = () => {
     passwordRef.current?.focus();
-    // 비밀번호 칸으로 넘어갈 때 화면을 끌어올림
-    setTimeout(() => {
-      scrollViewRef.current?.scrollTo({ y: 220, animated: true });
-    }, 100);
-  };
-
-  // 💡 포커스를 잃었을 때 호출 (키보드 닫기 및 스크롤 비활성화)
-  const handleBlur = () => {
-    setFocusedField(null);
-    setIsScrollEnabled(false);
-    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
   };
 
   return (
     <KeyboardAvoidingView 
       style={styles.flex1} 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
     >
-      <ScrollView 
-        ref={scrollViewRef}
-        style={styles.flex1}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        // 💡 입력창을 눌렀을 때만 스크롤이 가능하게 설정
-        scrollEnabled={isScrollEnabled}
+      {/* 💡 빈 공간 터치 시 키보드 닫힘 및 포커스 해제 */}
+      <TouchableOpacity 
+        style={styles.flex1} 
+        activeOpacity={1} 
+        onPress={() => {
+          Keyboard.dismiss();
+          setFocusedField(null); // 💡 바깥을 누르면 테두리 색상 원상복구
+        }}
       >
-        <View style={styles.innerContainer}>
-          <Image 
-            source={require('../assets/olla_logo_white.png')}
-            style={styles.logo} 
-          />
-
-          <View style={styles.container}>
-            <Text style={styles.title}>로그인</Text>
-
-            <Text style={styles.middleText}>아이디</Text>
-            <TextInput 
-              style={[styles.input, focusedField === 'loginId' && styles.focusedInput]} 
-              placeholder="아이디를 입력하세요" 
-              placeholderTextColor="#ffffff80"
-              value={loginId}
-              onChangeText={setLoginId}
-              autoCapitalize="none"
-              returnKeyType="next" 
-              blurOnSubmit={false}
-              onSubmitEditing={goToPassword}
-              onFocus={() => {
-                setFocusedField('loginId');
-                setIsScrollEnabled(true); // 💡 포커스 시 스크롤 활성화
-                setTimeout(() => {
-                  scrollViewRef.current?.scrollTo({ y: 120, animated: true });
-                }, 100);
-              }}
-              onBlur={handleBlur}
-            />
-          
-            <Text style={styles.middleText}>비밀번호</Text>
-            <TextInput 
-              ref={passwordRef}
-              style={[styles.input, focusedField === 'password' && styles.focusedInput]} 
-              placeholder="비밀번호를 입력하세요" 
-              secureTextEntry={true} 
-              placeholderTextColor="#ffffff80"
-              value={password}
-              onChangeText={setPassword}
-              returnKeyType="done"
-              onSubmitEditing={handleLogin}
-              onFocus={() => {
-                setFocusedField('password');
-                setIsScrollEnabled(true); // 💡 포커스 시 스크롤 활성화
-                setTimeout(() => {
-                  scrollViewRef.current?.scrollTo({ y: 220, animated: true });
-                }, 100);
-              }}
-              onBlur={handleBlur}
+        <ScrollView 
+          style={styles.flex1}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false} 
+        >
+          <View style={styles.innerContainer}>
+            <Image 
+              source={require('../assets/olla_logo_white.png')}
+              style={styles.logo} 
             />
 
-            <TouchableOpacity onPress={handleLogin} style={styles.button}>
-              <Text style={styles.buttonText}>로그인</Text>
-            </TouchableOpacity>
+            <View style={styles.container}>
+              <Text style={styles.title}>로그인</Text>
 
-            <View style={styles.signupContainer}>
-              <Text style={styles.signupText}>계정이 없으신가요?  </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
-                <Text style={styles.signupLink}>회원가입</Text>
+              <Text style={styles.middleText}>아이디</Text>
+              <TextInput 
+                // 💡 focusedField 상태에 따라 연두색 테두리 스타일 적용
+                style={[styles.input, focusedField === 'loginId' && styles.focusedInput]} 
+                placeholder="아이디를 입력하세요" 
+                placeholderTextColor="#ffffff80"
+                value={loginId}
+                onChangeText={setLoginId}
+                autoCapitalize="none"
+                returnKeyType="next" 
+                blurOnSubmit={false}
+                onSubmitEditing={goToPassword}
+                onFocus={() => setFocusedField('loginId')} // 💡 클릭 시 포커스 켜기
+                onBlur={() => setFocusedField(null)} // 💡 다른 곳 클릭 시 포커스 끄기
+              />
+            
+              <Text style={styles.middleText}>비밀번호</Text>
+              <TextInput 
+                ref={passwordRef}
+                // 💡 focusedField 상태에 따라 연두색 테두리 스타일 적용
+                style={[styles.input, focusedField === 'password' && styles.focusedInput]} 
+                placeholder="비밀번호를 입력하세요" 
+                secureTextEntry={true} 
+                placeholderTextColor="#ffffff80"
+                value={password}
+                onChangeText={setPassword}
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
+                onFocus={() => setFocusedField('password')} // 💡 클릭 시 포커스 켜기
+                onBlur={() => setFocusedField(null)} // 💡 다른 곳 클릭 시 포커스 끄기
+              />
+
+              <TouchableOpacity onPress={handleLogin} style={styles.button}>
+                <Text style={styles.buttonText}>로그인</Text>
               </TouchableOpacity>
+
+              <View style={styles.signupContainer}>
+                <Text style={styles.signupText}>계정이 없으신가요?  </Text>
+                <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
+                  <Text style={styles.signupLink}>회원가입</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
-
-        {/* 💡 하단 여백: 키보드 공간 확보용 */}
-        <View style={{ height: 50 }} />
-      </ScrollView>
+        </ScrollView>
+      </TouchableOpacity>
 
       {/* ─── 커스텀 알림 결과 모달 ─── */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
@@ -180,39 +161,65 @@ const LoginScreen = ({ navigation }: any) => {
   );
 };
 
+// ─────────────────────────── 스타일 (글씨 및 레이아웃 확대 적용) ───────────────────────────
 const styles = StyleSheet.create({
   flex1: { flex: 1, backgroundColor: '#1A1A1A' },
-  scrollContent: { flexGrow: 1, justifyContent: 'center' },
+  scrollContent: { 
+    flexGrow: 1, 
+    justifyContent: 'center', 
+    paddingVertical: 20 
+  },
   innerContainer: { 
     alignItems: 'center', 
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 80 : 50,
   },
   container: { 
     width: '100%', 
     backgroundColor: '#212121', 
-    padding: 20, 
+    padding: 24, // 💡 20 -> 24 (내부 여유 공간 확대)
     borderRadius: 25, 
     alignItems: 'center',
     marginTop: 20 
   },
-  logo: { width: 100, height: 100, resizeMode: 'contain' },
-  title: { fontSize: 32, fontWeight: 'bold', marginBottom: 20, color: '#ffffff' },
-  middleText: { color: '#888888', fontSize: 14, alignSelf: 'flex-start', marginBottom: 8, marginLeft: 5 },
-  input: { width: '100%', height: 50, borderWidth: 1, borderColor: '#444444', color: '#ffffff', borderRadius: 10, paddingHorizontal: 15, marginBottom: 15 },
-  focusedInput: { borderColor: '#A1BE44' },
-  button: { width: '100%', height: 50, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', borderRadius: 10, marginTop: 10 },
-  buttonText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
+  logo: { width: 120, height: 120, resizeMode: 'contain', marginBottom: 10 }, // 💡 100 -> 120 (로고 크기 확대)
+  title: { fontSize: 36, fontWeight: 'bold', marginBottom: 25, color: '#ffffff' }, // 💡 32 -> 36
+  middleText: { color: '#888888', fontSize: 16, alignSelf: 'flex-start', marginBottom: 8, marginLeft: 5 }, // 💡 14 -> 16
+  
+  input: { 
+    width: '100%', 
+    height: 60, // 💡 50 -> 60 (입력창 높이 시원하게 확대)
+    borderWidth: 1, 
+    borderColor: '#444444', 
+    color: '#ffffff', 
+    fontSize: 18, // 💡 텍스트 입력 폰트 크기 확대
+    borderRadius: 12, // 💡 10 -> 12
+    paddingHorizontal: 15, 
+    marginBottom: 20 // 💡 15 -> 20
+  },
+  focusedInput: { borderColor: '#A1BE44' }, // 연두색 테두리 스타일
+  
+  button: { 
+    width: '100%', 
+    height: 60, // 💡 50 -> 60 (버튼 높이 확대)
+    backgroundColor: '#A1BE44', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    borderRadius: 12, // 💡 10 -> 12
+    marginTop: 10 
+  },
+  buttonText: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' }, // 💡 18 -> 20
+  
   signupContainer: { flexDirection: 'row', marginTop: 30 },
-  signupText: { color: '#888888', fontSize: 14 },
-  signupLink: { color: '#2ecc71', fontSize: 14, fontWeight: 'bold' },
+  signupText: { color: '#888888', fontSize: 16 }, // 💡 14 -> 16
+  signupLink: { color: '#2ecc71', fontSize: 16, fontWeight: 'bold' }, // 💡 14 -> 16
 
+  // ─── 커스텀 알림 모달 전용 스타일 (통일) ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
-  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 },
-  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, // 💡 300 -> 320
+  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, // 💡 18 -> 20
+  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, // 💡 15 -> 17
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, // 💡 14 -> 16
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
 });
 
 export default LoginScreen;
