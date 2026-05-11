@@ -6,9 +6,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../src/constants/Config';
 
 // ─────────────────────────── API URLs ───────────────────────────
-const ENDURANCE_BASE_URL = '${API_BASE_URL}records/endurance';
-const SERIES_BASE_URL   = '${API_BASE_URL}records/series';
-const MEMBERSHIP_URL    = '${API_BASE_URL}memberships/me';
+const ENDURANCE_BASE_URL = `${API_BASE_URL}/records/endurance`;
+const SERIES_BASE_URL    = `${API_BASE_URL}/records/series`;
+const MEMBERSHIP_URL     = `${API_BASE_URL}/memberships/me`;
 
 // ─────────────────────────── Axios 인터셉터 ───────────────────────────
 axios.interceptors.request.use(
@@ -157,7 +157,7 @@ const RecodeScreen = ({
   // ── 초보벽 최고기록 조회 ──
   const fetchBestRecords = async () => {
     try {
-      const res  = await axios.get(`${API_BASE_URL}/best`);
+      const res  = await axios.get(`${API_BASE_URL}/records/beginner/best`);
       const raw  = res.data?.data ?? res.data ?? [];
       const list: BeginnerRecord[] = Array.isArray(raw) ? raw
         : Array.isArray(raw?.list) ? raw.list : [];
