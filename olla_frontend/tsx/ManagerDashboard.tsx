@@ -151,15 +151,31 @@ const ManagerDashboard = ({ navigation }: any) => {
     }
   };
 
+  // ✅ 방문자 수 중복 카운트 방지 처리 (회원 목록에서 고유 방문자 수 필터링)
   const fetchVisits = async (token: string) => {
     try {
-      const response = await axios.get(VISIT_TODAY_API_URL, {
+      const response = await axios.get(MEMBER_API_URL, {
         headers: { Authorization: `Bearer ${token}` },
+        params: { size: 1000 } // 전체 회원을 불러와서 직접 필터링
       });
-      const todayCount = response.data?.data?.totalVisitsToday ?? 0;
-      setMetrics(prev => ({ ...prev, todayVisitors: todayCount }));
+      const list = response.data?.data?.content || response.data?.data || [];
+      
+      // 방문 플래그가 있는 고유 인원만 카운트
+      const uniqueVisitors = list.filter((item: any) => {
+        const member = item.member || item;
+        return member.visitedToday === true || member.todayVisit === true || member.hasVisited === true;
+      }).length;
+
+      setMetrics(prev => ({ ...prev, todayVisitors: uniqueVisitors }));
     } catch (error) {
-      console.error('방문자 데이터 로드 실패', error);
+      console.error('고유 방문자 데이터 로드 실패, 기존 API로 폴백', error);
+      try {
+        const fallbackRes = await axios.get(VISIT_TODAY_API_URL, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const todayCount = fallbackRes.data?.data?.totalVisitsToday ?? 0;
+        setMetrics(prev => ({ ...prev, todayVisitors: todayCount }));
+      } catch (err) {}
     }
   };
 
@@ -274,11 +290,12 @@ const ManagerDashboard = ({ navigation }: any) => {
   const handleBarCodeScanned = async (qrData: string) => {
     if (scannedRef.current) return;
     scannedRef.current = true;
-    setIsProcessing(true);
+    setIsProcessing(true); // 로딩 시작
 
     try {
       const token = await AsyncStorage.getItem('userToken');
       if (!token) {
+        setIsProcessing(false); // 에러 시 로딩 종료
         showResultModal('오류', '로그인 정보가 없습니다.', 'error', () => closeScanner());
         return;
       }
@@ -294,22 +311,31 @@ const ManagerDashboard = ({ navigation }: any) => {
         }
       );
 
+      setIsProcessing(false); // 로딩 종료
+
       const result = response.data?.data || response.data || {};
       const memberName    = result.memberName || '회원';
       const remainingInfo = result.remainingInfo || '';
       const message       = result.message || '정상적으로 출석 처리되었습니다.';
 
-      showResultModal(
-        '출석 완료! 🎉',
-        `${memberName}님 환영합니다.\n${remainingInfo ? `\n${remainingInfo}` : ''}\n\n${message}`,
-        'success',
-        () => {
-          closeScanner();
-          AsyncStorage.getItem('userToken').then(t => {
-            if (t) fetchVisits(t);
-          });
-        }
-      );
+      closeScanner(); // 스캐너 모달 닫기
+
+      setTimeout(() => {
+        showResultModal(
+          '출석 완료! 🎉',
+          `${memberName}님 환영합니다.\n${remainingInfo ? `\n${remainingInfo}` : ''}\n\n${message}`,
+          'success',
+          () => {
+            AsyncStorage.getItem('userToken').then(t => {
+              if (t) {
+                fetchVisits(t); // 고유 방문자 수 업데이트
+                fetchMembers(t); // 최근 가입회원(출석 뱃지 등) 갱신
+              }
+            });
+          }
+        );
+      }, 300);
+
     } catch (error: any) {
       console.error('QR 스캔 실패:', error?.response?.data || error.message);
       const errorMsg =
@@ -317,6 +343,8 @@ const ManagerDashboard = ({ navigation }: any) => {
         error?.response?.data?.error ||
         '출석 처리에 실패했습니다.\n유효한 QR 코드인지 확인해주세요.';
 
+      setIsProcessing(false); // 에러 시에도 무조건 로딩 끄기
+      
       setQrErrorMsg(errorMsg);
       setQrErrorVisible(true);
     }

@@ -9,7 +9,8 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Modal
+  Modal,
+  ActivityIndicator
 } from 'react-native';
 import { API_BASE_URL } from '../src/constants/Config';
 
@@ -50,6 +51,9 @@ const SignupScreen = ({ navigation }: any) => {
   const [birthError, setBirthError] = useState('');
 
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  
+  // 다음 단계 진행 로딩 상태
+  const [isCheckingNext, setIsCheckingNext] = useState(false);
 
   const passwordRef = useRef<TextInput>(null);
   const confirmRef = useRef<TextInput>(null);
@@ -106,6 +110,7 @@ const SignupScreen = ({ navigation }: any) => {
     } else {
       setEmailError('');
     }
+    // 이메일 변경 시 인증 초기화
     setIsEmailSent(false);
     setIsEmailVerified(false);
     setEmailCode('');
@@ -227,46 +232,81 @@ const SignupScreen = ({ navigation }: any) => {
     }
   };
 
-  // ─── 다음으로 ────────────────────────────────────────────
+  // ─── 다음으로 (중복 최종 검증) ────────────────────────────────────────────
 
-  const handleNextStep = () => {
-    if (!isIdChecked) {
-      showResultModal('알림', '아이디 중복 확인을 해주세요.', 'info');
-      return;
-    }
-    if (!password || passwordError) {
-      showResultModal('알림', '비밀번호를 올바르게 입력해주세요.', 'info');
-      return;
-    }
-    if (password !== passwordConfirm || passwordConfirmError) {
-      showResultModal('알림', '비밀번호가 일치하지 않습니다.', 'info');
-      return;
-    }
-    if (!name.trim()) {
-      showResultModal('알림', '이름을 입력해주세요.', 'info');
-      return;
-    }
-    if (!gender) {
-      showResultModal('알림', '성별을 선택해주세요.', 'info');
-      return;
-    }
-    if (birthError || birth.length !== 10) {
-      showResultModal('알림', '올바른 생년월일을 입력해주세요. (예: 1999-01-01)', 'info');
-      return;
-    }
-    if (!phone || phoneError) {
-      showResultModal('알림', '전화번호를 올바르게 입력해주세요.', 'info');
-      return;
-    }
-    if (!email || emailError) {
-      showResultModal('알림', '이메일을 올바르게 입력해주세요.', 'info');
-      return;
-    }
-    if (!isEmailVerified) {
-      showResultModal('알림', '이메일 인증을 완료해주세요.', 'info');
-      return;
+  const handleEmailDuplicate = () => {
+    setEmailError('이미 가입된 이메일입니다.');
+    // 이메일 재입력을 위해 상태 초기화
+    setIsEmailVerified(false);
+    setIsEmailSent(false);
+    setEmailCode('');
+    setEmailCodeSuccess('');
+    setEmailSuccess('');
+    showResultModal('가입 불가', '이미 가입된 이메일입니다.\n다른 이메일로 다시 인증해주세요.', 'error');
+  };
+
+  const handleNextStep = async () => {
+    if (isCheckingNext) return;
+
+    // 1. 기본 유효성 검사
+    if (!isIdChecked) { showResultModal('알림', '아이디 중복 확인을 해주세요.', 'info'); return; }
+    if (!password || passwordError) { showResultModal('알림', '비밀번호를 올바르게 입력해주세요.', 'info'); return; }
+    if (password !== passwordConfirm || passwordConfirmError) { showResultModal('알림', '비밀번호가 일치하지 않습니다.', 'info'); return; }
+    if (!name.trim()) { showResultModal('알림', '이름을 입력해주세요.', 'info'); return; }
+    if (!gender) { showResultModal('알림', '성별을 선택해주세요.', 'info'); return; }
+    if (birthError || birth.length !== 10) { showResultModal('알림', '올바른 생년월일을 입력해주세요. (예: 1999-01-01)', 'info'); return; }
+    if (!phone || phoneError) { showResultModal('알림', '전화번호를 올바르게 입력해주세요.', 'info'); return; }
+    if (!email || emailError) { showResultModal('알림', '이메일을 올바르게 입력해주세요.', 'info'); return; }
+    if (!isEmailVerified) { showResultModal('알림', '이메일 인증을 완료해주세요.', 'info'); return; }
+
+    setIsCheckingNext(true);
+
+    // 2. 백엔드 중복 최종 검증 (전화번호, 이메일)
+    try {
+      // 2-1. 전화번호 중복 체크
+      const phoneRes = await axios.get(`${API_BASE_URL}/auth/check-phone`, { params: { phone } });
+      const isPhoneDup = phoneRes.data?.data?.isDuplicate ?? phoneRes.data?.isDuplicate;
+      
+      if (isPhoneDup) {
+        setPhoneError('이미 가입된 전화번호입니다.');
+        showResultModal('가입 불가', '이미 가입된 전화번호입니다.', 'error');
+        setIsCheckingNext(false);
+        return;
+      }
+    } catch (error: any) {
+      // API가 400/409 에러 메시지로 중복을 반환할 경우 캐치
+      const msg = error.response?.data?.message || '';
+      if (msg.includes('전화번호') || error.response?.status === 409 || error.response?.status === 400) {
+        setPhoneError('이미 가입된 전화번호입니다.');
+        showResultModal('가입 불가', '이미 가입된 전화번호입니다.', 'error');
+        setIsCheckingNext(false);
+        return;
+      }
     }
 
+    try {
+      // 2-2. 이메일 중복 체크
+      const emailRes = await axios.get(`${API_BASE_URL}/auth/check-email`, { params: { email } });
+      const isEmailDup = emailRes.data?.data?.isDuplicate ?? emailRes.data?.isDuplicate;
+      
+      if (isEmailDup) {
+        handleEmailDuplicate();
+        setIsCheckingNext(false);
+        return;
+      }
+    } catch (error: any) {
+      // API가 400/409 에러 메시지로 중복을 반환할 경우 캐치
+      const msg = error.response?.data?.message || '';
+      if (msg.includes('이메일') || error.response?.status === 409 || error.response?.status === 400) {
+        handleEmailDuplicate();
+        setIsCheckingNext(false);
+        return;
+      }
+    }
+
+    setIsCheckingNext(false);
+
+    // 3. 모든 검증 통과 시 다음 화면으로 이동
     navigation.navigate('PersonalInfo', {
       accountData: {
         loginId: id,
@@ -455,7 +495,7 @@ const SignupScreen = ({ navigation }: any) => {
               onSubmitEditing={sendEmailVerification}
               value={email}
               onChangeText={validateEmail}
-              editable={!isEmailVerified}
+              editable={!isEmailVerified} // 이미 인증된 경우 수정 불가
             />
             <TouchableOpacity
               style={[styles.checkButton, (isSendingEmail || isEmailVerified) && styles.checkButtonDisabled]}
@@ -516,9 +556,14 @@ const SignupScreen = ({ navigation }: any) => {
 
           <TouchableOpacity
             onPress={handleNextStep}
-            style={[styles.button, (!isIdChecked || !isEmailVerified) && styles.buttonDisabled]}
+            disabled={isCheckingNext}
+            style={[styles.button, (!isIdChecked || !isEmailVerified || isCheckingNext) && styles.buttonDisabled]}
           >
-            <Text style={styles.buttonText}>다음으로</Text>
+            {isCheckingNext ? (
+              <ActivityIndicator color="#000000" size="small" />
+            ) : (
+              <Text style={styles.buttonText}>다음으로</Text>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>

@@ -203,7 +203,8 @@ const ManagerUser = ({ navigation }: any) => {
 
   return (
     <SafeAreaView style={styles.background} edges={['top', 'left', 'right']}>
-      {/* 상단 검색바 */}
+      
+      {/* 상단 검색바 - 여백 제거됨 */}
       <View style={styles.searchContainer}>
         <View style={styles.searchBox}>
           <Text style={styles.searchIcon}>🔎</Text>
@@ -392,7 +393,9 @@ const ManagerUser = ({ navigation }: any) => {
 
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
-  searchContainer: { paddingHorizontal: 20, marginTop: 15, marginBottom: 20 },
+  
+  // 💡 검색창 상단 마진을 완전히 제거 (marginTop: 0)
+  searchContainer: { paddingHorizontal: 20, marginTop: 0, marginBottom: 20 },
   searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2C2C2C', borderRadius: 12, paddingHorizontal: 15, height: 50 },
   searchIcon: { fontSize: 18, marginRight: 10 },
   searchInput: { flex: 1, color: '#ffffff', fontSize: 15 },
