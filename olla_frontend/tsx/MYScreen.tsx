@@ -8,7 +8,6 @@ import {
 } from 'react-native';
 import { API_BASE_URL } from '../src/constants/Config';
 
-// ✅ 횟수권 -> 일일권 명칭 통일
 const resolveMembershipType = (
   typeStr: string,
   startDate: string,
@@ -74,7 +73,7 @@ const MYScreen = ({ navigation }: any) => {
 
   const [isPushEnabled, setIsPushEnabled] = useState(true);
   const [isActivityEnabled, setIsActivityEnabled] = useState(true);
-
+  
   const fetchMyInfo = async () => {
     try {
       const userToken = await AsyncStorage.getItem('userToken');
@@ -89,9 +88,14 @@ const MYScreen = ({ navigation }: any) => {
 
       // [GET] 내 정보 조회
       const userRes = await axios.get(`${API_BASE_URL}/members/me`, { headers });
+      
       const data = userRes.data?.data?.data;
 
-      if (!data) return;
+      if (!data) {
+        showResultModal('오류', '내 정보를 불러오지 못했습니다. 다시 시도해주세요.', 'error');
+        setLoading(false);
+        return;
+      }
 
       const checkStored = String(storedRole || '').toUpperCase();
       const checkDataRole = String(data.role || '').toUpperCase();
@@ -108,13 +112,14 @@ const MYScreen = ({ navigation }: any) => {
       setProfileData({
         name: data.name || '',
         phone: data.phone || '',
-        gender: data.gender || '',
+        gender: data.gender === 'MALE' ? '남' : data.gender === 'FEMALE' ? '여' : (data.gender || ''),
         birthDate: data.birthDate || '',
-        age: data.detail?.age?.toString() || '',
-        height: data.detail?.height?.toString() || '',
-        weight: data.detail?.weight?.toString() || '',
-        arm: data.detail?.armSpan?.toString() || '',
-        shoe: data.detail?.footSize?.toString() || '',
+        
+        age: data.age?.toString() || '',
+        height: data.height?.toString() || '',
+        weight: data.weight?.toString() || '',
+        arm: data.armSpan?.toString() || '',
+        shoe: data.footSize?.toString() || '',
       });
 
       if (data.privacy) {
@@ -136,7 +141,7 @@ const MYScreen = ({ navigation }: any) => {
         const yearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
         const visitRes = await axios.get(`${API_BASE_URL}/visit/my-history?yearMonth=${yearMonth}`, { headers });
         
-        let rawData = visitRes.data?.data?.data;
+        let rawData = visitRes.data?.data?.data || visitRes.data?.data;
         if (rawData && !Array.isArray(rawData) && rawData.data) rawData = rawData.data;
         
         if (Array.isArray(rawData)) {
@@ -162,7 +167,7 @@ const MYScreen = ({ navigation }: any) => {
       // [GET] 회원권 정보 조회
       try {
         const memRes = await axios.get(`${API_BASE_URL}/memberships/me`, { headers });
-        const memData = memRes.data?.data?.data;
+        const memData = memRes.data?.data?.data || memRes.data?.data;
 
         if (memData) {
           const today = new Date();
@@ -217,6 +222,7 @@ const MYScreen = ({ navigation }: any) => {
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || '데이터를 불러오는데 실패했습니다.';
       console.error('데이터 로드 실패:', errorMessage);
+      showResultModal('오류', errorMessage, 'error'); 
     } finally {
       setLoading(false);
     }
@@ -230,7 +236,6 @@ const MYScreen = ({ navigation }: any) => {
 
   useEffect(() => { fetchMyInfo(); }, [isFocused]);
 
-  // ✅ 수정됨: 프로필 저장 로직 (모달이 겹쳐서 안 뜨는 iOS 버그 방지)
   const handleSaveProfile = async () => {
     try {
       const userToken = await AsyncStorage.getItem('userToken');
@@ -239,14 +244,18 @@ const MYScreen = ({ navigation }: any) => {
       const requestBody = {
         name: profileData.name,
         phone: profileData.phone,
-        gender: profileData.gender,
+        gender: profileData.gender === '남' ? 'MALE' : profileData.gender === '여' ? 'FEMALE' : profileData.gender,
         birthDate: profileData.birthDate,
         profileImageUrl: '',
+        
+        
         age: parseInt(profileData.age) || 0,
         height: parseFloat(profileData.height) || 0,
         weight: parseFloat(profileData.weight) || 0,
         armSpan: parseFloat(profileData.arm) || 0,
         footSize: parseFloat(profileData.shoe) || 0,
+        
+
         isPublicPhone: profileToggles.showPhone,
         isHeightPublic: profileToggles.showHeight,
         isWeightPublic: profileToggles.showWeight,
@@ -254,22 +263,18 @@ const MYScreen = ({ navigation }: any) => {
         isFootSizePublic: profileToggles.showShoe
       };
 
-      await axios.patch(`${API_BASE_URL}/members/me`, requestBody, { headers });
+      await axios.patch(`${API_BASE_URL}/members/me/info`, requestBody, { headers });
       fetchMyInfo();
       
-      // 1. 프로필 모달을 닫는 애니메이션 실행
       closeProfileModal();
 
-      // 2. 애니메이션 완료(250ms) + 추가 여유 시간을 주어 모달이 완전히 사라진 후 팝업 호출
       setTimeout(() => {
         showResultModal('성공', '정보가 저장되었습니다.', 'success');
       }, 500); 
 
     } catch (error: any) {
-      // 1. 에러 시에도 열려있는 모달을 닫음
       closeProfileModal();
       
-      // 2. 모달이 완전히 닫힌 후 에러 알림 띄움
       setTimeout(() => {
         const errorMessage = error.response?.data?.message || '저장에 실패했습니다.';
         showResultModal('오류', errorMessage, 'error');
@@ -298,7 +303,6 @@ const MYScreen = ({ navigation }: any) => {
     }
   };
 
-  // ✅ 수정됨: 회원탈퇴 로직 (모달이 겹쳐서 안 뜨는 iOS 버그 방지)
   const executeDeleteAccount = async () => {
     try {
       const userToken = await AsyncStorage.getItem('userToken');
@@ -306,10 +310,8 @@ const MYScreen = ({ navigation }: any) => {
 
       await axios.delete(`${API_BASE_URL}/members/me`, { headers: { Authorization: `Bearer ${userToken}` } });
       
-      // 1. 질문 모달 즉시 닫기
       setDeleteModalVisible(false);
 
-      // 2. 모달이 닫힐 시간을 확보(500ms) 후 성공 팝업 호출
       setTimeout(async () => {
         showResultModal('성공', '회원탈퇴가 완료되었습니다.', 'success');
         await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole']);
@@ -319,10 +321,8 @@ const MYScreen = ({ navigation }: any) => {
       }, 500);
 
     } catch (error: any) {
-      // 1. 질문 모달 먼저 닫기
       setDeleteModalVisible(false);
       
-      // 2. 모달이 닫힌 후 에러 팝업 호출
       setTimeout(() => {
         const errorMessage = error.response?.data?.message || '회원탈퇴에 실패했습니다.';
         console.log('회원탈퇴 실패:', errorMessage);

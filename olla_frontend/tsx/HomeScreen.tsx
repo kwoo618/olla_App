@@ -359,7 +359,7 @@ const HomeScreen = ({ navigation }: any) => {
         { headers: { Authorization: `Bearer ${userToken}` } }
       );
       
-      // ✅ Depth 1단계 추가 적용
+      // Depth 1단계 추가 적용
       let rawData = response.data?.data?.data;
       if (rawData && !Array.isArray(rawData) && rawData.data) rawData = rawData.data;
       

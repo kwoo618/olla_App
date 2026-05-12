@@ -181,7 +181,6 @@ const SignupScreen = ({ navigation }: any) => {
     try {
       const response = await axios.get(`${API_BASE_URL}/auth/check-id`, { params: { loginId: id } });
       
-      // ✅ 1. Depth 1단계 추가 반영: response.data.data.isDuplicate
       const isDuplicate = response.data?.data?.data?.isDuplicate;
 
       if (isDuplicate) {
@@ -194,7 +193,6 @@ const SignupScreen = ({ navigation }: any) => {
         setIsIdChecked(true);
       }
     } catch (error: any) {
-      // ✅ 3. 예외 처리 반영: 백엔드에서 준 에러 메시지 그대로 노출
       const errorMessage = error.response?.data?.message || '중복 확인 중 서버 오류가 발생했습니다.';
       
       if (error.response?.status === 409 || error.response?.status === 400) {
@@ -217,10 +215,10 @@ const SignupScreen = ({ navigation }: any) => {
 
     setIsSendingEmail(true);
 
-    try {
+    /* try {
       const emailRes = await axios.get(`${API_BASE_URL}/auth/check-email`, { params: { email } });
       
-      // ✅ 1. Depth 1단계 추가 반영
+      
       const isEmailDup = emailRes.data?.data?.data?.isDuplicate;
 
       if (isEmailDup) {
@@ -242,6 +240,7 @@ const SignupScreen = ({ navigation }: any) => {
       setIsSendingEmail(false);
       return;
     }
+      */
 
     try {
       // 발송 요청
@@ -340,7 +339,7 @@ const SignupScreen = ({ navigation }: any) => {
       return; 
     }
 
-    try {
+    /* try {
       const emailRes = await axios.get(`${API_BASE_URL}/auth/check-email`, { params: { email } });
       
       // ✅ 1. Depth 1단계 추가 반영
@@ -361,6 +360,7 @@ const SignupScreen = ({ navigation }: any) => {
       setIsCheckingNext(false);
       return; 
     }
+      */
 
     setIsCheckingNext(false);
 
