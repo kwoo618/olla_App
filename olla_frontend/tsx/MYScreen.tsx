@@ -569,7 +569,7 @@ const MYScreen = ({ navigation }: any) => {
       <Modal visible={isDeleteModalVisible} transparent={true} animationType="fade">
         <View style={styles.centerModalOverlay}>
           <View style={styles.centerModalBox}>
-            <Text style={[styles.centerModalText, { textAlign: 'center', lineHeight: 24 }]}>
+            <Text style={[styles.centerModalText, { textAlign: 'center' }]}>
               정말로 탈퇴하시겠습니까?{'\n'}모든 데이터가 삭제됩니다.
             </Text>
             <View style={styles.centerBtnRow}>
@@ -731,102 +731,117 @@ const MYScreen = ({ navigation }: any) => {
   );
 };
 
+// ─────────────────────────── 스타일 (글씨 크기 확대 적용) ───────────────────────────
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
   scrollContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 100 },
   card: { backgroundColor: '#212121', borderRadius: 16, padding: 20, marginBottom: 15 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  cardHeaderIcon: { width: 22, height: 22, tintColor: '#A1BE44', marginRight: 10, resizeMode: 'contain' },
-  cardHeaderTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
+  cardHeaderIcon: { width: 24, height: 24, tintColor: '#A1BE44', marginRight: 10, resizeMode: 'contain' }, // 💡 22 -> 24
+  cardHeaderTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' }, // 💡 18 -> 20
+  
   profileCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#212121', borderRadius: 16, paddingVertical: 20, paddingHorizontal: 20, marginBottom: 15 },
   profileLeft: { flexDirection: 'row', alignItems: 'center' },
-  profileImagePlaceholder: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#444444', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', marginRight: 15 },
+  profileImagePlaceholder: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#444444', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', marginRight: 15 }, // 💡 50 -> 60
   profileImage: { width: '100%', height: '100%', resizeMode: 'cover' },
   profileTextContainer: { flexDirection: 'column' },
-  profileName: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
-  profileEmail: { color: '#999999', fontSize: 13 },
-  chevronIcon: { color: '#999999', fontSize: 18, fontWeight: 'bold' },
+  profileName: { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginBottom: 4 }, // 💡 18 -> 20
+  profileEmail: { color: '#999999', fontSize: 15 }, // 💡 13 -> 15
+  chevronIcon: { color: '#999999', fontSize: 20, fontWeight: 'bold' }, // 💡 18 -> 20
+  
   memInfoContainer: { marginBottom: 5 },
   memInfoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  memInfoLabel: { color: '#ffffff', fontSize: 15, fontWeight: '500' },
-  memInfoValue: { color: '#ffffff', fontSize: 15, fontWeight: 'bold' },
+  memInfoLabel: { color: '#ffffff', fontSize: 17, fontWeight: '500' }, // 💡 15 -> 17
+  memInfoValue: { color: '#ffffff', fontSize: 17, fontWeight: 'bold' }, // 💡 15 -> 17
   activeBadge: { backgroundColor: '#C2FF00', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
-  activeBadgeText: { color: '#000000', fontSize: 13, fontWeight: 'bold' },
-  pauseButton: { backgroundColor: '#2C2C2C', borderWidth: 1, borderColor: '#555555', borderRadius: 8, paddingVertical: 14, alignItems: 'center', marginTop: 10 },
-  pauseButtonText: { color: '#ffffff', fontSize: 15, fontWeight: 'bold' },
+  activeBadgeText: { color: '#000000', fontSize: 15, fontWeight: 'bold' }, // 💡 13 -> 15
+  
+  pauseButton: { backgroundColor: '#2C2C2C', borderWidth: 1, borderColor: '#555555', borderRadius: 8, paddingVertical: 16, alignItems: 'center', marginTop: 10 }, // 💡 패딩 14 -> 16
+  pauseButtonText: { color: '#ffffff', fontSize: 17, fontWeight: 'bold' }, // 💡 15 -> 17
+  
   activityRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
-  activityText: { color: '#ffffff', fontSize: 15, fontWeight: '500' },
+  activityText: { color: '#ffffff', fontSize: 17, fontWeight: '500' }, // 💡 15 -> 17
+  
   settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 12 },
   settingTextContainer: { flex: 1, paddingRight: 10 },
-  settingTitle: { color: '#ffffff', fontSize: 15, fontWeight: 'bold', marginBottom: 4 },
-  settingSub: { color: '#999999', fontSize: 12, lineHeight: 18 },
+  settingTitle: { color: '#ffffff', fontSize: 17, fontWeight: 'bold', marginBottom: 4 }, // 💡 15 -> 17
+  settingSub: { color: '#999999', fontSize: 14, lineHeight: 20 }, // 💡 12 -> 14
   divider: { height: 1, backgroundColor: '#333333', marginVertical: 8 },
+  
   adminCard: { flexDirection: 'row', backgroundColor: '#212121', borderRadius: 16, paddingVertical: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 15, borderWidth: 1, borderColor: '#A1BE44' },
-  adminIcon: { width: 20, height: 20, tintColor: '#A1BE44', marginRight: 8, resizeMode: 'contain' },
-  adminText: { color: '#A1BE44', fontSize: 16, fontWeight: 'bold' },
+  adminIcon: { width: 24, height: 24, tintColor: '#A1BE44', marginRight: 8, resizeMode: 'contain' }, // 💡 20 -> 24
+  adminText: { color: '#A1BE44', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  
   logoutCard: { flexDirection: 'row', backgroundColor: '#212121', borderRadius: 16, paddingVertical: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 15 },
-  logoutIcon: { width: 20, height: 20, tintColor: '#FF4D4D', marginRight: 8, resizeMode: 'contain' },
-  logoutText: { color: '#FF4D4D', fontSize: 16, fontWeight: 'bold' },
+  logoutIcon: { width: 24, height: 24, tintColor: '#FF4D4D', marginRight: 8, resizeMode: 'contain' }, // 💡 20 -> 24
+  logoutText: { color: '#FF4D4D', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  
   deleteAccountBtn: { alignItems: 'center', paddingVertical: 10, marginBottom: 20 },
-  deleteAccountText: { color: '#666666', fontSize: 14, textDecorationLine: 'underline' },
+  deleteAccountText: { color: '#666666', fontSize: 16, textDecorationLine: 'underline' }, // 💡 14 -> 16
+  
   centerModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  centerModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
-  centerModalText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 25 },
+  centerModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' }, // 💡 너비 300 -> 320
+  centerModalText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, lineHeight: 26 }, // 💡 16 -> 18
   centerBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
   centerBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
-  centerBtnYesText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
+  centerBtnYesText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
   centerBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
-  centerBtnNoText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
+  centerBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
   
   // 모달 레이아웃
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  sheetTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' },
-  sheetTitleCenter: { color: '#ffffff', fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 15 },
+  sheetTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' }, // 💡 20 -> 23
+  sheetTitleCenter: { color: '#ffffff', fontSize: 23, fontWeight: 'bold', textAlign: 'center', marginBottom: 15 }, // 💡 20 -> 23
   contactContentBox: { alignItems: 'center', marginBottom: 30, width: '100%' },
-  phoneIcon: { width: 80, height: 80, resizeMode: 'contain', marginBottom: 20 },
-  contactLabel: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 8 },
-  contactNumber: { color: '#A1BE44', fontSize: 32, fontWeight: '900', marginBottom: 12 },
-  contactTime: { color: '#999999', fontSize: 14, fontWeight: '500' },
-  closeBtn: { color: '#999999', fontSize: 24, paddingHorizontal: 10 },
+  phoneIcon: { width: 90, height: 90, resizeMode: 'contain', marginBottom: 20 }, // 💡 80 -> 90
+  contactLabel: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 8 }, // 💡 16 -> 18
+  contactNumber: { color: '#A1BE44', fontSize: 36, fontWeight: '900', marginBottom: 12 }, // 💡 32 -> 36
+  contactTime: { color: '#999999', fontSize: 16, fontWeight: '500' }, // 💡 14 -> 16
+  closeBtn: { color: '#999999', fontSize: 28, paddingHorizontal: 10 }, // 💡 24 -> 28
   horizontalDivider: { height: 1, backgroundColor: '#333333', width: '100%', marginBottom: 20 },
+  
   pauseInfoBox: { backgroundColor: '#2C2C2C', borderWidth: 1, borderColor: '#555555', borderRadius: 12, padding: 18, marginBottom: 25, width: '100%' },
-  pauseInfoText: { color: '#ffffff', fontSize: 15, lineHeight: 24, fontWeight: '500' },
+  pauseInfoText: { color: '#ffffff', fontSize: 17, lineHeight: 26, fontWeight: '500' }, // 💡 15 -> 17
   modalBtnRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%' },
   modalBtnCancel: { flex: 1, backgroundColor: 'transparent', borderWidth: 1, borderColor: '#555555', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginRight: 6 },
-  modalBtnCancelText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
+  modalBtnCancelText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
   modalBtnSubmit: { flex: 1, backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginLeft: 6 },
-  modalBtnSubmitText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  modalBtnSubmitText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  
   profileEditContainer: { backgroundColor: '#262626', borderRadius: 16, padding: 20, marginTop: 5 },
-  profileImageEditWrapper: { alignSelf: 'center', width: 80, height: 80, borderRadius: 40, backgroundColor: '#444444', marginBottom: 25, overflow: 'hidden' },
+  profileImageEditWrapper: { alignSelf: 'center', width: 90, height: 90, borderRadius: 45, backgroundColor: '#444444', marginBottom: 25, overflow: 'hidden' }, // 💡 80 -> 90
   profileImageLarge: { width: '100%', height: '100%', resizeMode: 'cover' },
   profileImageEditOverlay: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: 'rgba(0,0,0,0.6)', paddingVertical: 4, alignItems: 'center' },
-  profileImageEditText: { color: '#ffffff', fontSize: 11, fontWeight: 'bold' },
+  profileImageEditText: { color: '#ffffff', fontSize: 13, fontWeight: 'bold' }, // 💡 11 -> 13
+  
   editFieldWrapper: { marginBottom: 20 },
   editFieldHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  editFieldTitle: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
+  editFieldTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
   toggleWrapper: { flexDirection: 'row', alignItems: 'center' },
-  toggleLabel: { color: '#999999', fontSize: 12, marginRight: 6, fontWeight: '500' },
-  editInputBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#000000', borderRadius: 10, paddingHorizontal: 15, paddingVertical: 14 },
-  editInput: { flex: 1, color: '#ffffff', fontSize: 16, padding: 0 },
-  editUnit: { color: '#999999', fontSize: 16, fontWeight: 'bold', marginLeft: 10 },
-  saveProfileButton: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 15 },
-  saveProfileButtonText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  toggleLabel: { color: '#999999', fontSize: 14, marginRight: 6, fontWeight: '500' }, // 💡 12 -> 14
+  editInputBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#000000', borderRadius: 10, paddingHorizontal: 15, paddingVertical: 16 }, // 💡 패딩 14 -> 16
+  editInput: { flex: 1, color: '#ffffff', fontSize: 18, padding: 0 }, // 💡 16 -> 18
+  editUnit: { color: '#999999', fontSize: 18, fontWeight: 'bold', marginLeft: 10 }, // 💡 16 -> 18
+  
+  saveProfileButton: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 18, alignItems: 'center', marginTop: 15 }, // 💡 패딩 16 -> 18
+  saveProfileButtonText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  
   genderRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  genderBtn: { flex: 1, backgroundColor: '#000000', borderWidth: 1, borderColor: '#444444', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginHorizontal: 4 },
+  genderBtn: { flex: 1, backgroundColor: '#000000', borderWidth: 1, borderColor: '#444444', borderRadius: 10, paddingVertical: 16, alignItems: 'center', marginHorizontal: 4 }, // 💡 패딩 14 -> 16
   genderBtnActive: { borderColor: '#A1BE44', backgroundColor: 'rgba(161, 190, 68, 0.1)' },
-  genderBtnText: { color: '#999999', fontSize: 16, fontWeight: 'bold' },
+  genderBtnText: { color: '#999999', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
   genderBtnTextActive: { color: '#A1BE44' },
 
   // ─── 커스텀 알림 모달 전용 스타일 ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
-  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 },
+  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, // 💡 너비 300 -> 320
+  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, // 💡 18 -> 20
+  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, // 💡 15 -> 17
   resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
 });
 
 export default MYScreen;

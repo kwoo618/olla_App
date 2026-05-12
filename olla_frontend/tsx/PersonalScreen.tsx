@@ -8,7 +8,10 @@ import {
   TextInput, 
   TouchableOpacity, 
   ScrollView, 
-  Modal 
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard
 } from 'react-native';
 import { API_BASE_URL } from '../src/constants/Config';
 
@@ -111,53 +114,78 @@ const PersonalScreen = ({ navigation, route }: any) => {
   );
 
   return (
-    <View style={styles.background}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>개인정보</Text>
+    <KeyboardAvoidingView 
+      style={styles.background} 
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={Keyboard.dismiss}>
+        <ScrollView 
+          contentContainerStyle={styles.container} 
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled" 
+          bounces={false}
+        >
+          <Text style={styles.title}>개인정보</Text>
 
-        {/* 나이 */}
-        <View style={styles.inputHeader}>
-          <Text style={styles.middleText}>나이(선택)</Text>
-          <CustomSwitch isOn={isAgePublic} onToggle={() => setIsAgePublic(!isAgePublic)} />
-        </View>
-        <TextInput style={styles.input} placeholder="나이를 입력하세요" placeholderTextColor="#ffffff80" value={age} onChangeText={setAge} keyboardType="numeric" />
+          {/* 💡 나이 */}
+          <View style={styles.inputHeader}>
+            <Text style={styles.middleText}>나이(선택)</Text>
+            <CustomSwitch isOn={isAgePublic} onToggle={() => setIsAgePublic(!isAgePublic)} />
+          </View>
+          <View style={styles.inputWrapper}>
+            <TextInput style={styles.inputText} placeholder="나이를 입력하세요" placeholderTextColor="#ffffff80" value={age} onChangeText={setAge} keyboardType="numeric" />
+            <Text style={styles.unitText}>세</Text>
+          </View>
 
-        {/* 키 */}
-        <View style={styles.inputHeader}>
-          <Text style={styles.middleText}>키(cm)</Text>
-          <CustomSwitch isOn={isHeightPublic} onToggle={() => setIsHeightPublic(!isHeightPublic)} />
-        </View>
-        <TextInput style={styles.input} placeholder="키를 입력하세요" placeholderTextColor="#ffffff80" value={height} onChangeText={setHeight} keyboardType="numeric" />
+          {/* 💡 키 */}
+          <View style={styles.inputHeader}>
+            <Text style={styles.middleText}>키(선택)</Text>
+            <CustomSwitch isOn={isHeightPublic} onToggle={() => setIsHeightPublic(!isHeightPublic)} />
+          </View>
+          <View style={styles.inputWrapper}>
+            <TextInput style={styles.inputText} placeholder="키를 입력하세요" placeholderTextColor="#ffffff80" value={height} onChangeText={setHeight} keyboardType="numeric" />
+            <Text style={styles.unitText}>cm</Text>
+          </View>
 
-        {/* 몸무게 */}
-        <View style={styles.inputHeader}>
-          <Text style={styles.middleText}>몸무게(kg)</Text>
-          <CustomSwitch isOn={isWeightPublic} onToggle={() => setIsWeightPublic(!isWeightPublic)} />
-        </View>
-        <TextInput style={styles.input} placeholder="몸무게를 입력하세요" placeholderTextColor="#ffffff80" value={weight} onChangeText={setWeight} keyboardType="numeric" />
+          {/* 💡 몸무게 */}
+          <View style={styles.inputHeader}>
+            <Text style={styles.middleText}>몸무게(선택)</Text>
+            <CustomSwitch isOn={isWeightPublic} onToggle={() => setIsWeightPublic(!isWeightPublic)} />
+          </View>
+          <View style={styles.inputWrapper}>
+            <TextInput style={styles.inputText} placeholder="몸무게를 입력하세요" placeholderTextColor="#ffffff80" value={weight} onChangeText={setWeight} keyboardType="numeric" />
+            <Text style={styles.unitText}>kg</Text>
+          </View>
 
-        {/* 팔길이 */}
-        <View style={styles.inputHeader}>
-          <Text style={styles.middleText}>팔길이(윙스팬 cm)</Text>
-          <CustomSwitch isOn={isArmPublic} onToggle={() => setIsArmPublic(!isArmPublic)} />
-        </View>
-        <TextInput style={styles.input} placeholder="팔길이를 입력하세요" placeholderTextColor="#ffffff80" value={armSpan} onChangeText={setArmSpan} keyboardType="numeric" />
+          {/* 💡 팔길이/윙스팬 */}
+          <View style={styles.inputHeader}>
+            <Text style={styles.middleText}>팔길이/윙스팬(선택)</Text>
+            <CustomSwitch isOn={isArmPublic} onToggle={() => setIsArmPublic(!isArmPublic)} />
+          </View>
+          <View style={styles.inputWrapper}>
+            <TextInput style={styles.inputText} placeholder="팔길이를 입력하세요" placeholderTextColor="#ffffff80" value={armSpan} onChangeText={setArmSpan} keyboardType="numeric" />
+            <Text style={styles.unitText}>cm</Text>
+          </View>
 
-        {/* 발 사이즈 */}
-        <View style={styles.inputHeader}>
-          <Text style={styles.middleText}>발 사이즈(mm)</Text>
-          <CustomSwitch isOn={isFootPublic} onToggle={() => setIsFootPublic(!isFootPublic)} />
-        </View>
-        <TextInput style={styles.input} placeholder="발 사이즈를 입력하세요" placeholderTextColor="#ffffff80" value={footSize} onChangeText={setFootSize} keyboardType="numeric" />
+          {/* 💡 발 사이즈 */}
+          <View style={styles.inputHeader}>
+            <Text style={styles.middleText}>발 사이즈(선택)</Text>
+            <CustomSwitch isOn={isFootPublic} onToggle={() => setIsFootPublic(!isFootPublic)} />
+          </View>
+          <View style={styles.inputWrapper}>
+            <TextInput style={styles.inputText} placeholder="발 사이즈를 입력하세요" placeholderTextColor="#ffffff80" value={footSize} onChangeText={setFootSize} keyboardType="numeric" />
+            <Text style={styles.unitText}>mm</Text>
+          </View>
 
-        <TouchableOpacity onPress={handleFinalSignup} style={styles.button}>
-          <Text style={styles.buttonText}>회원가입 완료</Text>
-        </TouchableOpacity>
+          <TouchableOpacity onPress={handleFinalSignup} style={styles.button}>
+            <Text style={styles.buttonText}>회원가입 완료</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginTop: 15 }}>
-          <Text style={{ color: '#888' }}>이전 단계로</Text>
-        </TouchableOpacity>
-      </ScrollView>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginTop: 20 }}>
+            <Text style={styles.goBackText}>이전 단계로</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </TouchableOpacity>
 
       {/* ─── 커스텀 알림 결과 모달 ─── */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
@@ -178,22 +206,23 @@ const PersonalScreen = ({ navigation, route }: any) => {
           </View>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 
+// ─────────────────────────── 스타일 (글씨 및 레이아웃 확대 적용) ───────────────────────────
 const styles = StyleSheet.create({
   background: {
     flex: 1,
     backgroundColor: '#1A1A1A',
   },
   container: {
-    padding: 20,
+    padding: 24, 
     alignItems: 'center',
-    paddingBottom: 40,
+    paddingBottom: 60,
   },
   title: {
-    fontSize: 32,
+    fontSize: 36, 
     fontWeight: 'bold',
     marginTop: 60,
     marginBottom: 30,
@@ -208,62 +237,88 @@ const styles = StyleSheet.create({
   },
   middleText: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 18, 
     marginLeft: 5,
+    fontWeight: 'bold',
   },
-  input: {
+
+  // 💡 단위를 고정 표시하기 위한 새로운 입력창 레이아웃
+  inputWrapper: {
     width: '100%',
-    height: 55,
+    height: 60, 
     backgroundColor: '#000000',
-    color: '#ffffff',
-    borderRadius: 15,
+    borderRadius: 12, 
+    borderWidth: 1, 
+    borderColor: '#444444',
     paddingHorizontal: 15,
     marginBottom: 25,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
+  inputText: {
+    flex: 1,
+    color: '#ffffff',
+    fontSize: 18, 
+    height: '100%',
+    paddingVertical: 0, // 안드로이드 정렬 보정
+  },
+  unitText: {
+    color: '#999999',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginLeft: 10,
+  },
+
   switchWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   switchLabel: {
     color: '#888888',
-    fontSize: 12,
+    fontSize: 14, 
     marginRight: 8,
+    fontWeight: 'bold',
   },
   switchTrack: {
-    width: 45,
-    height: 24,
-    borderRadius: 12,
+    width: 50, 
+    height: 28, 
+    borderRadius: 14,
     padding: 2,
     justifyContent: 'center',
   },
   switchThumb: {
-    width: 20,
-    height: 20,
+    width: 24, 
+    height: 24, 
     backgroundColor: '#ffffff',
-    borderRadius: 10,
+    borderRadius: 12,
   },
   button: {
     width: '100%',
-    height: 60,
+    height: 60, 
     backgroundColor: '#A1BE44',
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 15,
+    borderRadius: 12, 
     marginTop: 20,
   },
   buttonText: {
     color: '#000000',
-    fontSize: 20,
+    fontSize: 20, 
     fontWeight: 'bold',
   },
+  goBackText: {
+    color: '#888888',
+    fontSize: 16, 
+    textDecorationLine: 'underline',
+  },
 
-  // ─── 커스텀 알림 모달 전용 스타일 ───
+  // ─── 커스텀 알림 모달 전용 스타일 (통일) ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
-  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 },
-  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, 
+  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, 
+  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, 
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, 
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
 });
 
 export default PersonalScreen;

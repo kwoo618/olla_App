@@ -10,7 +10,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Modal,
-  ActivityIndicator
+  ActivityIndicator,
+  Keyboard
 } from 'react-native';
 import { API_BASE_URL } from '../src/constants/Config';
 
@@ -380,8 +381,16 @@ const SignupScreen = ({ navigation }: any) => {
   // ─── 렌더링 ─────────────────────────────────────────────
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <ScrollView contentContainerStyle={styles.background} keyboardShouldPersistTaps="handled">
+    <KeyboardAvoidingView 
+      style={{ flex: 1, backgroundColor: '#1A1A1A' }} 
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      {/* 💡 ScrollView를 감싸고 있던 TouchableOpacity 삭제함 (스크롤 충돌 방지) */}
+      <ScrollView 
+        contentContainerStyle={styles.background} 
+        keyboardShouldPersistTaps="handled" // 빈 공간 터치시 키보드 자동 해제
+        bounces={false}
+      >
         <View style={styles.container}>
           <Text style={styles.title}>회원가입</Text>
 
@@ -651,20 +660,20 @@ const SignupScreen = ({ navigation }: any) => {
 
 const styles = StyleSheet.create({
   background: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1A1A1A', paddingVertical: 50, paddingHorizontal: 20 },
-  container: { width: '100%', backgroundColor: '#212121', padding: 20, borderRadius: 25, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 10 },
-  title: { fontSize: 32, fontWeight: 'bold', marginBottom: 20, color: '#ffffff', textAlign: 'center' },
-  middleText: { color: '#ffffff', fontSize: 14, alignSelf: 'flex-start', marginBottom: 8, marginLeft: 5, marginTop: 10 },
+  container: { width: '100%', backgroundColor: '#212121', padding: 24, borderRadius: 25, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 10 }, 
+  title: { fontSize: 36, fontWeight: 'bold', marginBottom: 25, color: '#ffffff', textAlign: 'center' }, 
+  middleText: { color: '#ffffff', fontSize: 16, alignSelf: 'flex-start', marginBottom: 8, marginLeft: 5, marginTop: 10 }, 
 
-  input: { width: '100%', height: 50, borderWidth: 1, borderColor: '#444444', color: '#ffffff', borderRadius: 10, paddingHorizontal: 15, marginBottom: 5 },
-  inputRow: { flexDirection: 'row', alignItems: 'center', width: '100%', height: 50, borderWidth: 1, borderColor: '#444444', borderRadius: 10, marginBottom: 5, paddingRight: 5 },
-  inputFlex: { flex: 1, height: '100%', color: '#ffffff', paddingHorizontal: 15 },
+  input: { width: '100%', height: 60, borderWidth: 1, borderColor: '#444444', color: '#ffffff', fontSize: 18, borderRadius: 12, paddingHorizontal: 15, marginBottom: 5 }, 
+  inputRow: { flexDirection: 'row', alignItems: 'center', width: '100%', height: 60, borderWidth: 1, borderColor: '#444444', borderRadius: 12, marginBottom: 5, paddingRight: 5 }, 
+  inputFlex: { flex: 1, height: '100%', color: '#ffffff', fontSize: 18, paddingHorizontal: 15 }, 
 
-  checkButton: { backgroundColor: '#A1BE44', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8 },
+  checkButton: { backgroundColor: '#A1BE44', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 10 }, 
   checkButtonDisabled: { backgroundColor: '#555555' },
-  checkButtonText: { color: '#000000', fontSize: 12, fontWeight: 'bold' },
+  checkButtonText: { color: '#000000', fontSize: 15, fontWeight: 'bold' }, 
 
-  errorText: { color: '#ff4d4d', fontSize: 12, alignSelf: 'flex-start', marginLeft: 5, marginBottom: 10 },
-  successText: { color: '#A1BE44', fontSize: 12, alignSelf: 'flex-start', marginLeft: 5, marginBottom: 10 },
+  errorText: { color: '#ff4d4d', fontSize: 14, alignSelf: 'flex-start', marginLeft: 5, marginBottom: 10 }, 
+  successText: { color: '#A1BE44', fontSize: 14, alignSelf: 'flex-start', marginLeft: 5, marginBottom: 10 }, 
   divider: { height: 1, backgroundColor: '#333333', marginVertical: 15 },
 
   focusedInput: { borderColor: '#A1BE44' },
@@ -672,21 +681,21 @@ const styles = StyleSheet.create({
   inputRowError: { borderColor: '#ff4d4d' },
 
   genderRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
-  genderBtn: { flex: 1, backgroundColor: '#2A2A2A', borderWidth: 1, borderColor: '#444444', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginHorizontal: 4 },
+  genderBtn: { flex: 1, backgroundColor: '#2A2A2A', borderWidth: 1, borderColor: '#444444', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginHorizontal: 4 }, 
   genderBtnActive: { borderColor: '#A1BE44', backgroundColor: 'rgba(161, 190, 68, 0.1)' },
-  genderBtnText: { color: '#999999', fontSize: 16, fontWeight: 'bold' },
+  genderBtnText: { color: '#999999', fontSize: 18, fontWeight: 'bold' }, 
   genderBtnTextActive: { color: '#A1BE44' },
 
-  button: { width: '100%', height: 55, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', borderRadius: 10, marginTop: 30 },
+  button: { width: '100%', height: 60, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', borderRadius: 12, marginTop: 30 }, 
   buttonDisabled: { backgroundColor: '#333333' },
-  buttonText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
+  buttonText: { color: '#000000', fontSize: 20, fontWeight: 'bold' }, 
 
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
-  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 },
-  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, 
+  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, 
+  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, 
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, 
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
 });
 
 export default SignupScreen;

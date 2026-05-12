@@ -91,7 +91,7 @@ const LoadingScreen = ({ route, navigation }: any) => {
   );
 };
 
-// 화면을 예쁘게 꾸미는 설정 (Style)
+// ─────────────────────────── 스타일 (글씨 및 레이아웃 확대 적용) ───────────────────────────
 const styles = StyleSheet.create({
   background: {
     flex: 1,
@@ -104,8 +104,8 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#212121', // 카드 배경
     borderRadius: 25,
-    paddingVertical: 40,
-    paddingHorizontal: 30,
+    paddingVertical: 45, // 💡 40 -> 45 (내부 여백 확장)
+    paddingHorizontal: 35, // 💡 30 -> 35
     width: '90%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 5 },
@@ -118,8 +118,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   logoIcon: {
-    width: 60,
-    height: 60,
+    width: 70, // 💡 60 -> 70 (로고 크기 확대)
+    height: 70, // 💡 60 -> 70
     marginRight: 20, // 아이콘과 텍스트 사이 간격
   },
   textContainer: {
@@ -127,15 +127,16 @@ const styles = StyleSheet.create({
   },
   welcomeTitle: {
     color: '#A1BE44',
-    fontSize: 24,
+    fontSize: 28, // 💡 24 -> 28 (제목 폰트 확대)
     fontWeight: 'bold',
-    marginBottom: 5,
+    marginBottom: 8, // 💡 5 -> 8 (간격 미세 조정)
   },
   welcomeDescription: {
     color: '#A1BE44',
-    fontSize: 16,
-    fontWeight: 'normal',
+    fontSize: 18, // 💡 16 -> 18 (설명 폰트 확대)
+    fontWeight: 'bold', // 💡 가독성을 위해 살짝 두껍게 변경
   },
+  
   // 홈 화면 자리 표시자 스타일
   homePlaceholder: {
     justifyContent: 'center',
@@ -143,14 +144,15 @@ const styles = StyleSheet.create({
   },
   homePlaceholderText: {
     color: '#888888',
-    fontSize: 28,
+    fontSize: 32, // 💡 28 -> 32
     fontWeight: 'bold',
     marginBottom: 10,
   },
   homePlaceholderSubText: {
     color: '#888888',
-    fontSize: 18,
+    fontSize: 20, // 💡 18 -> 20
   },
+  
   // 하단 작은 로고 스타일
   bottomLogoContainer: {
     position: 'absolute', // 배경 위에 띄우기
@@ -158,8 +160,8 @@ const styles = StyleSheet.create({
     right: 30,
   },
   bottomLogoIcon: {
-    width: 40,
-    height: 40,
+    width: 50, // 💡 40 -> 50 (하단 로고 확대)
+    height: 50, // 💡 40 -> 50
     opacity: 0.5, // 투명도 조절
   },
 });

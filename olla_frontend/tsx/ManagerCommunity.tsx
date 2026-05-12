@@ -149,7 +149,10 @@ const ManagerCommunity = ({ navigation }: any) => {
       const response = await axios.get(`${MEMBERS_API}/${authorId}/profile`, { headers });
       
       // ✅ Depth 1단계 추가 반영
-      const d = response.data?.data; 
+      const d = response.data?.data?.data; 
+      // 💡 MEMBERS_API 사용
+      // const { data } = await axios.get(`${MEMBERS_API}/${authorId}/profile`, { headers });
+      // const d = data?.data?.data || data?.data || data; 
       
       if (!d) { 
         showResultModal('프로필 조회 불가', '정보를 불러올 수 없습니다.', 'error'); 
@@ -295,7 +298,7 @@ const ManagerCommunity = ({ navigation }: any) => {
           );
         })}
         {filteredPosts.length === 0 && (
-          <Text style={{ color: '#999', textAlign: 'center', marginTop: 30 }}>등록된 커뮤니티 글이 없습니다.</Text>
+          <Text style={{ color: '#999', textAlign: 'center', marginTop: 30, fontSize: 16 }}>등록된 커뮤니티 글이 없습니다.</Text> // 💡 16 추가
         )}
       </ScrollView>
 
@@ -314,6 +317,7 @@ const ManagerCommunity = ({ navigation }: any) => {
         </View>
       </Modal>
 
+      {/* 삭제 확인 모달 */}
       <Modal visible={isDeleteModalVisible} animationType="fade" transparent={true} onRequestClose={cancelDelete}>
         <View style={styles.deleteModalOverlay}>
           <View style={styles.deleteModalBox}>
@@ -326,6 +330,7 @@ const ManagerCommunity = ({ navigation }: any) => {
         </View>
       </Modal>
 
+      {/* 프로필 정보 바텀시트 모달 */}
       <Modal visible={isDetailVisible} transparent={true} animationType="fade" onRequestClose={closeDetailModal}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeDetailModal}>
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: detailSlideAnim }] }]}>
@@ -340,13 +345,13 @@ const ManagerCommunity = ({ navigation }: any) => {
                 <View style={styles.detailContainer}>
                   <View style={styles.detailProfileWrapper}>
                     {selectedUser.profileImageUrl ? (
-                       <Image source={{ uri: selectedUser.profileImageUrl }} style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#444444' }} />
+                       <Image source={{ uri: selectedUser.profileImageUrl }} style={{ width: 90, height: 90, borderRadius: 45, backgroundColor: '#444444' }} /> // 💡 80 -> 90
                     ) : selectedUser.name === '최강우' ? (
-                       <View style={[styles.textProfileImg, { width: 80, height: 80, borderRadius: 40 }]}>
-                         <Text style={[styles.textProfileText, { fontSize: 28 }]}>최</Text>
-                       </View>
+                       <View style={[styles.textProfileImg, { width: 90, height: 90, borderRadius: 45 }]}>
+                         <Text style={[styles.textProfileText, { fontSize: 32 }]}>최</Text>
+                       </View> // 💡 80 -> 90, 28 -> 32
                     ) : (
-                       <Image source={require('../assets/profile.png')} style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#444444' }} />
+                       <Image source={require('../assets/profile.png')} style={{ width: 90, height: 90, borderRadius: 45, backgroundColor: '#444444' }} /> // 💡 80 -> 90
                     )}
                   </View>
                   <View style={styles.detailInfoBox}>
@@ -372,12 +377,13 @@ const ManagerCommunity = ({ navigation }: any) => {
   );
 };
 
+// ─────────────────────────── 스타일 (글씨 크기 및 여백 확대 적용) ───────────────────────────
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A', paddingHorizontal: 20, paddingTop: 10 },
   tabContainer: { flexDirection: 'row', backgroundColor: '#3A3A3A', borderRadius: 24, padding: 4, marginBottom: 20 },
-  tabButton: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 20 },
+  tabButton: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 20 }, // 💡 10 -> 12
   activeTabButton: { backgroundColor: '#1D1D1D' },
-  tabText: { color: '#999999', fontSize: 15, fontWeight: 'bold' },
+  tabText: { color: '#999999', fontSize: 17, fontWeight: 'bold' }, // 💡 15 -> 17
   activeTabText: { color: '#ffffff' },
   scrollContent: { paddingBottom: 80 },
 
@@ -385,62 +391,64 @@ const styles = StyleSheet.create({
   postCardDimmed: { opacity: 0.6, borderColor: '#333333' }, 
 
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  badge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8 },
-  badgeText: { fontSize: 12, fontWeight: 'bold' },
-  postDateText: { color: '#999999', fontSize: 12 },
-  postTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 6 },
-  postDesc: { color: '#999999', fontSize: 14, lineHeight: 20, marginBottom: 15 },
+  badge: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8 }, // 💡 12, 4 -> 14, 6
+  badgeText: { fontSize: 14, fontWeight: 'bold' }, // 💡 12 -> 14
+  postDateText: { color: '#999999', fontSize: 14 }, // 💡 12 -> 14
+  postTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginBottom: 6 }, // 💡 18 -> 20
+  postDesc: { color: '#999999', fontSize: 16, lineHeight: 22, marginBottom: 15 }, // 💡 14 -> 16, 행간 조절
   
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  infoItemGroup: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }, // flexWrap 추가로 내용이 많아도 줄바꿈됨
-  infoItem: { flexDirection: 'row', alignItems: 'center', marginRight: 8, marginVertical: 2 },
-  infoIcon: { width: 14, height: 14, resizeMode: 'contain', marginRight: 4, tintColor: '#999999' },
-  infoText: { color: '#999999', fontSize: 12 },
+  infoItemGroup: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' },
+  infoItem: { flexDirection: 'row', alignItems: 'center', marginRight: 12, marginVertical: 4 }, // 💡 여백 확대
+  infoIcon: { width: 16, height: 16, resizeMode: 'contain', marginRight: 6, tintColor: '#999999' }, // 💡 14 -> 16
+  infoText: { color: '#999999', fontSize: 14 }, // 💡 12 -> 14
   
-  trashBtn: { padding: 8, marginRight: -8 }, // 터치 영역을 넉넉하게 주기 위해 padding 조정
-  trashIcon: { width: 20, height: 20, resizeMode: 'contain', tintColor: '#A1BE44' }, 
+  trashBtn: { padding: 10, marginRight: -8 }, // 💡 8 -> 10
+  trashIcon: { width: 22, height: 22, resizeMode: 'contain', tintColor: '#A1BE44' }, // 💡 20 -> 22
   
   divider: { height: 1, backgroundColor: '#333333', marginBottom: 15 },
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   profileRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  profileImg: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#444444', marginRight: 10 },
-  textProfileImg: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#444444', marginRight: 10, justifyContent: 'center', alignItems: 'center' },
-  textProfileText: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
-  authorText: { color: '#cccccc', fontSize: 14, fontWeight: '600' },
+  profileImg: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#444444', marginRight: 10 }, // 💡 32 -> 36
+  textProfileImg: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#444444', marginRight: 10, justifyContent: 'center', alignItems: 'center' }, // 💡 32 -> 36
+  textProfileText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' }, // 💡 14 -> 16
+  authorText: { color: '#cccccc', fontSize: 16, fontWeight: '600' }, // 💡 14 -> 16
 
+  // 삭제 모달 스타일 (통일)
   deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  deleteModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
-  deleteModalText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 25 },
+  deleteModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' }, // 💡 300 -> 320
+  deleteModalText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25 }, // 💡 16 -> 18
   deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  deleteBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
-  deleteBtnYesText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
-  deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
-  deleteBtnNoText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
+  deleteBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginRight: 5 }, // 💡 12 -> 16
+  deleteBtnYesText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginLeft: 5 }, // 💡 12 -> 16
+  deleteBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
 
+  // 바텀 시트 (회원 정보 모달)
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  sheetTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' },
-  closeBtn: { color: '#999999', fontSize: 24, paddingHorizontal: 10 },
+  sheetTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' }, // 💡 20 -> 23
+  closeBtn: { color: '#999999', fontSize: 28, paddingHorizontal: 10 }, // 💡 24 -> 28
   horizontalDivider: { height: 1, backgroundColor: '#333333', width: '100%', marginBottom: 20 },
 
   detailContainer: { width: '100%' },
   detailProfileWrapper: { alignSelf: 'center', marginBottom: 25 },
   detailInfoBox: { backgroundColor: '#262626', borderRadius: 16, padding: 20, marginBottom: 20 },
-  detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#333333' },
-  detailLabel: { color: '#999999', fontSize: 15, fontWeight: 'bold' },
-  detailValue: { color: '#ffffff', fontSize: 15, fontWeight: 'bold' },
-  closeFullBtn: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
-  closeFullBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: '#333333' }, // 💡 12 -> 14
+  detailLabel: { color: '#999999', fontSize: 17, fontWeight: 'bold' }, // 💡 15 -> 17
+  detailValue: { color: '#ffffff', fontSize: 17, fontWeight: 'bold' }, // 💡 15 -> 17
+  closeFullBtn: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 18, alignItems: 'center' }, // 💡 16 -> 18
+  closeFullBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
 
-  // ─── 커스텀 알림 모달 전용 스타일 ───
+  // ─── 커스텀 알림 모달 전용 스타일 (통일) ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
-  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 },
-  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, // 💡 300 -> 320
+  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, // 💡 18 -> 20
+  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, // 💡 15 -> 17
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, // 💡 14 -> 16
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
 });
 
 export default ManagerCommunity;

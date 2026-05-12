@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, RefreshControl } from 'react-native';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, RefreshControl, Modal, Animated } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../src/constants/Config';
@@ -574,73 +575,73 @@ const RankingScreen = ({ route }: any) => {
   );
 };
 
-// ─────────────────────────── 스타일 ───────────────────────────
+// ─────────────────────────── 스타일 (글씨 크기 확대) ───────────────────────────
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A', paddingHorizontal: 20, paddingTop: 10 },
 
   // 내 랭킹 카드
   myRankingWrapper: { marginBottom: 20, marginTop: 10 },
-  myRankingCard: { height: 100, borderRadius: 16, borderWidth: 1, borderColor: '#718A26', backgroundColor: '#5E731F', justifyContent: 'center' },
+  myRankingCard: { height: 110, borderRadius: 16, borderWidth: 1, borderColor: '#718A26', backgroundColor: '#5E731F', justifyContent: 'center' }, // 높이 100->110
   myRankingContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 25 },
   myRankingLeft: { flexDirection: 'row', alignItems: 'center' },
-  myProfileImg: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#444444', marginRight: 15 },
-  myNameText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
-  myRankSubText: { color: '#EBEBEB', fontSize: 13, fontWeight: '500' },
+  myProfileImg: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#444444', marginRight: 15 }, // 프사 56->64
+  myNameText: { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginBottom: 4 }, // 18->20
+  myRankSubText: { color: '#EBEBEB', fontSize: 15, fontWeight: '500' }, // 13->15
   myRankingRight: { flexDirection: 'row', alignItems: 'baseline' },
-  myRankNumText: { color: '#A1BE44', fontSize: 42, fontWeight: '900', marginRight: 4, textShadowColor: 'rgba(0,0,0,0.4)', textShadowOffset: { width: 1, height: 2 }, textShadowRadius: 3 },
-  myRankUnitText: { color: '#EBEBEB', fontSize: 18, fontWeight: 'bold', marginBottom: 6 },
+  myRankNumText: { color: '#A1BE44', fontSize: 48, fontWeight: '900', marginRight: 4, textShadowColor: 'rgba(0,0,0,0.4)', textShadowOffset: { width: 1, height: 2 }, textShadowRadius: 3 }, // 42->48
+  myRankUnitText: { color: '#EBEBEB', fontSize: 20, fontWeight: 'bold', marginBottom: 6 }, // 18->20
 
   // 메인 탭
   mainTabContainer: { flexDirection: 'row', backgroundColor: '#3A3A3A', borderRadius: 24, padding: 4, marginBottom: 20 },
-  mainTabButton: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 20 },
+  mainTabButton: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 20 }, // 패딩 10->12
   activeMainTab: { backgroundColor: '#1D1D1D' },
-  mainTabText: { color: '#999999', fontSize: 15, fontWeight: 'bold' },
+  mainTabText: { color: '#999999', fontSize: 17, fontWeight: 'bold' }, // 15->17
   activeMainTabText: { color: '#ffffff' },
 
   scrollContent: { paddingBottom: 50 },
 
   // 색상 탭
   colorTabRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
-  colorBtn: { flex: 1, borderWidth: 1, borderRadius: 8, paddingVertical: 8, alignItems: 'center', marginHorizontal: 2 },
-  colorBtnText: { fontSize: 11, fontWeight: 'bold' },
-  colorBtnTextActive: { color: '#ffffff', fontSize: 11, fontWeight: 'bold' },
-  colorBtnTextGray: { color: '#999999', fontSize: 11, fontWeight: 'bold' },
+  colorBtn: { flex: 1, borderWidth: 1, borderRadius: 8, paddingVertical: 10, alignItems: 'center', marginHorizontal: 2 }, // 패딩 8->10
+  colorBtnText: { fontSize: 13, fontWeight: 'bold' }, // 11->13
+  colorBtnTextActive: { color: '#ffffff', fontSize: 13, fontWeight: 'bold' }, // 11->13
+  colorBtnTextGray: { color: '#999999', fontSize: 13, fontWeight: 'bold' }, // 11->13
 
   // 랭킹 목록
   rankingListContainer: { paddingBottom: 20 },
-  emptyText: { color: '#999', textAlign: 'center', marginTop: 30 },
-  rankItemCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#212121', borderWidth: 1, borderColor: '#333333', borderRadius: 16, paddingVertical: 15, paddingHorizontal: 15, marginBottom: 10 },
+  emptyText: { color: '#999', textAlign: 'center', marginTop: 30, fontSize: 16 }, // 14->16
+  rankItemCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#212121', borderWidth: 1, borderColor: '#333333', borderRadius: 16, paddingVertical: 18, paddingHorizontal: 15, marginBottom: 12 }, // 패딩 조절
   myRankItemHighlight: { borderColor: '#A1BE44', backgroundColor: '#2A2F1D' },
 
   // 순위 원
-  rankCircle: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginRight: 15 },
-  rankNumberText: { fontSize: 14, fontWeight: '900' },
+  rankCircle: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginRight: 15 }, // 크기 36->40
+  rankNumberText: { fontSize: 16, fontWeight: '900' }, // 14->16
 
   // 프로필 + 이름
   rankCenter: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  rankProfileImg: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#444444', marginRight: 12 },
-  rankNameText: { color: '#ffffff', fontSize: 15, fontWeight: 'bold' },
+  rankProfileImg: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#444444', marginRight: 12 }, // 36->40
+  rankNameText: { color: '#ffffff', fontSize: 17, fontWeight: 'bold' }, // 15->17
 
   // 우측 정보
-  rankRight: { alignItems: 'center', justifyContent: 'center', minWidth: 85 },
+  rankRight: { alignItems: 'center', justifyContent: 'center', minWidth: 95 }, // 85->95
 
   // 초보벽
-  rankTypeText: { fontSize: 14, fontWeight: '900', marginBottom: 4, textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
+  rankTypeText: { fontSize: 16, fontWeight: '900', marginBottom: 4, textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }, // 14->16
   rankInfoBottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  rankColorText: { fontSize: 15, fontWeight: 'bold', marginRight: 6, textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
-  rankHoldText: { color: '#ffffff', fontSize: 15, fontWeight: '600', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
+  rankColorText: { fontSize: 17, fontWeight: 'bold', marginRight: 6, textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }, // 15->17
+  rankHoldText: { color: '#ffffff', fontSize: 17, fontWeight: '600', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }, // 15->17
 
   // 지구력
-  enduranceLapsText: { color: '#A1BE44', fontSize: 15, fontWeight: 'bold', marginBottom: 3, textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
-  enduranceTimeText: { color: '#ffffff', fontSize: 14, fontWeight: '600', marginBottom: 3, textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
+  enduranceLapsText: { color: '#A1BE44', fontSize: 17, fontWeight: 'bold', marginBottom: 3, textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }, // 15->17
+  enduranceTimeText: { color: '#ffffff', fontSize: 16, fontWeight: '600', marginBottom: 3, textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }, // 14->16
   enduranceSectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  enduranceSectionText: { fontSize: 15, fontWeight: 'bold', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
-  enduranceSectionArrow: { fontSize: 15, fontWeight: 'bold', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
+  enduranceSectionText: { fontSize: 17, fontWeight: 'bold', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }, // 15->17
+  enduranceSectionArrow: { fontSize: 17, fontWeight: 'bold', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }, // 15->17
 
   // 연속 완등
   consecutiveColorsRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', maxWidth: 90, marginBottom: 5 },
-  miniColorCircle: { width: 14, height: 14, borderRadius: 7, margin: 2, borderWidth: 0.5, borderColor: '#555555' },
-  consecutiveScoreText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
+  miniColorCircle: { width: 16, height: 16, borderRadius: 8, margin: 2, borderWidth: 0.5, borderColor: '#555555' }, // 14->16
+  consecutiveScoreText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }, // 16->18
 });
 
 export default RankingScreen;

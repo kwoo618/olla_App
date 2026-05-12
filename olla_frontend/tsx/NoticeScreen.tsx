@@ -171,6 +171,7 @@ const NoticeScreen = ({ navigation }: any) => {
   );
 };
 
+// ─────────────────────────── 스타일 (글씨 및 레이아웃 확대 적용) ───────────────────────────
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
   center: { justifyContent: 'center', alignItems: 'center' },
@@ -179,15 +180,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    height: 44,
+    height: 50, // 💡 44 -> 50 (터치 영역 및 여유 공간 확대)
     borderBottomWidth: 0.5,
     borderBottomColor: '#2A2A2A',
   },
   backBtn: { padding: 5 },
-  backBtnText: { color: '#ffffff', fontSize: 24 },
-  headerTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
+  backBtnText: { color: '#ffffff', fontSize: 28 }, // 💡 24 -> 28
+  headerTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' }, // 💡 18 -> 20
   listContent: { padding: 20, paddingBottom: 30 },
-  emptyText: { color: '#999999', textAlign: 'center', marginTop: 50 },
+  emptyText: { color: '#999999', textAlign: 'center', marginTop: 50, fontSize: 16 }, // 💡 16 추가
 
   noticeWrapper: {
     backgroundColor: '#2A2A2A',
@@ -203,14 +204,13 @@ const styles = StyleSheet.create({
   },
   noticeInfo: { flex: 1 },
 
-  // 수정한 스타일 (HomeScreen 스타일 적용)
-  noticeHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  noticeBadge: { backgroundColor: '#A1BE44', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 8 },
-  noticeBadgeText: { color: '#1A1A1A', fontSize: 10, fontWeight: 'bold' },
-  noticeTitle: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', flex: 1 },
+  noticeHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 }, // 💡 4 -> 6
+  noticeBadge: { backgroundColor: '#A1BE44', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, marginRight: 8 }, // 💡 패딩 확대
+  noticeBadgeText: { color: '#1A1A1A', fontSize: 12, fontWeight: 'bold' }, // 💡 10 -> 12
+  noticeTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', flex: 1 }, // 💡 16 -> 18
 
-  noticeDate: { color: '#999999', fontSize: 12 },
-  expandIcon: { color: '#999999', fontSize: 16, marginLeft: 10 },
+  noticeDate: { color: '#999999', fontSize: 14 }, // 💡 12 -> 14
+  expandIcon: { color: '#999999', fontSize: 18, marginLeft: 10, fontWeight: 'bold' }, // 💡 16 -> 18
 
   noticeContent: {
     paddingHorizontal: 20,
@@ -219,15 +219,15 @@ const styles = StyleSheet.create({
     borderTopColor: '#333333',
     paddingTop: 15,
   },
-  noticeContentText: { color: '#CCCCCC', fontSize: 14, lineHeight: 22 },
+  noticeContentText: { color: '#CCCCCC', fontSize: 16, lineHeight: 24 }, // 💡 14 -> 16, 행간 22 -> 24
 
-  // ─── 커스텀 알림 모달 전용 스타일 ───
+  // ─── 커스텀 알림 모달 전용 스타일 (통일) ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
-  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 },
-  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, // 💡 300 -> 320
+  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, // 💡 18 -> 20
+  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, // 💡 15 -> 17
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, // 💡 14 -> 16
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
 });
 
 export default NoticeScreen;
