@@ -2,6 +2,7 @@ package com.olla.olla_climbing.domain.member.service;
 
 import com.olla.olla_climbing.domain.admin.service.GoogleSheetsService;
 import com.olla.olla_climbing.domain.community.repository.CommentRepository;
+import com.olla.olla_climbing.domain.community.repository.PostLikeRepository;
 import com.olla.olla_climbing.domain.community.repository.PostParticipantRepository;
 import com.olla.olla_climbing.domain.community.repository.PostRepository;
 import com.olla.olla_climbing.domain.member.dto.response.OtherMemberProfileResponse;
@@ -34,6 +35,7 @@ public class MemberService {
     private final PostRepository postRepository;
     private final CommentRepository commentRepository;
     private final PostParticipantRepository postParticipantRepository;
+    private final PostLikeRepository postLikeRepository;
 
     // 회원가입 화면에서 DB 아이디 중복 확인 로직 (동철 수정)
     @Transactional(readOnly = true)
@@ -148,15 +150,15 @@ public class MemberService {
     @Transactional
     public void withdrawMember(String loginId) {
         Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
-                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND)); // 💡 1단계 예외 적용
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
 
-        // 💡 [핵심] 커뮤니티 데이터 연쇄 삭제 (좀비 데이터 방지용 벌크 연산)
-        postParticipantRepository.deleteByMemberId(member.getId()); // 모임 참가 내역 물리 삭제
-        commentRepository.softDeleteByMemberId(member.getId());     // 댓글 소프트 삭제
-        postRepository.softDeleteByMemberId(member.getId());        // 게시글 소프트 삭제
+        postLikeRepository.deleteByMemberId(member.getId());        // 1. 좋아요 기록 삭제
+        postParticipantRepository.deleteByMemberId(member.getId()); // 2. 모임 참가 내역 삭제
+        commentRepository.softDeleteByMemberId(member.getId());     // 3. 댓글 소프트 삭제
+        postRepository.softDeleteByMemberId(member.getId());        // 4. 게시글 소프트 삭제
 
-        member.withdraw(); // 엔티티 내부의 데이터 변조(Soft Delete) 로직 실행
-        log.info("회원 탈퇴 완료 (연관 데이터 안전 삭제 처리됨): loginId={}", loginId);
+        member.withdraw(); // 5. 본체 데이터 변조 및 탈퇴 처리
+        log.info("회원 탈퇴 완료: loginId={}", loginId);
     }
 
     @Transactional
