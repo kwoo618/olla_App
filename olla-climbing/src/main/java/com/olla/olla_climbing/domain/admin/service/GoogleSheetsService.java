@@ -56,8 +56,9 @@ public class GoogleSheetsService {
                     .setValueInputOption("USER_ENTERED")
                     .execute();
             log.info("Google Sheet Insert Success at row: {}", emptyRowIdx);
-        } catch (IOException e) {
-            log.error("Google Sheet API 에러 발생: ", e);
+        } catch (Exception e) {
+            log.error("Google Sheets 행 추가 중 치명적 오류 발생: {}", e.getMessage(), e);
+            throw new RuntimeException("구글 시트 연동 실패", e);
         }
         ----- 구글 시트 활성화 시 이 줄 삭제 ----- */
     }
