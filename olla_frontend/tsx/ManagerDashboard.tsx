@@ -449,7 +449,7 @@ const ManagerDashboard = ({ navigation }: any) => {
               return (
                 <View key={post.id} style={[styles.noticeListItem, index > 0 && { marginTop: 20 }, isPast && { opacity: 0.6 }]}>
                   <View style={styles.noticeTextContent}>
-                    <View style={[styles.badge, { backgroundColor: badgeBgColor, alignSelf: 'flex-start', marginBottom: 8 }]}>
+                    <View style={[styles.badge, { backgroundColor: badgeBgColor, alignSelf: 'flex-start', marginBottom: 8, marginLeft: -10 }]}>
                       <Text style={[styles.badgeText, { color: badgeTextColor }]}>{postType}</Text>
                     </View>
                     {/* 💡 폰트 확대: 인라인 스타일도 적용 */}
@@ -460,7 +460,7 @@ const ManagerDashboard = ({ navigation }: any) => {
                   </View>
                   <View style={styles.noticeActions}>
                     <TouchableOpacity style={[styles.actionBtn, styles.deleteBtn]} onPress={() => confirmDelete('post', post.id)}>
-                      <Image source={require('../assets/trash.png')} style={[styles.actionIcon, { tintColor: isPast ? '#666666' : '#FF4D4D' }]} />
+                      <Image source={require('../assets/trash.png')} style={[styles.actionIcon, { tintColor: isPast ? '#666666' : '#FF0000' }]} />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -623,7 +623,7 @@ const styles = StyleSheet.create({
 
   noticeActions: { flexDirection: 'row', alignItems: 'center' },
   actionBtn: { padding: 6, marginLeft: 6 },
-  deleteBtn: { backgroundColor: 'rgba(255,77,77,0.1)', borderRadius: 8, padding: 8 }, // 💡 여백 추가
+  deleteBtn: { borderRadius: 8, padding: 8 }, // 💡 여백 추가
   actionIcon: { width: 24, height: 24, resizeMode: 'contain' }, // 💡 20 -> 24
 
   fab: { position: 'absolute', bottom: 15, right: 20, width: 70, height: 70, borderRadius: 35, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4.65 }, // 💡 60 -> 70

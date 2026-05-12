@@ -249,7 +249,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
                   <Image source={require('../assets/fix.png')} style={[styles.actionIcon, { tintColor: '#A1BE44' }]} />
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.actionBtn, styles.deleteBtn]} onPress={() => confirmDelete(notice.id)}>
-                  <Image source={require('../assets/trash.png')} style={[styles.actionIcon, { tintColor: '#FF4D4D' }]} />
+                  <Image source={require('../assets/trash.png')} style={[styles.actionIcon, { tintColor: '#FF0000' }]} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
 
   noticeActions: { flexDirection: 'row', alignItems: 'center' },
   actionBtn:  { padding: 8, marginLeft: 4 }, // 💡 6, 2 -> 8, 4
-  deleteBtn: { backgroundColor: 'rgba(255,77,77,0.1)', borderRadius: 8 }, // 💡 삭제 버튼 강조
+  deleteBtn: { borderRadius: 8 }, // 💡 삭제 버튼 강조
   actionIcon: { width: 22, height: 22, resizeMode: 'contain' }, // 💡 18 -> 22
 
   fab: {
