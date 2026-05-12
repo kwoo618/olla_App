@@ -355,6 +355,9 @@ const RecodeScreen = ({
   const [timerRunning,  setTimerRunning]  = useState(false);
   const [timerSeconds,  setTimerSeconds]  = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  
+  // 💡 측정 종료 모달 상태
+  const [isFinishModalVisible, setFinishModalVisible] = useState(false);
 
   const openEnduranceModal = () => {
     requireMembership(() => {
@@ -366,6 +369,10 @@ const RecodeScreen = ({
   };
 
   const closeEnduranceModal = () => {
+    // 💡 [추가된 부분] 모달이 닫힐 때 백그라운드에서 돌아가던 타이머를 강제로 종료시킵니다.
+    if (timerRef.current) clearInterval(timerRef.current);
+    setTimerRunning(false);
+
     Animated.timing(enduranceSlideAnim, { toValue: 800, duration: 200, useNativeDriver: true }).start();
     setTimeout(() => {
       setEnduranceModalVisible(false);
@@ -484,6 +491,20 @@ const RecodeScreen = ({
     }
   };
 
+  // 💡 모달 띄우기 (타이머 일시정지 후 확인)
+  const confirmStopTimer = () => {
+    if (timerRunning) {
+      setTimerRunning(false);
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+    setFinishModalVisible(true);
+  };
+
+  // 💡 측정 완료 취소
+  const cancelStopTimer = () => {
+    setFinishModalVisible(false);
+  };
+
   // 💡 측정 완료 시 경과시간 계산 후 입력창에 세팅
   const stopTimerAndSave = () => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -500,6 +521,7 @@ const RecodeScreen = ({
     setEnduranceMin(m);
     setEnduranceSec(s);
     setIsTimerActive(false);
+    setFinishModalVisible(false); // 모달 닫기
   };
 
   // 처음 모달 열 때 스톱워치 모드로 초기화
@@ -753,6 +775,23 @@ const RecodeScreen = ({
         </View>
       </Modal>
 
+      {/* ─── 타이머 종료 확인 모달 (새로 추가됨) ─── */}
+      <Modal visible={isFinishModalVisible} animationType="fade" transparent onRequestClose={cancelStopTimer}>
+        <View style={styles.deleteModalOverlay}>
+          <View style={styles.deleteModalBox}>
+            <Text style={styles.deleteModalText}>종료하시겠습니까?</Text>
+            <View style={styles.deleteBtnRow}>
+              <TouchableOpacity style={styles.deleteBtnYes} onPress={stopTimerAndSave}>
+                <Text style={styles.deleteBtnYesText}>예</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.deleteBtnNo} onPress={cancelStopTimer}>
+                <Text style={styles.deleteBtnNoText}>아니오</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* ─── 초보벽 기록 모달 ─── */}
       <Modal visible={isRecordModalVisible} animationType="fade" transparent onRequestClose={closeRecordModal}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeRecordModal}>
@@ -766,6 +805,8 @@ const RecodeScreen = ({
             </TouchableOpacity>
             <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%' }}>
               <TouchableOpacity activeOpacity={1} style={{ width: '100%', paddingBottom: 20 }}>
+                
+                {/* 💡 초보벽 난이도 선택 (선택된 버튼 스타일 변경) */}
                 <Text style={styles.sectionTitle}>난이도 선택</Text>
                 <View style={styles.colorButtonContainer}>
                   <View style={styles.colorButtonRow}>
@@ -773,8 +814,23 @@ const RecodeScreen = ({
                       const isSelected = selectedDifficulty === item.color;
                       return (
                         <TouchableOpacity key={item.color} onPress={() => setSelectedDifficulty(item.color)}
-                          style={[styles.diffButton, { borderColor: item.hex }, isSelected && { backgroundColor: item.hex + '20' }]}>
-                          <Text style={[styles.diffButtonText, isSelected && { fontWeight: 'bold' }]}>{item.color}</Text>
+                          style={[
+                            styles.diffButton, 
+                            { borderColor: item.hex }, 
+                            isSelected && { backgroundColor: item.hex, borderWidth: 2 } // 💡 선택 시 배경 꽉 채우기 및 테두리 강조
+                          ]}>
+                          <Text style={[
+                            styles.diffButtonText, 
+                            isSelected && { 
+                              fontWeight: 'bold', 
+                              color: '#ffffff', // 💡 글씨를 흰색으로
+                              textShadowColor: 'rgba(0, 0, 0, 0.7)', // 💡 밝은 색상 대비를 위한 그림자 추가
+                              textShadowOffset: { width: 0, height: 1 }, 
+                              textShadowRadius: 2 
+                            }
+                          ]}>
+                            {item.color}
+                          </Text>
                         </TouchableOpacity>
                       );
                     })}
@@ -911,7 +967,8 @@ const RecodeScreen = ({
               <TouchableOpacity style={[styles.timerCircleBtn, { backgroundColor: timerRunning ? '#FFB74D' : '#A1BE44' }]} onPress={toggleTimer}>
                 <Text style={styles.timerCircleBtnText}>{timerRunning ? '일시정지' : '시작'}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.timerCircleBtn, { backgroundColor: '#FF4D4D' }]} onPress={stopTimerAndSave}>
+              {/* 완료 버튼에 stopTimerAndSave 대신 모달 띄우는 함수 연결 */}
+              <TouchableOpacity style={[styles.timerCircleBtn, { backgroundColor: '#FF4D4D' }]} onPress={confirmStopTimer}>
                 <Text style={styles.timerCircleBtnText}>완료</Text>
               </TouchableOpacity>
             </View>
