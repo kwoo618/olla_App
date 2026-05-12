@@ -139,7 +139,6 @@ const RecodeScreen = ({
   const checkMembership = async () => {
     try {
       const res = await axios.get(MEMBERSHIP_URL);
-      // Depth 적용: res.data.data
       const data = res.data?.data?.data; 
       
       if (data) {
@@ -173,7 +172,6 @@ const RecodeScreen = ({
   const fetchBestRecords = async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/records/beginner/best`);
-      // Depth 적용
       const raw = res.data?.data?.data ?? [];
       const list: BeginnerRecord[] = Array.isArray(raw) ? raw : Array.isArray(raw?.list) ? raw.list : [];
 
@@ -221,8 +219,7 @@ const RecodeScreen = ({
   const fetchEnduranceRecords = async () => {
     try {
       const res = await axios.get(`${ENDURANCE_BASE_URL}/history`);
-      // Depth 적용
-      const raw = res.data?.data ?? [];
+      const raw = res.data?.data?.data ?? [];
       const list: EnduranceRecord[] = Array.isArray(raw) ? raw : [];
 
       const mapped = list.map((item: EnduranceRecord) => ({
@@ -244,8 +241,7 @@ const RecodeScreen = ({
   const fetchSeriesRecords = async () => {
     try {
       const res = await axios.get(`${SERIES_BASE_URL}/history`);
-      // Depth 적용
-      const raw = res.data?.data ?? [];
+      const raw = res.data?.data?.data ?? [];
       const list: SeriesRecord[] = Array.isArray(raw) ? raw : [];
 
       const mapped = list.map((item: SeriesRecord) => ({
@@ -267,7 +263,7 @@ const RecodeScreen = ({
   const toggleSection = (section: string) =>
     setExpandedSection(expandedSection === section ? null : section);
 
-  // ─── 삭제 모달 ───
+  // ─── 삭제 모달 및 삭제 로직 ───
   const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{
     id: number; type: 'endurance' | 'consecutive' | 'difficulty';
@@ -280,6 +276,7 @@ const RecodeScreen = ({
     });
   };
 
+  // ✅ 수정됨: 삭제 시 iOS 모달 버그 해결 (500ms 딜레이)
   const executeDelete = async () => {
     if (!itemToDelete) return;
     try {
@@ -287,18 +284,30 @@ const RecodeScreen = ({
       if      (itemToDelete.type === 'difficulty')  { await axios.delete(`${API_BASE_URL}/records/beginner/${id}`);       await fetchBestRecords();       }
       else if (itemToDelete.type === 'endurance')   { await axios.delete(`${ENDURANCE_BASE_URL}/${id}`); await fetchEnduranceRecords();  }
       else if (itemToDelete.type === 'consecutive') { await axios.delete(`${SERIES_BASE_URL}/${id}`);    await fetchSeriesRecords();     }
+      
       setDeleteModalVisible(false);
       setItemToDelete(null);
+
+      // 모달 닫히고 0.5초 후 성공 팝업
+      setTimeout(() => {
+        showResultModal('성공', '기록이 삭제되었습니다.', 'success');
+      }, 500);
+
     } catch (error: any) {
-      // 에러 메시지 적용
-      const errorMessage = error.response?.data?.message || '기록 삭제에 실패했습니다.';
-      showResultModal('오류', errorMessage, 'error');
+      setDeleteModalVisible(false);
+      setItemToDelete(null);
+      
+      // 모달 닫히고 0.5초 후 에러 팝업
+      setTimeout(() => {
+        const errorMessage = error.response?.data?.message || '기록 삭제에 실패했습니다.';
+        showResultModal('오류', errorMessage, 'error');
+      }, 500);
     }
   };
 
   const cancelDelete = () => { setDeleteModalVisible(false); setItemToDelete(null); };
 
-  // ─── 초보벽 모달 ───
+  // ─── 초보벽 모달 및 로직 ───
   const [isRecordModalVisible,  setRecordModalVisible]  = useState(false);
   const beginnerSlideAnim = useRef(new Animated.Value(800)).current;
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('흰색');
@@ -331,10 +340,10 @@ const RecodeScreen = ({
     return MAX_HOLDS[selectedDifficulty] ?? 0;
   }, [selectedDifficulty]);
 
-  // ── 초보벽 기록 저장 ──
+  // ✅ 수정됨: 초보벽 기록 저장 시 iOS 모달 버그 해결 (500ms 딜레이)
   const handleSaveBeginnerRecord = async () => {
     if (!selectedType || !selectedResult) {
-      showResultModal('알림', '모든 항목을 선택해주세요.', 'info');
+      showResultModal('알림', '모든 항목을 선택해주세요.', 'info'); // 열린 창 위에 즉시 표시
       return;
     }
     const isSuccess    = selectedResult === '완등';
@@ -353,11 +362,18 @@ const RecodeScreen = ({
       await axios.post(`${API_BASE_URL}/records/beginner`, payload);
       await fetchBestRecords();
       closeRecordModal();
-      setTimeout(() => showResultModal('성공', '등반 기록이 저장되었습니다.', 'success'), 300);
+      
+      setTimeout(() => {
+        showResultModal('성공', '등반 기록이 저장되었습니다.', 'success');
+      }, 500);
+
     } catch (error: any) {
-      // 에러 메시지 적용
-      const errorMessage = error.response?.data?.message || '데이터 저장에 실패했습니다.';
-      showResultModal('오류', errorMessage, 'error');
+      closeRecordModal();
+      
+      setTimeout(() => {
+        const errorMessage = error.response?.data?.message || '데이터 저장에 실패했습니다.';
+        showResultModal('오류', errorMessage, 'error');
+      }, 500);
     }
   };
 
@@ -369,15 +385,13 @@ const RecodeScreen = ({
   const [enduranceMin,     setEnduranceMin]     = useState('');
   const [enduranceSec,     setEnduranceSec]     = useState('');
   
-  // 💡 스톱워치 / 타이머 관련 상태
   const [isTimerActive,    setIsTimerActive]    = useState(false);
   const [timerMode, setTimerMode] = useState<'stopwatch' | 'timer'>('stopwatch');
-  const [initialTimerValue, setInitialTimerValue] = useState(600); // 타이머용 기본 10분(600초)
+  const [initialTimerValue, setInitialTimerValue] = useState(600); 
   const [timerRunning,  setTimerRunning]  = useState(false);
   const [timerSeconds,  setTimerSeconds]  = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
-  // 💡 측정 종료 모달 상태
   const [isFinishModalVisible, setFinishModalVisible] = useState(false);
 
   const openEnduranceModal = () => {
@@ -390,7 +404,6 @@ const RecodeScreen = ({
   };
 
   const closeEnduranceModal = () => {
-    // 💡 [추가된 부분] 모달이 닫힐 때 백그라운드에서 돌아가던 타이머를 강제로 종료시킵니다.
     if (timerRef.current) clearInterval(timerRef.current);
     setTimerRunning(false);
 
@@ -457,7 +470,7 @@ const RecodeScreen = ({
     return segments;
   }, [enduranceLaps, selectedMapNode, mapElements]);
 
-  // ── 지구력 기록 저장 ──
+  // ✅ 수정됨: 지구력 기록 저장 시 iOS 모달 버그 해결 (500ms 딜레이)
   const handleSaveEnduranceRecord = async () => {
     if (!effectiveSection && enduranceLaps === 0) {
       showResultModal('알림', '기록할 바퀴 수나 지도 구간을 선택해주세요.', 'info');
@@ -479,30 +492,35 @@ const RecodeScreen = ({
       await axios.post(ENDURANCE_BASE_URL, payload);
       await fetchEnduranceRecords();
       closeEnduranceModal();
-      setTimeout(() => showResultModal('성공', '지구력 기록이 저장되었습니다.', 'success'), 300);
+      
+      setTimeout(() => {
+        showResultModal('성공', '지구력 기록이 저장되었습니다.', 'success');
+      }, 500);
+
     } catch (error: any) {
-      // 에러 메시지 적용
-      const errorMessage = error.response?.data?.message || '지구력 기록 저장에 실패했습니다.';
-      showResultModal('오류', errorMessage, 'error');
+      closeEnduranceModal();
+      setTimeout(() => {
+        const errorMessage = error.response?.data?.message || '지구력 기록 저장에 실패했습니다.';
+        showResultModal('오류', errorMessage, 'error');
+      }, 500);
     }
   };
 
-  // 💡 시작 / 일시정지 (스톱워치 & 타이머 로직 분리)
   const toggleTimer = () => {
     if (timerRunning) {
       setTimerRunning(false);
       if (timerRef.current) clearInterval(timerRef.current);
     } else {
-      if (timerMode === 'timer' && timerSeconds <= 0) return; // 타이머가 0일 땐 시작 불가
+      if (timerMode === 'timer' && timerSeconds <= 0) return; 
       
       setTimerRunning(true);
       if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = setInterval(() => {
         setTimerSeconds(prev => {
           if (timerMode === 'stopwatch') {
-            return prev + 1; // 스톱워치는 1초씩 증가
+            return prev + 1; 
           } else {
-            if (prev <= 1) { // 타이머는 1초씩 감소
+            if (prev <= 1) { 
               if (timerRef.current) clearInterval(timerRef.current);
               setTimerRunning(false);
               return 0;
@@ -514,7 +532,6 @@ const RecodeScreen = ({
     }
   };
 
-  // 💡 모달 띄우기 (타이머 일시정지 후 확인)
   const confirmStopTimer = () => {
     if (timerRunning) {
       setTimerRunning(false);
@@ -523,31 +540,28 @@ const RecodeScreen = ({
     setFinishModalVisible(true);
   };
 
-  // 💡 측정 완료 취소
   const cancelStopTimer = () => {
     setFinishModalVisible(false);
   };
 
-  // 💡 측정 완료 시 경과시간 계산 후 입력창에 세팅
   const stopTimerAndSave = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     setTimerRunning(false);
     
     let elapsed = 0;
     if (timerMode === 'stopwatch') {
-      elapsed = timerSeconds; // 스톱워치는 흘러간 시간 그대로
+      elapsed = timerSeconds; 
     } else {
-      elapsed = initialTimerValue - timerSeconds; // 타이머는 (설정한 시간 - 남은 시간)
+      elapsed = initialTimerValue - timerSeconds; 
     }
     
     const [m, s] = formatTime(elapsed).split(':');
     setEnduranceMin(m);
     setEnduranceSec(s);
     setIsTimerActive(false);
-    setFinishModalVisible(false); // 모달 닫기
+    setFinishModalVisible(false); 
   };
 
-  // 처음 모달 열 때 스톱워치 모드로 초기화
   const openTimerModal = () => { 
     setTimerMode('stopwatch');
     setTimerSeconds(0); 
@@ -597,7 +611,7 @@ const RecodeScreen = ({
     (acc: number, curr: any) => acc + (curr.score ?? 0), 0
   );
 
-  // ── 연속 완등 기록 저장 ──
+  // ✅ 수정됨: 연속 완등 기록 저장 시 iOS 모달 버그 해결 (500ms 딜레이)
   const handleSaveConsecutiveRecord = async () => {
     if (selectedConsecutiveList.length === 0) {
       showResultModal('알림', '연속으로 완등한 난이도를 1개 이상 입력해주세요.', 'info');
@@ -612,11 +626,17 @@ const RecodeScreen = ({
       await axios.post(SERIES_BASE_URL, payload);
       await fetchSeriesRecords();
       closeConsecutiveModal();
-      setTimeout(() => showResultModal('성공', '연속 완등 기록이 저장되었습니다.', 'success'), 300);
+      
+      setTimeout(() => {
+        showResultModal('성공', '연속 완등 기록이 저장되었습니다.', 'success');
+      }, 500);
+
     } catch (error: any) {
-      // 에러 메시지 적용
-      const errorMessage = error.response?.data?.message || '연속 완등 기록 저장에 실패했습니다.';
-      showResultModal('오류', errorMessage, 'error');
+      closeConsecutiveModal();
+      setTimeout(() => {
+        const errorMessage = error.response?.data?.message || '연속 완등 기록 저장에 실패했습니다.';
+        showResultModal('오류', errorMessage, 'error');
+      }, 500);
     }
   };
 
@@ -811,7 +831,7 @@ const RecodeScreen = ({
         </View>
       </Modal>
 
-      {/* ─── 타이머 종료 확인 모달 (새로 추가됨) ─── */}
+      {/* ─── 타이머 종료 확인 모달 ─── */}
       <Modal visible={isFinishModalVisible} animationType="fade" transparent onRequestClose={cancelStopTimer}>
         <View style={styles.deleteModalOverlay}>
           <View style={styles.deleteModalBox}>
@@ -842,7 +862,6 @@ const RecodeScreen = ({
             <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%' }}>
               <TouchableOpacity activeOpacity={1} style={{ width: '100%', paddingBottom: 20 }}>
                 
-                {/* 💡 초보벽 난이도 선택 (선택된 버튼 스타일 변경) */}
                 <Text style={styles.sectionTitle}>난이도 선택</Text>
                 <View style={styles.colorButtonContainer}>
                   <View style={styles.colorButtonRow}>
@@ -853,14 +872,14 @@ const RecodeScreen = ({
                           style={[
                             styles.diffButton, 
                             { borderColor: item.hex }, 
-                            isSelected && { backgroundColor: item.hex, borderWidth: 2 } // 💡 선택 시 배경 꽉 채우기 및 테두리 강조
+                            isSelected && { backgroundColor: item.hex, borderWidth: 2 } 
                           ]}>
                           <Text style={[
                             styles.diffButtonText, 
                             isSelected && { 
                               fontWeight: 'bold', 
-                              color: '#ffffff', // 💡 글씨를 흰색으로
-                              textShadowColor: 'rgba(0, 0, 0, 0.7)', // 💡 밝은 색상 대비를 위한 그림자 추가
+                              color: '#ffffff', 
+                              textShadowColor: 'rgba(0, 0, 0, 0.7)', 
                               textShadowOffset: { width: 0, height: 1 }, 
                               textShadowRadius: 2 
                             }
@@ -938,7 +957,6 @@ const RecodeScreen = ({
               </TouchableOpacity>
             </View>
 
-            {/* 💡 스톱워치 / 타이머 선택 탭 */}
             <View style={styles.timerModeContainer}>
               <TouchableOpacity 
                 style={[styles.timerModeBtn, timerMode === 'stopwatch' && styles.timerModeBtnActive]}
@@ -959,7 +977,7 @@ const RecodeScreen = ({
                 onPress={() => { 
                   if (!timerRunning) { 
                     setTimerMode('timer'); 
-                    setTimerSeconds(600); // 타이머 기본 10분
+                    setTimerSeconds(600); 
                     setInitialTimerValue(600); 
                   } 
                 }}
@@ -974,12 +992,11 @@ const RecodeScreen = ({
             <View style={styles.timerCenterArea}>
               <Text style={styles.hugeTimerText}>{formatTime(timerSeconds)}</Text>
               
-              {/* 💡 타이머 모드일 때만 보이는 10분 단위 설정 버튼 */}
               {timerMode === 'timer' && !timerRunning && (
                 <View style={styles.timerAdjustRow}>
                   <TouchableOpacity 
                     onPress={() => {
-                      setTimerSeconds(prev => Math.max(600, prev - 600)); // 최소 10분은 유지
+                      setTimerSeconds(prev => Math.max(600, prev - 600)); 
                       setInitialTimerValue(prev => Math.max(600, prev - 600));
                     }} 
                     style={styles.adjustBtn}
@@ -1003,7 +1020,6 @@ const RecodeScreen = ({
               <TouchableOpacity style={[styles.timerCircleBtn, { backgroundColor: timerRunning ? '#FFB74D' : '#A1BE44' }]} onPress={toggleTimer}>
                 <Text style={styles.timerCircleBtnText}>{timerRunning ? '일시정지' : '시작'}</Text>
               </TouchableOpacity>
-              {/* 완료 버튼에 stopTimerAndSave 대신 모달 띄우는 함수 연결 */}
               <TouchableOpacity style={[styles.timerCircleBtn, { backgroundColor: '#FF4D4D' }]} onPress={confirmStopTimer}>
                 <Text style={styles.timerCircleBtnText}>완료</Text>
               </TouchableOpacity>
@@ -1155,7 +1171,6 @@ const RecodeScreen = ({
   );
 };
 
-// ─────────────────────────── 스타일 (글씨 크기 확대 적용) ───────────────────────────
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
   scrollContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 20 },
@@ -1253,14 +1268,12 @@ const styles = StyleSheet.create({
   timerCenterArea: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   hugeTimerText: { color: '#ffffff', fontSize: 86, fontWeight: '900' }, 
   
-  // 💡 상단 스톱워치 / 타이머 탭 스타일
   timerModeContainer: { flexDirection: 'row', backgroundColor: '#333333', borderRadius: 12, padding: 4, marginHorizontal: 20, marginTop: 20 },
   timerModeBtn: { flex: 1, paddingVertical: 14, alignItems: 'center', borderRadius: 8 },
   timerModeBtnActive: { backgroundColor: '#555555' },
   timerModeBtnText: { color: '#999999', fontSize: 18, fontWeight: 'bold' },
   timerModeBtnTextActive: { color: '#ffffff' },
 
-  // 💡 타이머 10분 단위 조절 버튼 스타일
   timerAdjustRow: { flexDirection: 'row', marginTop: 40, justifyContent: 'center', alignItems: 'center' },
   adjustBtn: { backgroundColor: '#333333', paddingVertical: 14, paddingHorizontal: 20, borderRadius: 12, marginHorizontal: 10 },
   adjustBtnText: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' },

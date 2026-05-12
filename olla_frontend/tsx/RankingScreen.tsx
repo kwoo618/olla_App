@@ -240,7 +240,7 @@ const RankingScreen = ({ route }: any) => {
         const maxHold      = MAX_HOLDS[currentColor.name] ?? 0;
         
         // ✅ 1. Depth 1단계 추가
-        const rawList = extractList(response.data?.data);
+        const rawList = extractList(response.data?.data?.data);
 
         // 랭킹 목록 파싱
         const mappedList = rawList.map((item: any, i: number) => {
@@ -318,7 +318,7 @@ const RankingScreen = ({ route }: any) => {
     try {
       const res = await axios.get(RANKING_ENDURANCE_URL);
       // ✅ 1. Depth 1단계 추가
-      const rawList = extractList(res.data?.data);
+      const rawList = extractList(res.data?.data?.data);
 
       const mapped = rawList.map((item: EnduranceRankItem, i: number) => ({
         id:               item.memberId ?? `rank-endurance-${i}`,
@@ -346,7 +346,7 @@ const RankingScreen = ({ route }: any) => {
     try {
       const res = await axios.get(RANKING_SERIES_URL);
       // ✅ 1. Depth 1단계 추가
-      const rawList = extractList(res.data?.data);
+      const rawList = extractList(res.data?.data?.data);
 
       const mapped = rawList.map((item: SeriesRankItem, i: number) => {
         const colorHexList = (item.sequenceLog ?? []).map(diffEnum => {

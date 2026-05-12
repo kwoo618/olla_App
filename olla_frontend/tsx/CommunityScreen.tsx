@@ -17,8 +17,7 @@ const authHeader = async () => {
 const p = (n: number) => String(n).padStart(2, '0');
 
 const CommunityScreen = ({ route, navigation }: any) => {
-  const [refreshing, setRefreshing] = useState(false); // 새로고침 상태
-  
+  const [refreshing, setRefreshing] = useState(false);
   const isFocused = useIsFocused();
   const currentFilter = route?.params?.filter || 'ALL';
 
@@ -54,7 +53,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
     }
   }, [isFocused, currentFilter]);
 
-  // ✅ 당겨서 새로고침 기능 추가
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await initData(currentFilter);
@@ -66,7 +64,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
     try {
       const headers = await authHeader();
       const { data } = await axios.get(`${MEMBERS}/me`, { headers });
-      // ✅ Depth 1단계 추가 적용
       const d = data?.data?.data;
       if (d) {
         uName = d.name || ''; 
@@ -94,7 +91,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
     }
     return writerName === uName || writerName === uNick;
   };
-  
 
   const fetchPosts = async (uName: string, uNick: string, uId: number | null, filterToUse: string) => {
     try {
@@ -103,8 +99,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
       const url = `${urlMap[filterToUse] || POSTS}?page=0&size=100`;
       
       const { data } = await axios.get(url, { headers });
-      
-      // ✅ Depth 1단계 추가 적용
       let list = data?.data?.data?.content ?? data?.data?.data ?? [];
 
       if (filterToUse === 'MY_APPLIED') {
@@ -119,7 +113,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
         setPosts(sortPosts(mappedList));
       }
     } catch (e: any) {
-      // ✅ 에러 메시지 처리 적용
       const errorMessage = e.response?.data?.message || '게시글을 가져오지 못했습니다.';
       showResultModal('불러오기 실패', errorMessage, 'error');
     }
@@ -156,7 +149,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
       let backendRes: any[] = [];
       try {
         const { data } = await axios.get(`${POSTS}/search?keyword=${encodeURIComponent(searchKeyword)}&page=0&size=100`, { headers });
-        const resList = data?.data?.content ?? data?.data ?? [];
+        const resList = data?.data?.data?.content ?? data?.data?.data ?? [];
         backendRes = Array.isArray(resList) ? resList : [];
       } catch (e: any) {
         console.log('백엔드 검색 오류:', e.response?.data?.message || e.message);
@@ -192,15 +185,25 @@ const CommunityScreen = ({ route, navigation }: any) => {
       return { ...post, isJoined: joining, people: `${joining?Math.min(cur+1,max):Math.max(cur-1,1)}/${max}명` };
     }));
 
+  // ✅ 추가됨: 좋아요 누르거나 취소할 때 모달 즉각 표시
   const toggleLike = async (id: number, liked: boolean) => {
     updatePost(id, { isLiked: !liked, likeCount: (post: any) => liked ? Math.max(post.likeCount-1,0) : post.likeCount+1 });
+    
+    // UI상 즉시 표시하기 위해 모달을 바로 띄움
+    if (liked) {
+      showResultModal('좋아요 취소', '좋아요가 취소되었습니다.', 'info');
+    } else {
+      showResultModal('좋아요', '게시글에 좋아요를 눌렀습니다.', 'success');
+    }
+
     try {
       const headers = await authHeader();
       await axios.post(`${POSTS}/${id}/like`, {}, { headers });
     } catch (e: any) {
+      // 실패하면 원래대로 복구
       updatePost(id, { isLiked: liked, likeCount: (post: any) => liked ? post.likeCount+1 : post.likeCount-1 });
       const errorMessage = e.response?.data?.message || '좋아요 요청을 처리할 수 없습니다.';
-      showResultModal('알림', errorMessage, 'error');
+      showResultModal('오류', errorMessage, 'error');
     }
   };
 
@@ -228,18 +231,28 @@ const CommunityScreen = ({ route, navigation }: any) => {
     } catch {}
   };
 
+  // ✅ 수정됨: 삭제 시 iOS 모달 겹침 방지 (500ms)
   const executeDelete = async () => {
     if (deleteTarget === null) return;
     try {
       const headers = await authHeader();
       await axios.delete(`${POSTS}/${deleteTarget}`, { headers });
-      showResultModal('성공', '게시글이 삭제되었습니다.', 'success');
-      initData(currentFilter);
+      
+      setDeleteTarget(null); // 질문창 닫기
+      initData(currentFilter); // 데이터 갱신
+      
+      // 질문창이 닫히는 시간을 충분히(500ms) 주고 성공 팝업 띄움
+      setTimeout(() => {
+        showResultModal('성공', '게시글이 삭제되었습니다.', 'success');
+      }, 500);
+
     } catch (e: any) {
-      const errorMessage = e.response?.data?.message || '삭제할 수 없습니다.';
-      showResultModal('삭제 실패', errorMessage, 'error');
+      setDeleteTarget(null);
+      setTimeout(() => {
+        const errorMessage = e.response?.data?.message || '삭제할 수 없습니다.';
+        showResultModal('삭제 실패', errorMessage, 'error');
+      }, 500);
     }
-    setDeleteTarget(null);
   };
 
   const openDetailModal = async (authorId: number, authorName: string, isMine: boolean) => {
@@ -247,9 +260,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
       const headers = await authHeader();
       const url = isMine ? `${MEMBERS}/me` : `${MEMBERS}/${authorId}/profile`;
       const { data } = await axios.get(url, { headers });
-      
-      // ✅ Depth 1단계 추가 적용
-      const d = data?.data; 
+      const d = data?.data?.data; 
       
       if (!d) { showResultModal('프로필 조회 불가', '정보를 불러올 수 없습니다.', 'error'); return; }
       
@@ -329,11 +340,13 @@ const CommunityScreen = ({ route, navigation }: any) => {
   const closeCreateModal = () =>
     Animated.timing(createAnim,{toValue:800,duration:250,useNativeDriver:true}).start(() => setCreateVisible(false));
 
+  // ✅ 수정됨: 작성 완료/에러 처리 시 모달 즉각 대응 및 완료 팝업 (500ms)
   const submitPost = async () => {
     const { category, title, desc, date, time, people, location } = form;
     
+    // 💡 경고창은 글쓰기 모달창 위에 바로 뜨도록 딜레이 없이 호출
     if (!title || !desc || !date || !time) { 
-      showResultModal('알림', '모든 항목을 입력해주세요.', 'info'); 
+      showResultModal('알림', '모든 내용을 적어주십시오.', 'info'); 
       return; 
     }
     if (category === '아웃도어' && (!location || !location.trim())) {
@@ -378,12 +391,22 @@ const CommunityScreen = ({ route, navigation }: any) => {
         await axios.post(POSTS, payload, { headers });
       }
       
-      showResultModal('성공', isEditMode ? '게시글이 수정되었습니다.' : '모집 글이 작성되었습니다.', 'success');
-      closeCreateModal(); 
-      initData(currentFilter);
+      initData(currentFilter); // 리스트 업데이트
+      closeCreateModal(); // 모달 닫기
+      
+      // 💡 모달 닫히고 500ms(0.5초) 뒤 성공 팝업
+      setTimeout(() => {
+        showResultModal('성공', isEditMode ? '게시글이 성공적으로 수정되었습니다.' : '모집 글이 성공적으로 작성되었습니다.', 'success');
+      }, 500);
+
     } catch (e: any) {
-      const errorMessage = e.response?.data?.message || '처리에 실패했습니다.';
-      showResultModal(`${isEditMode ? '수정' : '작성'} 실패`, errorMessage, 'error');
+      closeCreateModal();
+      
+      // 💡 모달 닫히고 500ms(0.5초) 뒤 에러 팝업
+      setTimeout(() => {
+        const errorMessage = e.response?.data?.message || '처리에 실패했습니다.';
+        showResultModal(`${isEditMode ? '수정' : '작성'} 실패`, errorMessage, 'error');
+      }, 500);
     }
   };
 
@@ -422,7 +445,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
         </View>
       )}
 
-      {/* 게시글 목록 - ✅ RefreshControl 추가 */}
+      {/* 게시글 목록 - RefreshControl 추가 */}
       <ScrollView 
         showsVerticalScrollIndicator={false} 
         contentContainerStyle={s.scroll}
@@ -446,7 +469,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
                   <Text style={[s.badgeText, { color: isPast ? '#888' : (isOut ? '#2CDE00' : '#009DFF') }]}>{post.type}</Text>
                 </View>
                 <View style={s.statsRow}>
-                  {/* 조회수 디자인 수정: Eye.png */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10 }}>
                     <Image 
                       source={require('../assets/Eye.png')} 
@@ -510,7 +532,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
 
       <TouchableOpacity style={s.fab} onPress={openCreateModal}><Text style={s.fabText}>+</Text></TouchableOpacity>
 
-      {/* 삭제 확인 */}
+      {/* 삭제 확인 모달 */}
       <Modal visible={deleteTarget!==null} animationType="fade" transparent onRequestClose={() => setDeleteTarget(null)}>
         <View style={s.overlay}>
           <View style={s.alertBox}>
@@ -523,7 +545,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 커스텀 알림 결과 모달 ─── */}
+      {/* ─── 커스텀 알림 결과 모달 (이 부분에서 모든 알림이 표시됨) ─── */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
         <View style={s.resultModalOverlay}>
           <View style={s.resultModalBox}>
@@ -538,7 +560,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 회원 정보 */}
+      {/* 회원 정보 상세 보기 */}
       <Modal visible={selectedUser!==null} transparent animationType="fade" onRequestClose={closeDetailModal}>
         <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={closeDetailModal}>
           <Animated.View style={[s.sheet,{transform:[{translateY:detailAnim}]}]}>
@@ -571,7 +593,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
         </TouchableOpacity>
       </Modal>
 
-      {/* 작성/수정 */}
+      {/* 작성/수정 창 */}
       <Modal visible={isCreateVisible} transparent animationType="fade" onRequestClose={closeCreateModal}>
         <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={closeCreateModal}>
           <Animated.View style={[s.sheet,{transform:[{translateY:createAnim}],maxHeight:'90%'}]}>
@@ -638,125 +660,124 @@ const CommunityScreen = ({ route, navigation }: any) => {
   );
 };
 
-// ─────────────────────────── 스타일 (글씨 크기 확대 적용) ───────────────────────────
 const s = StyleSheet.create({
   bg:{flex:1,backgroundColor:'#1A1A1A',paddingHorizontal:20,paddingTop:10},
   
   searchRow:{flexDirection:'row',marginBottom:12,alignItems:'center'},
   searchBox:{flex:1,backgroundColor:'#262626',borderRadius:10,flexDirection:'row',alignItems:'center',paddingHorizontal:12},
-  searchInput:{flex:1,color:'#fff',fontSize:16,paddingVertical:12}, // 💡 14 -> 16
-  clearText:{color:'#999',fontSize:18,padding:5}, // 💡 16 -> 18
+  searchInput:{flex:1,color:'#fff',fontSize:16,paddingVertical:12}, 
+  clearText:{color:'#999',fontSize:18,padding:5}, 
   searchBtn:{backgroundColor:'#A1BE44',borderRadius:10,paddingHorizontal:16,paddingVertical:10,marginLeft:10},
-  searchBtnText:{color:'#000',fontSize:16,fontWeight:'bold'}, // 💡 14 -> 16
+  searchBtnText:{color:'#000',fontSize:16,fontWeight:'bold'}, 
   
   alertBar:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',backgroundColor:'rgba(0,114,185,0.1)',paddingHorizontal:16,paddingVertical:10,borderRadius:8,marginBottom:10,borderWidth:1,borderColor:'#0072B9'},
-  alertBlue:{color:'#009DFF',fontSize:16,fontWeight:'bold'}, // 💡 14 -> 16
+  alertBlue:{color:'#009DFF',fontSize:16,fontWeight:'bold'}, 
   filterBar:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',backgroundColor:'rgba(161,190,68,0.1)',paddingHorizontal:16,paddingVertical:10,borderRadius:8,marginBottom:15,borderWidth:1,borderColor:'#A1BE44'},
-  alertGreen:{color:'#A1BE44',fontSize:16,fontWeight:'bold'}, // 💡 14 -> 16
-  clearBtn:{color:'#fff',fontSize:14,opacity:0.8}, // 💡 12 -> 14
+  alertGreen:{color:'#A1BE44',fontSize:16,fontWeight:'bold'}, 
+  clearBtn:{color:'#fff',fontSize:14,opacity:0.8}, 
   
   tabRow:{flexDirection:'row',backgroundColor:'#3A3A3A',borderRadius:24,padding:4,marginBottom:20},
   tab:{flex:1,paddingVertical:10,alignItems:'center',borderRadius:20},
   tabActive:{backgroundColor:'#1D1D1D'},
-  tabText:{color:'#999',fontSize:17,fontWeight:'bold'}, // 💡 15 -> 17
+  tabText:{color:'#999',fontSize:17,fontWeight:'bold'}, 
   tabTextActive:{color:'#fff'},
   
   scroll:{paddingBottom:80},
-  empty:{color:'#999',fontSize:16,textAlign:'center',marginTop:30}, // 💡 추가됨 (16)
+  empty:{color:'#999',fontSize:16,textAlign:'center',marginTop:30}, 
   
   card:{backgroundColor:'#212121',borderColor:'#262626',borderWidth:1.5,borderRadius:16,padding:20,marginBottom:15},
   cardPast:{opacity:0.25,borderColor:'#333'},
   cardHeader:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginBottom:12},
-  badge:{paddingHorizontal:14,paddingVertical:6,borderRadius:8}, // 💡 크기 조절
-  badgeText:{fontSize:14,fontWeight:'bold'}, // 💡 12 -> 14
+  badge:{paddingHorizontal:14,paddingVertical:6,borderRadius:8}, 
+  badgeText:{fontSize:14,fontWeight:'bold'}, 
   
   statsRow:{flexDirection:'row',alignItems:'center'},
-  stat:{color:'#999',fontSize:14,fontWeight:'500',marginRight:10}, // 💡 12 -> 14
-  dateText:{color:'#999',fontSize:14}, // 💡 12 -> 14
+  stat:{color:'#999',fontSize:14,fontWeight:'500',marginRight:10}, 
+  dateText:{color:'#999',fontSize:14}, 
   
-  title:{color:'#fff',fontSize:20,fontWeight:'bold',marginBottom:6}, // 💡 18 -> 20
-  desc:{color:'#999',fontSize:16,lineHeight:22,marginBottom:15}, // 💡 14 -> 16
+  title:{color:'#fff',fontSize:20,fontWeight:'bold',marginBottom:6}, 
+  desc:{color:'#999',fontSize:16,lineHeight:22,marginBottom:15}, 
   
   infoRow:{flexDirection:'row',alignItems:'center',marginBottom:15,flexWrap:'wrap'},
   infoItem:{flexDirection:'row',alignItems:'center',marginRight:12,marginBottom:4},
-  infoIcon:{width:16,height:16,resizeMode:'contain',marginRight:4,tintColor:'#999'}, // 💡 14 -> 16
-  infoText:{color:'#999',fontSize:14}, // 💡 12 -> 14
+  infoIcon:{width:16,height:16,resizeMode:'contain',marginRight:4,tintColor:'#999'}, 
+  infoText:{color:'#999',fontSize:14}, 
   
   divider:{height:1,backgroundColor:'#333',marginBottom:15},
   footer:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'},
   profileRow:{flexDirection:'row',alignItems:'center'},
-  avatar:{width:36,height:36,borderRadius:18,backgroundColor:'#444',marginRight:10}, // 💡 32 -> 36
-  author:{color:'#ccc',fontSize:16,fontWeight:'600'}, // 💡 14 -> 16
+  avatar:{width:36,height:36,borderRadius:18,backgroundColor:'#444',marginRight:10}, 
+  author:{color:'#ccc',fontSize:16,fontWeight:'600'}, 
   
   joinBtn:{backgroundColor:'#A1BE44',paddingHorizontal:20,paddingVertical:10,borderRadius:12},
-  joinText:{color:'#000',fontSize:16,fontWeight:'bold'}, // 💡 14 -> 16
+  joinText:{color:'#000',fontSize:16,fontWeight:'bold'}, 
   cancelBtn:{backgroundColor:'#333'},
   cancelText:{color:'#fff'},
   
   myActions:{flexDirection:'row',alignItems:'center'},
   editBtn:{backgroundColor:'#333',paddingHorizontal:14,paddingVertical:7,borderRadius:8,marginRight:8},
-  editText:{color:'#A1BE44',fontSize:14,fontWeight:'bold'}, // 💡 12 -> 14
+  editText:{color:'#A1BE44',fontSize:14,fontWeight:'bold'}, 
   trashBtn:{padding:6},
-  trashIcon:{width:20,height:20,resizeMode:'contain',tintColor:'#A1BE44'}, // 💡 18 -> 20
+  trashIcon:{width:20,height:20,resizeMode:'contain',tintColor:'#A1BE44'}, 
   
   fab:{position:'absolute',right:20,bottom:20,width:60,height:60,borderRadius:30,backgroundColor:'#A1BE44',justifyContent:'center',alignItems:'center',elevation:5},
-  fabText:{color:'#000',fontSize:36,marginTop:-4}, // 💡 32 -> 36
+  fabText:{color:'#000',fontSize:36,marginTop:-4}, 
   
   overlay:{flex:1,backgroundColor:'rgba(0,0,0,0.7)',justifyContent:'center',alignItems:'center'},
   modalOverlay:{flex:1,backgroundColor:'rgba(0,0,0,0.7)',justifyContent:'flex-end'},
   sheet:{backgroundColor:'#1E1E1E',borderTopLeftRadius:24,borderTopRightRadius:24,paddingHorizontal:20,paddingBottom:40,width:'100%'},
   handle:{width:40,height:4,backgroundColor:'#333',borderRadius:2,marginTop:12,marginBottom:20,alignSelf:'center'},
   sheetHeader:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginBottom:15},
-  sheetTitle:{color:'#fff',fontSize:23,fontWeight:'bold'}, // 💡 20 -> 23
-  closeBtn:{color:'#999',fontSize:28,paddingHorizontal:10}, // 💡 24 -> 28
+  sheetTitle:{color:'#fff',fontSize:23,fontWeight:'bold'}, 
+  closeBtn:{color:'#999',fontSize:28,paddingHorizontal:10}, 
   hr:{height:1,backgroundColor:'#333',marginBottom:20},
   
   alertBox:{width:300,backgroundColor:'#212121',borderRadius:16,padding:25,alignItems:'center'},
-  alertTitle:{color:'#fff',fontSize:18,fontWeight:'bold',marginBottom:25}, // 💡 16 -> 18
+  alertTitle:{color:'#fff',fontSize:18,fontWeight:'bold',marginBottom:25}, 
   alertBtns:{flexDirection:'row',width:'100%'},
   btnYes:{flex:1,backgroundColor:'#A1BE44',paddingVertical:12,borderRadius:8,alignItems:'center',marginRight:5},
-  btnYesText:{color:'#fff',fontSize:18,fontWeight:'bold'}, // 💡 16 -> 18
+  btnYesText:{color:'#fff',fontSize:18,fontWeight:'bold'}, 
   btnNo:{flex:1,backgroundColor:'#262626',paddingVertical:12,borderRadius:8,alignItems:'center',marginLeft:5},
-  btnNoText:{color:'#fff',fontSize:18,fontWeight:'bold'}, // 💡 16 -> 18
+  btnNoText:{color:'#fff',fontSize:18,fontWeight:'bold'}, 
   
   profileCenter:{alignSelf:'center',alignItems:'center',marginBottom:25},
   profileBig:{width:80,height:80,borderRadius:40,backgroundColor:'#444'},
-  profileName:{color:'#fff',fontSize:18,fontWeight:'bold',marginTop:12}, // 💡 16 -> 18
+  profileName:{color:'#fff',fontSize:18,fontWeight:'bold',marginTop:12}, 
   infoBox:{backgroundColor:'#262626',borderRadius:16,padding:20,marginBottom:20},
   infoRowDetail:{flexDirection:'row',justifyContent:'space-between',paddingVertical:12,borderBottomWidth:0.5,borderBottomColor:'#333'},
-  infoLabel:{color:'#999',fontSize:17,fontWeight:'bold'}, // 💡 15 -> 17
-  infoVal:{color:'#fff',fontSize:17,fontWeight:'bold'}, // 💡 15 -> 17
+  infoLabel:{color:'#999',fontSize:17,fontWeight:'bold'}, 
+  infoVal:{color:'#fff',fontSize:17,fontWeight:'bold'}, 
   closeFullBtn:{width:'100%',backgroundColor:'#A1BE44',borderRadius:12,paddingVertical:16,alignItems:'center'},
-  closeFullText:{color:'#000',fontSize:18,fontWeight:'bold'}, // 💡 16 -> 18
+  closeFullText:{color:'#000',fontSize:18,fontWeight:'bold'}, 
   
   formBox:{backgroundColor:'#262626',borderWidth:1,borderColor:'#555',borderRadius:16,padding:20,marginTop:5},
-  label:{color:'#fff',fontSize:18,fontWeight:'bold',marginBottom:10}, // 💡 16 -> 18
+  label:{color:'#fff',fontSize:18,fontWeight:'bold',marginBottom:10}, 
   innerHr:{height:1,backgroundColor:'#444',marginVertical:15},
   catRow:{flexDirection:'row',justifyContent:'space-between'},
   catBtn:{flex:1,borderWidth:1,borderColor:'#555',borderRadius:10,paddingVertical:12,alignItems:'center',marginHorizontal:4},
   catBtnActive:{borderColor:'#A1BE44'},
-  catText:{color:'#999',fontSize:16,fontWeight:'bold'}, // 💡 14 -> 16
+  catText:{color:'#999',fontSize:16,fontWeight:'bold'}, 
   catTextActive:{color:'#A1BE44'},
   
   inputWrap:{backgroundColor:'#000',borderRadius:10,paddingHorizontal:15,paddingVertical:12,marginBottom:15},
-  input:{color:'#fff',fontSize:17,padding:0}, // 💡 15 -> 17
+  input:{color:'#fff',fontSize:17,padding:0}, 
   
   counterRow:{flexDirection:'row',alignItems:'center',marginBottom:5},
-  counterBtn:{width:45,height:45,backgroundColor:'#333',borderRadius:22.5,alignItems:'center',justifyContent:'center'}, // 💡 크기 조절
-  counterBtnText:{color:'#fff',fontSize:24,fontWeight:'bold'}, // 💡 20 -> 24
-  counterInput:{color:'#fff',fontSize:24,fontWeight:'bold',textAlign:'center',minWidth:20,padding:0}, // 💡 20 -> 24
-  counterUnit:{color:'#999',fontSize:18,fontWeight:'bold',marginLeft:2}, // 💡 16 -> 18
+  counterBtn:{width:45,height:45,backgroundColor:'#333',borderRadius:22.5,alignItems:'center',justifyContent:'center'}, 
+  counterBtnText:{color:'#fff',fontSize:24,fontWeight:'bold'}, 
+  counterInput:{color:'#fff',fontSize:24,fontWeight:'bold',textAlign:'center',minWidth:20,padding:0}, 
+  counterUnit:{color:'#999',fontSize:18,fontWeight:'bold',marginLeft:2}, 
   
   submitBtn:{width:'100%',backgroundColor:'#A1BE44',borderRadius:12,paddingVertical:16,alignItems:'center',marginTop:20},
-  submitText:{color:'#000',fontSize:18,fontWeight:'bold'}, // 💡 16 -> 18
+  submitText:{color:'#000',fontSize:18,fontWeight:'bold'}, 
 
   // ─── 커스텀 알림 모달 전용 스타일 ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, // 💡 18 -> 20
-  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, // 💡 15 -> 17
+  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, 
+  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, 
   resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
 });
 
 export default CommunityScreen;

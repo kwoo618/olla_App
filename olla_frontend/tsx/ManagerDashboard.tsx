@@ -146,8 +146,8 @@ const ManagerDashboard = ({ navigation }: any) => {
         params: { page: 0, size: 2, sort: 'id,desc' },
       });
       // ✅ Depth 1단계 추가 반영
-      const memberList = response.data?.data?.content ?? response.data?.data ?? [];
-      const totalElements = response.data?.data?.totalElements ?? memberList.length;
+      const memberList = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
+      const totalElements = response.data?.data?.data?.totalElements ?? memberList.length;
       
       setRecentMembers(Array.isArray(memberList) ? memberList : []);
       setMetrics(prev => ({ ...prev, totalMembers: totalElements }));
@@ -163,7 +163,7 @@ const ManagerDashboard = ({ navigation }: any) => {
         params: { size: 1000 }
       });
       // ✅ Depth 1단계 추가 반영
-      const list = response.data?.data?.content ?? response.data?.data ?? [];
+      const list = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
       
       const uniqueVisitors = list.filter((item: any) => {
         const member = item.member || item;
@@ -177,7 +177,7 @@ const ManagerDashboard = ({ navigation }: any) => {
         const fallbackRes = await axios.get(VISIT_TODAY_API_URL, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        const todayCount = fallbackRes.data?.data?.totalVisitsToday ?? fallbackRes.data?.data ?? 0;
+        const todayCount = fallbackRes.data?.data?.data?.totalVisitsToday ?? fallbackRes.data?.data?.data ?? 0;
         setMetrics(prev => ({ ...prev, todayVisitors: todayCount }));
       } catch (err) {}
     }
@@ -206,7 +206,7 @@ const ManagerDashboard = ({ navigation }: any) => {
           headers: { Authorization: `Bearer ${token}` },
           params: { size: 1000 }
         });
-        const list = fallbackRes.data?.data?.content ?? fallbackRes.data?.data ?? [];
+        const list = fallbackRes.data?.data?.data?.content ?? fallbackRes.data?.data?.data ?? [];
         const count = list.filter((m: any) => m.membershipStatus === 'ACTIVE' || m.status === 'ACTIVE').length;
         setMetrics(prev => ({ ...prev, activeMemberships: count }));
       } catch (fallbackError) {
@@ -320,7 +320,7 @@ const ManagerDashboard = ({ navigation }: any) => {
       setIsProcessing(false); 
 
       // ✅ Depth 1단계 추가 반영
-      const result = response.data?.data ?? response.data ?? {};
+      const result = response.data?.data?.data ?? response.data?.data?.data ?? {};
       const memberName    = result.memberName || '회원';
       const remainingInfo = result.remainingInfo || '';
       const message       = result.message || '정상적으로 출석 처리되었습니다.';

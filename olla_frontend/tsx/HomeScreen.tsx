@@ -181,7 +181,7 @@ const HomeScreen = ({ navigation }: any) => {
       try {
         const profileRes = await axios.get(`${API_BASE_URL}/members/me`, config);
         // ✅ Depth 1단계 추가 적용
-        const pData = profileRes.data?.data;
+        const pData = profileRes.data?.data?.data;
         if (pData) {
           nickname = pData.nickname || pData.name || '';
           memberId = pData.memberId ?? pData.id ?? null;
@@ -196,7 +196,7 @@ const HomeScreen = ({ navigation }: any) => {
       try {
         const noticeResponse = await axios.get(`${API_BASE_URL}/admin/notices`);
         // ✅ Depth 1단계 추가 적용
-        const noticeList: any[] = noticeResponse.data?.data?.content ?? noticeResponse.data?.data ?? [];
+        const noticeList: any[] = noticeResponse.data?.data?.data.content ?? noticeResponse.data?.data?.data ?? [];
 
         if (noticeList.length > 0) {
           const importantNotices = noticeList
@@ -227,7 +227,7 @@ const HomeScreen = ({ navigation }: any) => {
       try {
         const memResponse = await axios.get(`${API_BASE_URL}/memberships/me`, config);
         // ✅ Depth 1단계 추가 적용
-        const data = memResponse.data?.data;
+        const data = memResponse.data?.data?.data;
         if (data) {
           const currentDate = new Date();
           currentDate.setHours(0, 0, 0, 0);
@@ -266,7 +266,7 @@ const HomeScreen = ({ navigation }: any) => {
         try {
           const endRes = await axios.get(`${API_BASE_URL}/rankings/endurance/distance`, config);
           // ✅ Depth 1단계 추가 적용
-          const endList = extractList(endRes.data?.data);
+          const endList = extractList(endRes.data?.data?.data);
           const myEndRecord = endList.find((item: any) => isMyRecord(item, memberId, nickname));
           if (myEndRecord) {
             endList.sort((a: any, b: any) => {
@@ -298,7 +298,7 @@ const HomeScreen = ({ navigation }: any) => {
           [bestRes, historyRes, allRes].forEach(res => {
             if (res) {
               // ✅ Depth 1단계 추가 적용
-              const data = res.data?.data;
+              const data = res.data?.data?.data;
               if (Array.isArray(data)) myRealBestRecords = [...myRealBestRecords, ...data];
               else if (data?.list && Array.isArray(data.list)) myRealBestRecords = [...myRealBestRecords, ...data.list];
             }
@@ -360,7 +360,7 @@ const HomeScreen = ({ navigation }: any) => {
       );
       
       // ✅ Depth 1단계 추가 적용
-      let rawData = response.data?.data;
+      let rawData = response.data?.data?.data;
       if (rawData && !Array.isArray(rawData) && rawData.data) rawData = rawData.data;
       
       let daysAttended: number[] = [];
