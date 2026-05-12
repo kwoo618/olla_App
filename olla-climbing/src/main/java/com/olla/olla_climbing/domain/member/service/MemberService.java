@@ -1,6 +1,9 @@
 package com.olla.olla_climbing.domain.member.service;
 
 import com.olla.olla_climbing.domain.admin.service.GoogleSheetsService;
+import com.olla.olla_climbing.domain.community.repository.CommentRepository;
+import com.olla.olla_climbing.domain.community.repository.PostParticipantRepository;
+import com.olla.olla_climbing.domain.community.repository.PostRepository;
 import com.olla.olla_climbing.domain.member.dto.response.OtherMemberProfileResponse;
 import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.entity.NotificationSetting;
@@ -8,6 +11,8 @@ import com.olla.olla_climbing.domain.member.dto.request.NotificationUpdateReques
 import com.olla.olla_climbing.domain.member.dto.response.NotificationResponse;
 import com.olla.olla_climbing.domain.member.dto.response.MemberResponse;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
+import com.olla.olla_climbing.global.exception.CustomException;
+import com.olla.olla_climbing.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -25,6 +30,10 @@ public class MemberService {
 
     private final MemberRepository memberRepository;
     private final GoogleSheetsService googleSheetsService;
+
+    private final PostRepository postRepository;
+    private final CommentRepository commentRepository;
+    private final PostParticipantRepository postParticipantRepository;
 
     // 회원가입 화면에서 DB 아이디 중복 확인 로직 (동철 수정)
     @Transactional(readOnly = true)
@@ -139,19 +148,29 @@ public class MemberService {
     @Transactional
     public void withdrawMember(String loginId) {
         Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않거나 이미 탈퇴한 회원입니다."));
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND)); // 💡 1단계 예외 적용
 
-        member.withdraw(); // 엔티티 내부의 데이터 변조 로직 실행
-        log.info("회원 탈퇴 완료: loginId={}", loginId);
+        // 💡 [핵심] 커뮤니티 데이터 연쇄 삭제 (좀비 데이터 방지용 벌크 연산)
+        postParticipantRepository.deleteByMemberId(member.getId()); // 모임 참가 내역 물리 삭제
+        commentRepository.softDeleteByMemberId(member.getId());     // 댓글 소프트 삭제
+        postRepository.softDeleteByMemberId(member.getId());        // 게시글 소프트 삭제
+
+        member.withdraw(); // 엔티티 내부의 데이터 변조(Soft Delete) 로직 실행
+        log.info("회원 탈퇴 완료 (연관 데이터 안전 삭제 처리됨): loginId={}", loginId);
     }
-
 
     @Transactional
     public void withdrawMemberById(Long memberId) {
         Member member = memberRepository.findById(memberId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND)); // 💡 1단계 예외 적용
+
+        // 💡 [핵심] 관리자 강제 탈퇴 시에도 연쇄 삭제 동일하게 적용
+        postParticipantRepository.deleteByMemberId(member.getId());
+        commentRepository.softDeleteByMemberId(member.getId());
+        postRepository.softDeleteByMemberId(member.getId());
+
         member.withdraw();
-        log.info("관리자에 의한 회원 강제 탈퇴 완료: {}", memberId);
+        log.info("관리자에 의한 회원 강제 탈퇴 완료 (연관 데이터 안전 삭제 처리됨): {}", memberId);
     }
 
     @Transactional

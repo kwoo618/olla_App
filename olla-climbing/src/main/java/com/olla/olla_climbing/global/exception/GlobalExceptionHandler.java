@@ -1,6 +1,7 @@
 package com.olla.olla_climbing.global.exception;
 
 import com.olla.olla_climbing.global.common.ApiResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.HashMap;
 import java.util.Map;
 
+@Slf4j // 💡 로그 기록을 위해 SLF4J 추가
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -18,6 +20,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(CustomException.class)
     public ResponseEntity<ApiResponse<Void>> handleCustomException(CustomException ex) {
         ErrorCode errorCode = ex.getErrorCode();
+        // 비즈니스 로직 에러는 INFO 레벨로 남겨 정상적인 필터링 추적
+        log.info("CustomException: {}", errorCode.getMessage());
         return ResponseEntity
                 .status(errorCode.getHttpStatus())
                 .body(ApiResponse.error(errorCode.getHttpStatus().value(), errorCode.getMessage()));
@@ -33,16 +37,16 @@ public class GlobalExceptionHandler {
             String errorMessage = error.getDefaultMessage();
             errors.put(fieldName, errorMessage);
         });
- 
-        // 상태 코드 400과 함께, data 필드에 errors 맵을 담아서 반환
+
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(HttpStatus.BAD_REQUEST.value(), "입력값이 올바르지 않습니다.", errors));
     }
 
-    // 3. 기존 IllegalArgumentException 예외 처리
+    // 3. 기존 IllegalArgumentException 예외 처리 (임시 유지)
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException ex) {
+        log.info("IllegalArgumentException: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
@@ -51,7 +55,9 @@ public class GlobalExceptionHandler {
     // 4. 최후의 수단: 모든 예외 처리 (500 Internal Server Error)
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleAllException(Exception ex) {
-        ex.printStackTrace(); // 콘솔에 에러 원인 출력
+        // 🚨 안티 패턴(ex.printStackTrace()) 제거 완료! -> SLF4J 로거로 안전하게 에러 수집
+        log.error("Unhandled Exception Occurred: ", ex);
+
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR.value(), "서버 내부 오류가 발생했습니다. 관리자에게 문의하세요."));

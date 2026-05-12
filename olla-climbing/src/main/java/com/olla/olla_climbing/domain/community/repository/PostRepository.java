@@ -3,11 +3,8 @@ package com.olla.olla_climbing.domain.community.repository;
 import com.olla.olla_climbing.domain.community.entity.Post;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.EntityGraph;
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.*;
 import jakarta.persistence.LockModeType;
-import org.springframework.data.jpa.repository.Lock;
-import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
@@ -35,4 +32,9 @@ public interface PostRepository extends JpaRepository<Post, Long> {
     Page<Post> findByMemberIdAndIsDeletedFalseOrderByCreatedAtDesc(Long memberId, Pageable pageable);
 
     List<Post> findByMeetDateTimeBetweenAndIsDeletedFalse(java.time.LocalDateTime start, java.time.LocalDateTime end);
+
+    // 💡 작성한 게시글을 한 번에 Soft Delete 처리
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE Post p SET p.isDeleted = true WHERE p.member.id = :memberId")
+    void softDeleteByMemberId(@Param("memberId") Long memberId);
 }

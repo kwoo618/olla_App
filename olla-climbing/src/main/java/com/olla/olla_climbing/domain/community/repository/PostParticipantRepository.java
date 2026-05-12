@@ -6,6 +6,9 @@ import com.olla.olla_climbing.domain.member.entity.Member;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -25,4 +28,9 @@ public interface PostParticipantRepository extends JpaRepository<PostParticipant
 
     // 내가 참여 신청한 내역을 페이징하여 조회
     Page<PostParticipant> findByMemberIdOrderByCreatedAtDesc(Long memberId, Pageable pageable);
+
+    // 💡 참여했던 내역은 중요 데이터가 아니므로 한 번에 물리 삭제(DELETE) 처리
+    @Modifying(clearAutomatically = true)
+    @Query("DELETE FROM PostParticipant p WHERE p.member.id = :memberId")
+    void deleteByMemberId(@Param("memberId") Long memberId);
 }
