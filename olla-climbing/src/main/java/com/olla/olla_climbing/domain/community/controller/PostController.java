@@ -27,46 +27,44 @@ public class PostController {
 
     @PostMapping
     @Operation(summary = "게시글 작성", description = "새로운 게시글을 작성합니다.", security = @SecurityRequirement(name = "bearerAuth"))
-    // 💡 수정: 반환 타입을 ResponseEntity<ApiResponse<PostResponse>> 로 변경
     public ResponseEntity<ApiResponse<PostResponse>> createPost(@AuthenticationPrincipal Member member, @Valid @RequestBody PostCreateRequest request){
 
-        if (member ==null) {
+        if (member == null) {
             throw new IllegalArgumentException("인증 정보가 없습니다.");
         }
 
         PostResponse response = postService.createPost(request, member.getLoginId());
-        return ResponseEntity.ok(ApiResponse.success(response));
+        return ResponseEntity.ok(ApiResponse.success(201, "게시글이 등록되었습니다.", response));
     }
 
     @GetMapping
     @Operation(summary = "게시글 목록 조회", description = "게시글 목록을 최신순으로 페이징하여 조회합니다.", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<ApiResponse<Page<PostResponse>>> getPostList(
             @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
-            @AuthenticationPrincipal Member member) { // 💡 로그인 유저 정보 받기
+            @AuthenticationPrincipal Member member) {
 
         if (member == null) throw new IllegalArgumentException("로그인이 필요합니다.");
 
-        // 서비스로 로그인 아이디 전달
         Page<PostResponse> response = postService.getPostList(pageable, member.getLoginId());
-        return ResponseEntity.ok(ApiResponse.success(response));
+        return ResponseEntity.ok(ApiResponse.success(200, "목록 조회 성공", response));
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "게시글 상세 조회", description = "게시글 ID로 상세 정보를 조회합니다.", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<ApiResponse<PostResponse>> getPostDetail(
             @PathVariable("id") Long postId,
-            @AuthenticationPrincipal Member member) { // 로그인 정보 파라미터 추가
+            @AuthenticationPrincipal Member member) {
 
         if (member == null) throw new IllegalArgumentException("로그인이 필요합니다.");
 
-        // 로그인 아이디를 서비스로 전달
         PostResponse response = postService.getPostDetail(postId, member.getLoginId());
-        return ResponseEntity.ok(ApiResponse.success(response));
+        return ResponseEntity.ok(ApiResponse.success(200, "상세 조회 성공", response));
     }
 
     @PatchMapping("/{id}")
     @Operation(summary = "게시글 수정", description = "작성자가 자신의 모집글을 수정합니다.", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<PostResponse> updatePost(
+    // 💡 수정: 누락되었던 ApiResponse 래핑 적용
+    public ResponseEntity<ApiResponse<PostResponse>> updatePost(
             @PathVariable("id") Long postId,
             @AuthenticationPrincipal Member member,
             @Valid @RequestBody PostUpdateRequest request) {
@@ -74,17 +72,18 @@ public class PostController {
         if (member == null) throw new IllegalArgumentException("인증 정보가 없습니다.");
 
         PostResponse response = postService.updatePost(postId, member.getLoginId(), request);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponse.success(200, "게시글이 수정되었습니다.", response));
     }
 
     @DeleteMapping("/{id}")
     @Operation(summary = "게시글 삭제", description = "작성자 또는 관리자가 글을 삭제합니다.")
-    public ResponseEntity<ApiResponse<String>> deletePost(
+    // 💡 수정: String 대신 Void를 사용하여 데이터가 null 임을 명확히 전달
+    public ResponseEntity<ApiResponse<Void>> deletePost(
             @PathVariable("id") Long postId,
             @AuthenticationPrincipal Member member) {
 
-        postService.deletePost(postId, member); // loginId 대신 member 자체를 넘김
-        return ResponseEntity.ok(ApiResponse.success("게시글이 삭제되었습니다."));
+        postService.deletePost(postId, member);
+        return ResponseEntity.ok(ApiResponse.success(200, "게시글이 삭제되었습니다.", null));
     }
 
     @GetMapping("/search")
@@ -94,7 +93,8 @@ public class PostController {
             @PageableDefault(size = 10) Pageable pageable,
             @AuthenticationPrincipal Member member) {
 
-        return ResponseEntity.ok(ApiResponse.success(postService.searchPosts(keyword, pageable, member.getLoginId())));
+        Page<PostResponse> response = postService.searchPosts(keyword, pageable, member.getLoginId());
+        return ResponseEntity.ok(ApiResponse.success(200, "검색 성공", response));
     }
 
     @GetMapping("/me")
@@ -103,7 +103,8 @@ public class PostController {
             @PageableDefault(size = 10) Pageable pageable,
             @AuthenticationPrincipal Member member) {
 
-        return ResponseEntity.ok(ApiResponse.success(postService.getMyPosts(member.getLoginId(), pageable)));
+        Page<PostResponse> response = postService.getMyPosts(member.getLoginId(), pageable);
+        return ResponseEntity.ok(ApiResponse.success(200, "조회 성공", response));
     }
 
     @GetMapping("/me/applied")
@@ -112,7 +113,8 @@ public class PostController {
             @PageableDefault(size = 10) Pageable pageable,
             @AuthenticationPrincipal Member member) {
 
-        return ResponseEntity.ok(ApiResponse.success(postService.getMyAppliedPosts(member.getLoginId(), pageable)));
+        Page<PostResponse> response = postService.getMyAppliedPosts(member.getLoginId(), pageable);
+        return ResponseEntity.ok(ApiResponse.success(200, "조회 성공", response));
     }
 
     @PostMapping("/{id}/like")
@@ -122,16 +124,17 @@ public class PostController {
             @AuthenticationPrincipal Member member) {
 
         boolean result = postService.toggleLike(postId, member.getLoginId());
-        return ResponseEntity.ok(ApiResponse.success(result));
+        return ResponseEntity.ok(ApiResponse.success(200, "좋아요 처리 완료", result));
     }
 
     @PatchMapping("/{id}/close")
     @Operation(summary = "게시글 수동 마감", description = "작성자가 모집을 수동으로 마감합니다.")
-    public ResponseEntity<ApiResponse<String>> closePost(
+    // 💡 수정: String 대신 Void를 사용하여 데이터가 null 임을 명확히 전달
+    public ResponseEntity<ApiResponse<Void>> closePost(
             @PathVariable("id") Long postId,
             @AuthenticationPrincipal Member member) {
 
         postService.closePost(postId, member.getLoginId());
-        return ResponseEntity.ok(ApiResponse.success("모집이 마감되었습니다."));
+        return ResponseEntity.ok(ApiResponse.success(200, "모집이 마감되었습니다.", null));
     }
 }

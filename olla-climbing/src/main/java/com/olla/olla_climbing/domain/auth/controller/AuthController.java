@@ -7,7 +7,7 @@ import com.olla.olla_climbing.domain.auth.dto.request.SignupRequest;
 import com.olla.olla_climbing.domain.auth.dto.response.TokenResponse;
 import com.olla.olla_climbing.domain.auth.service.AuthService;
 import com.olla.olla_climbing.domain.member.entity.Member;
-import com.olla.olla_climbing.domain.member.service.MemberService; // 아이디 중복확인 코드 추가 (동철 수정)
+import com.olla.olla_climbing.domain.member.service.MemberService;
 import com.olla.olla_climbing.global.common.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -16,93 +16,93 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-// 회원가입에서 아이디 중복 확인 코드 추가 (동철 수정)
-import java.util.Map;
-import java.util.HashMap;
 
-@RestController // "API를 처리하는 컨트롤러"
-@RequestMapping("/api/v1/auth") // 이 컨트롤러의 기본 URL 경로 설정
-@RequiredArgsConstructor    // 자동 주입
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/v1/auth")
+@RequiredArgsConstructor
 public class AuthController {
 
     private final AuthService authService;
-    private final MemberService memberService; // 회원가입 화면에서 아이디 중복 확인 코드 수정 (동철 수정)
+    private final MemberService memberService;
 
     @PostMapping("/signup")
-    @Operation(summary = "회원가입", description = "신규 회원 가입을 처리하고 즉시 JWT 토큰을 반환합니다.")
+    @Operation(summary = "회원가입")
     public ResponseEntity<ApiResponse<TokenResponse>> signup(@Valid @RequestBody SignupRequest request) {
         TokenResponse response = authService.signup(request);
-        return ResponseEntity.ok(ApiResponse.success(response));
+        return ResponseEntity.ok(ApiResponse.success(201, "회원가입이 완료되었습니다.", response));
     }
 
     @GetMapping("/check-id")
     @Operation(summary = "아이디 중복 확인")
     public ResponseEntity<ApiResponse<Map<String, Boolean>>> checkDuplicateId(@RequestParam("loginId") String loginId) {
         boolean isDuplicate = memberService.existsByLoginId(loginId);
-        return ResponseEntity.ok(ApiResponse.success(Map.of("isDuplicate", isDuplicate)));
+        return ResponseEntity.ok(ApiResponse.success(200, "아이디 중복 확인 완료", Map.of("isDuplicate", isDuplicate)));
     }
 
     @GetMapping("/check-phone")
     @Operation(summary = "전화번호 중복 확인")
-    public ResponseEntity<ApiResponse<Map<String, Boolean>>> checkDuplicatePhone(@RequestParam String phone) {
+    public ResponseEntity<ApiResponse<Map<String, Boolean>>> checkDuplicatePhone(@RequestParam("phone") String phone) {
         boolean isDuplicate = memberService.existsByPhone(phone);
-        return ResponseEntity.ok(ApiResponse.success(Map.of("isDuplicate", isDuplicate)));
+        return ResponseEntity.ok(ApiResponse.success(200, "전화번호 중복 확인 완료", Map.of("isDuplicate", isDuplicate)));
     }
 
     @PostMapping("/login")
     @Operation(summary = "로그인")
     public ResponseEntity<ApiResponse<TokenResponse>> login(@Valid @RequestBody LoginRequest request) {
-        TokenResponse tokenResponse = authService.login(request);
-        return ResponseEntity.ok(ApiResponse.success(tokenResponse));
+        TokenResponse response = authService.login(request);
+        return ResponseEntity.ok(ApiResponse.success(200, "로그인 성공", response));
     }
 
     @PostMapping("/logout")
     @Operation(summary = "로그아웃")
-    public ResponseEntity<ApiResponse<String>> logout(@RequestBody LogoutRequest request) {
+    public ResponseEntity<ApiResponse<Void>> logout(@RequestBody LogoutRequest request) {
         authService.logout(request);
-        return ResponseEntity.ok(ApiResponse.success("로그아웃이 완료되었습니다."));
+        return ResponseEntity.ok(ApiResponse.success(200, "로그아웃이 완료되었습니다.", null));
     }
 
     @PostMapping("/find-id")
     @Operation(summary = "아이디 찾기 (마스킹)")
-    public ResponseEntity<ApiResponse<String>> findId(@RequestParam String name, @RequestParam String phone) {
+    public ResponseEntity<ApiResponse<String>> findId(@RequestParam("name") String name, @RequestParam("phone") String phone) {
         String maskedId = authService.findMaskedLoginId(name, phone);
-        return ResponseEntity.ok(ApiResponse.success(maskedId));
+        return ResponseEntity.ok(ApiResponse.success(200, "아이디 찾기 성공", maskedId));
     }
 
     @PostMapping("/find-password")
     @Operation(summary = "임시 비밀번호 발송")
-    public ResponseEntity<ApiResponse<Void>> findPassword(@RequestParam String name,
-                                                          @RequestParam String phone,
-                                                          @RequestParam String loginId) {
+    public ResponseEntity<ApiResponse<Void>> findPassword(
+            @RequestParam("name") String name,
+            @RequestParam("phone") String phone,
+            @RequestParam("loginId") String loginId) {
         authService.sendTempPassword(name, phone, loginId);
-        return ResponseEntity.ok(ApiResponse.success(null));
+        return ResponseEntity.ok(ApiResponse.success(200, "임시 비밀번호가 발송되었습니다.", null));
     }
 
     @PostMapping("/email/request")
-    @Operation(summary = "이메일 인증번호 발송", description = "회원가입 전 이메일 소유 확인을 위해 인증번호를 발송합니다.")
-    public ResponseEntity<ApiResponse<String>> requestEmailVerification(@RequestParam String email) {
-
+    @Operation(summary = "이메일 인증번호 발송")
+    public ResponseEntity<ApiResponse<Void>> requestEmailVerification(@RequestParam("email") String email) {
+        if (memberService.existsByEmail(email)) {
+            throw new IllegalArgumentException("이미 가입된 이메일입니다.");
+        }
         authService.requestEmailVerification(email);
-        return ResponseEntity.ok(ApiResponse.success("인증번호가 발송되었습니다."));
+        return ResponseEntity.ok(ApiResponse.success(200, "인증번호가 발송되었습니다.", null));
     }
 
     @PostMapping("/email/verify")
-    @Operation(summary = "이메일 인증번호 검증", description = "발송된 인증번호가 맞는지 확인하고 인증 완료 처리를 합니다.")
-    public ResponseEntity<ApiResponse<String>> verifyEmailCode(@RequestParam String email, @RequestParam String code) {
+    @Operation(summary = "이메일 인증번호 검증")
+    public ResponseEntity<ApiResponse<Void>> verifyEmailCode(@RequestParam("email") String email, @RequestParam("code") String code) {
         authService.verifyEmailCode(email, code);
-        return ResponseEntity.ok(ApiResponse.success("이메일 인증이 완료되었습니다."));
+        return ResponseEntity.ok(ApiResponse.success(200, "이메일 인증이 완료되었습니다.", null));
     }
 
     @PatchMapping("/password")
-    @Operation(summary = "비밀번호 변경", description = "로그인한 유저가 자신의 비밀번호를 변경합니다.", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<ApiResponse<String>> changePassword(
+    @Operation(summary = "비밀번호 변경", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<ApiResponse<Void>> changePassword(
             @AuthenticationPrincipal Member member,
             @Valid @RequestBody ChangePasswordRequest request) {
-
         if (member == null) throw new IllegalArgumentException("로그인이 필요합니다.");
-
         authService.changePassword(member.getLoginId(), request);
-        return ResponseEntity.ok(ApiResponse.success("비밀번호가 성공적으로 변경되었습니다."));
+        return ResponseEntity.ok(ApiResponse.success(200, "비밀번호가 성공적으로 변경되었습니다.", null));
     }
 }

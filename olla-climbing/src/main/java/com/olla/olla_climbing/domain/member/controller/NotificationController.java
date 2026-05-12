@@ -28,19 +28,16 @@ public class NotificationController {
     public ResponseEntity<ApiResponse<Page<MemberNotification>>> getMyNotifications(
             @AuthenticationPrincipal Member member,
             @PageableDefault(size = 15) Pageable pageable) {
-
-        return ResponseEntity.ok(ApiResponse.success(
-                notificationService.getMyNotifications(member.getId(), pageable)
-        ));
+        Page<MemberNotification> response = notificationService.getMyNotifications(member.getId(), pageable);
+        return ResponseEntity.ok(ApiResponse.success(200, "내 알림 목록 조회 성공", response));
     }
 
     @PatchMapping("/{id}/read")
     @Operation(summary = "알림 읽음 처리", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<ApiResponse<String>> markAsRead(
+    public ResponseEntity<ApiResponse<Void>> markAsRead(
             @PathVariable("id") Long notiId,
             @AuthenticationPrincipal Member member) {
-
         notificationService.markAsRead(notiId, member.getId());
-        return ResponseEntity.ok(ApiResponse.success("읽음 처리 완료"));
+        return ResponseEntity.ok(ApiResponse.success(200, "알림 읽음 처리 완료", null));
     }
 }

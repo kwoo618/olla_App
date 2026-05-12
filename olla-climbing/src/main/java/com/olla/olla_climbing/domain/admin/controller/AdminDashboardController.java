@@ -14,13 +14,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/admin/dashboard")
 @RequiredArgsConstructor
-@Tag(name = "Admin Dashboard API", description = "관리자 메인 대시보드 통계 API")
+@Tag(name = "Admin Dashboard API")
 public class AdminDashboardController {
 
     private final AdminDashboardService adminDashboardService;
 
     @GetMapping
-    @Operation(summary = "대시보드 통계 조회", description = "혼잡도 그래프, 활성 이용권, 만료 임박 회원 통계를 반환합니다.")
+    @Operation(summary = "대시보드 통계 조회")
     public ResponseEntity<ApiResponse<AdminDashboardResponse>> getDashboardStats() {
         return ResponseEntity.ok(ApiResponse.success(adminDashboardService.getDashboardStats()));
     }
