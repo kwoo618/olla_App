@@ -122,13 +122,25 @@ const ManagerUser = ({ navigation }: any) => {
       await axios.post(OFFLINE_REGISTER_API, requestBody, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      showResultModal("성공", "신규 회원이 등록되었습니다.", "success");
-      closeAddModal();
+      
+      // ✅ iOS 모달 렌더링 버그 해결: 등록 모달이 닫힌 후(시간차) 결과 알림 띄우기
+      closeAddModal(() => {
+        setTimeout(() => {
+          showResultModal("성공", "신규 회원이 등록되었습니다.", "success");
+        }, 300);
+      });
+      
       fetchUsers(token!); 
     } catch (error: any) {
       // ✅ 에러 메시지 처리 적용 (예: "이미 등록된 전화번호입니다.")
       const errorMessage = error.response?.data?.message || "회원 등록 중 오류가 발생했습니다.";
-      showResultModal("오류", errorMessage, "error");
+      
+      // 에러 시에도 동일하게 iOS 버그 방지용 시간차 적용
+      closeAddModal(() => {
+        setTimeout(() => {
+          showResultModal("오류", errorMessage, "error");
+        }, 300);
+      });
     }
   };
 
@@ -138,12 +150,19 @@ const ManagerUser = ({ navigation }: any) => {
       await axios.delete(`${MEMBER_DELETE_API}/${memberId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      showResultModal("성공", "회원이 삭제되었습니다.", "success");
+      
+      // ✅ 확인 모달이 닫힌 뒤 시간차를 두고 완료 모달 띄우기
+      setTimeout(() => {
+        showResultModal("성공", "회원이 삭제되었습니다.", "success");
+      }, 300);
+      
       fetchUsers(token!); 
     } catch (error: any) {
       // ✅ 에러 메시지 처리 적용
       const errorMessage = error.response?.data?.message || "회원 삭제에 실패했습니다.";
-      showResultModal("오류", errorMessage, "error");
+      setTimeout(() => {
+        showResultModal("오류", errorMessage, "error");
+      }, 300);
     }
   };
 
@@ -163,13 +182,18 @@ const ManagerUser = ({ navigation }: any) => {
   // 모달 제어 함수
   const openAddModal = () => {
     setAddModalVisible(true);
-    Animated.timing(addSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+    // ✅ iOS 애니메이션 충돌 방지를 위해 약간의 지연 추가
+    setTimeout(() => {
+      Animated.timing(addSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+    }, 50);
   };
 
-  const closeAddModal = () => {
+  // ✅ 콜백(callback) 인자를 받을 수 있도록 수정
+  const closeAddModal = (callback?: () => void) => {
     Animated.timing(addSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => {
       setAddModalVisible(false);
       setNewName(''); setNewGender(null); setNewBirth(''); setNewPhone('');
+      if (callback) callback();
     });
   };
 
@@ -197,13 +221,17 @@ const ManagerUser = ({ navigation }: any) => {
 
   const filteredAndSortedUsers = useMemo(() => {
     const filtered = users.filter((user: any) => {
-      const targetName = user.member?.name || user.name || '';
-      const targetPhone = user.member?.phone || user.phone || '';
+      // ✅ 명확한 API 스펙(deleted 필드)을 기준으로 탈퇴 회원 완전 숨김 처리
+      if (user.deleted === true) return false;
+
+      const targetName = user.name || '';
+      const targetPhone = user.phone || '';
       return targetName.includes(searchQuery) || targetPhone.includes(searchQuery);
     });
+    
     return filtered.sort((a: any, b: any) => {
-      const nameA = a.member?.name || a.name || '';
-      const nameB = b.member?.name || b.name || '';
+      const nameA = a.name || '';
+      const nameB = b.name || '';
       return nameA.localeCompare(nameB);
     });
   }, [users, searchQuery]);
@@ -256,11 +284,8 @@ const ManagerUser = ({ navigation }: any) => {
           <Text style={styles.emptyText}>검색 결과가 없습니다.</Text>
         ) : (
           filteredAndSortedUsers.map((user: any, index: number) => {
-            const memberInfo = user.member || user;
-            const memberId = user.memberId || user.id || memberInfo.id;
-            const isDeleted = memberInfo.isDeleted || user.isDeleted; // 추가: 탈퇴 여부 확인
-            const membershipInfo = user.activeMembership || user.membership || user;
-            const memType = membershipInfo?.membershipType || membershipInfo?.type;
+            const memberId = user.memberId || user.id;
+            const memType = user.membershipType;
 
             let displayType = '없음';
             let badgeStyle = styles.badgeInactive;
@@ -279,10 +304,10 @@ const ManagerUser = ({ navigation }: any) => {
             return (
               <View key={`user-${memberId || index}`} style={styles.tableRow}>
                 <Text style={[styles.rowTextBold, styles.colName]} numberOfLines={1}>
-                  {memberInfo.name || '이름 없음'}
+                  {user.name || '이름 없음'}
                 </Text>
                 <Text style={[styles.rowText, styles.colPhone, { textAlign: 'center' }]} numberOfLines={1}>
-                  {memberInfo.phone || '연락처 없음'}
+                  {user.phone || '연락처 없음'}
                 </Text>
                 <View style={[styles.colStatus, styles.centerAlign]}>
                   <View style={[styles.badge, badgeStyle]}>
@@ -290,12 +315,10 @@ const ManagerUser = ({ navigation }: any) => {
                   </View>
                 </View>
                 <View style={[styles.colAction, styles.centerAlign]}>
-                  {/* 탈퇴한 회원이 아닐 때만 휴지통 아이콘 표시 */}
-                  {!isDeleted && (
-                    <TouchableOpacity style={styles.trashBtn} onPress={() => confirmDelete(memberId)}>
-                      <Image source={require('../assets/trash.png')} style={styles.trashIcon} />
-                    </TouchableOpacity>
-                  )}
+                  {/* 필터링 처리로 인해 렌더링되는 회원은 모두 탈퇴하지 않은 상태임 */}
+                  <TouchableOpacity style={styles.trashBtn} onPress={() => confirmDelete(memberId)}>
+                    <Image source={require('../assets/trash.png')} style={styles.trashIcon} />
+                  </TouchableOpacity>
                 </View>
               </View>
             );
@@ -356,13 +379,13 @@ const ManagerUser = ({ navigation }: any) => {
       {/* 신규 회원 등록 모달 */}
       <Modal visible={isAddModalVisible} transparent={true} animationType="fade">
         <View style={styles.modalOverlay}>
-          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={closeAddModal} />
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => closeAddModal()} />
           
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: addSlideAnim }] }]}>
             <View style={styles.dragHandle} />
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>신규 회원 등록</Text>
-              <TouchableOpacity onPress={closeAddModal}><Text style={styles.closeIcon}>✕</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => closeAddModal()}><Text style={styles.closeIcon}>✕</Text></TouchableOpacity>
             </View>
             <View style={styles.horizontalDivider} />
             

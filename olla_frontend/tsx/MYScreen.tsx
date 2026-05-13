@@ -490,7 +490,7 @@ const MYScreen = ({ navigation }: any) => {
             </View>
           </View>
           <TouchableOpacity style={styles.pauseButton} onPress={openPauseModal}>
-            <Text style={styles.pauseButtonText}>멤버십 일시정지</Text>
+            <Text style={styles.pauseButtonText}>문의하기</Text>
           </TouchableOpacity>
         </View>
 
@@ -622,11 +622,11 @@ const MYScreen = ({ navigation }: any) => {
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={closePauseModal} />
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: pauseSlideAnim }] }]}>
             <View style={styles.dragHandle} />
-            <Text style={styles.sheetTitleCenter}>멤버십 일시정지</Text>
+            <Text style={styles.sheetTitleCenter}>문의하기</Text>
             <View style={styles.horizontalDivider} />
             <View style={styles.pauseInfoBox}>
               <Text style={styles.pauseInfoText}>
-                멤버십 일시정지는 관리자 승인이 필요합니다.{'\n'}프론트 데스크에 문의하시겠습니까?
+                프론트 데스크에 문의하시겠습니까?
               </Text>
             </View>
             <View style={styles.modalBtnRow}>

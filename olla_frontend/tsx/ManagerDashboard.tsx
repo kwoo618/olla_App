@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Image, ActivityIndicator, Modal, Platform, PermissionsAndroid, RefreshControl
+  Image, ActivityIndicator, Modal, Platform, PermissionsAndroid, RefreshControl, Dimensions
 } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -14,6 +14,10 @@ const MEMBER_API_URL      = `${API_BASE_URL}/admin/memberships/members`;
 const MEMBERSHIP_API_URL  = `${API_BASE_URL}/admin/memberships`;
 const VISIT_TODAY_API_URL = `${API_BASE_URL}/admin/visits/today`;
 const QR_SCAN_API_URL     = `${API_BASE_URL}/admin/visits/scan`; 
+
+// 💡 화면의 가로 길이를 가져와 완벽한 정사각형 사이즈(화면의 80%)를 계산합니다.
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const SCANNER_SIZE = SCREEN_WIDTH * 0.8; 
 
 const ManagerDashboard = ({ navigation }: any) => {
   const [refreshing, setRefreshing] = useState(false);
@@ -143,14 +147,26 @@ const ManagerDashboard = ({ navigation }: any) => {
     try {
       const response = await axios.get(MEMBER_API_URL, {
         headers: { Authorization: `Bearer ${token}` },
-        params: { page: 0, size: 2, sort: 'id,desc' },
+        // 💡 총 회원 수를 정확히 파악하기 위해 여유 있게 1000개를 불러옵니다.
+        params: { page: 0, size: 1000, sort: 'id,desc' },
       });
       // ✅ Depth 1단계 추가 반영
-      const memberList = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
-      const totalElements = response.data?.data?.data?.totalElements ?? memberList.length;
+      const rawList = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
+      const list = Array.isArray(rawList) ? rawList : [];
       
-      setRecentMembers(Array.isArray(memberList) ? memberList : []);
-      setMetrics(prev => ({ ...prev, totalMembers: totalElements }));
+      // 💡 탈퇴한 회원(deleted: true) 완벽 필터링
+      const validMembers = list.filter((user: any) => {
+        const memberInfo = user.member || user;
+        const isDeleted = user.deleted === true || memberInfo.isDeleted === true || memberInfo.status === 'DELETED';
+        return !isDeleted;
+      });
+
+      // 💡 백엔드의 totalElements 대신 필터링이 완료된 실제 유효 회원 수를 사용합니다.
+      const actualTotalElements = validMembers.length;
+      
+      // 최신 2명만 잘라서 세팅
+      setRecentMembers(validMembers.slice(0, 2));
+      setMetrics(prev => ({ ...prev, totalMembers: actualTotalElements }));
     } catch (error: any) {
       console.error('회원 데이터 로드 실패:', error.response?.data?.message || error.message);
     }
@@ -587,16 +603,20 @@ const ManagerDashboard = ({ navigation }: any) => {
 
           <View style={styles.scannerContainer}>
             {isScannerVisible && cameraReady ? (
-              <Camera
-                style={StyleSheet.absoluteFill}
-                scanBarcode={true}
-                onReadCode={(event: any) =>
-                  handleBarCodeScanned(event.nativeEvent.codeStringValue)
-                }
-                showFrame={true}
-                laserColor="#A1BE44"
-                frameColor="white"
-              />
+              <View style={StyleSheet.absoluteFill}>
+                <Camera
+                  style={StyleSheet.absoluteFill}
+                  scanBarcode={true}
+                  onReadCode={(event: any) =>
+                    handleBarCodeScanned(event.nativeEvent.codeStringValue)
+                  }
+                  showFrame={false} // 💡 네이티브 기본 프레임 숨김 처리
+                />
+                {/* 💡 추가된 부분: 카메라 배경은 그대로 두고 중앙에 완벽한 정사각형 가이드라인 생성 */}
+                <View style={styles.customFrameOverlay}>
+                  <View style={styles.customSquareGuide} />
+                </View>
+              </View>
             ) : (
               <ActivityIndicator
                 size="large"
@@ -671,6 +691,26 @@ const styles = StyleSheet.create({
   scannerTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' }, // 💡 20 -> 23
   closeIcon: { color: '#999999', fontSize: 32 }, // 💡 28 -> 32
   scannerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
+  
+  // 💡 추가된 커스텀 프레임 오버레이 스타일 (정사각형 가이드)
+  customFrameOverlay: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  customSquareGuide: {
+    width: '65%',
+    aspectRatio: 1, // 화면 너비의 65% 크기를 갖는 완벽한 정사각형
+    borderWidth: 3,
+    borderColor: '#A1BE44',
+    backgroundColor: 'transparent',
+    borderRadius: 16,
+  },
+
   processingOverlay: {
     position: 'absolute',
     top: 0,
