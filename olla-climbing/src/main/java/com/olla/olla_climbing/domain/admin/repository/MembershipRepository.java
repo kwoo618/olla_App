@@ -4,6 +4,8 @@ import com.olla.olla_climbing.domain.admin.entity.Membership;
 import com.olla.olla_climbing.domain.admin.entity.VisitLog;
 import com.olla.olla_climbing.domain.admin.enums.MembershipStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -13,6 +15,8 @@ import java.time.LocalDate;
 public interface MembershipRepository extends JpaRepository<Membership, Long> {
 
     List<VisitLog> findByCreatedAtAfter(LocalDateTime dateTime);
+
+    List<Membership> findAllByMemberIdAndStatusIn(Long memberId, List<MembershipStatus> statuses);
 
     // 특정 상태(status)를 가진 이용권의 총 개수를 반환하는 메서드 (삭제되지 않은 것만)
     long countByStatusAndIsDeletedFalse(MembershipStatus status);
@@ -30,4 +34,7 @@ public interface MembershipRepository extends JpaRepository<Membership, Long> {
     List<Membership> findAllByMemberIdAndStatusAndIsDeletedFalse(Long memberId, MembershipStatus status);
 
     List<Membership> findByEndDateBetweenAndStatus(LocalDate start, LocalDate end, MembershipStatus status);
+
+    @Query("SELECT MAX(m.endDate) FROM Membership m WHERE m.member.id = :memberId AND m.isDeleted = false")
+    Optional<LocalDate> findMaxEndDateByMemberId(@Param("memberId") Long memberId);
 }
