@@ -1,6 +1,5 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, RefreshControl } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../src/constants/Config';
@@ -38,7 +37,6 @@ const colors = [
   { name: '검정',  hex: '#000000', enum: 'BLACK'  },
 ];
 
-// 난이도 enum → 한글 색 이름
 const ENUM_TO_KR: Record<string, string> = {
   WHITE: '흰색', YELLOW: '노랑', GREEN: '초록', BLUE: '파랑',
   RED: '빨강', PURPLE: '보라', ORANGE: '주황', BLACK: '검정',
@@ -48,6 +46,12 @@ const ENUM_TO_KR: Record<string, string> = {
 const MAX_HOLDS: Record<string, number> = {
   '흰색': 26, '노랑': 33, '초록': 28, '파랑': 26,
   '빨강': 26, '보라': 25, '주황': 28, '검정': 30,
+};
+
+// 난이도별 기본 점수 (연속 완등 점수 계산용)
+const BASE_SCORES: Record<string, number> = {
+  '흰색': 10, '노랑': 20, '주황': 30, '초록': 40,
+  '파랑': 50, '빨강': 60, '보라': 70, '검정': 80,
 };
 
 // 색 이름 → 색 인덱스 (점수 계산용)
@@ -64,9 +68,10 @@ const BOX_SEQUENCE = [
 // ─────────────────────────── 타입 ───────────────────────────
 interface BeginnerRecord {
   id: number;
-  difficulty: string;       // WHITE | YELLOW | ...
-  attemptType: string;      // ONE_WAY | ROUND_TRIP
-  maxHoldNo: number;
+  difficulty: string;       
+  attemptType: string;      
+  maxHoldNo?: number;
+  score?: number;
   recordDate: string;
   success: boolean;
 }
@@ -90,12 +95,12 @@ interface SeriesRankItem {
   name?: string;
   nickname?: string;
   sequenceLog: string[];
-  totalScore: number;
+  totalScore?: number;
+  score?: number;
   recordDate: string;
 }
 
 // ─────────────────────────── 헬퍼 ───────────────────────────
-/** 응답에서 배열 추출 */
 const extractList = (serverData: any): any[] => {
   if (!serverData) return [];
   if (Array.isArray(serverData)) return serverData;
@@ -106,13 +111,11 @@ const extractList = (serverData: any): any[] => {
   return [];
 };
 
-/** 초보벽 rawScore 계산 */
 const calcBeginnerScore = (colorName: string, isRoundTrip: boolean, holdCount: number): number => {
   const colorIdx = COLOR_ORDER.indexOf(colorName);
   return colorIdx * 100_000 + (isRoundTrip ? 50_000 : 0) + holdCount;
 };
 
-/** 지구력 구간 문자열 */
 const getSectionLabel = (oneWayCount: number, additionalBlocks: number): string => {
   if (oneWayCount === 0 && additionalBlocks === 0) return '0';
   if (additionalBlocks > 0 && additionalBlocks <= BOX_SEQUENCE.length)
@@ -120,7 +123,6 @@ const getSectionLabel = (oneWayCount: number, additionalBlocks: number): string 
   return '완주';
 };
 
-/** 지구력 구간 색상 */
 const getSectionColor = (section: string): string => {
   if (!section || section === '0') return '#FFFFFF';
   if (section.startsWith('1-')) return section === '1-6' ? '#B96BC6' : '#FFFFFF';
@@ -135,7 +137,6 @@ const getSectionColor = (section: string): string => {
   return '#FFFFFF';
 };
 
-/** 순위 원 색상 */
 const getRankColor = (rank: number): string => {
   if (rank === 1) return '#FFCC00';
   if (rank === 2) return '#C2C2C2';
@@ -143,7 +144,6 @@ const getRankColor = (rank: number): string => {
   return '#666666';
 };
 
-/** 초 → mm:ss */
 const formatTime = (seconds: number): string => {
   const m = Math.floor(seconds / 60).toString().padStart(2, '0');
   const s = (seconds % 60).toString().padStart(2, '0');
@@ -152,6 +152,17 @@ const formatTime = (seconds: number): string => {
 
 // ─────────────────────────── 컴포넌트 ───────────────────────────
 const RankingScreen = ({ route }: any) => {
+  const [refreshing, setRefreshing] = useState(false);
+  
+  const loadAllData = async () => {
+    const userData = await fetchMyProfile();
+    await Promise.all([
+      fetchBeginnerRankings(userData),
+      fetchEnduranceRankings(),
+      fetchConsecutiveRankings()
+    ]);
+  };
+
   const [mainTab, setMainTab]   = useState<string>(route?.params?.targetTab ?? '초보벽');
   const [colorTab, setColorTab] = useState<string>('전체');
 
@@ -162,26 +173,26 @@ const RankingScreen = ({ route }: any) => {
   const [myNickname, setMyNickname] = useState<string>('알 수 없음');
   const [myMemberId, setMyMemberId] = useState<number | null>(null);
 
-  // targetTab 파라미터 변경 감지
   useEffect(() => {
     if (route?.params?.targetTab) setMainTab(route.params.targetTab);
   }, [route?.params?.targetTab]);
 
-  // 최초 데이터 로드
   useEffect(() => {
-    (async () => {
-      const userData = await fetchMyProfile();
-      fetchBeginnerRankings(userData);
-      fetchEnduranceRankings();
-      fetchConsecutiveRankings();
-    })();
+    loadAllData();
+  }, []);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadAllData();
+    setRefreshing(false);
   }, []);
 
   // ── 내 프로필 ──
   const fetchMyProfile = async (): Promise<{ id: number | null; nickname: string }> => {
     try {
-      const res  = await axios.get(MY_PROFILE_URL);
-      const data = res.data?.data ?? res.data;
+      const res = await axios.get(MY_PROFILE_URL);
+      const data = res.data?.data?.data; 
+      
       if (data) {
         const nickname = data.nickname ?? data.name ?? '알 수 없음';
         const id       = data.memberId ?? data.id ?? null;
@@ -189,8 +200,8 @@ const RankingScreen = ({ route }: any) => {
         if (id !== null) setMyMemberId(Number(id));
         return { id: id !== null ? Number(id) : null, nickname };
       }
-    } catch (e) {
-      console.log('내 프로필 로드 실패', e);
+    } catch (error: any) {
+      console.log('내 프로필 로드 실패:', error.response?.data?.message || error.message);
     }
     return { id: null, nickname: '알 수 없음' };
   };
@@ -198,7 +209,6 @@ const RankingScreen = ({ route }: any) => {
   // ── 초보벽 랭킹 ──
   const fetchBeginnerRankings = async (userData: { id: number | null; nickname: string }) => {
     try {
-      // 색상별 랭킹 병렬 요청
       const rankResponses = await Promise.all(
         colors.map(c =>
           axios.get(`${RANKING_BEGINNER_URL}?difficulty=${c.enum}`)
@@ -206,14 +216,13 @@ const RankingScreen = ({ route }: any) => {
         )
       );
 
-      // 내 베스트 기록 (명세: { id, difficulty, attemptType, maxHoldNo, recordDate, success })
       let myBestList: BeginnerRecord[] = [];
       try {
         const res = await axios.get(MY_BEGINNER_BEST_URL);
-        const raw = res.data?.data ?? res.data;
+        const raw = res.data?.data?.data;
         myBestList = Array.isArray(raw) ? raw : (Array.isArray(raw?.list) ? raw.list : []);
-      } catch (e) {
-        console.log('내 초보벽 베스트 기록 로드 실패', e);
+      } catch (error: any) {
+        console.log('내 초보벽 베스트 기록 로드 실패:', error.response?.data?.message || error.message);
       }
 
       let allData: any[] = [];
@@ -221,15 +230,23 @@ const RankingScreen = ({ route }: any) => {
       rankResponses.forEach((response, colorIdx) => {
         const currentColor = colors[colorIdx];
         const maxHold      = MAX_HOLDS[currentColor.name] ?? 0;
-        const rawList      = extractList(response.data?.data ?? response.data);
+        
+        const rawList = extractList(response.data?.data?.data);
 
-        // 랭킹 목록 파싱
         const mappedList = rawList.map((item: any, i: number) => {
-          const isRoundTrip = String(item.attemptType ?? '').toUpperCase() === 'ROUND_TRIP';
-          // success=true 이거나 maxHoldNo가 없으면 완등으로 처리
-          const holdCount = (item.success === true || !item.maxHoldNo)
+          // ★ 수정: score에 .5(소수점)가 포함되어 있다면 attemptType을 왕복으로 무조건 강제 인식시킴
+          const hasDecimal = item.score !== undefined && item.score !== null && item.score % 1 !== 0;
+          const attemptStr = String(item.attemptType ?? '').toUpperCase();
+          const isRoundTrip = attemptStr === 'ROUND_TRIP' || hasDecimal;
+
+          // 소수점이 있다면 Math.floor로 내려서 화면에는 순수 홀드 수만 노출
+          const rawHold = item.maxHoldNo !== undefined ? item.maxHoldNo : (item.score !== undefined ? Math.floor(item.score) : undefined);
+          const holdCount = (item.success === true || rawHold === undefined || rawHold === null)
             ? maxHold
-            : Number(item.maxHoldNo);
+            : Number(rawHold);
+
+          const recordTimeStr = item.recordDate || item.achievedAt;
+          const recordTime = recordTimeStr ? new Date(recordTimeStr).getTime() : 9_999_999_999_999;
 
           return {
             id:        item.memberId ?? `rank-beginner-${colorIdx}-${i}`,
@@ -240,16 +257,17 @@ const RankingScreen = ({ route }: any) => {
             type:      isRoundTrip ? '왕복' : '편도',
             hold:      holdCount,
             rawScore:  calcBeginnerScore(currentColor.name, isRoundTrip, holdCount),
-            achievedAt: item.recordDate ? new Date(item.recordDate).getTime() : 9_999_999_999_999,
+            achievedAt: recordTime,
           };
         });
 
-        // 내 베스트 기록 중 이 색상에 해당하는 것 찾기
         const myRecord = myBestList
           .filter(r => r.difficulty === currentColor.enum)
           .reduce<{ score: number; entry: any } | null>((best, r) => {
-            const isRT    = String(r.attemptType ?? '').toUpperCase() === 'ROUND_TRIP';
-            const hold    = (r.success === true || !r.maxHoldNo) ? maxHold : Number(r.maxHoldNo);
+            const hasDec  = r.score !== undefined && r.score !== null && r.score % 1 !== 0;
+            const isRT    = String(r.attemptType ?? '').toUpperCase() === 'ROUND_TRIP' || hasDec;
+            const rawH    = r.maxHoldNo !== undefined ? r.maxHoldNo : (r.score !== undefined ? Math.floor(r.score) : undefined);
+            const hold    = (r.success === true || rawH === undefined || rawH === null) ? maxHold : Number(rawH);
             const score   = calcBeginnerScore(currentColor.name, isRT, hold);
             if (!best || score > best.score) return { score, entry: r };
             return best;
@@ -259,11 +277,12 @@ const RankingScreen = ({ route }: any) => {
 
         if (myRecord) {
           const r     = myRecord.entry as BeginnerRecord;
-          const isRT  = String(r.attemptType ?? '').toUpperCase() === 'ROUND_TRIP';
-          const hold  = (r.success === true || !r.maxHoldNo) ? maxHold : Number(r.maxHoldNo);
+          const hasDec  = r.score !== undefined && r.score !== null && r.score % 1 !== 0;
+          const isRT  = String(r.attemptType ?? '').toUpperCase() === 'ROUND_TRIP' || hasDec;
+          const rawH  = r.maxHoldNo !== undefined ? r.maxHoldNo : (r.score !== undefined ? Math.floor(r.score) : undefined);
+          const hold  = (r.success === true || rawH === undefined || rawH === null) ? maxHold : Number(rawH);
           const score = calcBeginnerScore(currentColor.name, isRT, hold);
 
-          // 기존 랭킹에 내 항목이 있으면 제거 후 내 기록으로 교체
           finalList = finalList.filter(item =>
             userData.id
               ? Number(item.memberId) !== userData.id
@@ -287,17 +306,16 @@ const RankingScreen = ({ route }: any) => {
       });
 
       setBeginnerRankings(allData);
-    } catch (e) {
-      console.error('초보벽 랭킹 로드 실패:', e);
+    } catch (error: any) {
+      console.error('초보벽 랭킹 로드 실패:', error.response?.data?.message || error.message);
     }
   };
 
   // ── 지구력 랭킹 ──
-  // 명세: { id, memberId, name, oneWayCount, additionalBlocks, timeSeconds, totalScore, recordDate, ranking? }
   const fetchEnduranceRankings = async () => {
     try {
-      const res     = await axios.get(RANKING_ENDURANCE_URL);
-      const rawList = extractList(res.data?.data ?? res.data);
+      const res = await axios.get(RANKING_ENDURANCE_URL);
+      const rawList = extractList(res.data?.data?.data);
 
       const mapped = rawList.map((item: EnduranceRankItem, i: number) => ({
         id:               item.memberId ?? `rank-endurance-${i}`,
@@ -313,17 +331,16 @@ const RankingScreen = ({ route }: any) => {
       }));
 
       setEnduranceRankings(mapped);
-    } catch (e) {
-      console.error('지구력 랭킹 로드 실패:', e);
+    } catch (error: any) {
+      console.error('지구력 랭킹 로드 실패:', error.response?.data?.message || error.message);
     }
   };
 
   // ── 연속 완등 랭킹 ──
-  // 명세: { id, memberId, name, sequenceLog: string[], totalScore, recordDate }
   const fetchConsecutiveRankings = async () => {
     try {
-      const res     = await axios.get(RANKING_SERIES_URL);
-      const rawList = extractList(res.data?.data ?? res.data);
+      const res = await axios.get(RANKING_SERIES_URL);
+      const rawList = extractList(res.data?.data?.data);
 
       const mapped = rawList.map((item: SeriesRankItem, i: number) => {
         const colorHexList = (item.sequenceLog ?? []).map(diffEnum => {
@@ -331,19 +348,33 @@ const RankingScreen = ({ route }: any) => {
           return colors.find(c => c.name === krName)?.hex ?? '#999999';
         });
 
+        // ★ 수정: 백엔드에서 82점 등 이상한 값을 줘도 프론트엔드에서 기록 탭과 완벽히 동일한 공식으로 자체 계산
+        const calculatedScore = (item.sequenceLog ?? []).reduce((acc: number, diffEnum: string, idx: number) => {
+          const krName = ENUM_TO_KR[diffEnum] ?? '흰색';
+          const baseScore = BASE_SCORES[krName] ?? 10;
+          const multiplier = 1.0 + (idx * 0.1);
+          return acc + (baseScore * multiplier);
+        }, 0);
+        
+        // 반올림 처리
+        const displayScore = Math.round(calculatedScore * 10) / 10;
+        
+        // 만약 자체 계산값이 0보다 크면 사용하고, 아니면 서버 데이터 폴백
+        const finalScore = displayScore > 0 ? displayScore : (item.score ?? item.totalScore ?? 0);
+
         return {
           id:         item.memberId ?? item.id ?? `rank-series-${i}`,
           memberId:   item.memberId ?? null,
           name:       item.name ?? item.nickname ?? '알 수 없음',
           colors:     colorHexList,
-          score:      item.totalScore ?? 0,
+          score:      finalScore,
           recordDate: item.recordDate,
         };
       });
 
       setConsecutiveRankings(mapped);
-    } catch (e) {
-      console.error('연속 완등 랭킹 로드 실패:', e);
+    } catch (error: any) {
+      console.error('연속 완등 랭킹 로드 실패:', error.response?.data?.message || error.message);
     }
   };
 
@@ -361,10 +392,8 @@ const RankingScreen = ({ route }: any) => {
     if (mainTab === '초보벽') {
       list = [...beginnerRankings];
 
-      // 색상 필터
       if (colorTab !== '전체') list = list.filter(r => r.colorName === colorTab);
 
-      // 유저별 베스트 1개만
       const userMap = new Map<string, any>();
       list.forEach(item => {
         const key = item.memberId != null ? `id_${item.memberId}` : `name_${item.name}`;
@@ -379,7 +408,6 @@ const RankingScreen = ({ route }: any) => {
       });
       list = Array.from(userMap.values());
 
-      // 점수 내림차순 → 달성일 오름차순
       list.sort((a, b) =>
         b.rawScore !== a.rawScore
           ? b.rawScore - a.rawScore
@@ -388,7 +416,6 @@ const RankingScreen = ({ route }: any) => {
 
     } else if (mainTab === '지구력') {
       list = [...enduranceRankings];
-      // 서버가 준 ranking 값 우선, 없으면 totalScore 내림차순
       list.sort((a, b) =>
         a.rawRank !== b.rawRank ? a.rawRank - b.rawRank : b.totalScore - a.totalScore
       );
@@ -410,6 +437,13 @@ const RankingScreen = ({ route }: any) => {
   // ─────────────────────────── 렌더 ───────────────────────────
   return (
     <View style={styles.background}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
+        }
+      >
 
       {/* 내 랭킹 카드 */}
       <View style={styles.myRankingWrapper}>
@@ -442,8 +476,6 @@ const RankingScreen = ({ route }: any) => {
           </TouchableOpacity>
         ))}
       </View>
-
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
 
         {/* 색상 탭 (초보벽 전용) */}
         {mainTab === '초보벽' && (
@@ -511,11 +543,12 @@ const RankingScreen = ({ route }: any) => {
                       <Text style={styles.enduranceLapsText}>편도 {item.laps}회</Text>
                       <Text style={styles.enduranceTimeText}>{item.time}</Text>
                       <View style={styles.enduranceSectionRow}>
-                        {item.laps % 2 === 0 && (
+                        {/* ★ 수정: 1바퀴(홀수)일때 왼쪽 화살표, 0바퀴(짝수)일때 오른쪽 화살표 */}
+                        {item.laps % 2 !== 0 && (
                           <Text style={[styles.enduranceSectionArrow, { color: getSectionColor(item.section) }]}>← </Text>
                         )}
                         <Text style={[styles.enduranceSectionText, { color: getSectionColor(item.section) }]}>{item.section}</Text>
-                        {item.laps % 2 !== 0 && (
+                        {item.laps % 2 === 0 && (
                           <Text style={[styles.enduranceSectionArrow, { color: getSectionColor(item.section) }]}> →</Text>
                         )}
                       </View>

@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
   View, Text, StyleSheet, TextInput, TouchableOpacity, 
-  ScrollView, Image, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Animated 
+  ScrollView, Image, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Animated, RefreshControl
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import axios from 'axios';
@@ -13,6 +13,8 @@ const OFFLINE_REGISTER_API = `${API_BASE_URL}/admin/members/offline`;
 const MEMBER_DELETE_API = `${API_BASE_URL}/admin/members`; 
 
 const ManagerUser = ({ navigation }: any) => {
+  const [refreshing, setRefreshing] = useState(false); // 새로고침 
+    
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<any[]>([]); 
@@ -51,7 +53,14 @@ const ManagerUser = ({ navigation }: any) => {
     checkAdminAndFetchUsers();
   }, []);
 
-  const checkAdminAndFetchUsers = async () => {
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await checkAdminAndFetchUsers(true); // 새로고침 시에는 중앙 로딩 스피너 무시
+    setRefreshing(false);
+  }, []);
+
+  const checkAdminAndFetchUsers = async (isRefresh = false) => {
+    if (!isRefresh) setLoading(true); // 새로고침이 아닐 때만 화면 전체 로딩 활성화
     try {
       const role = await AsyncStorage.getItem('userRole');
       const token = await AsyncStorage.getItem('userToken');
@@ -74,10 +83,13 @@ const ManagerUser = ({ navigation }: any) => {
         headers: { Authorization: `Bearer ${token}` },
         params: { size: 1000, sort: 'id,desc' } 
       });
-      const memberList = response.data?.data?.content || response.data?.data || [];
-      setUsers(memberList);
-    } catch (error) {
-      showResultModal("오류", "회원 목록을 불러오는데 실패했습니다.", "error");
+      // ✅ ApiResponse Depth 1단계 추가 적용
+      const raw = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
+      setUsers(Array.isArray(raw) ? raw : []);
+    } catch (error: any) {
+      // ✅ 에러 메시지 처리 적용
+      const errorMessage = error.response?.data?.message || "회원 목록을 불러오는데 실패했습니다.";
+      showResultModal("오류", errorMessage, "error");
     }
   };
 
@@ -103,8 +115,9 @@ const ManagerUser = ({ navigation }: any) => {
       const requestBody = {
         name: newName,
         phone: newPhone,
-        gender: newGender === '남자' ? 'MALE' : 'FEMALE',
-        birthDate: newBirth
+        gender: newGender === '남자' ? '남' : '여', // 수정: API 스펙에 맞춰 '남', '여'로 전달
+        birthDate: newBirth,
+        email: `offline_${newPhone.replace(/-/g, '')}@olla.local` // 추가: DB NOT NULL 에러 방지를 위한 자동 이메일 생성
       };
       await axios.post(OFFLINE_REGISTER_API, requestBody, {
         headers: { Authorization: `Bearer ${token}` }
@@ -113,7 +126,9 @@ const ManagerUser = ({ navigation }: any) => {
       closeAddModal();
       fetchUsers(token!); 
     } catch (error: any) {
-      showResultModal("오류", "회원 등록 중 오류가 발생했습니다.", "error");
+      // ✅ 에러 메시지 처리 적용 (예: "이미 등록된 전화번호입니다.")
+      const errorMessage = error.response?.data?.message || "회원 등록 중 오류가 발생했습니다.";
+      showResultModal("오류", errorMessage, "error");
     }
   };
 
@@ -126,7 +141,9 @@ const ManagerUser = ({ navigation }: any) => {
       showResultModal("성공", "회원이 삭제되었습니다.", "success");
       fetchUsers(token!); 
     } catch (error: any) {
-      showResultModal("오류", "회원 삭제에 실패했습니다.", "error");
+      // ✅ 에러 메시지 처리 적용
+      const errorMessage = error.response?.data?.message || "회원 삭제에 실패했습니다.";
+      showResultModal("오류", errorMessage, "error");
     }
   };
 
@@ -203,7 +220,15 @@ const ManagerUser = ({ navigation }: any) => {
 
   return (
     <SafeAreaView style={styles.background} edges={['top', 'left', 'right']}>
-      {/* 상단 검색바 */}
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={[styles.listContainer, { paddingBottom: 150 }]}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
+        }
+      >
+      
+      {/* 상단 검색바 - 여백 제거됨 */}
       <View style={styles.searchContainer}>
         <View style={styles.searchBox}>
           <Text style={styles.searchIcon}>🔎</Text>
@@ -226,16 +251,14 @@ const ManagerUser = ({ navigation }: any) => {
       </View>
       <View style={styles.headerDivider} />
 
-      <ScrollView 
-        showsVerticalScrollIndicator={false} 
-        contentContainerStyle={[styles.listContainer, { paddingBottom: 150 }]}
-      >
+      
         {filteredAndSortedUsers.length === 0 ? (
           <Text style={styles.emptyText}>검색 결과가 없습니다.</Text>
         ) : (
           filteredAndSortedUsers.map((user: any, index: number) => {
             const memberInfo = user.member || user;
-            const memberId = memberInfo.id || user.id;
+            const memberId = user.memberId || user.id || memberInfo.id;
+            const isDeleted = memberInfo.isDeleted || user.isDeleted; // 추가: 탈퇴 여부 확인
             const membershipInfo = user.activeMembership || user.membership || user;
             const memType = membershipInfo?.membershipType || membershipInfo?.type;
 
@@ -267,9 +290,12 @@ const ManagerUser = ({ navigation }: any) => {
                   </View>
                 </View>
                 <View style={[styles.colAction, styles.centerAlign]}>
-                  <TouchableOpacity style={styles.trashBtn} onPress={() => confirmDelete(memberId)}>
-                    <Image source={require('../assets/trash.png')} style={styles.trashIcon} />
-                  </TouchableOpacity>
+                  {/* 탈퇴한 회원이 아닐 때만 휴지통 아이콘 표시 */}
+                  {!isDeleted && (
+                    <TouchableOpacity style={styles.trashBtn} onPress={() => confirmDelete(memberId)}>
+                      <Image source={require('../assets/trash.png')} style={styles.trashIcon} />
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
             );

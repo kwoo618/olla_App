@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
   View, Text, StyleSheet, TextInput, TouchableOpacity, 
-  ScrollView, Image, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Animated 
+  ScrollView, Image, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Animated, RefreshControl 
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
@@ -57,6 +57,8 @@ const resolveMembershipType = (
 };
 
 const ManagerTicket = ({ navigation }: any) => {
+  const [refreshing, setRefreshing] = useState(false);
+
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<any[]>([]);
@@ -82,7 +84,6 @@ const ManagerTicket = ({ navigation }: any) => {
     setConfirmModalVisible(true);
   };
 
-  // 💡 애니메이션 설정
   const [isEditModalVisible, setEditModalVisible] = useState(false);
   const editSlideAnim = useRef(new Animated.Value(800)).current;
 
@@ -94,6 +95,27 @@ const ManagerTicket = ({ navigation }: any) => {
   const [editStart, setEditStart] = useState('');
   const [editType, setEditType] = useState<'PERIOD' | 'COUNT'>('PERIOD');
   const [addValue, setAddValue] = useState('');
+
+  // ✅ 관리 바텀시트 상태
+  const [isManageVisible, setManageVisible] = useState(false);
+  const manageSlideAnim = useRef(new Animated.Value(800)).current;
+  const [selectedManageItem, setSelectedManageItem] = useState<any>(null);
+
+  const openManageModal = (item: any) => {
+    setSelectedManageItem(item);
+    setManageVisible(true);
+    setTimeout(() => {
+      Animated.timing(manageSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+    }, 50);
+  };
+
+  const closeManageModal = (callback?: () => void) => {
+    Animated.timing(manageSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => {
+      setManageVisible(false);
+      setSelectedManageItem(null);
+      if (callback) callback();
+    });
+  };
 
   useEffect(() => {
     checkAdminAndFetchUsers();
@@ -115,6 +137,12 @@ const ManagerTicket = ({ navigation }: any) => {
       setLoading(false);
     }
   };
+  
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await checkAdminAndFetchUsers();
+    setRefreshing(false);
+  }, []);
 
   const fetchUsers = async (token: string) => {
     try {
@@ -122,10 +150,11 @@ const ManagerTicket = ({ navigation }: any) => {
         headers: { Authorization: `Bearer ${token}` },
         params: { size: 1000, sort: 'id,desc' }
       });
-      const memberList = response.data?.data?.content || response.data?.data || [];
-      setUsers(memberList);
-    } catch (error) {
-      showResultModal('오류', '회원 목록을 불러오는데 실패했습니다.', 'error');
+      const raw = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
+      setUsers(Array.isArray(raw) ? raw : []);
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || '회원 목록을 불러오는데 실패했습니다.';
+      showResultModal('오류', errorMessage, 'error');
     }
   };
 
@@ -146,8 +175,12 @@ const ManagerTicket = ({ navigation }: any) => {
     return days >= 0 ? `${days}일` : '만료';
   };
 
+  // ✅ 핵심 수정: isDeleted === true 인 항목 필터링
   const ticketHolders = useMemo(() => {
     return users.filter((u: any) => {
+      // 삭제된 이용권은 목록에서 제외
+      if (u.isDeleted === true || u.deleted === true) return false;
+
       const isTicketActive = u.membershipStatus === 'ACTIVE' || u.membershipStatus === 'HOLDING';
       if (!isTicketActive) return false;
       return u.name?.includes(searchQuery) || u.phone?.includes(searchQuery);
@@ -207,10 +240,8 @@ const ManagerTicket = ({ navigation }: any) => {
       closeEditModal();
       fetchUsers(token!);
     } catch (error: any) {
-      const status = error?.response?.status;
-      const serverMessage = error?.response?.data?.message || error?.response?.data?.error || JSON.stringify(error?.response?.data);
-      console.error('[이용권 등록 실패]', `status: ${status}`, serverMessage);
-
+      const serverMessage = error.response?.data?.message || '이용권 등록에 실패했습니다.';
+      
       if (serverMessage?.includes("is_deleted") || serverMessage?.includes("default value")) {
         showResultModal(
           '서버 설정 오류',
@@ -219,10 +250,11 @@ const ManagerTicket = ({ navigation }: any) => {
         );
         return;
       }
-      showResultModal('오류', `이용권 등록에 실패했습니다.\n\n${serverMessage || '서버 오류가 발생했습니다.'}`, 'error');
+      showResultModal('오류', serverMessage, 'error');
     }
   };
 
+  // ✅ 일시정지 / 정지해제
   const togglePauseStatus = (membershipId: number, currentStatus: string) => {
     if (!membershipId) {
       showResultModal('오류', '이용권 ID를 확인할 수 없습니다.', 'error');
@@ -232,57 +264,83 @@ const ManagerTicket = ({ navigation }: any) => {
     const actionText = isCurrentlyHolding ? '정지 해제' : '일시정지';
     const endpoint = isCurrentlyHolding ? 'unpause' : 'pause';
 
-    showConfirmModal(
-      `${actionText} 확인`,
-      `해당 이용권을 ${actionText} 하시겠습니까?`,
-      async () => {
-        setConfirmModalVisible(false);
-        try {
-          const token = await AsyncStorage.getItem('userToken');
-          await axios.patch(`${MEMBERSHIP_BASE_API}/${membershipId}/${endpoint}`, {}, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          showResultModal('성공', `이용권이 ${actionText} 되었습니다.`, 'success');
-          fetchUsers(token!);
-        } catch (error) {
-          showResultModal('오류', '상태 변경에 실패했습니다.', 'error');
-        }
-      }
-    );
+    closeManageModal(() => {
+      setTimeout(() => {
+        showConfirmModal(
+          `${actionText} 확인`,
+          `해당 이용권을 ${actionText} 하시겠습니까?`,
+          async () => {
+            setConfirmModalVisible(false);
+            try {
+              const token = await AsyncStorage.getItem('userToken');
+              await axios.patch(`${MEMBERSHIP_BASE_API}/${membershipId}/${endpoint}`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              showResultModal('성공', `이용권이 ${actionText} 되었습니다.`, 'success');
+              fetchUsers(token!);
+            } catch (error: any) {
+              const errorMessage = error.response?.data?.message || '상태 변경에 실패했습니다.';
+              showResultModal('오류', errorMessage, 'error');
+            }
+          }
+        );
+      }, 300);
+    });
   };
 
+  // ✅ 이용권 삭제 실행
   const executeDeleteTicket = async (membershipId: number) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        showResultModal('오류', '인증 정보가 없습니다. 다시 로그인해주세요.', 'error');
+        return;
+      }
       await axios.delete(`${MEMBERSHIP_BASE_API}/${membershipId}`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        }
       });
-      showResultModal('성공', '이용권이 삭제되었습니다.', 'success');
-      fetchUsers(token!);
+
+      // ✅ 핵심 수정: API 응답 기다리지 않고 로컬 상태에서 즉시 제거
+      setUsers(prev => prev.filter((u: any) => u.membershipId !== membershipId));
+
+      showResultModal('성공', '이용권이 삭제되었습니다.', 'success', async () => {
+        // 확인 버튼 누른 후 서버에서 최신 데이터 다시 조회
+        await fetchUsers(token);
+      });
     } catch (error: any) {
-      console.error(error);
-      showResultModal('오류', '이용권 삭제에 실패했습니다.', 'error');
+      const errorMessage = error.response?.data?.message 
+        || error.response?.data?.data?.message 
+        || '이용권 삭제에 실패했습니다.';
+      showResultModal('오류', errorMessage, 'error');
+      console.log('Delete Ticket Error:', error.response?.data);
     }
   };
 
+  // ✅ 이용권 삭제 확인
   const confirmDeleteTicket = (membershipId: number) => {
     if (!membershipId) {
       showResultModal('오류', '이용권 ID를 확인할 수 없습니다.', 'error');
       return;
     }
-    showConfirmModal(
-      '이용권 삭제 확인',
-      '해당 이용권을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.',
-      () => {
-        setConfirmModalVisible(false);
-        executeDeleteTicket(membershipId);
-      },
-      true, // isDestructive = true (빨간색 버튼)
-      '삭제'
-    );
+    closeManageModal(() => {
+      setTimeout(() => {
+        showConfirmModal(
+          '이용권 삭제 확인',
+          '해당 이용권을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.',
+          () => {
+            setConfirmModalVisible(false);
+            executeDeleteTicket(membershipId);
+          },
+          true,
+          '삭제'
+        );
+      }, 300);
+    });
   };
 
-  // 💡 모달 제어 함수 (애니메이션 포함)
   const openEditModal = () => {
     setEditModalVisible(true);
     Animated.timing(editSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
@@ -326,6 +384,14 @@ const ManagerTicket = ({ navigation }: any) => {
 
   return (
     <SafeAreaView style={styles.background} edges={['top', 'left', 'right']}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={[styles.listContainer, { paddingBottom: 150 }]}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
+        }
+      >
+        
       {/* 상단 검색바 */}
       <View style={styles.searchContainer}>
         <View style={styles.searchBox}>
@@ -340,17 +406,14 @@ const ManagerTicket = ({ navigation }: any) => {
         </View>
       </View>
 
-      {/* 리스트 헤더 */}
       <View style={styles.tableHeader}>
         <Text style={[styles.headerText, styles.colInfo]}>회원/이용권</Text>
         <Text style={[styles.headerText, styles.colDate]}>시작일/종료일</Text>
         <Text style={[styles.headerText, styles.colDday]}>잔여</Text>
         <Text style={[styles.headerText, styles.colStatus]}>상태</Text>
-        <Text style={[styles.headerText, styles.colAction]}>관리</Text>
       </View>
       <View style={styles.headerDivider} />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.listContainer, { paddingBottom: 150 }]}>
         {ticketHolders.length === 0 ? (
           <Text style={styles.emptyText}>보유 중인 이용권이 없습니다.</Text>
         ) : (
@@ -365,7 +428,12 @@ const ManagerTicket = ({ navigation }: any) => {
             const isHolding = item.membershipStatus === 'HOLDING';
 
             return (
-              <View key={item.memberId} style={styles.tableRow}>
+              <TouchableOpacity
+                key={item.memberId}
+                style={styles.tableRow}
+                activeOpacity={0.7}
+                onPress={() => openManageModal(item)}
+              >
                 <View style={styles.colInfo}>
                   <Text style={styles.rowTextName} numberOfLines={1}>{item.name}</Text>
                   <Text style={styles.rowTextSub}>{displayType}</Text>
@@ -393,32 +461,13 @@ const ManagerTicket = ({ navigation }: any) => {
                     </Text>
                   </View>
                 </View>
-
-                <View style={[styles.colAction, styles.rowCenter]}>
-                  {displayType !== '일일권' ? (
-                    <TouchableOpacity
-                      style={[styles.actionBtn, isHolding ? styles.actionBtnUnpause : styles.actionBtnPause]}
-                      onPress={() => togglePauseStatus(item.membershipId, item.membershipStatus)}
-                    >
-                      <Text style={isHolding ? styles.actionTextUnpause : styles.actionTextPause}>
-                        {isHolding ? '해제' : '정지'}
-                      </Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <View style={{ width: 42 }} /> 
-                  )}
-
-                  <TouchableOpacity style={styles.trashBtn} onPress={() => confirmDeleteTicket(item.membershipId)}>
-                    <Image source={require('../assets/trash.png')} style={styles.trashIcon} />
-                  </TouchableOpacity>
-                </View>
-              </View>
+              </TouchableOpacity>
             );
           })
         )}
       </ScrollView>
 
-      {/* 💡 등록 플로팅 버튼 */}
+      {/* 등록 플로팅 버튼 */}
       <TouchableOpacity 
         style={[styles.fab, { bottom: Math.max(insets.bottom + 5, 20) }]} 
         activeOpacity={0.8} 
@@ -468,7 +517,73 @@ const ManagerTicket = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 💡 이용권 등록 바텀 시트 모달 */}
+      {/* ✅ 관리 바텀시트 모달 */}
+      <Modal visible={isManageVisible} transparent={true} animationType="fade" onRequestClose={() => closeManageModal()}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => closeManageModal()}>
+          <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: manageSlideAnim }] }]}>
+            <TouchableOpacity activeOpacity={1} style={{ width: '100%' }}>
+              <View style={styles.dragHandle} />
+              <View style={styles.sheetHeader}>
+                <Text style={styles.sheetTitle}>이용권 관리</Text>
+                <TouchableOpacity onPress={() => closeManageModal()}>
+                  <Text style={styles.closeIcon}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.horizontalDivider} />
+
+              {selectedManageItem && (() => {
+                const manageDisplayType = resolveMembershipType(
+                  selectedManageItem.membershipType,
+                  selectedManageItem.startDate || '',
+                  selectedManageItem.endDate || '',
+                  selectedManageItem.remainingCount ?? null
+                );
+                const manageIsHolding = selectedManageItem.membershipStatus === 'HOLDING';
+                const manageIsCountType = manageDisplayType === '일일권';
+
+                return (
+                  <View>
+                    {/* 회원 정보 요약 */}
+                    <View style={styles.manageInfoBox}>
+                      <Text style={styles.manageItemName}>{selectedManageItem.name}</Text>
+                      <Text style={styles.manageItemSub}>
+                        {manageDisplayType} · {manageIsHolding ? '정지중' : '이용중'}
+                      </Text>
+                    </View>
+
+                    {/* 일시정지 / 정지해제 (일일권 제외) */}
+                    {!manageIsCountType && (
+                      <TouchableOpacity
+                        style={styles.manageActionBtn}
+                        onPress={() => togglePauseStatus(selectedManageItem.membershipId, selectedManageItem.membershipStatus)}
+                      >
+                        <Text style={styles.manageActionBtnText}>
+                          {manageIsHolding ? '이용권 정지 해제' : '이용권 일시정지'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {/* 이용권 삭제 */}
+                    <TouchableOpacity
+                      style={[styles.manageActionBtn, styles.manageActionBtnDanger]}
+                      onPress={() => confirmDeleteTicket(selectedManageItem.membershipId)}
+                    >
+                      <Text style={styles.manageActionBtnDangerText}>이용권 삭제</Text>
+                    </TouchableOpacity>
+
+                    {/* 닫기 */}
+                    <TouchableOpacity style={[styles.closeFullBtn, { marginTop: 6 }]} onPress={() => closeManageModal()}>
+                      <Text style={styles.closeFullBtnText}>닫기</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })()}
+            </TouchableOpacity>
+          </Animated.View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* 이용권 등록 바텀 시트 모달 */}
       <Modal visible={isEditModalVisible} transparent={true} animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeEditModal}>
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: editSlideAnim }] }]}>
@@ -623,122 +738,117 @@ const ManagerTicket = ({ navigation }: any) => {
   );
 };
 
-// ─────────────────────────── 스타일 (글씨 크기 및 여백 확대 적용) ───────────────────────────
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
   searchContainer: { paddingHorizontal: 20, marginTop: 15, marginBottom: 20 },
-  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2C2C2C', borderRadius: 12, paddingHorizontal: 20, height: 60 }, // 💡 50 -> 60, 패딩 15 -> 20
-  searchIcon: { fontSize: 20, marginRight: 10 }, // 💡 16 -> 20
-  searchInput: { flex: 1, color: '#fff', fontSize: 17 }, // 💡 14 -> 17
+  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2C2C2C', borderRadius: 12, paddingHorizontal: 20, height: 60 },
+  searchIcon: { fontSize: 20, marginRight: 10 },
+  searchInput: { flex: 1, color: '#fff', fontSize: 17 },
 
   tableHeader: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 20 },
-  headerText: { color: '#ffffff', fontSize: 15, fontWeight: 'bold', textAlign: 'center' }, // 💡 12 -> 15
+  headerText: { color: '#ffffff', fontSize: 15, fontWeight: 'bold', textAlign: 'center' },
   headerDivider: { height: 1, backgroundColor: '#333333', marginHorizontal: 20, marginBottom: 10 },
 
   listContainer: { paddingHorizontal: 20 },
 
-  tableRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#212121', borderRadius: 12, paddingVertical: 18, paddingHorizontal: 5, marginBottom: 10, borderWidth: 1, borderColor: '#2A2A2A' }, // 💡 패딩 14 -> 18
+  tableRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#212121', borderRadius: 12, paddingVertical: 18, paddingHorizontal: 5, marginBottom: 10, borderWidth: 1, borderColor: '#2A2A2A' },
 
   colInfo: { flex: 2.2, paddingLeft: 5 },
   colDate: { flex: 2.8 },
   colDday: { flex: 1.4 },
   colStatus: { flex: 1.6 },
-  colAction: { flex: 2.0 },
 
-  rowTextName: { color: '#fff', fontSize: 17, fontWeight: 'bold', marginBottom: 4 }, // 💡 13 -> 17
-  rowTextSub: { color: '#999', fontSize: 13 }, // 💡 10 -> 13
-  rowTextDate: { color: '#ccc', fontSize: 13, textAlign: 'center' }, // 💡 10 -> 13
-  rowTextDday: { color: '#A1BE44', fontSize: 17, fontWeight: 'bold', textAlign: 'center' }, // 💡 13 -> 17
-  emptyText: { color: '#666', fontSize: 17, textAlign: 'center', marginTop: 40 }, // 💡 15 -> 17
+  rowTextName: { color: '#fff', fontSize: 17, fontWeight: 'bold', marginBottom: 4 },
+  rowTextSub: { color: '#999', fontSize: 13 },
+  rowTextDate: { color: '#ccc', fontSize: 13, textAlign: 'center' },
+  rowTextDday: { color: '#A1BE44', fontSize: 17, fontWeight: 'bold', textAlign: 'center' },
+  emptyText: { color: '#666', fontSize: 17, textAlign: 'center', marginTop: 40 },
 
   center: { alignItems: 'center', justifyContent: 'center' },
   rowCenter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly' },
 
-  badge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 }, // 💡 패딩 6,4 -> 10,6
+  badge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
   badgeActive: { backgroundColor: 'rgba(161, 190, 68, 0.2)' },
   badgeHolding: { backgroundColor: 'rgba(255, 153, 0, 0.2)' },
-  badgeTextActive: { color: '#A1BE44', fontSize: 13, fontWeight: 'bold' }, // 💡 10 -> 13
-  badgeTextHolding: { color: '#FF9900', fontSize: 13, fontWeight: 'bold' }, // 💡 10 -> 13
+  badgeTextActive: { color: '#A1BE44', fontSize: 13, fontWeight: 'bold' },
+  badgeTextHolding: { color: '#FF9900', fontSize: 13, fontWeight: 'bold' },
 
-  actionBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6, borderWidth: 1 }, // 💡 패딩 8,6 -> 12,8
-  actionBtnPause: { borderColor: '#FF4D4D', backgroundColor: 'rgba(255, 77, 77, 0.1)' },
-  actionBtnUnpause: { borderColor: '#A1BE44', backgroundColor: 'rgba(161, 190, 68, 0.1)' },
-  actionTextPause: { color: '#FF4D4D', fontSize: 13, fontWeight: 'bold' }, // 💡 10 -> 13
-  actionTextUnpause: { color: '#A1BE44', fontSize: 13, fontWeight: 'bold' }, // 💡 10 -> 13
+  fab: { position: 'absolute', right: 20, backgroundColor: '#A1BE44', paddingHorizontal: 25, paddingVertical: 18, borderRadius: 30, elevation: 5 },
+  fabText: { color: '#000', fontSize: 18, fontWeight: 'bold' },
 
-  trashBtn: { padding: 6 },
-  trashIcon: { width: 22, height: 22, tintColor: '#FF4D4D', resizeMode: 'contain' }, // 💡 16 -> 22
-
-  fab: { position: 'absolute', right: 20, backgroundColor: '#A1BE44', paddingHorizontal: 25, paddingVertical: 18, borderRadius: 30, elevation: 5 }, // 💡 패딩 20,15 -> 25,18
-  fabText: { color: '#000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
-
-  // 💡 바텀 시트 모달
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%', maxHeight: '90%' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, paddingHorizontal: 5 },
-  sheetTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' }, // 💡 20 -> 23
-  closeIcon: { color: '#999999', fontSize: 28, paddingHorizontal: 10 }, // 💡 24 -> 28
+  sheetTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' },
+  closeIcon: { color: '#999999', fontSize: 28, paddingHorizontal: 10 },
   horizontalDivider: { height: 1, backgroundColor: '#333333', width: '100%', marginBottom: 20 },
 
-  modalSearchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#000', borderRadius: 10, paddingHorizontal: 15, height: 55, marginBottom: 15, borderWidth: 1, borderColor: '#333' }, // 💡 높이 45 -> 55
-  modalSearchInput: { flex: 1, color: '#fff', fontSize: 17 }, // 💡 14 -> 17
+  modalSearchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#000', borderRadius: 10, paddingHorizontal: 15, height: 55, marginBottom: 15, borderWidth: 1, borderColor: '#333' },
+  modalSearchInput: { flex: 1, color: '#fff', fontSize: 17 },
 
   modalTableHeader: { flexDirection: 'row', paddingVertical: 8, paddingHorizontal: 5 },
-  modalHeaderText: { color: '#999', fontSize: 14, fontWeight: 'bold' }, // 💡 11 -> 14
+  modalHeaderText: { color: '#999', fontSize: 14, fontWeight: 'bold' },
 
   searchResultTable: { backgroundColor: '#000', borderRadius: 10, borderWidth: 1, borderColor: '#333' },
-  searchResultRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 5, borderBottomWidth: 1, borderBottomColor: '#2A2A2A' }, // 💡 패딩 14 -> 16
+  searchResultRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 5, borderBottomWidth: 1, borderBottomColor: '#2A2A2A' },
   selectedRow: { backgroundColor: 'rgba(161, 190, 68, 0.15)', borderColor: '#A1BE44', borderWidth: 1, borderRadius: 8 },
-  resultTextName: { color: '#fff', fontSize: 16, fontWeight: 'bold', paddingLeft: 10 }, // 💡 13 -> 16
-  resultTextSub: { color: '#aaa', fontSize: 15 }, // 💡 12 -> 15
-  resultTextType: { color: '#A1BE44', fontSize: 15, fontWeight: 'bold' }, // 💡 12 -> 15
-  modalEmptyText: { color: '#666', textAlign: 'center', paddingVertical: 20, fontSize: 16 }, // 💡 14 -> 16
+  resultTextName: { color: '#fff', fontSize: 16, fontWeight: 'bold', paddingLeft: 10 },
+  resultTextSub: { color: '#aaa', fontSize: 15 },
+  resultTextType: { color: '#A1BE44', fontSize: 15, fontWeight: 'bold' },
+  modalEmptyText: { color: '#666', textAlign: 'center', paddingVertical: 20, fontSize: 16 },
 
-  // 💡 입력 폼 영역
   formContainer: { backgroundColor: '#262626', borderRadius: 16, padding: 20, marginTop: 10 },
   typeToggleRow: { flexDirection: 'row', marginBottom: 20 },
-  typeBtn: { flex: 1, height: 55, backgroundColor: '#000', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginHorizontal: 5, borderWidth: 1, borderColor: '#333' }, // 💡 45 -> 55
+  typeBtn: { flex: 1, height: 55, backgroundColor: '#000', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginHorizontal: 5, borderWidth: 1, borderColor: '#333' },
   typeBtnActive: { borderColor: '#A1BE44', backgroundColor: 'rgba(161, 190, 68, 0.1)' },
-  typeBtnText: { color: '#999', fontWeight: 'bold', fontSize: 16 }, // 💡 14 -> 16
+  typeBtnText: { color: '#999', fontWeight: 'bold', fontSize: 16 },
   typeBtnTextActive: { color: '#A1BE44' },
 
   horizontalDateRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
   dateBlock: { flex: 1 },
   dateSpacer: { width: 15 },
-  inputLabel: { color: '#fff', fontSize: 17, fontWeight: 'bold', marginBottom: 10, marginLeft: 2 }, // 💡 14 -> 17
-  dateInputBox: { height: 55, backgroundColor: '#000', borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, borderWidth: 1, borderColor: '#333' }, // 💡 45 -> 55
-  dateText: { color: '#fff', fontSize: 17 }, // 💡 14 -> 17
-  dateIcon: { width: 20, height: 20, tintColor: '#A1BE44' }, // 💡 18 -> 20
+  inputLabel: { color: '#fff', fontSize: 17, fontWeight: 'bold', marginBottom: 10, marginLeft: 2 },
+  dateInputBox: { height: 55, backgroundColor: '#000', borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, borderWidth: 1, borderColor: '#333' },
+  dateText: { color: '#fff', fontSize: 17 },
+  dateIcon: { width: 20, height: 20, tintColor: '#A1BE44' },
   resetDateBtn: { marginTop: 6, alignSelf: 'flex-start' },
-  resetDateText: { color: '#A1BE44', fontSize: 13 }, // 💡 11 -> 13
-  amountInput: { height: 55, backgroundColor: '#000', borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#333', color: '#fff', fontSize: 17 }, // 💡 45 -> 55, 14 -> 17
+  resetDateText: { color: '#A1BE44', fontSize: 13 },
+  amountInput: { height: 55, backgroundColor: '#000', borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#333', color: '#fff', fontSize: 17 },
 
-  submitBtn: { backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 18, alignItems: 'center', marginTop: 10 }, // 💡 패딩 16 -> 18
-  submitBtnText: { color: '#000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  submitBtn: { backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 18, alignItems: 'center', marginTop: 10 },
+  submitBtnText: { color: '#000', fontSize: 18, fontWeight: 'bold' },
 
   calendarOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
   calendarBox: { width: '90%', backgroundColor: '#212121', borderRadius: 16, padding: 15 },
-  calendarTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 }, // 💡 16 -> 18
-  calendarCloseBtn: { marginTop: 15, paddingVertical: 16, backgroundColor: '#333333', borderRadius: 10, alignItems: 'center' }, // 💡 패딩 12 -> 16
-  calendarCloseText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, // 💡 15 -> 18
+  calendarTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
+  calendarCloseBtn: { marginTop: 15, paddingVertical: 16, backgroundColor: '#333333', borderRadius: 10, alignItems: 'center' },
+  calendarCloseText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
 
-  // ─── 커스텀 알림 모달 전용 스타일 (통일) ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, // 💡 300 -> 320
-  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, // 💡 18 -> 20
-  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 24 }, // 💡 15 -> 17, 20 -> 24
-  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, // 💡 14 -> 16
-  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
+  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
+  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 24 },
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
 
-  // 투 버튼 확인 모달 관련 스타일 추가
-  deleteModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' }, // 💡 300 -> 320
-  deleteTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' }, // 💡 16 -> 20
+  deleteModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
+  deleteTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
   deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  btnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginRight: 5 }, // 💡 12 -> 16
-  btnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginLeft: 5 }, // 💡 12 -> 16
-  btnTextBlack: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
-  btnTextWhite: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  btnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginRight: 5 },
+  btnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
+  btnTextBlack: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
+  btnTextWhite: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
+
+  manageInfoBox: { backgroundColor: '#262626', borderRadius: 16, padding: 20, marginBottom: 16 },
+  manageItemName: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 6 },
+  manageItemSub: { color: '#999999', fontSize: 15 },
+  manageActionBtn: { width: '100%', backgroundColor: '#262626', borderRadius: 12, paddingVertical: 18, alignItems: 'center', marginBottom: 10 },
+  manageActionBtnText: { color: '#ffffff', fontSize: 17, fontWeight: 'bold' },
+  manageActionBtnDanger: { backgroundColor: 'rgba(255, 77, 77, 0.15)', borderWidth: 1, borderColor: '#FF4D4D' },
+  manageActionBtnDangerText: { color: '#FF4D4D', fontSize: 17, fontWeight: 'bold' },
+  closeFullBtn: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 18, alignItems: 'center' },
+  closeFullBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
 });
 
 export default ManagerTicket;

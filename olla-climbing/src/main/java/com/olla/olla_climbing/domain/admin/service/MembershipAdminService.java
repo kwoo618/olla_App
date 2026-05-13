@@ -8,11 +8,13 @@ import com.olla.olla_climbing.domain.admin.entity.Membership;
 import com.olla.olla_climbing.domain.admin.enums.MembershipStatus;
 import com.olla.olla_climbing.domain.admin.repository.AdminNotificationRepository;
 import com.olla.olla_climbing.domain.admin.repository.MembershipRepository;
+import com.olla.olla_climbing.domain.member.dto.response.MemberResponse;
 import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.enums.Role;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
 import com.olla.olla_climbing.domain.member.service.NotificationService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Page;
@@ -33,6 +35,7 @@ public class MembershipAdminService {
     private final GoogleSheetsService googleSheetsService;
     private final AdminNotificationRepository adminNotificationRepository;
     private final NotificationService notificationService;
+    private final PasswordEncoder passwordEncoder;
 
     @Transactional
     public void grantMembership(Long memberId, Integer addMonths, Integer addCount, LocalDate startDate) {
@@ -78,16 +81,34 @@ public class MembershipAdminService {
     }
 
     @Transactional
-    public void createOfflineMember(AdminMemberCreateRequest request) {
+    public MemberResponse createOfflineMember(AdminMemberCreateRequest request) {
+
         if (memberRepository.findByPhone(request.getPhone()).isPresent()) {
             throw new IllegalArgumentException("이미 등록된 전화번호입니다.");
         }
-        Member dummyMember = Member.builder()
-                .name(request.getName()).phone(request.getPhone()).gender(request.getGender()).birthDate(request.getBirthDate()).role(Role.USER).build();
-        Member savedMember = memberRepository.save(dummyMember);
+        // 1. 오프라인 회원용 더미 이메일 자동 생성 (예: offline_01012345678@ollagaja.com)
+        // 전화번호에서 하이픈(-)이 넘어올 경우를 대비해 제거해줍니다.
+        String cleanPhone = request.getPhone().replaceAll("-", "");
+        String dummyEmail = "offline_" + cleanPhone + "@ollagaja.com";
 
-        googleSheetsService.syncNewMember(savedMember);
-        googleSheetsService.syncUnregisteredMember(savedMember);
+        // 2. 임시 비밀번호 설정 (오프라인 회원이 나중에 앱 연동을 원할 경우를 대비)
+        // 보통 오프라인 회원은 전화번호 뒷자리 등을 임시 비밀번호로 사용합니다.
+        String tempPassword = passwordEncoder.encode(cleanPhone);
+
+        // 3. Member 엔티티 빌드 (생성)
+        Member offlineMember = Member.builder()
+                .name(request.getName())
+                .gender(request.getGender())
+                .birthDate(request.getBirthDate())
+                .phone(request.getPhone())
+                .email(dummyEmail)        // ✨ 핵심: 누락된 이메일 필드에 더미 이메일 주입
+                .password(tempPassword)   // 필수값인 비밀번호 주입
+                .role(Role.USER)          // 룰북에 따른 기본 권한 (또는 Role.OFFLINE_MEMBER)
+                .build();
+
+        // 4. DB 저장 및 응답 반환
+        Member savedMember = memberRepository.save(offlineMember);
+        return MemberResponse.from(savedMember);
     }
 
     @Transactional
@@ -163,5 +184,12 @@ public class MembershipAdminService {
                 .build();
 
         adminNotificationRepository.save(alert);
+    }
+
+    @Transactional
+    public void deleteMember(Long memberId) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
+        member.withdraw();
     }
 }

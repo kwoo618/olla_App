@@ -19,20 +19,26 @@ public class AdminMemberController {
     private final MembershipAdminService membershipAdminService;
     private final MemberService memberService;
 
-    // 관리자 - 오프라인 회원 신규 등록
     @PostMapping("/offline")
-    public String createOfflineMember(@Valid @RequestBody AdminMemberCreateRequest request) {
+    @Operation(summary = "오프라인 회원 신규 등록")
+    public ResponseEntity<ApiResponse<String>> createOfflineMember(@Valid @RequestBody AdminMemberCreateRequest request) {
         membershipAdminService.createOfflineMember(request);
-        return "오프라인 회원 등록 및 시트 연동 성공";
+        return ResponseEntity.ok(ApiResponse.success("오프라인 회원 등록 및 시트 연동 성공"));
     }
 
-    @Operation(summary = "오프라인 회원 정보 수정 (관리자)", description = "관리자가 특정 회원의 기본 정보를 수정합니다.")
     @PatchMapping("/{memberId}/info")
-    public ResponseEntity<String> updateMemberInfo(
+    @Operation(summary = "오프라인 회원 정보 수정 (관리자)")
+    public ResponseEntity<ApiResponse<String>> updateMemberInfo(
             @PathVariable("memberId") Long memberId,
             @RequestBody MemberUpdateRequest request) {
-
         memberService.updateMemberByAdmin(memberId, request);
-        return ResponseEntity.ok("회원 정보가 성공적으로 수정되었습니다.");
+        return ResponseEntity.ok(ApiResponse.success("회원 정보가 성공적으로 수정되었습니다."));
+    }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "회원 강제 삭제 (관리자)")
+    public ResponseEntity<ApiResponse<String>> deleteMember(@PathVariable("id") Long id) {
+        memberService.withdrawMemberById(id);
+        return ResponseEntity.ok(ApiResponse.success("회원이 성공적으로 삭제되었습니다."));
     }
 }

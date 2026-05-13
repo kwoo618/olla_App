@@ -1,14 +1,13 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Image, Switch, Modal, Animated, TextInput, ActivityIndicator, Linking
+  Image, Switch, Modal, Animated, TextInput, ActivityIndicator, Linking, RefreshControl
 } from 'react-native';
 import { API_BASE_URL } from '../src/constants/Config';
 
-// ✅ 횟수권 -> 일일권 명칭 통일
 const resolveMembershipType = (
   typeStr: string,
   startDate: string,
@@ -38,7 +37,16 @@ const resolveMembershipType = (
   return '-';
 };
 
+// ─── 생년월일로 나이 자동 계산 ───
+const calcAgeFromBirth = (birthDate: string): string => {
+  if (!birthDate || birthDate.length !== 10) return '-';
+  const birthYear = parseInt(birthDate.substring(0, 4), 10);
+  if (isNaN(birthYear)) return '-';
+  return String(new Date().getFullYear() - birthYear);
+};
+
 const MYScreen = ({ navigation }: any) => {
+  const [refreshing, setRefreshing] = useState(false);
   const isFocused = useIsFocused();
   const [loading, setLoading] = useState(true);
 
@@ -63,17 +71,17 @@ const MYScreen = ({ navigation }: any) => {
   const [isAdmin, setIsAdmin] = useState(false);
 
   const [profileData, setProfileData] = useState<any>({
-    name: '', phone: '', gender: '', birthDate: '', age: '', height: '', weight: '', arm: '', shoe: ''
+    name: '', phone: '', gender: '', birthDate: '', height: '', weight: '', arm: '', shoe: ''
   });
 
   const [profileToggles, setProfileToggles] = useState<any>({
-    showName: true, showPhone: true, showAge: true, showHeight: true,
+    showPhone: true, showAge: true, showHeight: true,
     showWeight: true, showArm: true, showShoe: true,
   });
 
   const [isPushEnabled, setIsPushEnabled] = useState(true);
   const [isActivityEnabled, setIsActivityEnabled] = useState(true);
-
+  
   const fetchMyInfo = async () => {
     try {
       const userToken = await AsyncStorage.getItem('userToken');
@@ -88,9 +96,15 @@ const MYScreen = ({ navigation }: any) => {
 
       // [GET] 내 정보 조회
       const userRes = await axios.get(`${API_BASE_URL}/members/me`, { headers });
-      const data = userRes.data.data || userRes.data;
+      
+      const data = userRes.data?.data?.data;
 
-      // 💡 저장된 값이나 서버에서 온 값에 'ADMIN'이라는 글자가 포함되어 있으면 무조건 true!
+      if (!data) {
+        showResultModal('오류', '내 정보를 불러오지 못했습니다. 다시 시도해주세요.', 'error');
+        setLoading(false);
+        return;
+      }
+
       const checkStored = String(storedRole || '').toUpperCase();
       const checkDataRole = String(data.role || '').toUpperCase();
       const checkAuth = String(data.authority || '').toUpperCase();
@@ -106,18 +120,17 @@ const MYScreen = ({ navigation }: any) => {
       setProfileData({
         name: data.name || '',
         phone: data.phone || '',
-        gender: data.gender || '',
+        gender: data.gender === 'MALE' ? '남' : data.gender === 'FEMALE' ? '여' : (data.gender || ''),
         birthDate: data.birthDate || '',
-        age: data.detail?.age?.toString() || '',
-        height: data.detail?.height?.toString() || '',
-        weight: data.detail?.weight?.toString() || '',
-        arm: data.detail?.armSpan?.toString() || '',
-        shoe: data.detail?.footSize?.toString() || '',
+        // ─── age 필드 제거: 생년월일로 자동 계산하므로 저장 불필요 ───
+        height: data.height?.toString() || '',
+        weight: data.weight?.toString() || '',
+        arm: data.armSpan?.toString() || '',
+        shoe: data.footSize?.toString() || '',
       });
 
       if (data.privacy) {
         setProfileToggles({
-          showName: true,
           showPhone: data.privacy.phonePublic,
           showAge: true,
           showHeight: data.privacy.heightPublic,
@@ -127,14 +140,14 @@ const MYScreen = ({ navigation }: any) => {
         });
       }
 
-      // ✅ [GET] 오늘 출석 여부 확인
+      // [GET] 오늘 출석 여 확인
       let attendedToday = false;
       try {
         const today = new Date();
         const yearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
         const visitRes = await axios.get(`${API_BASE_URL}/visit/my-history?yearMonth=${yearMonth}`, { headers });
         
-        let rawData = visitRes.data?.data;
+        let rawData = visitRes.data?.data?.data || visitRes.data?.data;
         if (rawData && !Array.isArray(rawData) && rawData.data) rawData = rawData.data;
         
         if (Array.isArray(rawData)) {
@@ -153,14 +166,14 @@ const MYScreen = ({ navigation }: any) => {
           
           attendedToday = daysAttended.includes(todayDate);
         }
-      } catch (e) {
-        console.log('출석 확인 실패:', e);
+      } catch (error: any) {
+        console.log('출석 확인 실패:', error.response?.data?.message || error.message);
       }
 
       // [GET] 회원권 정보 조회
       try {
         const memRes = await axios.get(`${API_BASE_URL}/memberships/me`, { headers });
-        const memData = memRes.data?.data ?? memRes.data;
+        const memData = memRes.data?.data?.data || memRes.data?.data;
 
         if (memData) {
           const today = new Date();
@@ -190,7 +203,6 @@ const MYScreen = ({ navigation }: any) => {
               ? `${memData.startDate} ~ ${memData.endDate}`
               : '-';
 
-          // ✅ 상태 계산
           let currentStatus = memData.status === 'ACTIVE' ? '이용중' : memData.status === 'HOLDING' ? '정지중' : '구매필요';
           
           if (isCountType && currentStatus === '이용중') {
@@ -208,17 +220,25 @@ const MYScreen = ({ navigation }: any) => {
         } else {
           setMemInfo({ type: '구매 필요', period: '-', status: '비회원', remainingDays: -1, remainingCount: -1, isCountType: false });
         }
-      } catch (e) {
-        console.log('이용권 정보 로드 실패', e);
+      } catch (error: any) {
+        console.log('이용권 정보 로드 실패:', error.response?.data?.message || error.message);
         setMemInfo({ type: '구매 필요', period: '-', status: '비회원', remainingDays: -1, remainingCount: -1, isCountType: false });
       }
 
-    } catch (error) {
-      console.error('데이터 로드 실패:', error);
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || '데이터를 불러오는데 실패했습니다.';
+      console.error('데이터 로드 실패:', errorMessage);
+      showResultModal('오류', errorMessage, 'error'); 
     } finally {
       setLoading(false);
     }
   };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchMyInfo();
+    setRefreshing(false);
+  }, []);
 
   useEffect(() => { fetchMyInfo(); }, [isFocused]);
 
@@ -227,17 +247,27 @@ const MYScreen = ({ navigation }: any) => {
       const userToken = await AsyncStorage.getItem('userToken');
       const headers = { Authorization: `Bearer ${userToken}` };
 
+      // ─── 나이 자동 계산 (생년월일 기반, 사용자 입력 없음) ───
+      let calculatedAge = 0;
+      if (profileData.birthDate && profileData.birthDate.length === 10) {
+        const birthYear = parseInt(profileData.birthDate.substring(0, 4), 10);
+        const currentYear = new Date().getFullYear();
+        calculatedAge = currentYear - birthYear;
+      }
+
       const requestBody = {
         name: profileData.name,
         phone: profileData.phone,
-        gender: profileData.gender,
+        gender: profileData.gender === '남' ? 'MALE' : profileData.gender === '여' ? 'FEMALE' : profileData.gender,
         birthDate: profileData.birthDate,
         profileImageUrl: '',
-        age: parseInt(profileData.age) || 0,
+        
+        age: calculatedAge,
         height: parseFloat(profileData.height) || 0,
         weight: parseFloat(profileData.weight) || 0,
         armSpan: parseFloat(profileData.arm) || 0,
         footSize: parseFloat(profileData.shoe) || 0,
+        
         isPublicPhone: profileToggles.showPhone,
         isHeightPublic: profileToggles.showHeight,
         isWeightPublic: profileToggles.showWeight,
@@ -245,12 +275,22 @@ const MYScreen = ({ navigation }: any) => {
         isFootSizePublic: profileToggles.showShoe
       };
 
-      await axios.patch(`${API_BASE_URL}/members/me`, requestBody, { headers });
-      showResultModal('성공', '정보가 저장되었습니다.', 'success');
+      await axios.patch(`${API_BASE_URL}/members/me/info`, requestBody, { headers });
       fetchMyInfo();
+      
       closeProfileModal();
-    } catch (error) {
-      showResultModal('오류', '저장에 실패했습니다.', 'error');
+
+      setTimeout(() => {
+        showResultModal('성공', '정보가 저장되었습니다.', 'success');
+      }, 500); 
+
+    } catch (error: any) {
+      closeProfileModal();
+      
+      setTimeout(() => {
+        const errorMessage = error.response?.data?.message || '저장에 실패했습니다.';
+        showResultModal('오류', errorMessage, 'error');
+      }, 500);
     }
   };
 
@@ -266,8 +306,8 @@ const MYScreen = ({ navigation }: any) => {
           headers: { Authorization: `Bearer ${accessToken}` }, timeout: 3000
         });
       }
-    } catch (error) {
-      console.log('서버 로그아웃 실패:', error);
+    } catch (error: any) {
+      console.log('서버 로그아웃 실패:', error.response?.data?.message || error.message);
     } finally {
       await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole']);
       setLogoutModalVisible(false);
@@ -279,18 +319,27 @@ const MYScreen = ({ navigation }: any) => {
     try {
       const userToken = await AsyncStorage.getItem('userToken');
       if (!userToken) return;
+
       await axios.delete(`${API_BASE_URL}/members/me`, { headers: { Authorization: `Bearer ${userToken}` } });
-      showResultModal('성공', '회원탈퇴가 완료되었습니다.', 'success');
-    } catch (error: any) {
-      console.log('회원탈퇴 실패:', error);
-      showResultModal('오류', error.response?.data?.message || '회원탈퇴에 실패했습니다.', 'error');
-      return;
-    } finally {
-      await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole']);
+      
       setDeleteModalVisible(false);
+
+      setTimeout(async () => {
+        showResultModal('성공', '회원탈퇴가 완료되었습니다.', 'success');
+        await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole']);
+        setTimeout(() => {
+          navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+        }, 1500);
+      }, 500);
+
+    } catch (error: any) {
+      setDeleteModalVisible(false);
+      
       setTimeout(() => {
-        navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
-      }, 1500); // 사용자가 알림을 확인할 시간을 약간 부여
+        const errorMessage = error.response?.data?.message || '회원탈퇴에 실패했습니다.';
+        console.log('회원탈퇴 실패:', errorMessage);
+        showResultModal('오류', errorMessage, 'error');
+      }, 500);
     }
   };
 
@@ -393,8 +442,13 @@ const MYScreen = ({ navigation }: any) => {
 
   return (
     <View style={styles.background}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
+        }
+      >
         {/* 상단 프로필 */}
         <TouchableOpacity style={styles.profileCard} activeOpacity={0.8} onPress={openProfileModal}>
           <View style={styles.profileLeft}>
@@ -547,7 +601,7 @@ const MYScreen = ({ navigation }: any) => {
       <Modal visible={isDeleteModalVisible} transparent={true} animationType="fade">
         <View style={styles.centerModalOverlay}>
           <View style={styles.centerModalBox}>
-            <Text style={[styles.centerModalText, { textAlign: 'center' }]}>
+            <Text style={[styles.centerModalText, { textAlign: 'center', lineHeight: 24 }]}>
               정말로 탈퇴하시겠습니까?{'\n'}모든 데이터가 삭제됩니다.
             </Text>
             <View style={styles.centerBtnRow}>
@@ -562,7 +616,7 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 💡 멤버십 일시정지 모달 */}
+      {/* 멤버십 일시정지 모달 */}
       <Modal visible={isPauseModalVisible} transparent={true} animationType="fade">
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={closePauseModal} />
@@ -587,7 +641,7 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 💡 문의하기 모달 */}
+      {/* 문의하기 모달 */}
       <Modal visible={isContactModalVisible} transparent={true} animationType="fade">
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={closeContactModal} />
@@ -616,7 +670,7 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 💡 프로필 수정 모달 */}
+      {/* 프로필 수정 모달 */}
       <Modal visible={isProfileModalVisible} transparent={true} animationType="fade">
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={closeProfileModal} />
@@ -642,7 +696,20 @@ const MYScreen = ({ navigation }: any) => {
                   </View>
                 </TouchableOpacity>
 
-                {renderEditField('이름', 'name', '')}
+                {/* 이름 수정 (공개 토글 없음) */}
+                <View style={styles.editFieldWrapper}>
+                  <View style={styles.editFieldHeader}>
+                    <Text style={styles.editFieldTitle}>이름</Text>
+                  </View>
+                  <View style={styles.editInputBox}>
+                    <TextInput
+                      style={styles.editInput}
+                      value={profileData.name}
+                      onChangeText={(txt) => setProfileData({ ...profileData, name: txt })}
+                      placeholderTextColor="#666666"
+                    />
+                  </View>
+                </View>
 
                 <View style={styles.editFieldWrapper}>
                   <View style={styles.editFieldHeader}>
@@ -691,7 +758,29 @@ const MYScreen = ({ navigation }: any) => {
                 </View>
 
                 {renderEditField('전화번호', 'phone', '')}
-                {renderEditField('나이', 'age', '세')}
+
+                {/* ─── 나이: 생년월일 기반 자동 계산, 수정 불가 ─── */}
+                <View style={styles.editFieldWrapper}>
+                  <View style={styles.editFieldHeader}>
+                    <Text style={styles.editFieldTitle}>나이</Text>
+                    <View style={styles.toggleWrapper}>
+                      <Text style={styles.toggleLabel}>{profileToggles.showAge ? '공개' : '비공개'}</Text>
+                      <Switch
+                        trackColor={{ false: '#333333', true: '#A1BE44' }}
+                        thumbColor={profileToggles.showAge ? '#ffffff' : '#f4f3f4'}
+                        onValueChange={() => setProfileToggles({ ...profileToggles, showAge: !profileToggles.showAge })}
+                        value={profileToggles.showAge}
+                      />
+                    </View>
+                  </View>
+                  <View style={styles.editInputBox}>
+                    <Text style={styles.editInput}>
+                      {calcAgeFromBirth(profileData.birthDate)}
+                    </Text>
+                    <Text style={styles.editUnit}>세</Text>
+                  </View>
+                </View>
+
                 {renderEditField('키', 'height', 'cm')}
                 {renderEditField('몸무게', 'weight', 'kg')}
                 {renderEditField('팔길이', 'arm', 'cm')}
@@ -709,117 +798,107 @@ const MYScreen = ({ navigation }: any) => {
   );
 };
 
-// ─────────────────────────── 스타일 (글씨 크기 확대 적용) ───────────────────────────
 const styles = StyleSheet.create({
+  // 기존 스타일 유지
   background: { flex: 1, backgroundColor: '#1A1A1A' },
   scrollContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 100 },
   card: { backgroundColor: '#212121', borderRadius: 16, padding: 20, marginBottom: 15 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  cardHeaderIcon: { width: 24, height: 24, tintColor: '#A1BE44', marginRight: 10, resizeMode: 'contain' }, // 💡 22 -> 24
-  cardHeaderTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' }, // 💡 18 -> 20
-  
+  cardHeaderIcon: { width: 24, height: 24, tintColor: '#A1BE44', marginRight: 10, resizeMode: 'contain' },
+  cardHeaderTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' },
   profileCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#212121', borderRadius: 16, paddingVertical: 20, paddingHorizontal: 20, marginBottom: 15 },
   profileLeft: { flexDirection: 'row', alignItems: 'center' },
-  profileImagePlaceholder: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#444444', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', marginRight: 15 }, // 💡 50 -> 60
+  profileImagePlaceholder: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#444444', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', marginRight: 15 },
   profileImage: { width: '100%', height: '100%', resizeMode: 'cover' },
   profileTextContainer: { flexDirection: 'column' },
-  profileName: { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginBottom: 4 }, // 💡 18 -> 20
-  profileEmail: { color: '#999999', fontSize: 15 }, // 💡 13 -> 15
-  chevronIcon: { color: '#999999', fontSize: 20, fontWeight: 'bold' }, // 💡 18 -> 20
-  
+  profileName: { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginBottom: 4 },
+  profileEmail: { color: '#999999', fontSize: 15 },
+  chevronIcon: { color: '#999999', fontSize: 20, fontWeight: 'bold' },
   memInfoContainer: { marginBottom: 5 },
   memInfoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  memInfoLabel: { color: '#ffffff', fontSize: 17, fontWeight: '500' }, // 💡 15 -> 17
-  memInfoValue: { color: '#ffffff', fontSize: 17, fontWeight: 'bold' }, // 💡 15 -> 17
+  memInfoLabel: { color: '#ffffff', fontSize: 17, fontWeight: '500' },
+  memInfoValue: { color: '#ffffff', fontSize: 17, fontWeight: 'bold' },
   activeBadge: { backgroundColor: '#C2FF00', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
-  activeBadgeText: { color: '#000000', fontSize: 15, fontWeight: 'bold' }, // 💡 13 -> 15
-  
-  pauseButton: { backgroundColor: '#2C2C2C', borderWidth: 1, borderColor: '#555555', borderRadius: 8, paddingVertical: 16, alignItems: 'center', marginTop: 10 }, // 💡 패딩 14 -> 16
-  pauseButtonText: { color: '#ffffff', fontSize: 17, fontWeight: 'bold' }, // 💡 15 -> 17
-  
+  activeBadgeText: { color: '#000000', fontSize: 15, fontWeight: 'bold' },
+  pauseButton: { backgroundColor: '#2C2C2C', borderWidth: 1, borderColor: '#555555', borderRadius: 8, paddingVertical: 16, alignItems: 'center', marginTop: 10 },
+  pauseButtonText: { color: '#ffffff', fontSize: 17, fontWeight: 'bold' },
   activityRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
-  activityText: { color: '#ffffff', fontSize: 17, fontWeight: '500' }, // 💡 15 -> 17
-  
+  activityText: { color: '#ffffff', fontSize: 17, fontWeight: '500' },
   settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 12 },
   settingTextContainer: { flex: 1, paddingRight: 10 },
-  settingTitle: { color: '#ffffff', fontSize: 17, fontWeight: 'bold', marginBottom: 4 }, // 💡 15 -> 17
-  settingSub: { color: '#999999', fontSize: 14, lineHeight: 20 }, // 💡 12 -> 14
+  settingTitle: { color: '#ffffff', fontSize: 17, fontWeight: 'bold', marginBottom: 4 },
+  settingSub: { color: '#999999', fontSize: 14, lineHeight: 20 },
   divider: { height: 1, backgroundColor: '#333333', marginVertical: 8 },
-  
   adminCard: { flexDirection: 'row', backgroundColor: '#212121', borderRadius: 16, paddingVertical: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 15, borderWidth: 1, borderColor: '#A1BE44' },
-  adminIcon: { width: 24, height: 24, tintColor: '#A1BE44', marginRight: 8, resizeMode: 'contain' }, // 💡 20 -> 24
-  adminText: { color: '#A1BE44', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
-  
+  adminIcon: { width: 24, height: 24, tintColor: '#A1BE44', marginRight: 8, resizeMode: 'contain' },
+  adminText: { color: '#A1BE44', fontSize: 18, fontWeight: 'bold' },
   logoutCard: { flexDirection: 'row', backgroundColor: '#212121', borderRadius: 16, paddingVertical: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 15 },
-  logoutIcon: { width: 24, height: 24, tintColor: '#FF4D4D', marginRight: 8, resizeMode: 'contain' }, // 💡 20 -> 24
-  logoutText: { color: '#FF4D4D', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
-  
+  logoutIcon: { width: 24, height: 24, tintColor: '#FF4D4D', marginRight: 8, resizeMode: 'contain' },
+  logoutText: { color: '#FF4D4D', fontSize: 18, fontWeight: 'bold' },
   deleteAccountBtn: { alignItems: 'center', paddingVertical: 10, marginBottom: 20 },
-  deleteAccountText: { color: '#666666', fontSize: 16, textDecorationLine: 'underline' }, // 💡 14 -> 16
-  
+  deleteAccountText: { color: '#666666', fontSize: 16, textDecorationLine: 'underline' },
   centerModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  centerModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' }, // 💡 너비 300 -> 320
-  centerModalText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, lineHeight: 26 }, // 💡 16 -> 18
+  centerModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
+  centerModalText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, lineHeight: 26 },
   centerBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
   centerBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
-  centerBtnYesText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  centerBtnYesText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
   centerBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
-  centerBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  centerBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
   
   // 모달 레이아웃
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  sheetTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' }, // 💡 20 -> 23
-  sheetTitleCenter: { color: '#ffffff', fontSize: 23, fontWeight: 'bold', textAlign: 'center', marginBottom: 15 }, // 💡 20 -> 23
+  sheetTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' },
+  sheetTitleCenter: { color: '#ffffff', fontSize: 23, fontWeight: 'bold', textAlign: 'center', marginBottom: 15 },
   contactContentBox: { alignItems: 'center', marginBottom: 30, width: '100%' },
-  phoneIcon: { width: 90, height: 90, resizeMode: 'contain', marginBottom: 20 }, // 💡 80 -> 90
-  contactLabel: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 8 }, // 💡 16 -> 18
-  contactNumber: { color: '#A1BE44', fontSize: 36, fontWeight: '900', marginBottom: 12 }, // 💡 32 -> 36
-  contactTime: { color: '#999999', fontSize: 16, fontWeight: '500' }, // 💡 14 -> 16
-  closeBtn: { color: '#999999', fontSize: 28, paddingHorizontal: 10 }, // 💡 24 -> 28
+  phoneIcon: { width: 90, height: 90, resizeMode: 'contain', marginBottom: 20 },
+  contactLabel: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 8 },
+  contactNumber: { color: '#A1BE44', fontSize: 36, fontWeight: '900', marginBottom: 12 },
+  contactTime: { color: '#999999', fontSize: 16, fontWeight: '500' },
+  closeBtn: { color: '#999999', fontSize: 28, paddingHorizontal: 10 },
   horizontalDivider: { height: 1, backgroundColor: '#333333', width: '100%', marginBottom: 20 },
-  
   pauseInfoBox: { backgroundColor: '#2C2C2C', borderWidth: 1, borderColor: '#555555', borderRadius: 12, padding: 18, marginBottom: 25, width: '100%' },
-  pauseInfoText: { color: '#ffffff', fontSize: 17, lineHeight: 26, fontWeight: '500' }, // 💡 15 -> 17
+  pauseInfoText: { color: '#ffffff', fontSize: 17, lineHeight: 26, fontWeight: '500' },
   modalBtnRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%' },
   modalBtnCancel: { flex: 1, backgroundColor: 'transparent', borderWidth: 1, borderColor: '#555555', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginRight: 6 },
-  modalBtnCancelText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  modalBtnCancelText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
   modalBtnSubmit: { flex: 1, backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginLeft: 6 },
-  modalBtnSubmitText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
-  
+  modalBtnSubmitText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
   profileEditContainer: { backgroundColor: '#262626', borderRadius: 16, padding: 20, marginTop: 5 },
-  profileImageEditWrapper: { alignSelf: 'center', width: 90, height: 90, borderRadius: 45, backgroundColor: '#444444', marginBottom: 25, overflow: 'hidden' }, // 💡 80 -> 90
+  profileImageEditWrapper: { alignSelf: 'center', width: 90, height: 90, borderRadius: 45, backgroundColor: '#444444', marginBottom: 25, overflow: 'hidden' },
   profileImageLarge: { width: '100%', height: '100%', resizeMode: 'cover' },
   profileImageEditOverlay: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: 'rgba(0,0,0,0.6)', paddingVertical: 4, alignItems: 'center' },
-  profileImageEditText: { color: '#ffffff', fontSize: 13, fontWeight: 'bold' }, // 💡 11 -> 13
-  
+  profileImageEditText: { color: '#ffffff', fontSize: 13, fontWeight: 'bold' },
   editFieldWrapper: { marginBottom: 20 },
   editFieldHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  editFieldTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  editFieldTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
   toggleWrapper: { flexDirection: 'row', alignItems: 'center' },
-  toggleLabel: { color: '#999999', fontSize: 14, marginRight: 6, fontWeight: '500' }, // 💡 12 -> 14
-  editInputBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#000000', borderRadius: 10, paddingHorizontal: 15, paddingVertical: 16 }, // 💡 패딩 14 -> 16
-  editInput: { flex: 1, color: '#ffffff', fontSize: 18, padding: 0 }, // 💡 16 -> 18
-  editUnit: { color: '#999999', fontSize: 18, fontWeight: 'bold', marginLeft: 10 }, // 💡 16 -> 18
-  
-  saveProfileButton: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 18, alignItems: 'center', marginTop: 15 }, // 💡 패딩 16 -> 18
-  saveProfileButtonText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
-  
+  toggleLabel: { color: '#999999', fontSize: 14, marginRight: 6, fontWeight: '500' },
+  editInputBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#000000', borderRadius: 10, paddingHorizontal: 15, paddingVertical: 16 },
+  // ─── 읽기전용 나이 필드 스타일 ───
+  editInputBoxReadOnly: { backgroundColor: '#1A1A1A', borderWidth: 1, borderColor: '#2C2C2C' },
+  editInputReadOnly: { flex: 1, color: '#999999', fontSize: 18 },
+  autoCalcHint: { color: '#555555', fontSize: 13, marginTop: 6, marginLeft: 4 },
+  editInput: { flex: 1, color: '#ffffff', fontSize: 18, padding: 0 },
+  editUnit: { color: '#999999', fontSize: 18, fontWeight: 'bold', marginLeft: 10 },
+  saveProfileButton: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 18, alignItems: 'center', marginTop: 15 },
+  saveProfileButtonText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
   genderRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  genderBtn: { flex: 1, backgroundColor: '#000000', borderWidth: 1, borderColor: '#444444', borderRadius: 10, paddingVertical: 16, alignItems: 'center', marginHorizontal: 4 }, // 💡 패딩 14 -> 16
+  genderBtn: { flex: 1, backgroundColor: '#000000', borderWidth: 1, borderColor: '#444444', borderRadius: 10, paddingVertical: 16, alignItems: 'center', marginHorizontal: 4 },
   genderBtnActive: { borderColor: '#A1BE44', backgroundColor: 'rgba(161, 190, 68, 0.1)' },
-  genderBtnText: { color: '#999999', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  genderBtnText: { color: '#999999', fontSize: 18, fontWeight: 'bold' },
   genderBtnTextActive: { color: '#A1BE44' },
 
   // ─── 커스텀 알림 모달 전용 스타일 ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, // 💡 너비 300 -> 320
-  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, // 💡 18 -> 20
-  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, // 💡 15 -> 17
+  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
+  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
+  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 },
   resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
 });
 
 export default MYScreen;

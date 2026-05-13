@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -8,7 +8,8 @@ import {
   Image, 
   Modal, 
   Animated, 
-  ActivityIndicator 
+  ActivityIndicator,
+  RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
@@ -27,6 +28,8 @@ const authHeader = async () => {
 };
 
 const ManagerCommunity = ({ navigation }: any) => {
+  const [refreshing, setRefreshing] = useState(false); // 새로고침 
+
   const isFocused = useIsFocused();
   const [loading, setLoading] = useState(true);
   const [posts, setPosts] = useState<any[]>([]);
@@ -44,9 +47,16 @@ const ManagerCommunity = ({ navigation }: any) => {
 
   useEffect(() => {
     if (isFocused) {
-      fetchPosts();
+      fetchPosts(); // 탭 이동 등 초기 접근 시에는 중앙 로딩 스피너 표시
     }
   }, [isFocused]);
+
+  // onRefresh
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchPosts(true); // 새로고침 시에는 true를 전달하여 중앙 로딩 방지
+    setRefreshing(false);
+  }, []);
 
   const sortPosts = (list: any[]) => {
     return list.sort((a, b) => {
@@ -56,13 +66,15 @@ const ManagerCommunity = ({ navigation }: any) => {
     });
   };
 
-  const fetchPosts = async () => {
+  // 💡 isRefresh 파라미터 추가
+  const fetchPosts = async (isRefresh = false) => {
     try {
+      if (!isRefresh) setLoading(true); // 새로고침이 아닐 때만 중앙 로딩 켬
       const headers = await authHeader();
-      // 💡 POSTS_API 사용
       const response = await axios.get(`${POSTS_API}?page=0&size=100&sort=id,desc`, { headers });
       
-      const raw = response.data?.data?.data?.content || response.data?.data?.content || response.data?.data || [];
+      // ✅ Depth 1단계 추가 반영 및 껍데기 제거
+      const raw = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
       const list = Array.isArray(raw) ? raw : [];
 
       const mappedList = list.map((item: any) => {
@@ -87,11 +99,13 @@ const ManagerCommunity = ({ navigation }: any) => {
       });
 
       setPosts(sortPosts(mappedList));
-    } catch (error) {
-      showResultModal('오류', '게시글 목록을 불러오지 못했습니다.', 'error');
-      console.log('ManagerCommunity Fetch Error:', error);
+    } catch (error: any) {
+      // ✅ 에러 메시지 처리 적용
+      const errorMessage = error.response?.data?.message || '게시글 목록을 불러오지 못했습니다.';
+      showResultModal('오류', errorMessage, 'error');
+      console.log('ManagerCommunity Fetch Error:', errorMessage);
     } finally {
-      setLoading(false);
+      if (!isRefresh) setLoading(false); // 새로고침이 아닐 때만 중앙 로딩 끔
     }
   };
 
@@ -107,12 +121,13 @@ const ManagerCommunity = ({ navigation }: any) => {
     if (itemToDelete !== null) {
       try {
         const headers = await authHeader();
-        // 💡 POSTS_API 사용
         await axios.delete(`${POSTS_API}/${itemToDelete}`, { headers });
         showResultModal('성공', '게시글이 삭제되었습니다.', 'success');
-        fetchPosts(); 
-      } catch (error) {
-        showResultModal('오류', '게시글 삭제에 실패했습니다.', 'error');
+        fetchPosts(true); // 💡 삭제 후 새로고침 시에도 부드럽게 갱신
+      } catch (error: any) {
+        // ✅ 에러 메시지 처리 적용
+        const errorMessage = error.response?.data?.message || '게시글 삭제에 실패했습니다.';
+        showResultModal('오류', errorMessage, 'error');
       }
     }
     setDeleteModalVisible(false); 
@@ -131,9 +146,13 @@ const ManagerCommunity = ({ navigation }: any) => {
   const openDetailModal = async (authorId: number, authorName: string) => {
     try {
       const headers = await authHeader();
+      const response = await axios.get(`${MEMBERS_API}/${authorId}/profile`, { headers });
+      
+      // ✅ Depth 1단계 추가 반영
+      const d = response.data?.data?.data; 
       // 💡 MEMBERS_API 사용
-      const { data } = await axios.get(`${MEMBERS_API}/${authorId}/profile`, { headers });
-      const d = data?.data?.data || data?.data || data; 
+      // const { data } = await axios.get(`${MEMBERS_API}/${authorId}/profile`, { headers });
+      // const d = data?.data?.data || data?.data || data; 
       
       if (!d) { 
         showResultModal('프로필 조회 불가', '정보를 불러올 수 없습니다.', 'error'); 
@@ -161,9 +180,11 @@ const ManagerCommunity = ({ navigation }: any) => {
       });
       setDetailVisible(true);
       setTimeout(() => { Animated.timing(detailSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(); }, 50);
-    } catch (error) {
-      showResultModal('프로필 조회 불가', '해당 회원의 정보를 불러올 수 없습니다.', 'error');
-      console.log('Profile Fetch Error:', error);
+    } catch (error: any) {
+      // ✅ 에러 메시지 처리 적용
+      const errorMessage = error.response?.data?.message || '해당 회원의 정보를 불러올 수 없습니다.';
+      showResultModal('프로필 조회 불가', errorMessage, 'error');
+      console.log('Profile Fetch Error:', errorMessage);
     }
   };
 
@@ -197,6 +218,14 @@ const ManagerCommunity = ({ navigation }: any) => {
   return (
     <SafeAreaView style={styles.background} edges={[]}>
       
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
+        }
+      >
+      
       <View style={styles.tabContainer}>
         {tabs.map((tab) => (
           <TouchableOpacity 
@@ -210,7 +239,6 @@ const ManagerCommunity = ({ navigation }: any) => {
         ))}
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {filteredPosts.map((post: any) => {
           const isOutdoor = post.type === '아웃도어';
           const isPast = post.isPast; 

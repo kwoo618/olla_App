@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Modal } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Modal, RefreshControl } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
 import { API_BASE_URL } from '../src/constants/Config';
 
 interface Notice {
@@ -13,6 +14,9 @@ interface Notice {
 }
 
 const NoticeScreen = ({ navigation }: any) => {
+  // 새로고침 상태 추가
+  const [refreshing, setRefreshing] = useState(false);
+
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [notices, setNotices] = useState<Notice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,17 +40,16 @@ const NoticeScreen = ({ navigation }: any) => {
         return;
       }
 
-      const response = await fetch(`${API_BASE_URL}/admin/notices`, {
-        method: 'GET',
+      // ✅ fetch 대신 axios를 사용하여 일관성 및 에러 처리 용이성 확보
+      const response = await axios.get(`${API_BASE_URL}/admin/notices`, {
         headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
       });
 
-      const result = await response.json();
-      const raw = result.data?.content ?? result.data ?? [];
+      // ✅ ApiResponse Depth 1단계 추가 (response.data.data)
+      // 페이징 객체(Page)로 올 경우를 대비해 content를 확인하고, 없으면 배열 자체를 사용합니다.
+      const raw = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
       const list: Notice[] = Array.isArray(raw) ? raw : [];
 
       // 중요 공지 우선 → 최신순
@@ -56,8 +59,10 @@ const NoticeScreen = ({ navigation }: any) => {
       });
 
       setNotices(list);
-    } catch (error) {
-      showResultModal('오류', '네트워크 연결을 확인해주세요.', 'error');
+    } catch (error: any) {
+      // ✅ 에러 메시지 처리 반영
+      const errorMessage = error.response?.data?.message || '네트워크 연결을 확인해주세요.';
+      showResultModal('오류', errorMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -65,6 +70,13 @@ const NoticeScreen = ({ navigation }: any) => {
 
   useEffect(() => {
     fetchNotices();
+  }, []);
+
+  // onRefresh 작성
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchNotices();
+    setRefreshing(false);
   }, []);
 
   const toggleExpand = (id: number) => {
@@ -94,6 +106,9 @@ const NoticeScreen = ({ navigation }: any) => {
         keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
+        }
         ListEmptyComponent={
           <Text style={styles.emptyText}>등록된 공지사항이 없습니다.</Text>
         }

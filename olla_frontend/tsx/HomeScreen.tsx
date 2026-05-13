@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import QRCode from 'react-native-qrcode-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -10,7 +10,8 @@ import {
   ScrollView,
   Image,
   Modal,
-  Animated
+  Animated,
+  RefreshControl
 } from 'react-native';
 import { API_BASE_URL } from '../src/constants/Config';
 
@@ -29,6 +30,9 @@ const HomeScreen = ({ navigation }: any) => {
 
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const slideAnim = useRef(new Animated.Value(500)).current;
+
+  // ─── 당겨서 새로고침(Pull-to-Refresh) 상태 ───
+  const [refreshing, setRefreshing] = useState(false);
 
   // ─── 커스텀 알림 모달 상태 추가 ───
   const [resultModalVisible, setResultModalVisible] = useState(false);
@@ -73,6 +77,10 @@ const HomeScreen = ({ navigation }: any) => {
 
   const [attendedDates, setAttendedDates] = useState<number[]>([]);
 
+  const today = new Date();
+  const [viewDate, setViewDate] = useState(new Date());
+  const [selectedFullDate, setSelectedFullDate] = useState<Date | null>(null);
+
   const fetchQrToken = async () => {
     try {
       const userToken = await AsyncStorage.getItem('userToken');
@@ -80,11 +88,16 @@ const HomeScreen = ({ navigation }: any) => {
       const response = await axios.get(`${API_BASE_URL}/visit/qr`, {
         headers: { Authorization: `Bearer ${userToken}` }
       });
-      if (response.data && response.data.data) {
-        setQrToken(response.data.data);
+      // ✅ Depth 1단계 추가 적용
+      const qrData = response.data?.data?.data;
+      if (qrData) {
+        setQrToken(qrData);
       }
-    } catch (error) {
-      console.error('QR 토큰 발급 실패:', error);
+    } catch (error: any) {
+      // ✅ 에러 메시지 처리 적용
+      const errorMessage = error.response?.data?.message || 'QR 코드 발급에 실패했습니다.';
+      console.error('QR 토큰 발급 실패:', errorMessage);
+      showResultModal('오류', errorMessage, 'error');
     }
   };
 
@@ -147,225 +160,248 @@ const HomeScreen = ({ navigation }: any) => {
     return '-';
   };
 
-  useEffect(() => {
-    const fetchData = async () => {
+  // ─── 메인 데이터 패치 함수 ───
+  const fetchMainData = async () => {
+    try {
+      const userToken = await AsyncStorage.getItem('userToken');
+      if (!userToken) {
+        setMembership(prev => ({ ...prev, isLoading: false }));
+        return;
+      }
+
+      const storedRole = await AsyncStorage.getItem('userRole');
+      setUserRole(storedRole);
+
+      const config = { headers: { Authorization: `Bearer ${userToken}` } };
+
+      let nickname = '';
+      let memberId: number | null = null;
+      
+      // [1] 내 정보(프로필) 로드
       try {
-        const userToken = await AsyncStorage.getItem('userToken');
-        if (!userToken) {
-          setMembership(prev => ({ ...prev, isLoading: false }));
-          return;
-        }
-
-        const storedRole = await AsyncStorage.getItem('userRole');
-        setUserRole(storedRole);
-
-        const config = { headers: { Authorization: `Bearer ${userToken}` } };
-
-        let nickname = '';
-        let memberId: number | null = null;
-        try {
-          const profileRes = await axios.get(`${API_BASE_URL}/members/me`, config);
-          const pData = profileRes.data?.data || profileRes.data;
+        const profileRes = await axios.get(`${API_BASE_URL}/members/me`, config);
+        // ✅ Depth 1단계 추가 적용
+        const pData = profileRes.data?.data?.data;
+        if (pData) {
           nickname = pData.nickname || pData.name || '';
           memberId = pData.memberId ?? pData.id ?? null;
           setMyNickname(nickname);
           setMyMemberId(memberId !== null ? Number(memberId) : null);
-        } catch (e) {
-          console.error('프로필 로드 실패');
         }
+      } catch (error: any) {
+        console.error('프로필 로드 실패:', error.response?.data?.message || error.message);
+      }
 
-        try {
-          const noticeResponse = await axios.get(`${API_BASE_URL}/admin/notices`);
-          const noticeList: any[] = noticeResponse.data?.data?.content ?? noticeResponse.data?.data ?? [];
+      // [2] 공지사항 로드
+      try {
+        const noticeResponse = await axios.get(`${API_BASE_URL}/admin/notices`);
+        // ✅ Depth 1단계 추가 적용
+        const noticeList: any[] = noticeResponse.data?.data?.data.content ?? noticeResponse.data?.data?.data ?? [];
 
-          if (noticeList.length > 0) {
-            const importantNotices = noticeList
-              .filter((n: any) => n.important === true)
-              .sort((a: any, b: any) =>
-                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-              );
-            const normalNotices = noticeList
-              .filter((n: any) => n.important !== true)
-              .sort((a: any, b: any) =>
-                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-              );
-            const target = importantNotices.length > 0 ? importantNotices[0] : normalNotices[0];
-            setNotice({
-              title: target.title,
-              content: target.content,
-              important: target.important === true,
-            });
-          } else {
-            setNotice({ title: '현재 등록된 공지가 없습니다.', content: '', important: false });
-          }
-        } catch (e) {
-          console.log('공지사항 실패');
-          setNotice({ title: '공지사항을 불러올 수 없습니다.', content: '', important: false });
+        if (noticeList.length > 0) {
+          const importantNotices = noticeList
+            .filter((n: any) => n.important === true)
+            .sort((a: any, b: any) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+          const normalNotices = noticeList
+            .filter((n: any) => n.important !== true)
+            .sort((a: any, b: any) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+          const target = importantNotices.length > 0 ? importantNotices[0] : normalNotices[0];
+          setNotice({
+            title: target.title,
+            content: target.content,
+            important: target.important === true,
+          });
+        } else {
+          setNotice({ title: '현재 등록된 공지가 없습니다.', content: '', important: false });
         }
+      } catch (error: any) {
+        console.log('공지사항 로드 실패:', error.response?.data?.message || error.message);
+        setNotice({ title: '공지사항을 불러올 수 없습니다.', content: '', important: false });
+      }
 
-        try {
-          const memResponse = await axios.get(`${API_BASE_URL}/memberships/me`, config);
-          const data = memResponse.data?.data ?? memResponse.data;
-          if (data) {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const rawType = String(data.membershipType || '');
-            const displayType = resolveMembershipType(rawType, data.startDate || '', data.endDate || '', data.remainingCount ?? null);
-            let remainingDays = 0;
-            if (data.endDate) {
-              const end = new Date(data.endDate);
-              end.setHours(0, 0, 0, 0);
-              const diff = Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-              remainingDays = diff >= 0 ? diff : 0;
-            }
-            setMembership({
-              membershipType: displayType,
-              remainingDays,
-              remainingCount: data.remainingCount ?? 0,
-              startDate: data.startDate || '',
-              endDate: data.endDate || '',
-              status: data.status === 'ACTIVE' ? '이용중' : data.status === 'HOLDING' ? '정지중' : '만료',
-              isLoading: false
-            });
-          } else {
-            setMembership(prev => ({ ...prev, isLoading: false }));
+      // [3] 회원권 로드
+      try {
+        const memResponse = await axios.get(`${API_BASE_URL}/memberships/me`, config);
+        // ✅ Depth 1단계 추가 적용
+        const data = memResponse.data?.data?.data;
+        if (data) {
+          const currentDate = new Date();
+          currentDate.setHours(0, 0, 0, 0);
+          const rawType = String(data.membershipType || '');
+          const displayType = resolveMembershipType(rawType, data.startDate || '', data.endDate || '', data.remainingCount ?? null);
+          let remainingDays = 0;
+          if (data.endDate) {
+            const end = new Date(data.endDate);
+            end.setHours(0, 0, 0, 0);
+            const diff = Math.ceil((end.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24));
+            remainingDays = diff >= 0 ? diff : 0;
           }
-        } catch (e) {
-          console.error('회원권 로드 실패', e);
+          setMembership({
+            membershipType: displayType,
+            remainingDays,
+            remainingCount: data.remainingCount ?? 0,
+            startDate: data.startDate || '',
+            endDate: data.endDate || '',
+            status: data.status === 'ACTIVE' ? '이용중' : data.status === 'HOLDING' ? '정지중' : '만료',
+            isLoading: false
+          });
+        } else {
           setMembership(prev => ({ ...prev, isLoading: false }));
         }
-
-        if (nickname || memberId !== null) {
-          let myEndRank = 0;
-          let myEndMin = 0;
-          let myEndSec = 0;
-
-          try {
-            const endRes = await axios.get(`${API_BASE_URL}/rankings/endurance/distance`, config);
-            const endList = extractList(endRes.data?.data || endRes.data);
-            const myEndRecord = endList.find((item: any) => isMyRecord(item, memberId, nickname));
-            if (myEndRecord) {
-              endList.sort((a: any, b: any) => {
-                if (a.ranking && b.ranking) return a.ranking - b.ranking;
-                return (b.oneWayCount || 0) - (a.oneWayCount || 0);
-              });
-              const myRankIndex = endList.findIndex((item: any) => isMyRecord(item, memberId, nickname));
-              myEndRank = myRankIndex !== -1 ? myRankIndex + 1 : 0;
-              const totalSec = myEndRecord.timeSeconds || 0;
-              myEndMin = Math.floor(totalSec / 60);
-              myEndSec = totalSec % 60;
-            }
-          } catch (e) {
-            console.log('지구력 기록 로드 실패', e);
-          }
-
-          let bestColor = '없음';
-          let bestType = '';
-          let bestStatus = '';
-
-          try {
-            const [bestRes, historyRes, allRes] = await Promise.all([
-              axios.get(`${API_BASE_URL}/records/beginner/best`, config).catch(() => null),
-              axios.get(`${API_BASE_URL}/records/beginner/history`, config).catch(() => null),
-              axios.get(`${API_BASE_URL}/records/beginner`, config).catch(() => null)
-            ]);
-
-            let myRealBestRecords: any[] = [];
-            [bestRes, historyRes, allRes].forEach(res => {
-              if (res) {
-                const data = res.data?.data || res.data || [];
-                if (Array.isArray(data)) myRealBestRecords = [...myRealBestRecords, ...data];
-                else if (data.list && Array.isArray(data.list)) myRealBestRecords = [...myRealBestRecords, ...data.list];
-              }
-            });
-
-            let highestScore = -1;
-            myRealBestRecords.forEach((r: any) => {
-              const krColor = reverseColorMap[r.difficulty] || r.color;
-              if (!krColor) return;
-              const colorIdx = colorOrder.indexOf(krColor);
-              if (colorIdx === -1) return;
-              const maxHoldForColor = MAX_HOLDS[krColor] || 0;
-              const attemptType = r.attemptType || r.attempt_type || r.type || r.recordType || '';
-              const isRoundTrip = String(attemptType).toUpperCase().includes('ROUND') || String(attemptType).includes('왕복') || r.isRoundTrip === true;
-              let holdCount = r.maxHoldNo ?? r.total ?? r.score ?? 0;
-              const isSuccess = r.success === true || String(r.success) === 'true' || r.isSuccess === true || String(r.isSuccess) === 'true' || r.isMaster === true || String(r.status) === '완료';
-              if (isSuccess || holdCount === 0) holdCount = maxHoldForColor;
-              const colorWeight = colorIdx * 100000;
-              const typeWeight = isRoundTrip ? 50000 : 0;
-              const score = colorWeight + typeWeight + Number(holdCount);
-              if (score > highestScore) {
-                highestScore = score;
-                bestColor = krColor;
-                bestType = isRoundTrip ? '왕복' : '편도';
-                bestStatus = isSuccess ? '완료' : '진행중';
-              }
-            });
-          } catch (e) {
-            console.log('초보벽 최고기록 로드 실패', e);
-          }
-
-          setUserStats(prev => ({
-            ...prev,
-            difficultyColor: bestColor,
-            difficultyType: bestType,
-            difficultyStatus: bestStatus,
-            enduranceRank: myEndRank,
-            enduranceMinutes: myEndMin,
-            enduranceSeconds: myEndSec
-          }));
-        }
-      } catch (error) {
-        console.error('데이터 전체 로드 중 오류:', error);
+      } catch (error: any) {
+        console.error('회원권 로드 실패:', error.response?.data?.message || error.message);
+        setMembership(prev => ({ ...prev, isLoading: false }));
       }
-    };
 
-    fetchData();
-  }, []);
+      // [4] 랭킹 및 기록 로드 (프로필이 있을 경우)
+      if (nickname || memberId !== null) {
+        let myEndRank = 0;
+        let myEndMin = 0;
+        let myEndSec = 0;
 
-  const today = new Date();
-  const [viewDate, setViewDate] = useState(new Date());
-  const [selectedFullDate, setSelectedFullDate] = useState<Date | null>(null);
+        try {
+          const endRes = await axios.get(`${API_BASE_URL}/rankings/endurance/distance`, config);
+          // ✅ Depth 1단계 추가 적용
+          const endList = extractList(endRes.data?.data?.data);
+          const myEndRecord = endList.find((item: any) => isMyRecord(item, memberId, nickname));
+          if (myEndRecord) {
+            endList.sort((a: any, b: any) => {
+              if (a.ranking && b.ranking) return a.ranking - b.ranking;
+              return (b.oneWayCount || 0) - (a.oneWayCount || 0);
+            });
+            const myRankIndex = endList.findIndex((item: any) => isMyRecord(item, memberId, nickname));
+            myEndRank = myRankIndex !== -1 ? myRankIndex + 1 : 0;
+            const totalSec = myEndRecord.timeSeconds || 0;
+            myEndMin = Math.floor(totalSec / 60);
+            myEndSec = totalSec % 60;
+          }
+        } catch (error: any) {
+          console.log('지구력 기록 로드 실패:', error.response?.data?.message || error.message);
+        }
+
+        let bestColor = '없음';
+        let bestType = '';
+        let bestStatus = '';
+
+        try {
+          const [bestRes, historyRes, allRes] = await Promise.all([
+            axios.get(`${API_BASE_URL}/records/beginner/best`, config).catch(() => null),
+            axios.get(`${API_BASE_URL}/records/beginner/history`, config).catch(() => null),
+            axios.get(`${API_BASE_URL}/records/beginner`, config).catch(() => null)
+          ]);
+          
+          let myRealBestRecords: any[] = [];
+          [bestRes, historyRes, allRes].forEach(res => {
+            if (res) {
+              // ✅ Depth 1단계 추가 적용
+              const data = res.data?.data?.data;
+              if (Array.isArray(data)) myRealBestRecords = [...myRealBestRecords, ...data];
+              else if (data?.list && Array.isArray(data.list)) myRealBestRecords = [...myRealBestRecords, ...data.list];
+            }
+          });
+
+          let highestScore = -1;
+          myRealBestRecords.forEach((r: any) => {
+            const krColor = reverseColorMap[r.difficulty] || r.color;
+            if (!krColor) return;
+            const colorIdx = colorOrder.indexOf(krColor);
+            if (colorIdx === -1) return;
+            const maxHoldForColor = MAX_HOLDS[krColor] || 0;
+            const attemptType = r.attemptType || r.attempt_type || r.type || r.recordType || '';
+            const isRoundTrip = String(attemptType).toUpperCase().includes('ROUND') || String(attemptType).includes('왕복') || r.isRoundTrip === true;
+            let holdCount = r.maxHoldNo ?? r.total ?? r.score ?? 0;
+            const isSuccess = r.success === true || String(r.success) === 'true' || r.isSuccess === true || String(r.isSuccess) === 'true' || r.isMaster === true || String(r.status) === '완료';
+            if (isSuccess || holdCount === 0) holdCount = maxHoldForColor;
+            const colorWeight = colorIdx * 100000;
+            const typeWeight = isRoundTrip ? 50000 : 0;
+            const score = colorWeight + typeWeight + Number(holdCount);
+            if (score > highestScore) {
+              highestScore = score;
+              bestColor = krColor;
+              bestType = isRoundTrip ? '왕복' : '편도';
+              bestStatus = isSuccess ? '완료' : '진행중';
+            }
+          });
+        } catch (error: any) {
+          console.log('초보벽 최고기록 로드 실패:', error.response?.data?.message || error.message);
+        }
+
+        setUserStats(prev => ({
+          ...prev,
+          difficultyColor: bestColor,
+          difficultyType: bestType,
+          difficultyStatus: bestStatus,
+          enduranceRank: myEndRank,
+          enduranceMinutes: myEndMin,
+          enduranceSeconds: myEndSec
+        }));
+      }
+    } catch (error) {
+      console.error('데이터 전체 로드 중 오류:', error);
+    }
+  };
+
+  // ─── 출석 데이터 패치 함수 ───
+  const fetchVisitHistory = async () => {
+    try {
+      const userToken = await AsyncStorage.getItem('userToken');
+      if (!userToken) return;
+      const year = viewDate.getFullYear();
+      const month = String(viewDate.getMonth() + 1).padStart(2, '0');
+      const yearMonth = `${year}-${month}`;
+      
+      const response = await axios.get(
+        `${API_BASE_URL}/visit/my-history?yearMonth=${yearMonth}`,
+        { headers: { Authorization: `Bearer ${userToken}` } }
+      );
+      
+      // Depth 1단계 추가 적용
+      let rawData = response.data?.data?.data;
+      if (rawData && !Array.isArray(rawData) && rawData.data) rawData = rawData.data;
+      
+      let daysAttended: number[] = [];
+      if (Array.isArray(rawData)) {
+        daysAttended = rawData
+          .map((item: any) => {
+            if (typeof item === 'string') {
+              const parts = item.split('-');
+              if (parts.length >= 3) return parseInt(parts[2], 10);
+            } else if (Array.isArray(item) && item.length >= 3) {
+              return parseInt(item[2], 10);
+            }
+            return -1;
+          })
+          .filter((day: number) => day > 0 && !isNaN(day));
+      }
+      setAttendedDates(daysAttended);
+      
+      if (year === today.getFullYear() && viewDate.getMonth() === today.getMonth()) {
+        setUserStats(prev => ({ ...prev, monthlyVisits: daysAttended.length }));
+      }
+    } catch (error: any) {
+      console.error('출석 내역 로드 실패:', error.response?.data?.message || error.message);
+      setAttendedDates([]);
+    }
+  };
 
   useEffect(() => {
-    const fetchVisitHistory = async () => {
-      try {
-        const userToken = await AsyncStorage.getItem('userToken');
-        if (!userToken) return;
-        const year = viewDate.getFullYear();
-        const month = String(viewDate.getMonth() + 1).padStart(2, '0');
-        const yearMonth = `${year}-${month}`;
-        const response = await axios.get(
-          `${API_BASE_URL}/visit/my-history?yearMonth=${yearMonth}`,
-          { headers: { Authorization: `Bearer ${userToken}` } }
-        );
-        let rawData = response.data?.data;
-        if (rawData && !Array.isArray(rawData) && rawData.data) rawData = rawData.data;
-        let daysAttended: number[] = [];
-        if (Array.isArray(rawData)) {
-          daysAttended = rawData
-            .map((item: any) => {
-              if (typeof item === 'string') {
-                const parts = item.split('-');
-                if (parts.length >= 3) return parseInt(parts[2], 10);
-              } else if (Array.isArray(item) && item.length >= 3) {
-                return parseInt(item[2], 10);
-              }
-              return -1;
-            })
-            .filter((day: number) => day > 0 && !isNaN(day));
-        }
-        setAttendedDates(daysAttended);
-        if (year === today.getFullYear() && viewDate.getMonth() === today.getMonth()) {
-          setUserStats(prev => ({ ...prev, monthlyVisits: daysAttended.length }));
-        }
-      } catch (error) {
-        console.error('출석 내역 로드 실패:', error);
-        setAttendedDates([]);
-      }
-    };
+    fetchMainData();
+  }, []);
+
+  useEffect(() => {
     fetchVisitHistory();
   }, [viewDate.getFullYear(), viewDate.getMonth()]);
+
+  // ─── 새로고침(Pull to Refresh) 핸들러 ───
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([fetchMainData(), fetchVisitHistory()]);
+    setRefreshing(false);
+  }, [viewDate]);
 
   const changeMonth = (offset: number) => {
     const newDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + offset, 1);
@@ -425,6 +461,14 @@ const HomeScreen = ({ navigation }: any) => {
         ref={scrollViewRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#A1BE44"
+            colors={['#A1BE44']}
+          />
+        }
       >
         <TouchableOpacity style={styles.noticeCard} onPress={() => handlePopupPress('공지사항')}>
           <View style={styles.noticeHeaderRow}>

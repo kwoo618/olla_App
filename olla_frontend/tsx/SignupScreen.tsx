@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Modal,
+  ActivityIndicator,
   Keyboard
 } from 'react-native';
 import { API_BASE_URL } from '../src/constants/Config';
@@ -51,6 +52,9 @@ const SignupScreen = ({ navigation }: any) => {
   const [birthError, setBirthError] = useState('');
 
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  
+  // 다음 단계 진행 로딩 상태
+  const [isCheckingNext, setIsCheckingNext] = useState(false);
 
   const passwordRef = useRef<TextInput>(null);
   const confirmRef = useRef<TextInput>(null);
@@ -60,7 +64,7 @@ const SignupScreen = ({ navigation }: any) => {
   const emailCodeRef = useRef<TextInput>(null);
   const phoneRef = useRef<TextInput>(null);
 
-  // ─── 커스텀 알림 모달 상태 추가 ───
+  // ─── 커스텀 알림 모달 상태 ───
   const [resultModalVisible, setResultModalVisible] = useState(false);
   const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info', onConfirm: () => {} });
 
@@ -152,7 +156,7 @@ const SignupScreen = ({ navigation }: any) => {
       formatted = `${cleaned.slice(0, 3)}-${cleaned.slice(3, 7)}-${cleaned.slice(7, 11)}`;
     }
     setPhone(formatted);
-    if (cleaned.length < 10) {
+    if (cleaned.length > 0 && cleaned.length < 10) {
       setPhoneError('전화번호를 정확히 입력해주세요.');
     } else {
       setPhoneError('');
@@ -162,11 +166,23 @@ const SignupScreen = ({ navigation }: any) => {
   // ─── API 호출 ───────────────────────────────────────────
 
   const checkDuplicateId = async () => {
-    if (!id) { setIdError('아이디를 먼저 입력해주세요.'); setIdSuccess(''); return; }
-    if (id.length < 4 || id.length > 15) { setIdError('아이디는 4~15자로 입력해주세요.'); setIdSuccess(''); return; }
+    setFocusedField('id'); 
+
+    if (!id) { 
+      setIdError('아이디를 먼저 입력해주세요.'); 
+      setIdSuccess(''); 
+      return; 
+    }
+    if (idError) {
+      showResultModal('알림', '아이디 형식을 확인해주세요.', 'info');
+      return;
+    }
+
     try {
       const response = await axios.get(`${API_BASE_URL}/auth/check-id`, { params: { loginId: id } });
-      const isDuplicate = response.data?.data?.isDuplicate ?? response.data?.isDuplicate;
+      
+      const isDuplicate = response.data?.data?.data?.isDuplicate;
+
       if (isDuplicate) {
         setIdError('이미 사용 중인 아이디입니다.');
         setIdSuccess('');
@@ -176,33 +192,49 @@ const SignupScreen = ({ navigation }: any) => {
         setIdSuccess('사용 가능한 아이디입니다.');
         setIsIdChecked(true);
       }
-    } catch {
-      showResultModal('오류', '중복 확인 중 서버 오류가 발생했습니다.', 'error');
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || '중복 확인 중 서버 오류가 발생했습니다.';
+      
+      if (error.response?.status === 409 || error.response?.status === 400) {
+        setIdError(errorMessage);
+        setIdSuccess('');
+        setIsIdChecked(false);
+      } else {
+        showResultModal('오류', errorMessage, 'error');
+      }
     }
   };
 
   const sendEmailVerification = async () => {
+    setFocusedField('email');
+
     if (!email || emailError) {
       showResultModal('알림', '이메일을 올바르게 입력해주세요.', 'info');
       return;
     }
+
     setIsSendingEmail(true);
+
     try {
+      // 발송 요청
       await axios.post(`${API_BASE_URL}/auth/email/request`, null, { params: { email } });
       setIsEmailSent(true);
       setEmailSuccess('인증코드가 발송되었습니다.');
       setEmailCodeError('');
       setEmailCodeSuccess('');
       setEmailCode('');
-      setTimeout(() => emailCodeRef.current?.focus(), 300);
-    } catch {
-      showResultModal('오류', '이메일 발송 중 서버 오류가 발생했습니다.', 'error');
+      setTimeout(() => setFocusedField('emailCode'), 300);
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || '이메일 발송 중 서버 오류가 발생했습니다.';
+      showResultModal('오류', errorMessage, 'error');
     } finally {
       setIsSendingEmail(false);
     }
   };
 
   const verifyEmailCode = async () => {
+    setFocusedField('emailCode');
+
     if (!emailCode) {
       setEmailCodeError('인증코드를 입력해주세요.');
       return;
@@ -210,8 +242,9 @@ const SignupScreen = ({ navigation }: any) => {
     setIsVerifyingEmail(true);
     try {
       const response = await axios.post(`${API_BASE_URL}/auth/email/verify`, null, { params: { email, code: emailCode } });
-      const status = response.data?.status;
-      if (status === 0 || response.status === 200) {
+      
+      // ApiResponse 구조 적용 (status: 200 이면 성공)
+      if (response.data?.status === 200) {
         setEmailCodeError('');
         setEmailCodeSuccess('이메일 인증이 완료되었습니다.');
         setIsEmailVerified(true);
@@ -220,53 +253,66 @@ const SignupScreen = ({ navigation }: any) => {
         setIsEmailVerified(false);
       }
     } catch (error: any) {
-      const msg = error.response?.data?.message || '인증코드가 올바르지 않습니다.';
-      setEmailCodeError(msg);
+      // ✅ 3. 예외 처리 반영: 백엔드 메시지 노출
+      setEmailCodeError(error.response?.data?.message || '인증코드가 올바르지 않습니다.');
       setIsEmailVerified(false);
     } finally {
       setIsVerifyingEmail(false);
     }
   };
 
-  // ─── 다음으로 ────────────────────────────────────────────
+  // ─── 다음으로 (중복 최종 검증 로직) ─────────────────────────
 
-  const handleNextStep = () => {
-    if (!isIdChecked) {
-      showResultModal('알림', '아이디 중복 확인을 해주세요.', 'info');
-      return;
+  const handleEmailDuplicate = (message: string = '이미 가입된 이메일입니다.') => {
+    setEmailError(message);
+    setIsEmailVerified(false);
+    setIsEmailSent(false);
+    setEmailCode('');
+    setEmailCodeSuccess('');
+    setEmailSuccess('');
+    showResultModal('가입 불가', `${message}\n다른 이메일로 다시 입력 후 인증해주세요.`, 'error');
+  };
+
+  const handleNextStep = async () => {
+    if (isCheckingNext) return;
+
+    if (!isIdChecked) { showResultModal('알림', '아이디 중복 확인을 해주세요.', 'info'); return; }
+    if (!password || passwordError) { showResultModal('알림', '비밀번호를 올바르게 입력해주세요.', 'info'); return; }
+    if (password !== passwordConfirm || passwordConfirmError) { showResultModal('알림', '비밀번호가 일치하지 않습니다.', 'info'); return; }
+    if (!name.trim()) { showResultModal('알림', '이름을 입력해주세요.', 'info'); return; }
+    if (!gender) { showResultModal('알림', '성별을 선택해주세요.', 'info'); return; }
+    if (birthError || birth.length !== 10) { showResultModal('알림', '올바른 생년월일을 입력해주세요. (예: 1999-01-01)', 'info'); return; }
+    if (!phone || phoneError) { showResultModal('알림', '전화번호를 올바르게 입력해주세요.', 'info'); return; }
+    if (!email || emailError) { showResultModal('알림', '이메일을 올바르게 입력해주세요.', 'info'); return; }
+    if (!isEmailVerified) { showResultModal('알림', '이메일 인증을 완료해주세요.', 'info'); return; }
+
+    setIsCheckingNext(true);
+
+    try {
+      const phoneRes = await axios.get(`${API_BASE_URL}/auth/check-phone`, { params: { phone } });
+      
+      // ✅ 1. Depth 1단계 추가 반영
+      const isPhoneDup = phoneRes.data?.data?.data?.isDuplicate;
+
+      if (isPhoneDup) {
+        setPhoneError('이미 가입된 전화번호입니다.');
+        showResultModal('가입 불가', '이미 가입된 전화번호입니다.\n번호를 다시 확인해주세요.', 'error');
+        setIsCheckingNext(false);
+        return;
+      }
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.data?.message || '전화번호 검증 중 통신 오류가 발생했습니다.';
+      if (error.response?.status === 409 || error.response?.status === 400) {
+        setPhoneError(errorMessage);
+        showResultModal('가입 불가', errorMessage, 'error');
+      } else {
+        showResultModal('오류', errorMessage, 'error');
+      }
+      setIsCheckingNext(false);
+      return; 
     }
-    if (!password || passwordError) {
-      showResultModal('알림', '비밀번호를 올바르게 입력해주세요.', 'info');
-      return;
-    }
-    if (password !== passwordConfirm || passwordConfirmError) {
-      showResultModal('알림', '비밀번호가 일치하지 않습니다.', 'info');
-      return;
-    }
-    if (!name.trim()) {
-      showResultModal('알림', '이름을 입력해주세요.', 'info');
-      return;
-    }
-    if (!gender) {
-      showResultModal('알림', '성별을 선택해주세요.', 'info');
-      return;
-    }
-    if (birthError || birth.length !== 10) {
-      showResultModal('알림', '올바른 생년월일을 입력해주세요. (예: 1999-01-01)', 'info');
-      return;
-    }
-    if (!phone || phoneError) {
-      showResultModal('알림', '전화번호를 올바르게 입력해주세요.', 'info');
-      return;
-    }
-    if (!email || emailError) {
-      showResultModal('알림', '이메일을 올바르게 입력해주세요.', 'info');
-      return;
-    }
-    if (!isEmailVerified) {
-      showResultModal('알림', '이메일 인증을 완료해주세요.', 'info');
-      return;
-    }
+
+    setIsCheckingNext(false);
 
     navigation.navigate('PersonalInfo', {
       accountData: {
@@ -289,7 +335,6 @@ const SignupScreen = ({ navigation }: any) => {
       style={{ flex: 1, backgroundColor: '#1A1A1A' }} 
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      {/* 💡 ScrollView를 감싸고 있던 TouchableOpacity 삭제함 (스크롤 충돌 방지) */}
       <ScrollView 
         contentContainerStyle={styles.background} 
         keyboardShouldPersistTaps="handled" // 빈 공간 터치시 키보드 자동 해제
@@ -302,13 +347,12 @@ const SignupScreen = ({ navigation }: any) => {
           <Text style={styles.middleText}>아이디</Text>
           <View style={[
             styles.inputRow,
-            focusedField === 'id' && styles.focusedInput,
+            focusedField === 'id' && styles.focusedInput, 
             idError !== '' && styles.inputRowError,
-            isIdChecked && focusedField === 'id' && styles.inputRowSuccess,
           ]}>
             <TextInput
               style={styles.inputFlex}
-              placeholder="4~15자로 입력하세요"
+              placeholder="영문+숫자 4~15자"
               placeholderTextColor="#ffffff80"
               value={id}
               autoCapitalize="none"
@@ -319,13 +363,20 @@ const SignupScreen = ({ navigation }: any) => {
               onBlur={() => setFocusedField(null)}
               onChangeText={(text) => {
                 setId(text);
-                if (text.length > 0 && (text.length < 4 || text.length > 15)) {
+                setIdSuccess('');
+                setIsIdChecked(false);
+
+                const idRegex = /^(?=.*[a-zA-Z])(?=.*[0-9])[a-zA-Z0-9]+$/;
+
+                if (text.length === 0) {
+                  setIdError('');
+                } else if (text.length < 4 || text.length > 15) {
                   setIdError('아이디는 4~15자로 입력해주세요.');
+                } else if (!idRegex.test(text)) {
+                  setIdError('영문+숫자 조합으로 입력해주세요.');
                 } else {
                   setIdError('');
                 }
-                setIdSuccess('');
-                setIsIdChecked(false);
               }}
             />
             <TouchableOpacity style={styles.checkButton} onPress={checkDuplicateId}>
@@ -333,9 +384,7 @@ const SignupScreen = ({ navigation }: any) => {
             </TouchableOpacity>
           </View>
           {idError !== '' && <Text style={styles.errorText}>{idError}</Text>}
-          {idSuccess !== '' && focusedField === 'id' && (
-            <Text style={styles.successText}>{idSuccess}</Text>
-          )}
+          {idSuccess !== '' && focusedField === 'id' && <Text style={styles.successText}>{idSuccess}</Text>}
 
           {/* 비밀번호 */}
           <Text style={styles.middleText}>비밀번호</Text>
@@ -449,7 +498,6 @@ const SignupScreen = ({ navigation }: any) => {
             styles.inputRow,
             focusedField === 'email' && styles.focusedInput,
             emailError !== '' && styles.inputRowError,
-            isEmailVerified && focusedField === 'email' && styles.inputRowSuccess,
           ]}>
             <TextInput
               ref={emailRef}
@@ -477,12 +525,11 @@ const SignupScreen = ({ navigation }: any) => {
             </TouchableOpacity>
           </View>
           {emailError !== '' && <Text style={styles.errorText}>{emailError}</Text>}
-          {emailSuccess !== '' && !isEmailVerified && <Text style={styles.successText}>{emailSuccess}</Text>}
-          {isEmailVerified && focusedField === 'email' && (
-            <Text style={styles.successText}>✓ 이메일 인증 완료</Text>
-          )}
+          {emailSuccess !== '' && !isEmailVerified && focusedField === 'email' && <Text style={styles.successText}>{emailSuccess}</Text>}
+          
+          {isEmailVerified && focusedField === 'email' && <Text style={styles.successText}>✓ 이메일 인증 완료</Text>}
 
-          {/* 이메일 인증코드 입력 (발송 후 표시) */}
+          {/* 이메일 인증코드 입력 */}
           {isEmailSent && !isEmailVerified && (
             <>
               <Text style={styles.middleText}>인증코드</Text>
@@ -490,7 +537,6 @@ const SignupScreen = ({ navigation }: any) => {
                 styles.inputRow,
                 focusedField === 'emailCode' && styles.focusedInput,
                 emailCodeError !== '' && styles.inputRowError,
-                emailCodeSuccess !== '' && styles.inputRowSuccess,
               ]}>
                 <TextInput
                   ref={emailCodeRef}
@@ -519,20 +565,25 @@ const SignupScreen = ({ navigation }: any) => {
                 </TouchableOpacity>
               </View>
               {emailCodeError !== '' && <Text style={styles.errorText}>{emailCodeError}</Text>}
-              {emailCodeSuccess !== '' && <Text style={styles.successText}>{emailCodeSuccess}</Text>}
+              {emailCodeSuccess !== '' && focusedField === 'emailCode' && <Text style={styles.successText}>{emailCodeSuccess}</Text>}
             </>
           )}
 
           <TouchableOpacity
             onPress={handleNextStep}
-            style={[styles.button, (!isIdChecked || !isEmailVerified) && styles.buttonDisabled]}
+            disabled={isCheckingNext}
+            style={[styles.button, (!isIdChecked || !isEmailVerified || isCheckingNext) && styles.buttonDisabled]}
           >
-            <Text style={styles.buttonText}>다음으로</Text>
+            {isCheckingNext ? (
+              <ActivityIndicator color="#000000" size="small" />
+            ) : (
+              <Text style={styles.buttonText}>다음으로</Text>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
 
-      {/* ─── 커스텀 알림 결과 모달 ─── */}
+      {/* 커스텀 알림 결과 모달 */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -577,7 +628,6 @@ const styles = StyleSheet.create({
   focusedInput: { borderColor: '#A1BE44' },
   inputError: { borderColor: '#ff4d4d' },
   inputRowError: { borderColor: '#ff4d4d' },
-  inputRowSuccess: { borderColor: '#A1BE44' },
 
   genderRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
   genderBtn: { flex: 1, backgroundColor: '#2A2A2A', borderWidth: 1, borderColor: '#444444', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginHorizontal: 4 }, 
@@ -589,7 +639,6 @@ const styles = StyleSheet.create({
   buttonDisabled: { backgroundColor: '#333333' },
   buttonText: { color: '#000000', fontSize: 20, fontWeight: 'bold' }, 
 
-  // ─── 커스텀 알림 모달 전용 스타일 ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, 
   resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, 

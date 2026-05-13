@@ -22,7 +22,7 @@ public class PostParticipantService {
 
     @Transactional
     public void joinPost(Long postId, String loginId) {
-        Post post = postRepository.findById(postId)
+        Post post = postRepository.findByIdWithPessimisticLock(postId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 게시글입니다."));
         Member member = memberRepository.findByLoginId(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
@@ -45,11 +45,20 @@ public class PostParticipantService {
         // 인원 추가 (엔티티 내부에 구현된 비즈니스 로직 호출, 초과 시 여기서 에러 발생)
         post.addParticipant();
 
-        // 중간 테이블에 참여 내역 저장
-        participantRepository.save(new PostParticipant(post, member));
+        PostParticipant participant = PostParticipant.builder()
+                .post(post)
+                .member(member)
+                .build();
+        participantRepository.save(participant);
 
         // [알림] 모임 방장에게 참여 알림 발송 (isJoin = true)
-        notificationService.sendParticipantNotification(post.getMember(), member, post, true);
+        notificationService.sendParticipantNotification(
+                post.getMember().getId(),
+                member.getName(),
+                post.getTitle(),
+                post.getId(),
+                true // 취소일 때는 false
+        );
     }
 
     @Transactional
@@ -75,6 +84,12 @@ public class PostParticipantService {
         participantRepository.delete(participant);
 
         // [알림] 모임 방장에게 취소 알림 발송 (isJoin = false)
-        notificationService.sendParticipantNotification(post.getMember(), member, post, false);
+        notificationService.sendParticipantNotification(
+                post.getMember().getId(),
+                member.getName(),
+                post.getTitle(),
+                post.getId(),
+                true // 취소일 때는 false
+        );
     }
 }
