@@ -215,33 +215,6 @@ const SignupScreen = ({ navigation }: any) => {
 
     setIsSendingEmail(true);
 
-    /* try {
-      const emailRes = await axios.get(`${API_BASE_URL}/auth/check-email`, { params: { email } });
-      
-      
-      const isEmailDup = emailRes.data?.data?.data?.isDuplicate;
-
-      if (isEmailDup) {
-        setEmailError('이미 가입된 이메일입니다.');
-        showResultModal('가입 불가', '이미 가입된 이메일입니다.\n다른 이메일로 시도해주세요.', 'error');
-        setIsSendingEmail(false);
-        return;
-      }
-    } catch (error: any) {
-      // ✅ 3. 예외 처리 반영
-      const errorMessage = error.response?.data?.message || '이메일 확인 중 통신 오류가 발생했습니다.';
-      
-      if (error.response?.status === 409 || error.response?.status === 400) {
-        setEmailError(errorMessage);
-        showResultModal('가입 불가', errorMessage, 'error');
-      } else {
-        showResultModal('오류', errorMessage, 'error');
-      }
-      setIsSendingEmail(false);
-      return;
-    }
-      */
-
     try {
       // 발송 요청
       await axios.post(`${API_BASE_URL}/auth/email/request`, null, { params: { email } });
@@ -339,29 +312,6 @@ const SignupScreen = ({ navigation }: any) => {
       return; 
     }
 
-    /* try {
-      const emailRes = await axios.get(`${API_BASE_URL}/auth/check-email`, { params: { email } });
-      
-      // ✅ 1. Depth 1단계 추가 반영
-      const isEmailDup = emailRes.data?.data?.data?.isDuplicate;
-
-      if (isEmailDup) {
-        handleEmailDuplicate('이미 가입된 이메일입니다.');
-        setIsCheckingNext(false);
-        return; 
-      }
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.message || '이메일 검증 중 통신 오류가 발생했습니다.';
-      if (error.response?.status === 409 || error.response?.status === 400) {
-        handleEmailDuplicate(errorMessage);
-      } else {
-        showResultModal('오류', errorMessage, 'error');
-      }
-      setIsCheckingNext(false);
-      return; 
-    }
-      */
-
     setIsCheckingNext(false);
 
     navigation.navigate('PersonalInfo', {
@@ -385,7 +335,6 @@ const SignupScreen = ({ navigation }: any) => {
       style={{ flex: 1, backgroundColor: '#1A1A1A' }} 
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      {/* 💡 ScrollView를 감싸고 있던 TouchableOpacity 삭제함 (스크롤 충돌 방지) */}
       <ScrollView 
         contentContainerStyle={styles.background} 
         keyboardShouldPersistTaps="handled" // 빈 공간 터치시 키보드 자동 해제

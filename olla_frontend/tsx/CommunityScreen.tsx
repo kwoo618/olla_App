@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, TextInput, RefreshControl} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, TextInput, RefreshControl } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
@@ -21,13 +21,22 @@ const CommunityScreen = ({ route, navigation }: any) => {
   const isFocused = useIsFocused();
   const currentFilter = route?.params?.filter || 'ALL';
 
-  // ─── 커스텀 알림 모달 상태 추가 ───
+  // ─── 공통 알림 모달 상태 ───
   const [resultModalVisible, setResultModalVisible] = useState(false);
   const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info' });
+
+  // ─── 작성 창 전용 내장 알림창 상태 (iOS 모달 중첩 버그 방지) ───
+  const [createAlertVisible, setCreateAlertVisible] = useState(false);
+  const [createAlertMessage, setCreateAlertMessage] = useState('');
 
   const showResultModal = (title: string, message: string, type: 'info' | 'success' | 'error' = 'info') => {
     setResultModalConfig({ title, message, type });
     setResultModalVisible(true);
+  };
+
+  const showCreateAlert = (msg: string) => {
+    setCreateAlertMessage(msg);
+    setCreateAlertVisible(true);
   };
 
   const [posts, setPosts] = useState<any[]>([]);
@@ -38,6 +47,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
   const [isSearching, setIsSearching] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
+  const [closeTarget, setCloseTarget] = useState<number | null>(null);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [isCreateVisible, setCreateVisible] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -78,7 +88,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
   };
 
   const sortPosts = (list: any[]) => {
-    return list.sort((a, b) => {
+    return [...list].sort((a, b) => {
       if (a.isPast && !b.isPast) return 1;
       if (!a.isPast && b.isPast) return -1;
       return b.id - a.id;
@@ -99,7 +109,16 @@ const CommunityScreen = ({ route, navigation }: any) => {
       const url = `${urlMap[filterToUse] || POSTS}?page=0&size=100`;
       
       const { data } = await axios.get(url, { headers });
-      let list = data?.data?.data?.content ?? data?.data?.data ?? [];
+      let list = [];
+      if (data?.data?.content) list = data.data.content;
+      else if (data?.data?.data?.content) list = data.data.data.content;
+      else if (Array.isArray(data?.data)) list = data.data;
+      else if (Array.isArray(data?.data?.data)) list = data.data.data;
+
+      // 🔥 백엔드 팩트 체크를 위한 디버깅 로그 (콘솔창 확인 필수!) 🔥
+      if (list.length > 0) {
+        console.log("📌 [디버그] 백엔드에서 넘겨준 0번째 게시글 실제 JSON:\n", JSON.stringify(list[0], null, 2));
+      }
 
       if (filterToUse === 'MY_APPLIED') {
         list = list.filter((item: any) => {
@@ -120,10 +139,23 @@ const CommunityScreen = ({ route, navigation }: any) => {
 
   const mapPosts = (list: any[], uName: string, uNick: string, uId: number | null) =>
     list.map(item => {
-      const md = new Date(item.meetDateTime), cd = new Date(item.createdAt);
+      const md = new Date(item.meetDateTime);
+      const cd = new Date(item.createdAt);
       const author = item.writerName || '알 수 없음';
       const isMine = checkIsMine(item.writerId, author, uId, uName, uNick);
-      const isPast = md.getTime() < new Date().getTime();
+      
+      // ✅ 백엔드 픽스 스펙 완벽 반영 (isClosed, closed 모두 추적)
+      const isClosedFlag = 
+        item.isClosed === true || 
+        item.isClosed === 'true' || 
+        item.closed === true || 
+        item.closed === 'true' || 
+        item.is_closed === 1 || 
+        item.is_closed === true ||
+        item.status === 'CLOSED';
+        
+      const isPastDate = !isNaN(md.getTime()) && md.getTime() < new Date().getTime();
+      const isPast = isClosedFlag || isPastDate;
 
       return {
         id: item.id, writerId: item.writerId,
@@ -134,8 +166,9 @@ const CommunityScreen = ({ route, navigation }: any) => {
         rawMeetDateTime: item.meetDateTime,
         people: `${item.memberCount||0}/${item.maxMember}명`, maxMember: item.maxMember,
         postDate: isNaN(cd.getTime()) ? item.createdAt : `${cd.getFullYear()}.${p(cd.getMonth()+1)}.${p(cd.getDate())}`,
-        isJoined: item.applied === true, viewCount: item.viewCount||0,
-        likeCount: item.likeCount||0, isLiked: item.liked === true,
+        isJoined: item.applied === true || item.isApplied === true, 
+        viewCount: item.viewCount||0,
+        likeCount: item.likeCount||0, isLiked: item.liked === true || item.isLiked === true,
         differentGym: item.differentGym, gymPlace: item.gymPlace,
       };
     });
@@ -149,14 +182,14 @@ const CommunityScreen = ({ route, navigation }: any) => {
       let backendRes: any[] = [];
       try {
         const { data } = await axios.get(`${POSTS}/search?keyword=${encodeURIComponent(searchKeyword)}&page=0&size=100`, { headers });
-        const resList = data?.data?.data?.content ?? data?.data?.data ?? [];
+        const resList = data?.data?.data?.content ?? data?.data?.content ?? [];
         backendRes = Array.isArray(resList) ? resList : [];
       } catch (e: any) {
         console.log('백엔드 검색 오류:', e.response?.data?.message || e.message);
       }
       
       const { data: allData } = await axios.get(`${POSTS}?page=0&size=100`, { headers });
-      const rawAll = allData?.data?.content ?? allData?.data ?? [];
+      const rawAll = allData?.data?.content ?? allData?.data?.data?.content ?? [];
       const all: any[] = Array.isArray(rawAll) ? rawAll : [];
       const filtered = all.filter(i => [i.title,i.content,i.writerName,i.gymPlace].some(v => (v||'').toLowerCase().includes(kw)));
       
@@ -185,11 +218,9 @@ const CommunityScreen = ({ route, navigation }: any) => {
       return { ...post, isJoined: joining, people: `${joining?Math.min(cur+1,max):Math.max(cur-1,1)}/${max}명` };
     }));
 
-  // ✅ 추가됨: 좋아요 누르거나 취소할 때 모달 즉각 표시
   const toggleLike = async (id: number, liked: boolean) => {
     updatePost(id, { isLiked: !liked, likeCount: (post: any) => liked ? Math.max(post.likeCount-1,0) : post.likeCount+1 });
     
-    // UI상 즉시 표시하기 위해 모달을 바로 띄움
     if (liked) {
       showResultModal('좋아요 취소', '좋아요가 취소되었습니다.', 'info');
     } else {
@@ -200,7 +231,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
       const headers = await authHeader();
       await axios.post(`${POSTS}/${id}/like`, {}, { headers });
     } catch (e: any) {
-      // 실패하면 원래대로 복구
       updatePost(id, { isLiked: liked, likeCount: (post: any) => liked ? post.likeCount+1 : post.likeCount-1 });
       const errorMessage = e.response?.data?.message || '좋아요 요청을 처리할 수 없습니다.';
       showResultModal('오류', errorMessage, 'error');
@@ -208,6 +238,20 @@ const CommunityScreen = ({ route, navigation }: any) => {
   };
 
   const toggleJoin = async (id: number, joined: boolean) => {
+    const post = posts.find(p => p.id === id);
+    if (!post) return;
+
+    if (post.isPast) {
+      showResultModal('참여 불가', '이미 마감된 모집글입니다.', 'info');
+      return;
+    }
+
+    const [cur, max] = post.people.replace('명','').split('/').map(Number);
+    if (!joined && cur >= max) {
+      showResultModal('참여 불가', '참여 인원이 마감되었습니다.', 'info');
+      return;
+    }
+
     updatePeople(id, !joined);
     try {
       const headers = await authHeader();
@@ -231,17 +275,16 @@ const CommunityScreen = ({ route, navigation }: any) => {
     } catch {}
   };
 
-  // ✅ 수정됨: 삭제 시 iOS 모달 겹침 방지 (500ms)
   const executeDelete = async () => {
-    if (deleteTarget === null) return;
+    const targetId = deleteTarget;
+    if (targetId === null) return;
     try {
       const headers = await authHeader();
-      await axios.delete(`${POSTS}/${deleteTarget}`, { headers });
+      await axios.delete(`${POSTS}/${targetId}`, { headers });
       
-      setDeleteTarget(null); // 질문창 닫기
-      initData(currentFilter); // 데이터 갱신
+      setPosts(prev => prev.filter(post => post.id !== targetId));
+      setDeleteTarget(null);
       
-      // 질문창이 닫히는 시간을 충분히(500ms) 주고 성공 팝업 띄움
       setTimeout(() => {
         showResultModal('성공', '게시글이 삭제되었습니다.', 'success');
       }, 500);
@@ -251,6 +294,30 @@ const CommunityScreen = ({ route, navigation }: any) => {
       setTimeout(() => {
         const errorMessage = e.response?.data?.message || '삭제할 수 없습니다.';
         showResultModal('삭제 실패', errorMessage, 'error');
+      }, 500);
+    }
+  };
+
+  const executeClose = async () => {
+    const targetId = closeTarget;
+    if (targetId === null) return;
+    try {
+      const headers = await authHeader();
+      await axios.patch(`${POSTS}/${targetId}/close`, {}, { headers });
+      
+      // ✅ 로컬에서 즉시 마감 상태로 덮어씌움 (새로고침 전에 먼저 시각적 반응 제공)
+      setPosts(prev => sortPosts([...prev].map(post => post.id === targetId ? { ...post, isPast: true } : post)));
+      setCloseTarget(null);
+      
+      setTimeout(() => {
+        showResultModal('성공', '모집이 마감되었습니다.', 'success');
+      }, 500);
+
+    } catch (e: any) {
+      setCloseTarget(null);
+      setTimeout(() => {
+        const errorMessage = e.response?.data?.message || '마감 처리할 수 없습니다.';
+        showResultModal('마감 실패', errorMessage, 'error');
       }, 500);
     }
   };
@@ -340,37 +407,36 @@ const CommunityScreen = ({ route, navigation }: any) => {
   const closeCreateModal = () =>
     Animated.timing(createAnim,{toValue:800,duration:250,useNativeDriver:true}).start(() => setCreateVisible(false));
 
-  // ✅ 수정됨: 작성 완료/에러 처리 시 모달 즉각 대응 및 완료 팝업 (500ms)
   const submitPost = async () => {
     const { category, title, desc, date, time, people, location } = form;
     
-    // 💡 경고창은 글쓰기 모달창 위에 바로 뜨도록 딜레이 없이 호출
-    if (!title || !desc || !date || !time) { 
-      showResultModal('알림', '모든 내용을 적어주십시오.', 'info'); 
+    // ✅ 폼 입력 전용 커스텀 알림 적용 (빈칸 공백 문자 체크 포함)
+    if (!title.trim() || !desc.trim() || !date.trim() || !time.trim()) { 
+      showCreateAlert('내용을 적어주십시오.'); 
       return; 
     }
     if (category === '아웃도어' && (!location || !location.trim())) {
-      showResultModal('알림', '아웃도어 장소 정보를 입력해주세요.', 'info');
+      showCreateAlert('아웃도어 장소 정보를 입력해주세요.');
       return;
     }
     if (date.length !== 10 || time.length !== 5) { 
-      showResultModal('알림', '날짜(YYYY/MM/DD)와 시간(HH:MM)을 올바르게 입력해주세요.', 'info'); 
+      showCreateAlert('날짜(YYYY/MM/DD)와 시간(HH:MM)을 올바르게 입력해주세요.'); 
       return; 
     }
     
     const [yr, mo, dy] = date.split('/').map(Number);
     const [hr, mn] = time.split(':').map(Number);
     
-    if (mo < 1 || mo > 12) { showResultModal('알림', '올바른 월을 입력해주세요.', 'info'); return; }
-    if (dy < 1 || dy > new Date(yr, mo, 0).getDate()) { showResultModal('알림', `${mo}월은 ${new Date(yr, mo, 0).getDate()}일까지입니다.`, 'info'); return; }
-    if (hr > 23 || mn > 59) { showResultModal('알림', '올바른 시간을 입력해주세요.', 'info'); return; }
+    if (mo < 1 || mo > 12) { showCreateAlert('올바른 월을 입력해주세요.'); return; }
+    if (dy < 1 || dy > new Date(yr, mo, 0).getDate()) { showCreateAlert(`${mo}월은 ${new Date(yr, mo, 0).getDate()}일까지입니다.`); return; }
+    if (hr > 23 || mn > 59) { showCreateAlert('올바른 시간을 입력해주세요.'); return; }
     
     const dt = new Date(yr, mo - 1, dy, hr, mn);
-    if (dt < new Date()) { showResultModal('알림', '과거 시간으로 등록할 수 없습니다.', 'info'); return; }
+    if (dt < new Date()) { showCreateAlert('과거 시간으로 등록할 수 없습니다.'); return; }
     
     const max3 = new Date(); 
     max3.setMonth(max3.getMonth() + 3);
-    if (dt > max3) { showResultModal('알림', '최대 3개월 이내 날짜만 가능합니다.', 'info'); return; }
+    if (dt > max3) { showCreateAlert('최대 3개월 이내 날짜만 가능합니다.'); return; }
     
     const formattedDateTime = `${yr}-${p(mo)}-${p(dy)}T${p(hr)}:${p(mn)}:00`;
 
@@ -391,22 +457,16 @@ const CommunityScreen = ({ route, navigation }: any) => {
         await axios.post(POSTS, payload, { headers });
       }
       
-      initData(currentFilter); // 리스트 업데이트
-      closeCreateModal(); // 모달 닫기
+      initData(currentFilter);
+      closeCreateModal();
       
-      // 💡 모달 닫히고 500ms(0.5초) 뒤 성공 팝업
       setTimeout(() => {
         showResultModal('성공', isEditMode ? '게시글이 성공적으로 수정되었습니다.' : '모집 글이 성공적으로 작성되었습니다.', 'success');
       }, 500);
 
     } catch (e: any) {
-      closeCreateModal();
-      
-      // 💡 모달 닫히고 500ms(0.5초) 뒤 에러 팝업
-      setTimeout(() => {
-        const errorMessage = e.response?.data?.message || '처리에 실패했습니다.';
-        showResultModal(`${isEditMode ? '수정' : '작성'} 실패`, errorMessage, 'error');
-      }, 500);
+      const errorMessage = e.response?.data?.message || '처리에 실패했습니다.';
+      showCreateAlert(errorMessage);
     }
   };
 
@@ -445,7 +505,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
         </View>
       )}
 
-      {/* 게시글 목록 - RefreshControl 추가 */}
+      {/* 게시글 목록 */}
       <ScrollView 
         showsVerticalScrollIndicator={false} 
         contentContainerStyle={s.scroll}
@@ -502,21 +562,36 @@ const CommunityScreen = ({ route, navigation }: any) => {
                   <Image source={require('../assets/profile.png')} style={[s.avatar, isPast && { opacity: 0.5 }]}/>
                   <Text style={[s.author, isPast && { color: '#666' }]}>{post.author}</Text>
                 </TouchableOpacity>
+                
+                {/* ✅ 마감된 게시글은 무조건 View로 감싸 클릭 자체를 방지하고 '마감됨' 표시 */}
                 {!post.isMine && (
                   isPast ? (
                     <View style={[s.joinBtn, s.cancelBtn]}>
-                      <Text style={[s.joinText, s.cancelText]}>{post.isJoined ? '참가완료' : '마감됨'}</Text>
+                      <Text style={[s.joinText, s.cancelText]}>마감됨</Text>
                     </View>
                   ) : (
-                    <TouchableOpacity style={[s.joinBtn,post.isJoined&&s.cancelBtn]} onPress={() => toggleJoin(post.id,post.isJoined)}>
-                      <Text style={[s.joinText,post.isJoined&&s.cancelText]}>{post.isJoined?'취소하기':'참여하기'}</Text>
+                    <TouchableOpacity 
+                      style={[s.joinBtn, post.isJoined && s.cancelBtn]} 
+                      onPress={() => toggleJoin(post.id, post.isJoined)}
+                    >
+                      <Text style={[s.joinText, post.isJoined && s.cancelText]}>
+                        {post.isJoined ? '취소하기' : '참여하기'}
+                      </Text>
                     </TouchableOpacity>
                   )
                 )}
+
                 {post.isMine && (
                   <View style={s.myActions}>
                     {!isPast && (
-                      <TouchableOpacity style={s.editBtn} onPress={() => openEditModal(post)}><Text style={s.editText}>수정</Text></TouchableOpacity>
+                      <>
+                        <TouchableOpacity style={s.closeBtnAction} onPress={() => setCloseTarget(post.id)}>
+                          <Text style={s.closeTextAction}>마감</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={s.editBtn} onPress={() => openEditModal(post)}>
+                          <Text style={s.editText}>수정</Text>
+                        </TouchableOpacity>
+                      </>
                     )}
                     <TouchableOpacity style={s.trashBtn} onPress={() => setDeleteTarget(post.id)}>
                       <Image source={require('../assets/trash.png')} style={[s.trashIcon, isPast && { tintColor: '#A1BE44' }]}/>
@@ -545,7 +620,20 @@ const CommunityScreen = ({ route, navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 커스텀 알림 결과 모달 (이 부분에서 모든 알림이 표시됨) ─── */}
+      {/* 수동 마감 확인 모달 */}
+      <Modal visible={closeTarget!==null} animationType="fade" transparent onRequestClose={() => setCloseTarget(null)}>
+        <View style={s.overlay}>
+          <View style={s.alertBox}>
+            <Text style={s.alertTitle}>모집을 마감하시겠습니까?</Text>
+            <View style={s.alertBtns}>
+              <TouchableOpacity style={s.btnYes} onPress={executeClose}><Text style={s.btnYesText}>예</Text></TouchableOpacity>
+              <TouchableOpacity style={s.btnNo} onPress={() => setCloseTarget(null)}><Text style={s.btnNoText}>아니오</Text></TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── 일반 공통 알림 결과 모달 ─── */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
         <View style={s.resultModalOverlay}>
           <View style={s.resultModalBox}>
@@ -654,6 +742,19 @@ const CommunityScreen = ({ route, navigation }: any) => {
               </TouchableOpacity>
             </ScrollView>
           </Animated.View>
+
+          {/* ✅ iOS 모달 겹침 버그 완벽 차단: 작성 창 내부에 띄우는 강제 덮어쓰기 뷰 */}
+          {createAlertVisible && (
+            <View style={s.innerAlertOverlay}>
+              <View style={s.resultModalBox}>
+                <Text style={[s.resultModalTitle, { color: '#FF4D4D' }]}>알림</Text>
+                <Text style={s.resultModalMessage}>{createAlertMessage}</Text>
+                <TouchableOpacity style={s.resultModalBtn} onPress={() => setCreateAlertVisible(false)}>
+                  <Text style={s.resultModalBtnText}>확인</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </TouchableOpacity>
       </Modal>
     </View>
@@ -685,8 +786,9 @@ const s = StyleSheet.create({
   scroll:{paddingBottom:80},
   empty:{color:'#999',fontSize:16,textAlign:'center',marginTop:30}, 
   
+  // ✅ 마감된 카드는 투명도 0.4 처리로 완벽한 시각적 피드백 제공
   card:{backgroundColor:'#212121',borderColor:'#262626',borderWidth:1.5,borderRadius:16,padding:20,marginBottom:15},
-  cardPast:{opacity:0.25,borderColor:'#333'},
+  cardPast:{opacity:0.4,borderColor:'#333'}, 
   cardHeader:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginBottom:12},
   badge:{paddingHorizontal:14,paddingVertical:6,borderRadius:8}, 
   badgeText:{fontSize:14,fontWeight:'bold'}, 
@@ -715,6 +817,8 @@ const s = StyleSheet.create({
   cancelText:{color:'#fff'},
   
   myActions:{flexDirection:'row',alignItems:'center'},
+  closeBtnAction:{backgroundColor:'#444',paddingHorizontal:14,paddingVertical:7,borderRadius:8,marginRight:8},
+  closeTextAction:{color:'#fff',fontSize:14,fontWeight:'bold'},
   editBtn:{backgroundColor:'#333',paddingHorizontal:14,paddingVertical:7,borderRadius:8,marginRight:8},
   editText:{color:'#A1BE44',fontSize:14,fontWeight:'bold'}, 
   trashBtn:{padding:6},
@@ -771,8 +875,9 @@ const s = StyleSheet.create({
   submitBtn:{width:'100%',backgroundColor:'#A1BE44',borderRadius:12,paddingVertical:16,alignItems:'center',marginTop:20},
   submitText:{color:'#000',fontSize:18,fontWeight:'bold'}, 
 
-  // ─── 커스텀 알림 모달 전용 스타일 ───
+  // ─── 공통 알림 모달 & 작성 모달 내부 알림 오버레이 스타일 ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  innerAlertOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', zIndex: 9999, elevation: 9999 },
   resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
   resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, 
   resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, 

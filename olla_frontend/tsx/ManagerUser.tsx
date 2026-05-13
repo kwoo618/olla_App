@@ -115,8 +115,9 @@ const ManagerUser = ({ navigation }: any) => {
       const requestBody = {
         name: newName,
         phone: newPhone,
-        gender: newGender === '남자' ? 'MALE' : 'FEMALE',
-        birthDate: newBirth
+        gender: newGender === '남자' ? '남' : '여', // 수정: API 스펙에 맞춰 '남', '여'로 전달
+        birthDate: newBirth,
+        email: `offline_${newPhone.replace(/-/g, '')}@olla.local` // 추가: DB NOT NULL 에러 방지를 위한 자동 이메일 생성
       };
       await axios.post(OFFLINE_REGISTER_API, requestBody, {
         headers: { Authorization: `Bearer ${token}` }
@@ -256,7 +257,8 @@ const ManagerUser = ({ navigation }: any) => {
         ) : (
           filteredAndSortedUsers.map((user: any, index: number) => {
             const memberInfo = user.member || user;
-            const memberId = memberInfo.id || user.id;
+            const memberId = user.memberId || user.id || memberInfo.id;
+            const isDeleted = memberInfo.isDeleted || user.isDeleted; // 추가: 탈퇴 여부 확인
             const membershipInfo = user.activeMembership || user.membership || user;
             const memType = membershipInfo?.membershipType || membershipInfo?.type;
 
@@ -288,9 +290,12 @@ const ManagerUser = ({ navigation }: any) => {
                   </View>
                 </View>
                 <View style={[styles.colAction, styles.centerAlign]}>
-                  <TouchableOpacity style={styles.trashBtn} onPress={() => confirmDelete(memberId)}>
-                    <Image source={require('../assets/trash.png')} style={styles.trashIcon} />
-                  </TouchableOpacity>
+                  {/* 탈퇴한 회원이 아닐 때만 휴지통 아이콘 표시 */}
+                  {!isDeleted && (
+                    <TouchableOpacity style={styles.trashBtn} onPress={() => confirmDelete(memberId)}>
+                      <Image source={require('../assets/trash.png')} style={styles.trashIcon} />
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
             );

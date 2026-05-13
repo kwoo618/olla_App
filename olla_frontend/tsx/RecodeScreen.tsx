@@ -31,6 +31,12 @@ const MAX_HOLDS: Record<string, number> = {
   '빨강': 26, '보라': 25, '주황': 28, '검정': 30,
 };
 
+// 난이도별 기본 점수 (연속 완등 점수 계산용)
+const BASE_SCORES: Record<string, number> = {
+  '흰색': 10, '노랑': 20, '주황': 30, '초록': 40,
+  '파랑': 50, '빨강': 60, '보라': 70, '검정': 80,
+};
+
 const KR_TO_ENUM: Record<string, string> = {
   '흰색': 'WHITE', '노랑': 'YELLOW', '주황': 'ORANGE', '초록': 'GREEN',
   '파랑': 'BLUE',  '빨강': 'RED',    '보라': 'PURPLE', '검정': 'BLACK',
@@ -53,7 +59,8 @@ interface BeginnerRecord {
   id: number;
   difficulty: string;
   attemptType: string;
-  maxHoldNo: number;
+  maxHoldNo?: number;
+  score?: number;
   recordDate: string;
   success: boolean;
 }
@@ -84,7 +91,16 @@ const getSectionLabel = (oneWayCount: number, additionalBlocks: number): string 
   if (oneWayCount === 0 && additionalBlocks === 0) return '0';
   if (additionalBlocks > 0 && additionalBlocks <= BOX_SEQUENCE.length)
     return BOX_SEQUENCE[additionalBlocks - 1];
-  return '완주';
+  // (수정) 완주 시 '완주'가 아닌 마지막 구간 '4-2' 리턴
+  return '4-2'; 
+};
+
+const getLocalDateStr = (): string => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 // ─────────────────────────── 컴포넌트 ───────────────────────────
@@ -128,7 +144,6 @@ const RecodeScreen = ({
     if (route?.params?.openSection) setExpandedSection(route.params.openSection);
   }, [route?.params?.openSection]);
 
-  // ─── 새로고침 핸들러 ───
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadAllData();
@@ -185,9 +200,10 @@ const RecodeScreen = ({
           let highestScore = -1;
 
           recordsForColor.forEach(r => {
-            const isRoundTrip = r.attemptType === 'ROUND_TRIP';
-            const holdCount = r.success ? maxHold : (r.maxHoldNo ?? 0);
-            const score     = (isRoundTrip ? 50_000 : 0) + holdCount;
+            const isRoundTrip = String(r.attemptType ?? '').toUpperCase() === 'ROUND_TRIP';
+            const rawHold = r.maxHoldNo !== undefined ? r.maxHoldNo : r.score;
+            const holdCount = r.success ? maxHold : (rawHold ?? 0);
+            const score     = (isRoundTrip ? 50_000 : 0) + Number(holdCount);
 
             if (score > highestScore) {
               highestScore = score;
@@ -197,8 +213,9 @@ const RecodeScreen = ({
 
           if (bestRecord) {
             const b         = bestRecord as BeginnerRecord;
-            const isRT      = b.attemptType === 'ROUND_TRIP';
-            const holdCount = b.success ? maxHold : (b.maxHoldNo ?? 0);
+            const isRT      = String(b.attemptType ?? '').toUpperCase() === 'ROUND_TRIP';
+            const rawHold   = b.maxHoldNo !== undefined ? b.maxHoldNo : b.score;
+            const holdCount = b.success ? maxHold : (rawHold ?? 0);
             return {
               ...item,
               id:      b.id,
@@ -225,7 +242,8 @@ const RecodeScreen = ({
       const mapped = list.map((item: EnduranceRecord) => ({
         id:      item.id,
         type:    '편도',
-        arrow:   item.oneWayCount % 2 !== 0 ? '->' : '<-',
+        // (수정) 짝수/0회는 ->, 홀수/1회는 <- 처리
+        arrow:   item.oneWayCount % 2 !== 0 ? '<-' : '->', 
         laps:    String(item.oneWayCount),
         time:    formatTime(item.timeSeconds),
         section: getSectionLabel(item.oneWayCount, item.additionalBlocks),
@@ -276,7 +294,6 @@ const RecodeScreen = ({
     });
   };
 
-  // ✅ 수정됨: 삭제 시 iOS 모달 버그 해결 (500ms 딜레이)
   const executeDelete = async () => {
     if (!itemToDelete) return;
     try {
@@ -288,7 +305,6 @@ const RecodeScreen = ({
       setDeleteModalVisible(false);
       setItemToDelete(null);
 
-      // 모달 닫히고 0.5초 후 성공 팝업
       setTimeout(() => {
         showResultModal('성공', '기록이 삭제되었습니다.', 'success');
       }, 500);
@@ -297,7 +313,6 @@ const RecodeScreen = ({
       setDeleteModalVisible(false);
       setItemToDelete(null);
       
-      // 모달 닫히고 0.5초 후 에러 팝업
       setTimeout(() => {
         const errorMessage = error.response?.data?.message || '기록 삭제에 실패했습니다.';
         showResultModal('오류', errorMessage, 'error');
@@ -340,22 +355,23 @@ const RecodeScreen = ({
     return MAX_HOLDS[selectedDifficulty] ?? 0;
   }, [selectedDifficulty]);
 
-  // ✅ 수정됨: 초보벽 기록 저장 시 iOS 모달 버그 해결 (500ms 딜레이)
   const handleSaveBeginnerRecord = async () => {
     if (!selectedType || !selectedResult) {
-      showResultModal('알림', '모든 항목을 선택해주세요.', 'info'); // 열린 창 위에 즉시 표시
+      showResultModal('알림', '모든 항목을 선택해주세요.', 'info'); 
       return;
     }
+    
     const isSuccess    = selectedResult === '완등';
     const finalHold    = isSuccess ? currentMaxHolds : holdCount;
     const enumDifficulty = KR_TO_ENUM[selectedDifficulty] ?? 'WHITE';
 
+    // (수정) 400 Bad Request 에러 해결: success -> isSuccess 로 변경!
     const payload = {
       difficulty:  enumDifficulty,
       attemptType: selectedType === '편도' ? 'ONE_WAY' : 'ROUND_TRIP',
-      maxHoldNo:   finalHold,
-      success:     isSuccess,
-      recordDate:  new Date().toISOString().split('T')[0],
+      maxHoldNo:   Number(finalHold),
+      isSuccess:   Boolean(isSuccess), 
+      recordDate:  getLocalDateStr(),
     };
 
     try {
@@ -369,7 +385,6 @@ const RecodeScreen = ({
 
     } catch (error: any) {
       closeRecordModal();
-      
       setTimeout(() => {
         const errorMessage = error.response?.data?.message || '데이터 저장에 실패했습니다.';
         showResultModal('오류', errorMessage, 'error');
@@ -470,7 +485,6 @@ const RecodeScreen = ({
     return segments;
   }, [enduranceLaps, selectedMapNode, mapElements]);
 
-  // ✅ 수정됨: 지구력 기록 저장 시 iOS 모달 버그 해결 (500ms 딜레이)
   const handleSaveEnduranceRecord = async () => {
     if (!effectiveSection && enduranceLaps === 0) {
       showResultModal('알림', '기록할 바퀴 수나 지도 구간을 선택해주세요.', 'info');
@@ -482,10 +496,10 @@ const RecodeScreen = ({
     const timeSeconds = ((parseInt(enduranceMin, 10) || 0) * 60) + (parseInt(enduranceSec, 10) || 0);
 
     const payload = {
-      oneWayCount:      enduranceLaps,
-      additionalBlocks,
-      timeSeconds,
-      recordDate: new Date().toISOString().split('T')[0],
+      oneWayCount:      Number(enduranceLaps),
+      additionalBlocks: Number(additionalBlocks),
+      timeSeconds:      Number(timeSeconds),
+      recordDate:       getLocalDateStr(),
     };
 
     try {
@@ -537,7 +551,10 @@ const RecodeScreen = ({
       setTimerRunning(false);
       if (timerRef.current) clearInterval(timerRef.current);
     }
-    setFinishModalVisible(true);
+    // 0.5초 딜레이를 주어 안전하게 종료 모달을 띄움
+    setTimeout(() => {
+      setFinishModalVisible(true);
+    }, 500);
   };
 
   const cancelStopTimer = () => {
@@ -607,11 +624,17 @@ const RecodeScreen = ({
   const removeConsecutiveItem = (indexToRemove: number) =>
     setSelectedConsecutiveList(prev => prev.filter((_, i) => i !== indexToRemove));
 
+  // (수정) 백엔드의 연속 완등 점수 계산 방식과 똑같이 매핑
   const totalConsecutiveScore = selectedConsecutiveList.reduce(
-    (acc: number, curr: any) => acc + (curr.score ?? 0), 0
+    (acc: number, curr: any, index: number) => {
+      const baseScore = BASE_SCORES[curr.color] ?? 10;
+      const multiplier = 1.0 + (index * 0.1);
+      return acc + (baseScore * multiplier);
+    }, 0
   );
+  
+  const displayTotalScore = Math.round(totalConsecutiveScore * 10) / 10;
 
-  // ✅ 수정됨: 연속 완등 기록 저장 시 iOS 모달 버그 해결 (500ms 딜레이)
   const handleSaveConsecutiveRecord = async () => {
     if (selectedConsecutiveList.length === 0) {
       showResultModal('알림', '연속으로 완등한 난이도를 1개 이상 입력해주세요.', 'info');
@@ -619,7 +642,7 @@ const RecodeScreen = ({
     }
     const payload = {
       sequenceLog: selectedConsecutiveList.map(item => KR_TO_ENUM[item.color] ?? 'WHITE'),
-      recordDate:  new Date().toISOString().split('T')[0],
+      recordDate:  getLocalDateStr(),
     };
 
     try {
@@ -799,55 +822,6 @@ const RecodeScreen = ({
 
       </ScrollView>
 
-      {/* ─── 커스텀 알림 결과 모달 ─── */}
-      <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
-        <View style={styles.resultModalOverlay}>
-          <View style={styles.resultModalBox}>
-            <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>
-              {resultModalConfig.title}
-            </Text>
-            <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
-            <TouchableOpacity style={styles.resultModalBtn} onPress={() => setResultModalVisible(false)}>
-              <Text style={styles.resultModalBtnText}>확인</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ─── 삭제 확인 모달 ─── */}
-      <Modal visible={isDeleteModalVisible} animationType="fade" transparent onRequestClose={cancelDelete}>
-        <View style={styles.deleteModalOverlay}>
-          <View style={styles.deleteModalBox}>
-            <Text style={styles.deleteModalText}>삭제하시겠습니까?</Text>
-            <View style={styles.deleteBtnRow}>
-              <TouchableOpacity style={styles.deleteBtnYes} onPress={executeDelete}>
-                <Text style={styles.deleteBtnYesText}>예</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.deleteBtnNo} onPress={cancelDelete}>
-                <Text style={styles.deleteBtnNoText}>아니오</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ─── 타이머 종료 확인 모달 ─── */}
-      <Modal visible={isFinishModalVisible} animationType="fade" transparent onRequestClose={cancelStopTimer}>
-        <View style={styles.deleteModalOverlay}>
-          <View style={styles.deleteModalBox}>
-            <Text style={styles.deleteModalText}>종료하시겠습니까?</Text>
-            <View style={styles.deleteBtnRow}>
-              <TouchableOpacity style={styles.deleteBtnYes} onPress={stopTimerAndSave}>
-                <Text style={styles.deleteBtnYesText}>예</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.deleteBtnNo} onPress={cancelStopTimer}>
-                <Text style={styles.deleteBtnNoText}>아니오</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
       {/* ─── 초보벽 기록 모달 ─── */}
       <Modal visible={isRecordModalVisible} animationType="fade" transparent onRequestClose={closeRecordModal}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeRecordModal}>
@@ -1024,6 +998,7 @@ const RecodeScreen = ({
                 <Text style={styles.timerCircleBtnText}>완료</Text>
               </TouchableOpacity>
             </View>
+
           </SafeAreaView>
         ) : (
           <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeEnduranceModal}>
@@ -1144,15 +1119,21 @@ const RecodeScreen = ({
                     <Text style={styles.detailButtonText}>{showDetails ? '닫기' : '상세보기'}</Text>
                   </TouchableOpacity>
                 </View>
-                <Text style={styles.totalScoreText}>{totalConsecutiveScore} 점</Text>
+                {/* (수정) 백엔드 로직에 맞춘 점수 화면에 렌더링 */}
+                <Text style={styles.totalScoreText}>{displayTotalScore} 점</Text>
 
                 {showDetails && (
                   <View style={[styles.consecutiveInputBox, { marginTop: 15 }]}>
-                    {selectedConsecutiveList.map((item: any, index: number) => (
-                      <View key={index} style={[styles.filledDiffBox, { backgroundColor: item.hex }]}>
-                        <Text style={styles.filledDiffText}>{item.score}</Text>
-                      </View>
-                    ))}
+                    {selectedConsecutiveList.map((item: any, index: number) => {
+                      const baseScore = BASE_SCORES[item.color] ?? 10;
+                      const multiplier = 1.0 + (index * 0.1);
+                      const stepScore = Math.round((baseScore * multiplier) * 10) / 10;
+                      return (
+                        <View key={index} style={[styles.filledDiffBox, { backgroundColor: item.hex }]}>
+                          <Text style={styles.filledDiffText}>{stepScore}</Text>
+                        </View>
+                      );
+                    })}
                     {selectedConsecutiveList.length === 0 && (
                       <Text style={styles.consecutiveEmptyText}>입력된 기록이 없습니다</Text>
                     )}
@@ -1167,6 +1148,56 @@ const RecodeScreen = ({
           </Animated.View>
         </TouchableOpacity>
       </Modal>
+
+      {/* ─── 커스텀 알림 모달 (모달 안에 중첩되지 않도록 루트 레벨에서 선언하여 안전하게 띄움) ─── */}
+      <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
+        <View style={styles.resultModalOverlay}>
+          <View style={styles.resultModalBox}>
+            <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>
+              {resultModalConfig.title}
+            </Text>
+            <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
+            <TouchableOpacity style={styles.resultModalBtn} onPress={() => setResultModalVisible(false)}>
+              <Text style={styles.resultModalBtnText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── 삭제 확인 모달 ─── */}
+      <Modal visible={isDeleteModalVisible} animationType="fade" transparent onRequestClose={cancelDelete}>
+        <View style={styles.deleteModalOverlay}>
+          <View style={styles.deleteModalBox}>
+            <Text style={styles.deleteModalText}>삭제하시겠습니까?</Text>
+            <View style={styles.deleteBtnRow}>
+              <TouchableOpacity style={styles.deleteBtnYes} onPress={executeDelete}>
+                <Text style={styles.deleteBtnYesText}>예</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.deleteBtnNo} onPress={cancelDelete}>
+                <Text style={styles.deleteBtnNoText}>아니오</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── 타이머 종료 확인 모달 ─── */}
+      <Modal visible={isFinishModalVisible} animationType="fade" transparent onRequestClose={cancelStopTimer}>
+        <View style={styles.deleteModalOverlay}>
+          <View style={styles.deleteModalBox}>
+            <Text style={styles.deleteModalText}>종료하시겠습니까?</Text>
+            <View style={styles.deleteBtnRow}>
+              <TouchableOpacity style={styles.deleteBtnYes} onPress={stopTimerAndSave}>
+                <Text style={styles.deleteBtnYesText}>예</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.deleteBtnNo} onPress={cancelStopTimer}>
+                <Text style={styles.deleteBtnNoText}>아니오</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 };
@@ -1311,4 +1342,4 @@ const styles = StyleSheet.create({
   deleteBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
 });
 
-export default RecodeScreen;
+export default RecodeScreen; 

@@ -293,7 +293,7 @@ const HomeScreen = ({ navigation }: any) => {
             axios.get(`${API_BASE_URL}/records/beginner/history`, config).catch(() => null),
             axios.get(`${API_BASE_URL}/records/beginner`, config).catch(() => null)
           ]);
-
+          
           let myRealBestRecords: any[] = [];
           [bestRes, historyRes, allRes].forEach(res => {
             if (res) {

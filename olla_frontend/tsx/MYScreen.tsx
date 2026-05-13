@@ -37,6 +37,14 @@ const resolveMembershipType = (
   return '-';
 };
 
+// ─── 생년월일로 나이 자동 계산 ───
+const calcAgeFromBirth = (birthDate: string): string => {
+  if (!birthDate || birthDate.length !== 10) return '-';
+  const birthYear = parseInt(birthDate.substring(0, 4), 10);
+  if (isNaN(birthYear)) return '-';
+  return String(new Date().getFullYear() - birthYear);
+};
+
 const MYScreen = ({ navigation }: any) => {
   const [refreshing, setRefreshing] = useState(false);
   const isFocused = useIsFocused();
@@ -63,11 +71,11 @@ const MYScreen = ({ navigation }: any) => {
   const [isAdmin, setIsAdmin] = useState(false);
 
   const [profileData, setProfileData] = useState<any>({
-    name: '', phone: '', gender: '', birthDate: '', age: '', height: '', weight: '', arm: '', shoe: ''
+    name: '', phone: '', gender: '', birthDate: '', height: '', weight: '', arm: '', shoe: ''
   });
 
   const [profileToggles, setProfileToggles] = useState<any>({
-    showName: true, showPhone: true, showAge: true, showHeight: true,
+    showPhone: true, showAge: true, showHeight: true,
     showWeight: true, showArm: true, showShoe: true,
   });
 
@@ -114,8 +122,7 @@ const MYScreen = ({ navigation }: any) => {
         phone: data.phone || '',
         gender: data.gender === 'MALE' ? '남' : data.gender === 'FEMALE' ? '여' : (data.gender || ''),
         birthDate: data.birthDate || '',
-        
-        age: data.age?.toString() || '',
+        // ─── age 필드 제거: 생년월일로 자동 계산하므로 저장 불필요 ───
         height: data.height?.toString() || '',
         weight: data.weight?.toString() || '',
         arm: data.armSpan?.toString() || '',
@@ -124,7 +131,6 @@ const MYScreen = ({ navigation }: any) => {
 
       if (data.privacy) {
         setProfileToggles({
-          showName: true,
           showPhone: data.privacy.phonePublic,
           showAge: true,
           showHeight: data.privacy.heightPublic,
@@ -134,7 +140,7 @@ const MYScreen = ({ navigation }: any) => {
         });
       }
 
-      // [GET] 오늘 출석 여부 확인
+      // [GET] 오늘 출석 여 확인
       let attendedToday = false;
       try {
         const today = new Date();
@@ -241,6 +247,14 @@ const MYScreen = ({ navigation }: any) => {
       const userToken = await AsyncStorage.getItem('userToken');
       const headers = { Authorization: `Bearer ${userToken}` };
 
+      // ─── 나이 자동 계산 (생년월일 기반, 사용자 입력 없음) ───
+      let calculatedAge = 0;
+      if (profileData.birthDate && profileData.birthDate.length === 10) {
+        const birthYear = parseInt(profileData.birthDate.substring(0, 4), 10);
+        const currentYear = new Date().getFullYear();
+        calculatedAge = currentYear - birthYear;
+      }
+
       const requestBody = {
         name: profileData.name,
         phone: profileData.phone,
@@ -248,14 +262,12 @@ const MYScreen = ({ navigation }: any) => {
         birthDate: profileData.birthDate,
         profileImageUrl: '',
         
-        
-        age: parseInt(profileData.age) || 0,
+        age: calculatedAge,
         height: parseFloat(profileData.height) || 0,
         weight: parseFloat(profileData.weight) || 0,
         armSpan: parseFloat(profileData.arm) || 0,
         footSize: parseFloat(profileData.shoe) || 0,
         
-
         isPublicPhone: profileToggles.showPhone,
         isHeightPublic: profileToggles.showHeight,
         isWeightPublic: profileToggles.showWeight,
@@ -684,7 +696,20 @@ const MYScreen = ({ navigation }: any) => {
                   </View>
                 </TouchableOpacity>
 
-                {renderEditField('이름', 'name', '')}
+                {/* 이름 수정 (공개 토글 없음) */}
+                <View style={styles.editFieldWrapper}>
+                  <View style={styles.editFieldHeader}>
+                    <Text style={styles.editFieldTitle}>이름</Text>
+                  </View>
+                  <View style={styles.editInputBox}>
+                    <TextInput
+                      style={styles.editInput}
+                      value={profileData.name}
+                      onChangeText={(txt) => setProfileData({ ...profileData, name: txt })}
+                      placeholderTextColor="#666666"
+                    />
+                  </View>
+                </View>
 
                 <View style={styles.editFieldWrapper}>
                   <View style={styles.editFieldHeader}>
@@ -733,7 +758,29 @@ const MYScreen = ({ navigation }: any) => {
                 </View>
 
                 {renderEditField('전화번호', 'phone', '')}
-                {renderEditField('나이', 'age', '세')}
+
+                {/* ─── 나이: 생년월일 기반 자동 계산, 수정 불가 ─── */}
+                <View style={styles.editFieldWrapper}>
+                  <View style={styles.editFieldHeader}>
+                    <Text style={styles.editFieldTitle}>나이</Text>
+                    <View style={styles.toggleWrapper}>
+                      <Text style={styles.toggleLabel}>{profileToggles.showAge ? '공개' : '비공개'}</Text>
+                      <Switch
+                        trackColor={{ false: '#333333', true: '#A1BE44' }}
+                        thumbColor={profileToggles.showAge ? '#ffffff' : '#f4f3f4'}
+                        onValueChange={() => setProfileToggles({ ...profileToggles, showAge: !profileToggles.showAge })}
+                        value={profileToggles.showAge}
+                      />
+                    </View>
+                  </View>
+                  <View style={styles.editInputBox}>
+                    <Text style={styles.editInput}>
+                      {calcAgeFromBirth(profileData.birthDate)}
+                    </Text>
+                    <Text style={styles.editUnit}>세</Text>
+                  </View>
+                </View>
+
                 {renderEditField('키', 'height', 'cm')}
                 {renderEditField('몸무게', 'weight', 'kg')}
                 {renderEditField('팔길이', 'arm', 'cm')}
@@ -831,6 +878,10 @@ const styles = StyleSheet.create({
   toggleWrapper: { flexDirection: 'row', alignItems: 'center' },
   toggleLabel: { color: '#999999', fontSize: 14, marginRight: 6, fontWeight: '500' },
   editInputBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#000000', borderRadius: 10, paddingHorizontal: 15, paddingVertical: 16 },
+  // ─── 읽기전용 나이 필드 스타일 ───
+  editInputBoxReadOnly: { backgroundColor: '#1A1A1A', borderWidth: 1, borderColor: '#2C2C2C' },
+  editInputReadOnly: { flex: 1, color: '#999999', fontSize: 18 },
+  autoCalcHint: { color: '#555555', fontSize: 13, marginTop: 6, marginLeft: 4 },
   editInput: { flex: 1, color: '#ffffff', fontSize: 18, padding: 0 },
   editUnit: { color: '#999999', fontSize: 18, fontWeight: 'bold', marginLeft: 10 },
   saveProfileButton: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 18, alignItems: 'center', marginTop: 15 },

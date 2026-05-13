@@ -18,13 +18,11 @@ import { API_BASE_URL } from '../src/constants/Config';
 const PersonalScreen = ({ navigation, route }: any) => {
   const { accountData } = route.params || {};
 
-  const [age, setAge] = useState('');
   const [height, setHeight] = useState('');
   const [weight, setWeight] = useState('');
   const [armSpan, setArmSpan] = useState('');
   const [footSize, setFootSize] = useState('');
 
-  const [isAgePublic, setIsAgePublic] = useState(true);
   const [isHeightPublic, setIsHeightPublic] = useState(true);
   const [isWeightPublic, setIsWeightPublic] = useState(true);
   const [isArmPublic, setIsArmPublic] = useState(true);
@@ -51,7 +49,6 @@ const PersonalScreen = ({ navigation, route }: any) => {
         ...accountData,
         role: 'USER',
         detail: {
-          age: parseInt(age) || null,
           height: parseFloat(height) || null,
           weight: parseFloat(weight) || null,
           armSpan: parseFloat(armSpan) || null,
@@ -126,16 +123,6 @@ const PersonalScreen = ({ navigation, route }: any) => {
           bounces={false}
         >
           <Text style={styles.title}>개인정보</Text>
-
-          {/* 💡 나이 */}
-          <View style={styles.inputHeader}>
-            <Text style={styles.middleText}>나이(선택)</Text>
-            <CustomSwitch isOn={isAgePublic} onToggle={() => setIsAgePublic(!isAgePublic)} />
-          </View>
-          <View style={styles.inputWrapper}>
-            <TextInput style={styles.inputText} placeholder="나이를 입력하세요" placeholderTextColor="#ffffff80" value={age} onChangeText={setAge} keyboardType="numeric" />
-            <Text style={styles.unitText}>세</Text>
-          </View>
 
           {/* 💡 키 */}
           <View style={styles.inputHeader}>
