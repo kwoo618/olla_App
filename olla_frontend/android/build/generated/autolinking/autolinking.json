@@ -1,26 +1,26 @@
 {
-  "root": "D:\\projects\\olla_App\\olla_frontend",
-  "reactNativePath": "D:\\projects\\olla_App\\olla_frontend\\node_modules\\react-native",
+  "root": "C:\\Users\\82103\\olla_App\\olla_frontend",
+  "reactNativePath": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native",
   "reactNativeVersion": "0.85",
   "dependencies": {
     "@react-native-async-storage/async-storage": {
-      "root": "D:\\projects\\olla_App\\olla_frontend\\node_modules\\@react-native-async-storage\\async-storage",
+      "root": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\@react-native-async-storage\\async-storage",
       "name": "@react-native-async-storage/async-storage",
       "platforms": {
         "ios": {
-          "podspecPath": "D:\\projects\\olla_App\\olla_frontend\\node_modules\\@react-native-async-storage\\async-storage\\RNCAsyncStorage.podspec",
+          "podspecPath": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\@react-native-async-storage\\async-storage\\RNCAsyncStorage.podspec",
           "version": "1.24.0",
           "configurations": [],
           "scriptPhases": []
         },
         "android": {
-          "sourceDir": "D:\\projects\\olla_App\\olla_frontend\\node_modules\\@react-native-async-storage\\async-storage\\android",
+          "sourceDir": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\@react-native-async-storage\\async-storage\\android",
           "packageImportPath": "import com.reactnativecommunity.asyncstorage.AsyncStoragePackage;",
           "packageInstance": "new AsyncStoragePackage()",
           "buildTypes": [],
           "libraryName": "rnasyncstorage",
           "componentDescriptors": [],
-          "cmakeListsPath": "D:/projects/olla_App/olla_frontend/node_modules/@react-native-async-storage/async-storage/android/build/generated/source/codegen/jni/CMakeLists.txt",
+          "cmakeListsPath": "C:/Users/82103/olla_App/olla_frontend/node_modules/@react-native-async-storage/async-storage/android/build/generated/source/codegen/jni/CMakeLists.txt",
           "cxxModuleCMakeListsModuleName": null,
           "cxxModuleCMakeListsPath": null,
           "cxxModuleHeaderName": null,
@@ -29,17 +29,17 @@
       }
     },
     "react-native-camera-kit": {
-      "root": "D:\\projects\\olla_App\\olla_frontend\\node_modules\\react-native-camera-kit",
+      "root": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-camera-kit",
       "name": "react-native-camera-kit",
       "platforms": {
         "ios": {
-          "podspecPath": "D:\\projects\\olla_App\\olla_frontend\\node_modules\\react-native-camera-kit\\ReactNativeCameraKit.podspec",
+          "podspecPath": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-camera-kit\\ReactNativeCameraKit.podspec",
           "version": "17.0.1",
           "configurations": [],
           "scriptPhases": []
         },
         "android": {
-          "sourceDir": "D:\\projects\\olla_App\\olla_frontend\\node_modules\\react-native-camera-kit\\android",
+          "sourceDir": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-camera-kit\\android",
           "packageImportPath": "import com.rncamerakit.RNCameraKitPackage;",
           "packageInstance": "new RNCameraKitPackage()",
           "buildTypes": [],
@@ -47,7 +47,7 @@
           "componentDescriptors": [
             "CKCameraComponentDescriptor"
           ],
-          "cmakeListsPath": "D:/projects/olla_App/olla_frontend/node_modules/react-native-camera-kit/android/build/generated/source/codegen/jni/CMakeLists.txt",
+          "cmakeListsPath": "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-camera-kit/android/build/generated/source/codegen/jni/CMakeLists.txt",
           "cxxModuleCMakeListsModuleName": null,
           "cxxModuleCMakeListsPath": null,
           "cxxModuleHeaderName": null,
@@ -56,17 +56,17 @@
       }
     },
     "react-native-safe-area-context": {
-      "root": "D:\\projects\\olla_App\\olla_frontend\\node_modules\\react-native-safe-area-context",
+      "root": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-safe-area-context",
       "name": "react-native-safe-area-context",
       "platforms": {
         "ios": {
-          "podspecPath": "D:\\projects\\olla_App\\olla_frontend\\node_modules\\react-native-safe-area-context\\react-native-safe-area-context.podspec",
+          "podspecPath": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-safe-area-context\\react-native-safe-area-context.podspec",
           "version": "5.7.0",
           "configurations": [],
           "scriptPhases": []
         },
         "android": {
-          "sourceDir": "D:\\projects\\olla_App\\olla_frontend\\node_modules\\react-native-safe-area-context\\android",
+          "sourceDir": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-safe-area-context\\android",
           "packageImportPath": "import com.th3rdwave.safeareacontext.SafeAreaContextPackage;",
           "packageInstance": "new SafeAreaContextPackage()",
           "buildTypes": [],
@@ -75,7 +75,7 @@
             "RNCSafeAreaProviderComponentDescriptor",
             "RNCSafeAreaViewComponentDescriptor"
           ],
-          "cmakeListsPath": "D:/projects/olla_App/olla_frontend/node_modules/react-native-safe-area-context/android/src/main/jni/CMakeLists.txt",
+          "cmakeListsPath": "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-safe-area-context/android/src/main/jni/CMakeLists.txt",
           "cxxModuleCMakeListsModuleName": null,
           "cxxModuleCMakeListsPath": null,
           "cxxModuleHeaderName": null,
@@ -84,17 +84,17 @@
       }
     },
     "react-native-screens": {
-      "root": "D:\\projects\\olla_App\\olla_frontend\\node_modules\\react-native-screens",
+      "root": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-screens",
       "name": "react-native-screens",
       "platforms": {
         "ios": {
-          "podspecPath": "D:\\projects\\olla_App\\olla_frontend\\node_modules\\react-native-screens\\RNScreens.podspec",
+          "podspecPath": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-screens\\RNScreens.podspec",
           "version": "4.24.0",
           "configurations": [],
           "scriptPhases": []
         },
         "android": {
-          "sourceDir": "D:\\projects\\olla_App\\olla_frontend\\node_modules\\react-native-screens\\android",
+          "sourceDir": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-screens\\android",
           "packageImportPath": "import com.swmansion.rnscreens.RNScreensPackage;",
           "packageInstance": "new RNScreensPackage()",
           "buildTypes": [],
@@ -114,7 +114,7 @@
             "RNSTabsHostComponentDescriptor",
             "RNSSafeAreaViewComponentDescriptor"
           ],
-          "cmakeListsPath": "D:/projects/olla_App/olla_frontend/node_modules/react-native-screens/android/src/main/jni/CMakeLists.txt",
+          "cmakeListsPath": "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-screens/android/src/main/jni/CMakeLists.txt",
           "cxxModuleCMakeListsModuleName": null,
           "cxxModuleCMakeListsPath": null,
           "cxxModuleHeaderName": null,
@@ -123,17 +123,17 @@
       }
     },
     "react-native-svg": {
-      "root": "D:\\projects\\olla_App\\olla_frontend\\node_modules\\react-native-svg",
+      "root": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-svg",
       "name": "react-native-svg",
       "platforms": {
         "ios": {
-          "podspecPath": "D:\\projects\\olla_App\\olla_frontend\\node_modules\\react-native-svg\\RNSVG.podspec",
+          "podspecPath": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-svg\\RNSVG.podspec",
           "version": "15.15.4",
           "configurations": [],
           "scriptPhases": []
         },
         "android": {
-          "sourceDir": "D:\\projects\\olla_App\\olla_frontend\\node_modules\\react-native-svg\\android",
+          "sourceDir": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-svg\\android",
           "packageImportPath": "import com.horcrux.svg.SvgPackage;",
           "packageInstance": "new SvgPackage()",
           "buildTypes": [],
@@ -169,7 +169,7 @@
             "RNSVGTSpanComponentDescriptor",
             "RNSVGUseComponentDescriptor"
           ],
-          "cmakeListsPath": "D:/projects/olla_App/olla_frontend/node_modules/react-native-svg/android/src/main/jni/CMakeLists.txt",
+          "cmakeListsPath": "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-svg/android/src/main/jni/CMakeLists.txt",
           "cxxModuleCMakeListsModuleName": null,
           "cxxModuleCMakeListsPath": null,
           "cxxModuleHeaderName": null,
@@ -340,7 +340,7 @@
         {
           "name": "--path <path>",
           "description": "Path to the React Native project root.",
-          "default": "D:\\projects\\olla_App\\olla_frontend"
+          "default": "C:\\Users\\82103\\olla_App\\olla_frontend"
         },
         {
           "name": "--platform <string>",
@@ -640,7 +640,7 @@
   "assets": [],
   "project": {
     "ios": {
-      "sourceDir": "D:\\projects\\olla_App\\olla_frontend\\ios",
+      "sourceDir": "C:\\Users\\82103\\olla_App\\olla_frontend\\ios",
       "xcodeProject": {
         "name": "olla_react.xcworkspace",
         "path": ".",
@@ -649,7 +649,7 @@
       "assets": []
     },
     "android": {
-      "sourceDir": "D:\\projects\\olla_App\\olla_frontend\\android",
+      "sourceDir": "C:\\Users\\82103\\olla_App\\olla_frontend\\android",
       "appName": "app",
       "packageName": "com.olla_react",
       "applicationId": "com.olla_react",

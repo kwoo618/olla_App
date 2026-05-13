@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Image, ActivityIndicator, Modal, Platform, PermissionsAndroid, RefreshControl
+  Image, ActivityIndicator, Modal, Platform, PermissionsAndroid, RefreshControl, Animated
 } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -14,6 +14,7 @@ const MEMBER_API_URL      = `${API_BASE_URL}/admin/memberships/members`;
 const MEMBERSHIP_API_URL  = `${API_BASE_URL}/admin/memberships`;
 const VISIT_TODAY_API_URL = `${API_BASE_URL}/admin/visits/today`;
 const QR_SCAN_API_URL     = `${API_BASE_URL}/admin/visits/scan`; 
+const PROFILE_API_URL     = `${API_BASE_URL}/members`; // 💡 회원 프로필 상세 조회용
 
 const ManagerDashboard = ({ navigation }: any) => {
   const [refreshing, setRefreshing] = useState(false);
@@ -23,7 +24,7 @@ const ManagerDashboard = ({ navigation }: any) => {
   const [posts, setPosts] = useState<any[]>([]);
   const [recentMembers, setRecentMembers] = useState<any[]>([]);
 
-  // ─── 커스텀 알림 모달 상태 추가 ───
+  // ─── 커스텀 알림 모달 상태 ───
   const [resultModalVisible, setResultModalVisible] = useState(false);
   const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info', onConfirm: () => {} });
 
@@ -36,7 +37,7 @@ const ManagerDashboard = ({ navigation }: any) => {
   const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ type: 'notice' | 'post', id: number } | null>(null);
 
-  // ─── QR 에러 모달 상태 (다시 스캔 / 닫기 투버튼) ───
+  // ─── QR 에러 모달 상태 ───
   const [qrErrorVisible, setQrErrorVisible] = useState(false);
   const [qrErrorMsg, setQrErrorMsg] = useState('');
 
@@ -51,6 +52,11 @@ const ManagerDashboard = ({ navigation }: any) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const scannedRef = useRef(false);
+
+  // ─── 💡 회원 정보 상세 팝업 상태 ───
+  const [isDetailVisible, setDetailVisible] = useState(false);
+  const detailSlideAnim = useRef(new Animated.Value(800)).current;
+  const [selectedUser, setSelectedUser] = useState<any>(null);
 
   useEffect(() => {
     if (isScannerVisible) {
@@ -100,7 +106,6 @@ const ManagerDashboard = ({ navigation }: any) => {
         headers: { Authorization: `Bearer ${token}` },
         params: { page: 0, size: 2, sort: 'id,desc' },
       });
-      // ✅ Depth 1단계 추가 반영
       const noticeList = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
       setNotices(Array.isArray(noticeList) ? noticeList : []);
     } catch (error: any) {
@@ -122,7 +127,6 @@ const ManagerDashboard = ({ navigation }: any) => {
         params: { page: 0, size: 20, sort: 'id,desc' },
       });
 
-      // ✅ Depth 1단계 추가 반영 (복잡한 껍데기 제거)
       const raw = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
       const list = Array.isArray(raw) ? raw : [];
       const totalElements = response.data?.data?.totalElements ?? list.length;
@@ -145,7 +149,6 @@ const ManagerDashboard = ({ navigation }: any) => {
         headers: { Authorization: `Bearer ${token}` },
         params: { page: 0, size: 2, sort: 'id,desc' },
       });
-      // ✅ Depth 1단계 추가 반영
       const memberList = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
       const totalElements = response.data?.data?.data?.totalElements ?? memberList.length;
       
@@ -162,7 +165,6 @@ const ManagerDashboard = ({ navigation }: any) => {
         headers: { Authorization: `Bearer ${token}` },
         params: { size: 1000 }
       });
-      // ✅ Depth 1단계 추가 반영
       const list = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
       
       const uniqueVisitors = list.filter((item: any) => {
@@ -188,7 +190,6 @@ const ManagerDashboard = ({ navigation }: any) => {
       const response = await axios.get(`${MEMBERSHIP_API_URL}/active`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      // ✅ Depth 1단계 추가 반영
       const d = response.data?.data?.data;
       let activeCount = 0;
       if (typeof d === 'number') activeCount = d;
@@ -234,7 +235,6 @@ const ManagerDashboard = ({ navigation }: any) => {
         fetchPosts(token!);
       }
     } catch (error: any) {
-      // ✅ 에러 메시지 처리 적용
       const errorMessage = error.response?.data?.message || '삭제에 실패했습니다.';
       showResultModal('오류', errorMessage, 'error');
     }
@@ -249,6 +249,58 @@ const ManagerDashboard = ({ navigation }: any) => {
   const formatDate = (dateString: string) => {
     if (!dateString) return '';
     return dateString.split('T')[0];
+  };
+
+  // ─── 💡 회원 정보 상세 팝업 오픈 함수 ───
+  const openDetailModal = async (memberId: number, fallbackName: string, fallbackPhone: string) => {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      const response = await axios.get(`${PROFILE_API_URL}/${memberId}/profile`, { 
+        headers: { Authorization: `Bearer ${token}` } 
+      });
+      
+      const d = response.data?.data?.data || response.data?.data; 
+      
+      if (!d) { 
+        showResultModal('프로필 조회 불가', '상세 정보를 불러올 수 없습니다.', 'error'); 
+        return; 
+      }
+      
+      const detail = d.detail || {};
+      
+      setSelectedUser({
+        name: d.name || fallbackName,
+        phone: d.phone || fallbackPhone || '-', 
+        profileImageUrl: d.profileImageUrl,
+        age: detail.age || d.age || '-',
+        height: detail.height || d.height || '-',
+        weight: detail.weight || d.weight || '-',
+        arm: detail.armSpan || d.armSpan || '-',
+        shoe: detail.footSize || d.footSize || '-',
+      });
+
+      setDetailVisible(true);
+      setTimeout(() => { Animated.timing(detailSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(); }, 50);
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || '회원 상세 정보를 불러올 수 없습니다.';
+      showResultModal('프로필 조회 불가', errorMessage, 'error');
+    }
+  };
+
+  const closeDetailModal = () => {
+    Animated.timing(detailSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => { 
+      setDetailVisible(false); 
+      setSelectedUser(null); 
+    });
+  };
+
+  const renderDetailRow = (label: string, value: string, unit: string = '') => {
+    return (
+      <View style={styles.detailRow}>
+        <Text style={styles.detailLabel}>{label}</Text>
+        <Text style={styles.detailValue}>{value !== '-' && value ? value + unit : '-'}</Text>
+      </View>
+    );
   };
 
   const requestCameraPermission = async () => {
@@ -319,7 +371,6 @@ const ManagerDashboard = ({ navigation }: any) => {
 
       setIsProcessing(false); 
 
-      // ✅ Depth 1단계 추가 반영
       const result = response.data?.data?.data ?? response.data?.data?.data ?? {};
       const memberName    = result.memberName || '회원';
       const remainingInfo = result.remainingInfo || '';
@@ -345,7 +396,6 @@ const ManagerDashboard = ({ navigation }: any) => {
 
     } catch (error: any) {
       console.error('QR 스캔 실패:', error.response?.data?.message || error.message);
-      // ✅ 에러 메시지 처리 적용
       const errorMsg = error.response?.data?.message || '출석 처리에 실패했습니다.\n유효한 QR 코드인지 확인해주세요.';
 
       setIsProcessing(false); 
@@ -408,21 +458,35 @@ const ManagerDashboard = ({ navigation }: any) => {
               const badgeColor = isVisited ? '#A1BE44' : '#8E8E8E';
               const label      = isVisited ? '출석함' : '미출석';
 
-              const profileImgSource = member.profileImageUrl
-                ? { uri: member.profileImageUrl }
-                : require('../assets/profile.png');
+              const userName = member.name || '이름 없음';
+              const userPhone = member.phone || '전화번호 없음';
+              const memberId = member.memberId || member.id;
 
               return (
-                <View key={member.id || index} style={[styles.rowItem, index > 0 && { marginTop: 15 }]}>
-                  <Image source={profileImgSource} style={styles.profileImg} defaultSource={require('../assets/profile.png')} />
+                // 💡 클릭 가능하게 TouchableOpacity로 변경하고 상세 정보 모달 연결
+                <TouchableOpacity 
+                  key={member.id || index} 
+                  style={[styles.rowItem, index > 0 && { marginTop: 15 }]}
+                  activeOpacity={0.7}
+                  onPress={() => openDetailModal(memberId, userName, userPhone)}
+                >
+                  {member.profileImageUrl ? (
+                    <Image source={{ uri: member.profileImageUrl }} style={styles.profileImg} />
+                  ) : userName === '최강우' ? (
+                    <View style={styles.textProfileImg}>
+                      <Text style={styles.textProfileText}>최</Text>
+                    </View>
+                  ) : (
+                    <Image source={require('../assets/profile.png')} style={styles.profileImg} />
+                  )}
                   <View style={styles.infoCol}>
-                    <Text style={styles.nameText}>{member.name || '이름 없음'}</Text>
-                    <Text style={styles.subText}>{member.phone || '전화번호 없음'}</Text>
+                    <Text style={styles.nameText}>{userName}</Text>
+                    <Text style={styles.subText}>{userPhone}</Text>
                   </View>
                   <View style={[styles.badge, { backgroundColor: badgeBg }]}>
                     <Text style={[styles.badgeText, { color: badgeColor }]}>{label}</Text>
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             })
           ) : (
@@ -489,7 +553,6 @@ const ManagerDashboard = ({ navigation }: any) => {
                     <View style={[styles.badge, { backgroundColor: badgeBgColor, alignSelf: 'flex-start', marginBottom: 8, marginLeft: -10 }]}>
                       <Text style={[styles.badgeText, { color: badgeTextColor }]}>{postType}</Text>
                     </View>
-                    {/* 💡 폰트 확대: 인라인 스타일도 적용 */}
                     <Text style={[styles.noticeTitle, isPast && { color: '#888888' }]} numberOfLines={1}>{post.title}</Text>
                     <Text style={[styles.subText, { color: isPast ? '#666666' : '#ffffff', fontSize: 14 }]}>
                       {post.writerName}  {formatDate(post.createdAt)} {isPast ? '(마감됨)' : ''}
@@ -571,6 +634,53 @@ const ManagerDashboard = ({ navigation }: any) => {
         </View>
       </Modal>
 
+      {/* ─── 💡 회원 정보 상세 팝업 (바텀시트) ─── */}
+      <Modal visible={isDetailVisible} transparent={true} animationType="fade" onRequestClose={closeDetailModal}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeDetailModal}>
+          <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: detailSlideAnim }] }]}>
+            <TouchableOpacity activeOpacity={1} style={{ width: '100%' }}>
+              <View style={styles.dragHandle} />
+              <View style={styles.sheetHeader}>
+                <Text style={styles.sheetTitle}>회원 정보</Text>
+                <TouchableOpacity onPress={closeDetailModal}><Text style={styles.closeIcon}>✕</Text></TouchableOpacity>
+              </View>
+              <View style={styles.horizontalDivider} />
+              
+              {selectedUser && (
+                <View style={styles.detailContainer}>
+                  <View style={styles.detailProfileWrapper}>
+                    {selectedUser.profileImageUrl ? (
+                      <Image source={{ uri: selectedUser.profileImageUrl }} style={styles.profileBig} />
+                    ) : selectedUser.name === '최강우' ? (
+                      <View style={[styles.textProfileImg, { width: 80, height: 80, borderRadius: 40 }]}>
+                        <Text style={[styles.textProfileText, { fontSize: 32 }]}>최</Text>
+                      </View>
+                    ) : (
+                      <Image source={require('../assets/profile.png')} style={styles.profileBig} />
+                    )}
+                    <Text style={styles.profileName}>{selectedUser.name}</Text>
+                  </View>
+                  
+                  <View style={styles.infoBox}>
+                    {renderDetailRow('이름', selectedUser.name)}
+                    {renderDetailRow('전화번호', selectedUser.phone)}
+                    {renderDetailRow('나이', selectedUser.age, '세')}
+                    {renderDetailRow('키', selectedUser.height, 'cm')}
+                    {renderDetailRow('몸무게', selectedUser.weight, 'kg')}
+                    {renderDetailRow('팔길이', selectedUser.arm, 'cm')}
+                    {renderDetailRow('암벽화 사이즈', selectedUser.shoe, 'mm')}
+                  </View>
+                  
+                  <TouchableOpacity style={styles.closeFullBtn} onPress={closeDetailModal}>
+                    <Text style={styles.closeFullBtnText}>닫기</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </TouchableOpacity>
+          </Animated.View>
+        </TouchableOpacity>
+      </Modal>
+
       <Modal
         visible={isScannerVisible}
         animationType="slide"
@@ -623,53 +733,55 @@ const ManagerDashboard = ({ navigation }: any) => {
   );
 };
 
-// ─────────────────────────── 스타일 (글씨 크기 확대 적용) ───────────────────────────
+// ─────────────────────────── 스타일 ───────────────────────────
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A', paddingHorizontal: 20, paddingTop: 10 },
   scrollContent: { paddingBottom: 80 },
 
-  metricsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 25 }, // 💡 20 -> 25
-  metricBox: { flex: 1, backgroundColor: '#2C2C2C', borderRadius: 12, paddingVertical: 20, alignItems: 'center', marginHorizontal: 4 }, // 💡 18 -> 20
-  metricTitle: { color: '#999999', fontSize: 13, fontWeight: 'bold', marginBottom: 8 }, // 💡 11 -> 13
-  metricValue: { color: '#ffffff', fontSize: 19, fontWeight: '900' }, // 💡 15 -> 19
+  metricsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 25 }, 
+  metricBox: { flex: 1, backgroundColor: '#2C2C2C', borderRadius: 12, paddingVertical: 20, alignItems: 'center', marginHorizontal: 4 }, 
+  metricTitle: { color: '#999999', fontSize: 13, fontWeight: 'bold', marginBottom: 8 }, 
+  metricValue: { color: '#ffffff', fontSize: 19, fontWeight: '900' }, 
 
   card: { backgroundColor: '#2C2C2C', borderRadius: 16, padding: 20, marginBottom: 20 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardTitle: { color: '#ffffff', fontSize: 19, fontWeight: 'bold' }, // 💡 16 -> 19
-  viewAllBtn: { borderWidth: 1, borderColor: '#A1BE44', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 }, // 💡 14, 6 -> 16, 8
-  viewAllBtnText: { color: '#999999', fontSize: 14, fontWeight: 'bold' }, // 💡 12 -> 14
+  cardTitle: { color: '#ffffff', fontSize: 19, fontWeight: 'bold' }, 
+  viewAllBtn: { borderWidth: 1, borderColor: '#A1BE44', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 }, 
+  viewAllBtnText: { color: '#999999', fontSize: 14, fontWeight: 'bold' }, 
   divider: { height: 1, backgroundColor: '#444444', marginVertical: 15 },
-  emptyText: { color: '#999', textAlign: 'center', marginVertical: 10, fontSize: 16 }, // 💡 16 추가
+  emptyText: { color: '#999', textAlign: 'center', marginVertical: 10, fontSize: 16 }, 
 
   rowItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  profileImg: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#444444', marginRight: 15 }, // 💡 40 -> 48
+  profileImg: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#444444', marginRight: 15 }, 
+  textProfileImg: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#444444', marginRight: 15, justifyContent: 'center', alignItems: 'center' }, 
+  textProfileText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
   infoCol: { flex: 1 },
-  nameText: { color: '#ffffff', fontSize: 17, fontWeight: 'bold', marginBottom: 4 }, // 💡 15 -> 17
-  subText: { color: '#999999', fontSize: 15 }, // 💡 13 -> 15
+  nameText: { color: '#ffffff', fontSize: 17, fontWeight: 'bold', marginBottom: 4 }, 
+  subText: { color: '#999999', fontSize: 15 }, 
 
-  badge: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 }, // 💡 12, 4 -> 14, 6
-  badgeText: { fontSize: 14, fontWeight: 'bold', textAlign: 'center' }, // 💡 12 -> 14
+  badge: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 }, 
+  badgeText: { fontSize: 14, fontWeight: 'bold', textAlign: 'center' }, 
 
   noticeListItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   noticeTextContent: { flex: 1, paddingRight: 10 },
 
   noticeHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  noticeBadge: { backgroundColor: '#A1BE44', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, marginRight: 8 }, // 💡 6, 2 -> 8, 4
-  noticeBadgeText: { color: '#1A1A1A', fontSize: 12, fontWeight: 'bold' }, // 💡 10 -> 12
-  noticeTitle: { color: '#ffffff', fontSize: 17, fontWeight: 'bold', flex: 1 }, // 💡 15 -> 17
+  noticeBadge: { backgroundColor: '#A1BE44', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, marginRight: 8 }, 
+  noticeBadgeText: { color: '#1A1A1A', fontSize: 12, fontWeight: 'bold' }, 
+  noticeTitle: { color: '#ffffff', fontSize: 17, fontWeight: 'bold', flex: 1 }, 
 
   noticeActions: { flexDirection: 'row', alignItems: 'center' },
   actionBtn: { padding: 6, marginLeft: 6 },
-  deleteBtn: { borderRadius: 8, padding: 8 }, // 💡 여백 추가
-  actionIcon: { width: 24, height: 24, resizeMode: 'contain' }, // 💡 20 -> 24
+  deleteBtn: { borderRadius: 8, padding: 8 }, 
+  actionIcon: { width: 24, height: 24, resizeMode: 'contain' }, 
 
-  fab: { position: 'absolute', bottom: 15, right: 20, width: 70, height: 70, borderRadius: 35, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4.65 }, // 💡 60 -> 70
-  fabIcon: { width: 35, height: 35, tintColor: '#1A1A1A', resizeMode: 'contain' }, // 💡 30 -> 35
+  fab: { position: 'absolute', bottom: 15, right: 20, width: 70, height: 70, borderRadius: 35, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4.65 }, 
+  fabIcon: { width: 35, height: 35, tintColor: '#1A1A1A', resizeMode: 'contain' }, 
 
   scannerModalOverlay: { flex: 1, backgroundColor: '#1A1A1A' },
   scannerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: 60, backgroundColor: '#1A1A1A' },
-  scannerTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' }, // 💡 20 -> 23
-  closeIcon: { color: '#999999', fontSize: 32 }, // 💡 28 -> 32
+  scannerTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' }, 
+  closeIcon: { color: '#999999', fontSize: 32 }, 
   scannerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
   processingOverlay: {
     position: 'absolute',
@@ -682,26 +794,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 20,
   },
-  processingText: { color: '#ffffff', fontSize: 18, marginTop: 12, fontWeight: 'bold' }, // 💡 16 -> 18
+  processingText: { color: '#ffffff', fontSize: 18, marginTop: 12, fontWeight: 'bold' }, 
   scannerFooter: { padding: 40, alignItems: 'center', backgroundColor: '#1A1A1A' },
-  scannerDesc: { color: '#ffffff', fontSize: 18, marginTop: 5 }, // 💡 16 -> 18
+  scannerDesc: { color: '#ffffff', fontSize: 18, marginTop: 5 }, 
 
-  // ─── 커스텀 알림 모달 전용 스타일 (통일) ───
+  // ─── 커스텀 알림 모달 전용 스타일 ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, // 💡 300 -> 320
-  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, // 💡 18 -> 20
-  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, // 💡 15 -> 17
-  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, // 💡 14 -> 16
-  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, 
+  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, 
+  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, 
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, 
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
 
   deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  deleteModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' }, // 💡 300 -> 320
-  deleteModalText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center', lineHeight: 26 }, // 💡 16 -> 18
+  deleteModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' }, 
+  deleteModalText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center', lineHeight: 26 }, 
   deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
   deleteBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
-  deleteBtnYesText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  deleteBtnYesText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
   deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
-  deleteBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  deleteBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
+
+  // ─── 회원 상세 정보 팝업 전용 스타일 ───
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
+  bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%', maxHeight: '85%' },
+  dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
+  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, paddingHorizontal: 5 },
+  sheetTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' },
+  horizontalDivider: { height: 1, backgroundColor: '#333333', width: '100%', marginBottom: 20 },
+  detailContainer: { width: '100%' },
+  detailProfileWrapper: { alignSelf: 'center', alignItems: 'center', marginBottom: 25 },
+  profileBig: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#444' },
+  profileName: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginTop: 12 }, 
+  infoBox: { backgroundColor: '#262626', borderRadius: 16, padding: 20, marginBottom: 20 },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#333' },
+  detailLabel: { color: '#999', fontSize: 17, fontWeight: 'bold' }, 
+  detailValue: { color: '#fff', fontSize: 17, fontWeight: 'bold' }, 
+  closeFullBtn: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
+  closeFullBtnText: { color: '#00', fontSize: 18, fontWeight: 'bold' },
 });
 
 export default ManagerDashboard;

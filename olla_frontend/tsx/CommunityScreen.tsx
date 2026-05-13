@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, TextInput, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, TextInput, RefreshControl, KeyboardAvoidingView, Platform, Keyboard, Dimensions, PanResponder, TouchableWithoutFeedback } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
@@ -16,6 +16,18 @@ const authHeader = async () => {
 
 const p = (n: number) => String(n).padStart(2, '0');
 
+// ─── 댓글 임시 타입 정의 ───
+interface CommentType {
+  id: number;
+  author: string;
+  date: string;
+  content: string;
+  likes: number;
+  isLiked: boolean;
+  parentId: number | null; 
+  isMine?: boolean; // 💡 내가 쓴 댓글인지 판별하는 속성 추가
+}
+
 const CommunityScreen = ({ route, navigation }: any) => {
   const [refreshing, setRefreshing] = useState(false);
   const isFocused = useIsFocused();
@@ -25,7 +37,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
   const [resultModalVisible, setResultModalVisible] = useState(false);
   const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info' });
 
-  // ─── 작성 창 전용 내장 알림창 상태 (iOS 모달 중첩 버그 방지) ───
+  // ─── 작성 창 전용 내장 알림창 상태 ───
   const [createAlertVisible, setCreateAlertVisible] = useState(false);
   const [createAlertMessage, setCreateAlertMessage] = useState('');
 
@@ -54,8 +66,56 @@ const CommunityScreen = ({ route, navigation }: any) => {
   const [editPostId, setEditPostId] = useState<number | null>(null);
   const [form, setForm] = useState({ category: '센터' as '센터'|'아웃도어', title: '', desc: '', date: '', time: '', people: '2', location: '' });
 
+  // ─── 댓글 모달 전용 상태 ───
+  const [isCommentVisible, setCommentVisible] = useState(false);
+  const [selectedCommentPostId, setSelectedCommentPostId] = useState<number | null>(null);
+  const [comments, setComments] = useState<CommentType[]>([]);
+  const [commentInput, setCommentInput] = useState('');
+  const [replyingTo, setReplyingTo] = useState<{id: number, name: string} | null>(null);
+  
+  // 💡 본인 댓글 삭제 확인 모달 상태
+  const [commentDeleteTarget, setCommentDeleteTarget] = useState<number | null>(null);
+
   const detailAnim = useRef(new Animated.Value(800)).current;
   const createAnim = useRef(new Animated.Value(800)).current;
+
+  // ─── 댓글창 드래그 앤 드롭 (점프/튕김 현상 완벽 해결) ───
+  const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+  const HALF_SCREEN = SCREEN_HEIGHT * 0.6; 
+  const FULL_SCREEN = SCREEN_HEIGHT * 0.95; 
+  const THRESHOLD = (HALF_SCREEN + FULL_SCREEN) / 2; 
+  const CLOSE_THRESHOLD = HALF_SCREEN * 0.7; 
+
+  const commentHeightAnim = useRef(new Animated.Value(0)).current;
+  const currentSnap = useRef(HALF_SCREEN); 
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
+      onPanResponderGrant: () => {
+        commentHeightAnim.setOffset(currentSnap.current);
+        commentHeightAnim.setValue(0);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        commentHeightAnim.setValue(-gestureState.dy);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        commentHeightAnim.flattenOffset();
+        const finalHeight = currentSnap.current - gestureState.dy;
+
+        if (finalHeight > THRESHOLD) {
+          currentSnap.current = FULL_SCREEN;
+          Animated.spring(commentHeightAnim, { toValue: FULL_SCREEN, useNativeDriver: false }).start();
+        } else if (finalHeight < CLOSE_THRESHOLD) {
+          closeCommentModal();
+        } else {
+          currentSnap.current = HALF_SCREEN;
+          Animated.spring(commentHeightAnim, { toValue: HALF_SCREEN, useNativeDriver: false }).start();
+        }
+      }
+    })
+  ).current;
 
   useEffect(() => { 
     if (isFocused) {
@@ -115,11 +175,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
       else if (Array.isArray(data?.data)) list = data.data;
       else if (Array.isArray(data?.data?.data)) list = data.data.data;
 
-      // 🔥 백엔드 팩트 체크를 위한 디버깅 로그 (콘솔창 확인 필수!) 🔥
-      if (list.length > 0) {
-        console.log("📌 [디버그] 백엔드에서 넘겨준 0번째 게시글 실제 JSON:\n", JSON.stringify(list[0], null, 2));
-      }
-
       if (filterToUse === 'MY_APPLIED') {
         list = list.filter((item: any) => {
           const isMine = checkIsMine(item.writerId, item.writerName || '', uId, uName, uNick);
@@ -144,7 +199,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
       const author = item.writerName || '알 수 없음';
       const isMine = checkIsMine(item.writerId, author, uId, uName, uNick);
       
-      // ✅ 백엔드 픽스 스펙 완벽 반영 (isClosed, closed 모두 추적)
       const isClosedFlag = 
         item.isClosed === true || 
         item.isClosed === 'true' || 
@@ -305,7 +359,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
       const headers = await authHeader();
       await axios.patch(`${POSTS}/${targetId}/close`, {}, { headers });
       
-      // ✅ 로컬에서 즉시 마감 상태로 덮어씌움 (새로고침 전에 먼저 시각적 반응 제공)
       setPosts(prev => sortPosts([...prev].map(post => post.id === targetId ? { ...post, isPast: true } : post)));
       setCloseTarget(null);
       
@@ -384,6 +437,79 @@ const CommunityScreen = ({ route, navigation }: any) => {
   const closeDetailModal = () =>
     Animated.timing(detailAnim,{toValue:800,duration:250,useNativeDriver:true}).start(() => setSelectedUser(null));
 
+  // ─── 💡 댓글 기능 로직 ───
+  const openCommentModal = (postId: number) => {
+    setSelectedCommentPostId(postId);
+    const dummyComments: CommentType[] = [
+      // 💡 더미 데이터 생성 시 내 닉네임과 일치하면 isMine을 true로 줌
+      { id: 1, author: '권클라이밍', date: '2026.05.13', content: '같이 가고 싶습니다!', likes: 2, isLiked: false, parentId: null, isMine: (myNickname || '나') === '권클라이밍' },
+      { id: 2, author: '김초보', date: '2026.05.14', content: '저도 참여할게요!', likes: 5, isLiked: true, parentId: null, isMine: (myNickname || '나') === '김초보' },
+      { id: 3, author: '이중수', date: '2026.05.14', content: '환영합니다~', likes: 0, isLiked: false, parentId: 2, isMine: (myNickname || '나') === '이중수' }, 
+    ];
+    setComments(dummyComments);
+    setCommentVisible(true);
+    
+    currentSnap.current = HALF_SCREEN;
+    commentHeightAnim.setValue(0);
+    Animated.timing(commentHeightAnim, { toValue: HALF_SCREEN, duration: 300, useNativeDriver: false }).start();
+  };
+
+  const closeCommentModal = () => {
+    Animated.timing(commentHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
+      setCommentVisible(false);
+      setReplyingTo(null);
+      setCommentInput('');
+    });
+  };
+
+  const toggleCommentLike = (commentId: number) => {
+    setComments(prev => prev.map(c => {
+      if (c.id === commentId) {
+        return { ...c, isLiked: !c.isLiked, likes: c.isLiked ? c.likes - 1 : c.likes + 1 };
+      }
+      return c;
+    }));
+  };
+
+  const submitComment = () => {
+    if (!commentInput.trim()) return;
+    
+    const newComment: CommentType = {
+      id: Date.now(), 
+      author: myNickname || '나', 
+      date: new Date().toISOString().split('T')[0].replace(/-/g, '.'), 
+      content: commentInput.trim(),
+      likes: 0,
+      isLiked: false,
+      parentId: replyingTo ? replyingTo.id : null,
+      isMine: true // 💡 내가 방금 쓴 댓글이므로 isMine은 true
+    };
+
+    setComments(prev => [...prev, newComment]);
+    setCommentInput('');
+    setReplyingTo(null); 
+    Keyboard.dismiss(); 
+  };
+
+  // 💡 본인 댓글 삭제 실행
+  const executeCommentDelete = () => {
+    if (commentDeleteTarget !== null) {
+      setComments(prev => prev.filter(c => c.id !== commentDeleteTarget && c.parentId !== commentDeleteTarget));
+      showResultModal('성공', '해당 댓글이 삭제되었습니다.', 'success');
+    }
+    setCommentDeleteTarget(null);
+  };
+
+  const sortCommentsLogic = (list: CommentType[]) => {
+    return [...list].sort((a, b) => {
+      if (b.likes !== a.likes) return b.likes - a.likes; 
+      return new Date(b.date).getTime() - new Date(a.date).getTime(); 
+    });
+  };
+
+  const parentComments = sortCommentsLogic(comments.filter(c => c.parentId === null));
+  const getChildComments = (parentId: number) => sortCommentsLogic(comments.filter(c => c.parentId === parentId));
+
   const openCreateModal = () => {
     setIsEditMode(false); setEditPostId(null);
     setForm({ category:'센터', title:'', desc:'', date:'', time:'', people:'2', location:'' });
@@ -410,7 +536,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
   const submitPost = async () => {
     const { category, title, desc, date, time, people, location } = form;
     
-    // ✅ 폼 입력 전용 커스텀 알림 적용 (빈칸 공백 문자 체크 포함)
     if (!title.trim() || !desc.trim() || !date.trim() || !time.trim()) { 
       showCreateAlert('내용을 적어주십시오.'); 
       return; 
@@ -528,30 +653,43 @@ const CommunityScreen = ({ route, navigation }: any) => {
                 <View style={[s.badge, { backgroundColor: isPast ? '#333' : (isOut ? '#00810F' : '#0072B9') }]}>
                   <Text style={[s.badgeText, { color: isPast ? '#888' : (isOut ? '#2CDE00' : '#009DFF') }]}>{post.type}</Text>
                 </View>
-                <View style={s.statsRow}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10 }}>
-                    <Image 
-                      source={require('../assets/Eye.png')} 
-                      style={{ width: 17, height: 17, tintColor: '#999', marginRight: 4 }} 
-                    />
-                    <Text style={s.stat}>{post.viewCount}</Text>
+                
+                {/* 우측 상단 묶음 영역 */}
+                <View style={{ alignItems: 'flex-end' }}>
+                  <View style={s.statsRow}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 4 }}>
+                      <Image 
+                        source={require('../assets/Eye.png')} 
+                        style={{ width: 17, height: 17, tintColor: '#999', marginRight: 4 }} 
+                      />
+                      <Text style={s.stat}>{post.viewCount}</Text>
+                    </View>
+                    <Text style={s.dateText}>{post.postDate}</Text>
                   </View>
 
-                  <TouchableOpacity onPress={() => toggleLike(post.id,post.isLiked)}>
-                    <Text style={[s.stat, post.isLiked&&{color:'#FF4D4D'}]}>{post.isLiked?'♥':'♡'} {post.likeCount}</Text>
-                  </TouchableOpacity>
-                  <Text style={s.dateText}>{post.postDate}</Text>
+                  {/* 내 게시글일 경우 마감/수정 버튼이 게시일 아래에 위치 */}
+                  {post.isMine && !isPast && (
+                    <View style={{ flexDirection: 'row', marginTop: 8 }}>
+                      <TouchableOpacity style={s.closeBtnAction} onPress={() => setCloseTarget(post.id)}>
+                        <Text style={s.closeTextAction}>마감</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={s.editBtn} onPress={() => openEditModal(post)}>
+                        <Text style={s.editText}>수정</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
               </View>
 
               <Text style={[s.title, isPast && { color: '#888' }]}>{post.title}</Text>
               <Text style={[s.desc, isPast && { color: '#666' }]}>{post.desc}</Text>
 
+              {/* 장소/날짜 정보 부분 */}
               <View style={s.infoRow}>
                 {([['point.png',post.location],['DATE.png',post.date],['people.png',post.people]] as [string,string][]).map(([img,val],i) => (
                   <View key={i} style={s.infoItem}>
                     <Image source={img==='point.png'?require('../assets/point.png'):img==='DATE.png'?require('../assets/DATE.png'):require('../assets/people.png')} style={s.infoIcon}/>
-                    <Text style={s.infoText} numberOfLines={1}>{val}</Text>
+                    <Text style={s.infoText}>{val}</Text>
                   </View>
                 ))}
               </View>
@@ -563,41 +701,44 @@ const CommunityScreen = ({ route, navigation }: any) => {
                   <Text style={[s.author, isPast && { color: '#666' }]}>{post.author}</Text>
                 </TouchableOpacity>
                 
-                {/* ✅ 마감된 게시글은 무조건 View로 감싸 클릭 자체를 방지하고 '마감됨' 표시 */}
-                {!post.isMine && (
-                  isPast ? (
-                    <View style={[s.joinBtn, s.cancelBtn]}>
-                      <Text style={[s.joinText, s.cancelText]}>마감됨</Text>
-                    </View>
-                  ) : (
-                    <TouchableOpacity 
-                      style={[s.joinBtn, post.isJoined && s.cancelBtn]} 
-                      onPress={() => toggleJoin(post.id, post.isJoined)}
-                    >
-                      <Text style={[s.joinText, post.isJoined && s.cancelText]}>
-                        {post.isJoined ? '취소하기' : '참여하기'}
-                      </Text>
-                    </TouchableOpacity>
-                  )
-                )}
+                {/* 우측 하단 액션 묶음 */}
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  
+                  {/* 좋아요 버튼 */}
+                  <TouchableOpacity style={{ marginRight: 20 }} onPress={() => toggleLike(post.id,post.isLiked)}>
+                    <Text style={[s.stat, post.isLiked&&{color:'#FF4D4D'}, { marginRight: 0 }]}>{post.isLiked?'♥':'♡'} {post.likeCount}</Text>
+                  </TouchableOpacity>
 
-                {post.isMine && (
-                  <View style={s.myActions}>
-                    {!isPast && (
-                      <>
-                        <TouchableOpacity style={s.closeBtnAction} onPress={() => setCloseTarget(post.id)}>
-                          <Text style={s.closeTextAction}>마감</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={s.editBtn} onPress={() => openEditModal(post)}>
-                          <Text style={s.editText}>수정</Text>
-                        </TouchableOpacity>
-                      </>
-                    )}
-                    <TouchableOpacity style={s.trashBtn} onPress={() => setDeleteTarget(post.id)}>
-                      <Image source={require('../assets/trash.png')} style={[s.trashIcon, isPast && { tintColor: '#A1BE44' }]}/>
-                    </TouchableOpacity>
-                  </View>
-                )}
+                  {/* 댓글 버튼 추가 */}
+                  <TouchableOpacity style={{ marginRight: post.isMine ? 11 : 15 }} onPress={() => openCommentModal(post.id)}>
+                    <Image source={require('../assets/ChatText.png')} style={{ width: 22, height: 22, tintColor: '#ffffff' }} />
+                  </TouchableOpacity>
+
+                  {!post.isMine && (
+                    isPast ? (
+                      <View style={[s.joinBtn, s.cancelBtn]}>
+                        <Text style={[s.joinText, s.cancelText]}>마감됨</Text>
+                      </View>
+                    ) : (
+                      <TouchableOpacity 
+                        style={[s.joinBtn, post.isJoined && s.cancelBtn]} 
+                        onPress={() => toggleJoin(post.id, post.isJoined)}
+                      >
+                        <Text style={[s.joinText, post.isJoined && s.cancelText]}>
+                          {post.isJoined ? '취소하기' : '참여하기'}
+                        </Text>
+                      </TouchableOpacity>
+                    )
+                  )}
+
+                  {post.isMine && (
+                    <View style={s.myActions}>
+                      <TouchableOpacity style={s.trashBtn} onPress={() => setDeleteTarget(post.id)}>
+                        <Image source={require('../assets/trash.png')} style={[s.trashIcon, isPast && { tintColor: '#A1BE44' }]}/>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
               </View>
             </TouchableOpacity>
           );
@@ -633,7 +774,20 @@ const CommunityScreen = ({ route, navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 일반 공통 알림 결과 모달 ─── */}
+      {/* 💡 본인 댓글 삭제 확인 모달 */}
+      <Modal visible={commentDeleteTarget !== null} animationType="fade" transparent onRequestClose={() => setCommentDeleteTarget(null)}>
+        <View style={s.overlay}>
+          <View style={s.alertBox}>
+            <Text style={s.alertTitle}>해당 댓글을 삭제하시겠습니까?</Text>
+            <View style={s.alertBtns}>
+              <TouchableOpacity style={s.btnYes} onPress={executeCommentDelete}><Text style={s.btnYesText}>예</Text></TouchableOpacity>
+              <TouchableOpacity style={s.btnNo} onPress={() => setCommentDeleteTarget(null)}><Text style={s.btnNoText}>아니오</Text></TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 일반 공통 알림 결과 모달 */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
         <View style={s.resultModalOverlay}>
           <View style={s.resultModalBox}>
@@ -679,6 +833,123 @@ const CommunityScreen = ({ route, navigation }: any) => {
             </TouchableOpacity>
           </Animated.View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* 🌟 새로운 댓글/대댓글 모달 창 (드래그 지원 + 본인 전용 삭제 기능) 🌟 */}
+      <Modal visible={isCommentVisible} transparent animationType="fade" onRequestClose={closeCommentModal}>
+        <View style={s.modalOverlay}>
+          {/* 바깥쪽 어두운 배경을 클릭했을 때만 창이 꺼지도록 분리 */}
+          <TouchableWithoutFeedback onPress={closeCommentModal}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', flex: 1, justifyContent: 'flex-end' }} pointerEvents="box-none">
+            <Animated.View style={[s.commentSheet, { height: commentHeightAnim }]}>
+              
+              <View {...panResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
+                <View style={s.handle} />
+                <View style={s.sheetHeader}>
+                  <Text style={s.sheetTitle}>댓글</Text>
+                  <TouchableOpacity onPress={closeCommentModal} hitSlop={{top:10, bottom:10, left:10, right:10}}>
+                    <Text style={s.closeBtn}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={s.hr} />
+              </View>
+              
+              <ScrollView showsVerticalScrollIndicator={true} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }}>
+                {parentComments.map(parent => (
+                  <View key={parent.id}>
+                    {/* 부모 댓글 렌더링 */}
+                    <View style={s.commentItem}>
+                      <Image source={require('../assets/profile.png')} style={s.commentAvatar} />
+                      <View style={s.commentContentArea}>
+                        <View style={s.commentHeaderLine}>
+                          <Text style={s.commentAuthorName}>{parent.author}</Text>
+                          <Text style={s.commentDateText}>{parent.date}</Text>
+                        </View>
+                        <Text style={s.commentBodyText}>{parent.content}</Text>
+                        <TouchableOpacity onPress={() => setReplyingTo({ id: parent.id, name: parent.author })}>
+                          <Text style={s.commentReplyBtnText}>답글 달기</Text>
+                        </TouchableOpacity>
+                      </View>
+                      
+                      {/* 💡 우측 하단 좋아요 & 삭제 컨테이너 */}
+                      <View style={{ alignItems: 'flex-end', justifyContent: 'flex-start', paddingTop: 2 }}>
+                        {/* 좋아요 버튼 (본인 댓글이면 삭제버튼이 있으므로 아래 여백을 줌) */}
+                        <TouchableOpacity style={{ paddingBottom: parent.isMine ? 8 : 0 }} onPress={() => toggleCommentLike(parent.id)}>
+                          <Text style={[s.commentStatText, parent.isLiked && { color: '#FF4D4D' }]}>{parent.isLiked ? '♥' : '♡'} {parent.likes}</Text>
+                        </TouchableOpacity>
+                        
+                        {/* 본인 댓글인 경우에만 삭제 버튼 노출 */}
+                        {parent.isMine && (
+                          <TouchableOpacity style={s.commentDeletePngBtn} onPress={() => setCommentDeleteTarget(parent.id)}>
+                            <Image source={require('../assets/trash.png')} style={s.commentTrashIcon} />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+
+                    {/* 대댓글 렌더링 (들여쓰기 적용) */}
+                    {getChildComments(parent.id).map(child => (
+                      <View key={child.id} style={[s.commentItem, s.childCommentItem]}>
+                        <Image source={require('../assets/profile.png')} style={s.commentAvatar} />
+                        <View style={s.commentContentArea}>
+                          <View style={s.commentHeaderLine}>
+                            <Text style={s.commentAuthorName}>{child.author}</Text>
+                            <Text style={s.commentDateText}>{child.date}</Text>
+                          </View>
+                          <Text style={s.commentBodyText}>{child.content}</Text>
+                        </View>
+
+                        {/* 💡 우측 하단 좋아요 & 삭제 컨테이너 */}
+                        <View style={{ alignItems: 'flex-end', justifyContent: 'flex-start', paddingTop: 2 }}>
+                          {/* 좋아요 버튼 (본인 댓글이면 삭제버튼이 있으므로 아래 여백을 줌) */}
+                          <TouchableOpacity style={{ paddingBottom: child.isMine ? 8 : 0 }} onPress={() => toggleCommentLike(child.id)}>
+                            <Text style={[s.commentStatText, child.isLiked && { color: '#FF4D4D' }]}>{child.isLiked ? '♥' : '♡'} {child.likes}</Text>
+                          </TouchableOpacity>
+                          
+                          {/* 본인 댓글인 경우에만 삭제 버튼 노출 */}
+                          {child.isMine && (
+                            <TouchableOpacity style={s.commentDeletePngBtn} onPress={() => setCommentDeleteTarget(child.id)}>
+                              <Image source={require('../assets/trash.png')} style={s.commentTrashIcon} />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ))}
+                {comments.length === 0 && <Text style={s.empty}>등록된 댓글이 없습니다.</Text>}
+              </ScrollView>
+
+              {/* 하단 댓글 입력창 */}
+              <View style={s.commentInputWrapper}>
+                {replyingTo && (
+                  <View style={s.replyingToIndicator}>
+                    <Text style={s.replyingToIndicatorText}>{replyingTo.name}님에게 답글 남기는 중</Text>
+                    <TouchableOpacity onPress={() => setReplyingTo(null)}><Text style={s.replyingCancelText}>✕</Text></TouchableOpacity>
+                  </View>
+                )}
+                <View style={s.commentInputRow}>
+                  <Image source={require('../assets/profile.png')} style={s.commentInputAvatar} />
+                  <TextInput
+                    style={s.commentTextInput}
+                    placeholder="댓글을 작성해주세요."
+                    placeholderTextColor="#666"
+                    value={commentInput}
+                    onChangeText={setCommentInput}
+                    multiline
+                  />
+                  <TouchableOpacity onPress={submitComment}>
+                    {/* 💡 입력 내용이 있으면 등록 버튼이 다시 메인 컬러(연두색)로 빛납니다! */}
+                    <Text style={[s.commentSubmitBtn, commentInput.trim() && { color: '#A1BE44' }]}>등록</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Animated.View>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       {/* 작성/수정 창 */}
@@ -743,7 +1014,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
             </ScrollView>
           </Animated.View>
 
-          {/* ✅ iOS 모달 겹침 버그 완벽 차단: 작성 창 내부에 띄우는 강제 덮어쓰기 뷰 */}
+          {/* iOS 모달 겹침 버그 방지용 알림 */}
           {createAlertVisible && (
             <View style={s.innerAlertOverlay}>
               <View style={s.resultModalBox}>
@@ -786,7 +1057,6 @@ const s = StyleSheet.create({
   scroll:{paddingBottom:80},
   empty:{color:'#999',fontSize:16,textAlign:'center',marginTop:30}, 
   
-  // ✅ 마감된 카드는 투명도 0.4 처리로 완벽한 시각적 피드백 제공
   card:{backgroundColor:'#212121',borderColor:'#262626',borderWidth:1.5,borderRadius:16,padding:20,marginBottom:15},
   cardPast:{opacity:0.4,borderColor:'#333'}, 
   cardHeader:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginBottom:12},
@@ -801,9 +1071,9 @@ const s = StyleSheet.create({
   desc:{color:'#999',fontSize:16,lineHeight:22,marginBottom:15}, 
   
   infoRow:{flexDirection:'row',alignItems:'center',marginBottom:15,flexWrap:'wrap'},
-  infoItem:{flexDirection:'row',alignItems:'center',marginRight:12,marginBottom:4},
-  infoIcon:{width:16,height:16,resizeMode:'contain',marginRight:4,tintColor:'#999'}, 
-  infoText:{color:'#999',fontSize:14}, 
+  infoItem:{flexDirection:'row',alignItems:'center',marginRight:10,marginBottom:4,flexShrink:1},
+  infoIcon:{width:14,height:14,resizeMode:'contain',marginRight:4,tintColor:'#999'}, 
+  infoText:{color:'#999',fontSize:13,flexShrink:1}, 
   
   divider:{height:1,backgroundColor:'#333',marginBottom:15},
   footer:{flexDirection:'row',justifyContent:'space-between',alignItems:'center'},
@@ -817,10 +1087,13 @@ const s = StyleSheet.create({
   cancelText:{color:'#fff'},
   
   myActions:{flexDirection:'row',alignItems:'center'},
-  closeBtnAction:{backgroundColor:'#444',paddingHorizontal:14,paddingVertical:7,borderRadius:8,marginRight:8},
-  closeTextAction:{color:'#fff',fontSize:14,fontWeight:'bold'},
-  editBtn:{backgroundColor:'#333',paddingHorizontal:14,paddingVertical:7,borderRadius:8,marginRight:8},
-  editText:{color:'#A1BE44',fontSize:14,fontWeight:'bold'}, 
+  
+  closeBtnAction:{backgroundColor:'#333',paddingHorizontal:14,paddingVertical:7,borderRadius:8,marginRight:6},
+  closeTextAction:{color:'#fff',fontSize:13,fontWeight:'bold'},
+  
+  editBtn:{backgroundColor:'#333',paddingHorizontal:14,paddingVertical:7,borderRadius:8},
+  editText:{color:'#A1BE44',fontSize:13,fontWeight:'bold'}, 
+
   trashBtn:{padding:6},
   trashIcon:{width:20,height:20,resizeMode:'contain',tintColor:'#A1BE44'}, 
   
@@ -875,7 +1148,6 @@ const s = StyleSheet.create({
   submitBtn:{width:'100%',backgroundColor:'#A1BE44',borderRadius:12,paddingVertical:16,alignItems:'center',marginTop:20},
   submitText:{color:'#000',fontSize:18,fontWeight:'bold'}, 
 
-  // ─── 공통 알림 모달 & 작성 모달 내부 알림 오버레이 스타일 ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   innerAlertOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', zIndex: 9999, elevation: 9999 },
   resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
@@ -883,6 +1155,34 @@ const s = StyleSheet.create({
   resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, 
   resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
+
+  // ─── 💡 댓글 모달 전용 스타일 (드래그 지원) ───
+  commentSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: Platform.OS === 'ios' ? 30 : 20, width: '100%', overflow: 'hidden' },
+  commentItem: { flexDirection: 'row', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#333' },
+  childCommentItem: { marginLeft: 45, borderLeftWidth: 1.5, borderLeftColor: '#444', paddingLeft: 12 },
+  commentAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#444', marginRight: 12 },
+  commentContentArea: { flex: 1, justifyContent: 'center' },
+  commentHeaderLine: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  commentAuthorName: { color: '#ffffff', fontSize: 14, fontWeight: 'bold', marginRight: 8 },
+  commentDateText: { color: '#999999', fontSize: 13 },
+  commentBodyText: { color: '#ffffff', fontSize: 16, lineHeight: 22, marginBottom: 6 },
+  commentReplyBtnText: { color: '#888888', fontSize: 13, fontWeight: 'bold' },
+  
+  // 댓글 내 좋아요 숫자 스타일
+  commentStatText: { color: '#999', fontSize: 14, fontWeight: '500' },
+  
+  // 💡 본인 전용: PNG 삭제 버튼 스타일 (빨간색 휴지통, 배경 없음)
+  commentDeletePngBtn: { padding: 4, marginTop: 4 }, // 좋아요 아래 공간 확보
+  commentTrashIcon: { width: 18, height: 18, resizeMode: 'contain', tintColor: '#FF0000' },
+  
+  commentInputWrapper: { borderTopWidth: 1, borderTopColor: '#333', paddingTop: 12, backgroundColor: '#1E1E1E' },
+  replyingToIndicator: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#2A2A2A', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 8, marginBottom: 10 },
+  replyingToIndicatorText: { color: '#A1BE44', fontSize: 13, fontWeight: 'bold' },
+  replyingCancelText: { color: '#999', fontSize: 16, fontWeight: 'bold' },
+  commentInputRow: { flexDirection: 'row', alignItems: 'center' },
+  commentInputAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#444', marginRight: 10 },
+  commentTextInput: { flex: 1, backgroundColor: '#000000', color: '#ffffff', fontSize: 15, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, minHeight: 40, maxHeight: 100 },
+  commentSubmitBtn: { color: '#666666', fontSize: 16, fontWeight: 'bold', marginLeft: 12, paddingVertical: 10 },
 });
 
 export default CommunityScreen;

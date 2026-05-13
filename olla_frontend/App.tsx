@@ -4,10 +4,10 @@ import { NavigationContainer, useNavigationContainerRef } from '@react-navigatio
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// 네비게이션 타입 정의
+// 💡 1. Notification 스크린 타입 추가
 type RootParamList = {
   Login: undefined; Signup: undefined; PersonalInfo: undefined; Loading: undefined;
-  Home: undefined; Notice: undefined; Recode: undefined; Ranking: undefined;
+  Home: undefined; Notice: undefined; Notification: undefined; Recode: undefined; Ranking: undefined;
   Community: { filter?: 'ALL' | 'MY_WRITTEN' | 'MY_APPLIED' } | undefined; 
   MY: undefined; ManagerDashboard: undefined;
   ManagerUser: undefined; ManagerTicket: undefined; ManagerNotice: undefined; ManagerCommunity: undefined;
@@ -20,6 +20,7 @@ import PersonalScreen from './tsx/PersonalScreen';
 import LoadingScreen from './tsx/LoadingScreen';
 import HomeScreen from './tsx/HomeScreen';
 import NoticeScreen from './tsx/NoticeScreen';
+import NotificationScreen from './tsx/NotificationScreen'; // 💡 2. 스크린 임포트 추가
 import RecodeScreen from './tsx/RecodeScreen';
 import RankingScreen from './tsx/RankingScreen';
 import CommunityScreen from './tsx/CommunityScreen';
@@ -32,7 +33,6 @@ import ManagerCommunity from './tsx/ManagerCommunity';
 
 const Stack = createNativeStackNavigator<RootParamList>();
 
-// 💡 하단 탭의 순서를 정의합니다. 이 순서에 따라 애니메이션 방향이 결정됩니다.
 const USER_TAB_ORDER = ['Home', 'Recode', 'Ranking', 'Community', 'MY'];
 const ADMIN_TAB_ORDER = ['ManagerDashboard', 'ManagerUser', 'ManagerTicket', 'ManagerNotice', 'ManagerCommunity'];
 
@@ -66,13 +66,12 @@ const AppContent = () => {
   const insets = useSafeAreaInsets(); 
   const [routeName, setRouteName] = useState<string>('');
   
-  // 💡 애니메이션 방향을 관리하기 위한 상태 (기본값: 오른쪽에서 나옴)
   const [slideDirection, setSlideDirection] = useState<'slide_from_right' | 'slide_from_left'>('slide_from_right');
-  const prevRouteName = useRef<string>('Home'); // 이전 라우트 이름을 저장
+  const prevRouteName = useRef<string>('Home'); 
 
   const [isExitModalVisible, setExitModalVisible] = useState(false);
 
-  // --- 기존 데이터 유지 ---
+  // --- 데이터 유지 ---
   const [profileData, setProfileData] = useState({ name: '권클라이밍', phone: '010-1234-5678', age: '25', height: '175', weight: '70', arm: '180', shoe: '260' });
   const [profileToggles, setProfileToggles] = useState({ showName: true, showPhone: false, showAge: true, showHeight: true, showWeight: true, showArm: true, showShoe: true });
   
@@ -95,31 +94,26 @@ const AppContent = () => {
   const adminScreens = ['ManagerDashboard', 'ManagerUser', 'ManagerTicket', 'ManagerNotice', 'ManagerCommunity'];
   const isAdminMode = adminScreens.includes(routeName);
 
-  // 💡 라우트(화면)가 변경될 때마다 방향을 계산합니다.
   const handleStateChange = () => {
     const currentRoute = navigationRef.getCurrentRoute()?.name;
     if (!currentRoute) return;
 
-    // 현재 관리자 모드인지 일반 유저 모드인지 파악하여 사용할 배열 결정
     const currentOrder = isAdminMode ? ADMIN_TAB_ORDER : USER_TAB_ORDER;
-    
     const prevIndex = currentOrder.indexOf(prevRouteName.current);
     const currentIndex = currentOrder.indexOf(currentRoute);
 
-    // 하단 탭 내에서의 이동일 경우에만 방향을 계산 (다른 화면들은 기본 오른쪽 슬라이드)
     if (prevIndex !== -1 && currentIndex !== -1) {
       if (currentIndex > prevIndex) {
-        setSlideDirection('slide_from_right'); // 오른쪽 탭을 누르면 오른쪽에서 나옴
+        setSlideDirection('slide_from_right'); 
       } else if (currentIndex < prevIndex) {
-        setSlideDirection('slide_from_left');  // 왼쪽 탭을 누르면 왼쪽에서 나옴
+        setSlideDirection('slide_from_left');  
       }
     } else {
-       // 하단 탭에 속하지 않은 화면(예: 공지사항 등)으로 이동할 때는 기본 오른쪽
        setSlideDirection('slide_from_right');
     }
 
     setRouteName(currentRoute);
-    prevRouteName.current = currentRoute; // 현재 라우트를 다음 번의 '이전 라우트'로 저장
+    prevRouteName.current = currentRoute; 
   };
 
   return (
@@ -133,17 +127,38 @@ const AppContent = () => {
           setRouteName(initRoute);
           prevRouteName.current = initRoute;
         }} 
-        onStateChange={handleStateChange} // 💡 상태 변화 감지 함수 연결
+        onStateChange={handleStateChange} 
       >
         {shouldShowNav && (
           <View style={[styles.topNav, { paddingTop: Math.max(insets.top, 10) }]}>
             <View style={styles.topNavInner}>
+              
+              {/* 🌟 1. 가운데 타이틀: 공지사항 또는 알림 화면일 때만 나타납니다. */}
+              {(routeName === 'Notice' || routeName === 'Notification') && (
+                <Text style={styles.globalCenterTitle}>
+                  {routeName === 'Notice' ? '공지사항' : '알림'}
+                </Text>
+              )}
+
               {!isAdminMode ? (
                 <>
-                  <Text style={styles.logoText}>olla</Text>
-                  <TouchableOpacity onPress={() => navigationRef.navigate('Notice')} hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
-                    <Image source={require('./assets/Vector.png')} style={styles.topIcon} />
-                  </TouchableOpacity>
+                  {/* 🌟 2. 왼쪽 영역: 해당 화면에서는 뒤로가기 버튼, 아니면 로고 */}
+                  {routeName === 'Notice' || routeName === 'Notification' ? (
+                    <TouchableOpacity style={styles.backBtn} onPress={() => navigationRef.goBack()} hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
+                      <Text style={styles.backBtnText}>←</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <Text style={styles.logoText}>olla</Text>
+                  )}
+
+                  {/* 🌟 3. 오른쪽 영역: 알림 버튼 (Notice나 Notification 화면에서는 숨김 처리) */}
+                  {routeName !== 'Notice' && routeName !== 'Notification' ? (
+                    <TouchableOpacity onPress={() => navigationRef.navigate('Notification')} hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
+                      <Image source={require('./assets/Vector.png')} style={styles.topIcon} />
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={{ width: 20 }} /> // 좌우 균형을 맞추기 위한 빈 공간
+                  )}
                 </>
               ) : (
                 <>
@@ -162,7 +177,6 @@ const AppContent = () => {
         )}
 
         <View style={styles.mainContent}>
-          {/* 💡 계산된 애니메이션 방향(slideDirection)을 Navigator 옵션에 주입 */}
           <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false, animation: slideDirection }}>
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Signup" component={SignupScreen} />
@@ -170,6 +184,10 @@ const AppContent = () => {
             <Stack.Screen name="Loading" component={LoadingScreen} />
             <Stack.Screen name="Home" component={HomeScreen} />
             <Stack.Screen name="Notice" component={NoticeScreen} />
+            
+            {/* 💡 Notification 스크린 스택 추가 */}
+            <Stack.Screen name="Notification" component={NotificationScreen} />
+
             <Stack.Screen name="Recode">{(props) => <RecodeScreen {...props} difficultyData={difficultyData} setDifficultyData={setDifficultyData} enduranceData={enduranceData} setEnduranceData={setEnduranceData} consecutiveData={consecutiveData} setConsecutiveData={setConsecutiveData} />}</Stack.Screen>
             <Stack.Screen name="Ranking">{(props) => <RankingScreen {...props} myProfile={profileData} difficultyData={difficultyData} enduranceData={enduranceData} consecutiveData={consecutiveData} />}</Stack.Screen>
             <Stack.Screen name="Community">{(props) => <CommunityScreen {...props} myProfile={profileData} myToggles={profileToggles} />}</Stack.Screen>
@@ -237,7 +255,14 @@ const styles = StyleSheet.create({
   globalContainer: { flex: 1, backgroundColor: '#1A1A1A' },
   mainContent: { flex: 1 },
   topNav: { backgroundColor: '#1A1A1A', borderBottomWidth: 0.5, borderBottomColor: '#222' },
-  topNavInner: { height: 50, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20 },
+  // 💡 relative 추가
+  topNavInner: { height: 50, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, position: 'relative' },
+  
+  // 💡 상단 정중앙에 고정될 타이틀 스타일
+  globalCenterTitle: { position: 'absolute', left: 0, right: 0, textAlign: 'center', color: '#ffffff', fontSize: 20, fontWeight: 'bold', zIndex: 1 },
+  backBtn: { padding: 5, zIndex: 10, marginLeft: -5 },
+  backBtnText: { color: '#ffffff', fontSize: 28 },
+
   logoText: { fontSize: 24, fontWeight: '900', color: '#A1BE44' }, 
   topIcon: { width: 20, height: 20, resizeMode: 'contain' }, 
   adminLogoContainer: { flexDirection: 'column' },

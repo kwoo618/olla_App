@@ -54,6 +54,9 @@ const MYScreen = ({ navigation }: any) => {
   const [resultModalVisible, setResultModalVisible] = useState(false);
   const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info' });
 
+  // 💡 멤버십 아코디언(토글) 상태 추가
+  const [isMembershipExpanded, setIsMembershipExpanded] = useState(false);
+
   const showResultModal = (title: string, message: string, type: 'info' | 'success' | 'error' = 'info') => {
     setResultModalConfig({ title, message, type });
     setResultModalVisible(true);
@@ -122,7 +125,6 @@ const MYScreen = ({ navigation }: any) => {
         phone: data.phone || '',
         gender: data.gender === 'MALE' ? '남' : data.gender === 'FEMALE' ? '여' : (data.gender || ''),
         birthDate: data.birthDate || '',
-        // ─── age 필드 제거: 생년월일로 자동 계산하므로 저장 불필요 ───
         height: data.height?.toString() || '',
         weight: data.weight?.toString() || '',
         arm: data.armSpan?.toString() || '',
@@ -140,7 +142,7 @@ const MYScreen = ({ navigation }: any) => {
         });
       }
 
-      // [GET] 오늘 출석 여 확인
+      // [GET] 오늘 출석 여부 확인
       let attendedToday = false;
       try {
         const today = new Date();
@@ -463,40 +465,52 @@ const MYScreen = ({ navigation }: any) => {
           <Text style={styles.chevronIcon}>＞</Text>
         </TouchableOpacity>
 
-        {/* 멤버십 */}
+        {/* 💡 멤버십 (아코디언 토글 적용) */}
         <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Image source={require('../assets/membership.png')} style={styles.cardHeaderIcon} />
-            <Text style={styles.cardHeaderTitle}>멤버십 정보</Text>
-          </View>
-          <View style={styles.memInfoContainer}>
-            <View style={styles.memInfoRow}>
-              <Text style={styles.memInfoLabel}>이용권</Text>
-              <Text style={styles.memInfoValue}>{memSummaryText}</Text>
+          <TouchableOpacity 
+            style={[styles.cardHeader, { marginBottom: isMembershipExpanded ? 20 : 0 }]} 
+            onPress={() => setIsMembershipExpanded(!isMembershipExpanded)}
+            activeOpacity={0.8}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Image source={require('../assets/membership.png')} style={styles.cardHeaderIcon} />
+              <Text style={styles.cardHeaderTitle}>멤버십 정보</Text>
             </View>
-            <View style={styles.memInfoRow}>
-              <Text style={styles.memInfoLabel}>
-                {memInfo.isCountType ? '잔여 횟수' : '기간'}
-              </Text>
-              <Text style={styles.memInfoValue}>{memInfo.period}</Text>
-            </View>
-            <View style={styles.memInfoRow}>
-              <Text style={styles.memInfoLabel}>상태</Text>
-              <View style={[styles.activeBadge, !hasMembership && { backgroundColor: '#444444' }]}>
-                <Text style={[styles.activeBadgeText, !hasMembership && { color: '#999999' }]}>
-                  {memInfo.status}
-                </Text>
-              </View>
-            </View>
-          </View>
-          <TouchableOpacity style={styles.pauseButton} onPress={openPauseModal}>
-            <Text style={styles.pauseButtonText}>멤버십 일시정지</Text>
+            <Text style={styles.chevronIcon}>{isMembershipExpanded ? '∨' : '＞'}</Text>
           </TouchableOpacity>
+
+          {isMembershipExpanded && (
+            <>
+              <View style={styles.memInfoContainer}>
+                <View style={styles.memInfoRow}>
+                  <Text style={styles.memInfoLabel}>이용권</Text>
+                  <Text style={styles.memInfoValue}>{memSummaryText}</Text>
+                </View>
+                <View style={styles.memInfoRow}>
+                  <Text style={styles.memInfoLabel}>
+                    {memInfo.isCountType ? '잔여 횟수' : '기간'}
+                  </Text>
+                  <Text style={styles.memInfoValue}>{memInfo.period}</Text>
+                </View>
+                <View style={styles.memInfoRow}>
+                  <Text style={styles.memInfoLabel}>상태</Text>
+                  <View style={[styles.activeBadge, !hasMembership && { backgroundColor: '#444444' }]}>
+                    <Text style={[styles.activeBadgeText, !hasMembership && { color: '#999999' }]}>
+                      {memInfo.status}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+              <TouchableOpacity style={styles.pauseButton} onPress={openPauseModal}>
+                <Text style={styles.pauseButtonText}>멤버십 일시정지</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
 
         {/* 내 활동 */}
         <View style={styles.card}>
-          <View style={styles.cardHeader}>
+          <View style={[styles.cardHeader, { justifyContent: 'flex-start', marginBottom: 20 }]}>
             <Image source={require('../assets/FilmScript.png')} style={styles.cardHeaderIcon} />
             <Text style={styles.cardHeaderTitle}>내 활동</Text>
           </View>
@@ -513,7 +527,7 @@ const MYScreen = ({ navigation }: any) => {
 
         {/* 알림 설정 */}
         <View style={styles.card}>
-          <View style={styles.cardHeader}>
+          <View style={[styles.cardHeader, { justifyContent: 'flex-start', marginBottom: 20 }]}>
             <Image source={require('../assets/Vector.png')} style={styles.cardHeaderIcon} />
             <Text style={styles.cardHeaderTitle}>알림설정</Text>
           </View>
@@ -799,11 +813,11 @@ const MYScreen = ({ navigation }: any) => {
 };
 
 const styles = StyleSheet.create({
-  // 기존 스타일 유지
+  // 기존 스타일 유지 (cardHeader만 양끝 정렬되도록 한 줄 수정했습니다!)
   background: { flex: 1, backgroundColor: '#1A1A1A' },
   scrollContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 100 },
   card: { backgroundColor: '#212121', borderRadius: 16, padding: 20, marginBottom: 15 },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, // 💡 양쪽 끝 정렬로 변경
   cardHeaderIcon: { width: 24, height: 24, tintColor: '#A1BE44', marginRight: 10, resizeMode: 'contain' },
   cardHeaderTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' },
   profileCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#212121', borderRadius: 16, paddingVertical: 20, paddingHorizontal: 20, marginBottom: 15 },
