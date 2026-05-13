@@ -6,6 +6,7 @@ import com.olla.olla_climbing.domain.ranking.entity.Ranking;
 import com.olla.olla_climbing.domain.ranking.enums.RankType;
 import com.olla.olla_climbing.domain.ranking.repository.RankingRepository;
 import com.olla.olla_climbing.domain.record.entity.RecordBeginner;
+import com.olla.olla_climbing.domain.record.enums.AttemptType;
 import com.olla.olla_climbing.domain.record.enums.Difficulty;
 import com.olla.olla_climbing.domain.record.repository.RecordBeginnerRepository;
 import lombok.RequiredArgsConstructor;
@@ -28,17 +29,17 @@ public class BeginnerRankingService {
     @Transactional(readOnly = true)
     public BeginnerRankingResponse getBeginnerRanking(Difficulty difficulty) {
         List<Ranking> masterRankings = rankingRepository.findByRankTypeAndDifficultyAndIsMasterTrueOrderByBaseDateDesc(RankType.BEGINNER, difficulty);
-        
+
         List<BeginnerRankingResponse.MasterDto> masterDtos = masterRankings.stream()
                 .map(r -> {
-                    // (동철 수정) 점수에 0.5가 더해져 있다면 왕복(ROUND_TRIP), 아니면 편도(ONE_WAY)로 확실하게 판단!
-                    String attemptType = (r.getScore() != null && r.getScore() % 1 != 0) ? "ROUND_TRIP" : "ONE_WAY";
+                    // 💡 점수에 0.5가 더해져 있다면 왕복(ROUND_TRIP), 아니면 편도(ONE_WAY)
+                    AttemptType type = (r.getScore() % 1 != 0) ? AttemptType.ROUND_TRIP : AttemptType.ONE_WAY;
 
                     return BeginnerRankingResponse.MasterDto.builder()
                             .memberId(r.getMember().getId())
                             .name(r.getMember().getName())
-                            .score(Math.floor(r.getScore())) // 프론트엔드에는 0.5를 제거한 순수 홀드 수만 전달
-                            .attemptType(attemptType) // (동철 수정) DTO에 왕복/편도 명확히 주입
+                            .score(Math.floor(r.getScore())) // 0.5 제거한 순수 홀드 수
+                            .attemptType(type)
                             .achievedAt(r.getBaseDate())
                             .build();
                 })
@@ -49,25 +50,27 @@ public class BeginnerRankingService {
 
         if (latestBaseDate != null) {
             List<Ranking> challengerRankings = rankingRepository.findByRankTypeAndDifficultyAndIsMasterFalseAndBaseDateOrderByRankingAsc(RankType.BEGINNER, difficulty, latestBaseDate);
-            
+
             challengerDtos = challengerRankings.stream()
                     .map(r -> {
-                        // (동철 수정) 챌린저 역시 점수를 통해 왕복/편도 판단
-                        String attemptType = (r.getScore() != null && r.getScore() % 1 != 0) ? "ROUND_TRIP" : "ONE_WAY";
+                        AttemptType type = (r.getScore() % 1 != 0) ? AttemptType.ROUND_TRIP : AttemptType.ONE_WAY;
 
                         return BeginnerRankingResponse.ChallengerDto.builder()
                                 .memberId(r.getMember().getId())
                                 .name(r.getMember().getName())
                                 .ranking(r.getRanking())
-                                .score(Math.floor(r.getScore())) // 순수 홀드 수만 전달
-                                .attemptType(attemptType) // (동철 수정) DTO에 왕복/편도 명확히 주입
+                                .score(Math.floor(r.getScore()))
+                                .attemptType(type)
                                 .achievedAt(r.getBaseDate())
                                 .build();
                     })
                     .collect(Collectors.toList());
         }
 
-        return BeginnerRankingResponse.builder().masters(masterDtos).challengers(challengerDtos).build();
+        return BeginnerRankingResponse.builder()
+                .masters(masterDtos)
+                .challengers(challengerDtos)
+                .build();
     }
 
     @Transactional
