@@ -480,27 +480,57 @@ const RankingScreen = ({ route }: any) => {
         {/* 색상 탭 (초보벽 전용) */}
         {mainTab === '초보벽' && (
           <View style={styles.colorTabRow}>
+            {/* 전체 버튼 */}
             <TouchableOpacity
-              style={[styles.colorBtn, colorTab === '전체' ? { backgroundColor: '#A1BE44', borderWidth: 0 } : { borderColor: '#555555' }]}
+              style={[
+                styles.colorBtn,
+                { borderColor: '#A1BE44' }, // 기본 테두리 색상
+                colorTab === '전체' && { backgroundColor: '#A1BE44', borderWidth: 1.5 } // 선택 시 배경 채우기
+              ]}
               onPress={() => setColorTab('전체')}
             >
-              <Text style={colorTab === '전체' ? styles.colorBtnTextActive : styles.colorBtnTextGray}>전체</Text>
+              <Text style={[
+                styles.colorBtnTextGray,
+                colorTab === '전체' && {
+                  color: '#ffffff',
+                  textShadowColor: 'rgba(0, 0, 0, 0.7)',
+                  textShadowOffset: { width: 0, height: 1 },
+                  textShadowRadius: 2
+                }
+              ]}>
+                전체
+              </Text>
             </TouchableOpacity>
-            {colors.map(c => (
-              <TouchableOpacity
-                key={c.name}
-                style={[
-                  styles.colorBtn,
-                  { borderColor: colorTab === c.name ? '#A1BE44' : c.hex },
-                  colorTab === c.name && { backgroundColor: c.hex + '20' },
-                ]}
-                onPress={() => setColorTab(c.name)}
-              >
-                <Text style={[styles.colorBtnText, { color: colorTab === c.name ? '#ffffff' : (c.name === '검정' ? '#ffffff' : c.hex) }]}>
-                  {c.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
+
+            {/* 개별 색상 버튼 */}
+            {colors.map(c => {
+              const isSelected = colorTab === c.name;
+              return (
+                <TouchableOpacity
+                  key={c.name}
+                  style={[
+                    styles.colorBtn,
+                    { borderColor: c.hex }, // 기본 테두리 색상
+                    isSelected && { backgroundColor: c.hex, borderWidth: 1.5 } // 선택 시 배경 꽉 채우기
+                  ]}
+                  onPress={() => setColorTab(c.name)}
+                >
+                  <Text style={[
+                    styles.colorBtnText,
+                    // 기본 글씨색 (검정색 버튼일 때는 잘 보이도록 기본 글씨도 흰색으로)
+                    { color: c.name === '검정' ? '#ffffff' : c.hex }, 
+                    isSelected && {
+                      color: '#ffffff',
+                      textShadowColor: 'rgba(0, 0, 0, 0.7)',
+                      textShadowOffset: { width: 0, height: 1 },
+                      textShadowRadius: 2
+                    }
+                  ]}>
+                    {c.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
 
@@ -606,7 +636,7 @@ const styles = StyleSheet.create({
 
   // 색상 탭
   colorTabRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
-  colorBtn: { flex: 1, borderWidth: 1, borderRadius: 8, paddingVertical: 10, alignItems: 'center', marginHorizontal: 2 }, // 패딩 8->10
+  colorBtn: { flex: 1, borderWidth: 1, borderRadius: 8, paddingVertical: 6, alignItems: 'center', marginHorizontal: 2 }, // 패딩 8->10
   colorBtnText: { fontSize: 13, fontWeight: 'bold' }, // 11->13
   colorBtnTextActive: { color: '#ffffff', fontSize: 13, fontWeight: 'bold' }, // 11->13
   colorBtnTextGray: { color: '#999999', fontSize: 13, fontWeight: 'bold' }, // 11->13

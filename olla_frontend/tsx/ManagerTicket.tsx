@@ -101,8 +101,8 @@ const ManagerTicket = ({ navigation }: any) => {
   const manageSlideAnim = useRef(new Animated.Value(800)).current;
   const [selectedManageItem, setSelectedManageItem] = useState<any>(null);
 
-  const openManageModal = (item: any) => {
-    setSelectedManageItem(item);
+  const openManageModal = (group: any) => {
+    setSelectedManageItem(group);
     setManageVisible(true);
     setTimeout(() => {
       Animated.timing(manageSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
@@ -175,29 +175,83 @@ const ManagerTicket = ({ navigation }: any) => {
     return days >= 0 ? `${days}일` : '만료';
   };
 
-  // ✅ 핵심 수정: isDeleted === true 인 항목 필터링
-  const ticketHolders = useMemo(() => {
-    return users.filter((u: any) => {
+  // ✅ 핵심 수정: 회원(memberId) 기준으로 그룹화하여 복수 이용권 동시 표기
+  const groupedHolders = useMemo(() => {
+    const map = new Map();
+    
+    users.forEach((u: any) => {
       // 삭제된 이용권은 목록에서 제외
-      if (u.isDeleted === true || u.deleted === true) return false;
+      if (u.isDeleted === true || u.deleted === true || u.status === 'DELETED') return;
 
       const isTicketActive = u.membershipStatus === 'ACTIVE' || u.membershipStatus === 'HOLDING';
-      if (!isTicketActive) return false;
-      return u.name?.includes(searchQuery) || u.phone?.includes(searchQuery);
+      if (!isTicketActive) return;
+
+      // 검색어 필터
+      if (searchQuery && !u.name?.includes(searchQuery) && !u.phone?.includes(searchQuery)) return;
+
+      const mId = u.memberId || u.id;
+      if (!map.has(mId)) {
+        map.set(mId, {
+          memberId: mId,
+          name: u.name,
+          phone: u.phone,
+          memberships: []
+        });
+      }
+      map.get(mId).memberships.push(u);
+    });
+
+    return Array.from(map.values()).map(group => {
+      // 회원권이 앞에, 일일권이 뒤에 오도록 정렬
+      group.memberships.sort((a: any, b: any) => {
+        const typeA = resolveMembershipType(a.membershipType, a.startDate, a.endDate, a.remainingCount);
+        const typeB = resolveMembershipType(b.membershipType, b.startDate, b.endDate, b.remainingCount);
+        if (typeA === '회원권' && typeB !== '회원권') return -1;
+        if (typeA !== '회원권' && typeB === '회원권') return 1;
+        return 0;
+      });
+      return group;
     });
   }, [users, searchQuery]);
 
-  const searchResults = useMemo(() => {
-    if (!modalSearch) return users;
-    return users.filter((u: any) => {
+  // ✅ 회원권 등록 모달의 검색 결과도 그룹화하여 동시 표시
+  const groupedSearchResults = useMemo(() => {
+    const map = new Map();
+    users.forEach((u: any) => {
+      // 🔥 등록 모달의 검색 목록에서도 탈퇴한 회원(deleted: true)을 완전 제외합니다.
+      if (u.isDeleted === true || u.deleted === true || u.status === 'DELETED') return;
+
       const name = u.name || '';
       const phone = u.phone || '';
-      return name.includes(modalSearch) || phone.includes(modalSearch);
+      
+      if (!modalSearch || name.includes(modalSearch) || phone.includes(modalSearch)) {
+        const mId = u.memberId || u.id;
+        if (!map.has(mId)) {
+          map.set(mId, { memberId: mId, name: u.name, phone: u.phone, memberships: [] });
+        }
+        
+        const isTicketActive = u.membershipStatus === 'ACTIVE' || u.membershipStatus === 'HOLDING';
+        
+        if (isTicketActive) {
+          map.get(mId).memberships.push(u);
+        }
+      }
+    });
+
+    return Array.from(map.values()).map(group => {
+      group.memberships.sort((a: any, b: any) => {
+        const typeA = resolveMembershipType(a.membershipType, a.startDate, a.endDate, a.remainingCount);
+        const typeB = resolveMembershipType(b.membershipType, b.startDate, b.endDate, b.remainingCount);
+        if (typeA === '회원권' && typeB !== '회원권') return -1;
+        if (typeA !== '회원권' && typeB === '회원권') return 1;
+        return 0;
+      });
+      return group;
     });
   }, [users, modalSearch]);
 
-  const handleSelectUser = (u: any) => {
-    setSelectedUser(u);
+  const handleSelectUser = (group: any) => {
+    setSelectedUser(group);
     setEditType('PERIOD');
     setAddValue('');
     setEditStart('');
@@ -213,7 +267,7 @@ const ManagerTicket = ({ navigation }: any) => {
 
     try {
       const token = await AsyncStorage.getItem('userToken');
-      const memberId = selectedUser.memberId || selectedUser.id || selectedUser.member?.id;
+      const memberId = selectedUser.memberId || selectedUser.id;
       const startDate = editStart || getToday();
 
       const requestBody = editType === 'PERIOD'
@@ -236,21 +290,30 @@ const ManagerTicket = ({ navigation }: any) => {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      showResultModal('성공', '이용권이 성공적으로 등록되었습니다.', 'success');
-      closeEditModal();
-      fetchUsers(token!);
+      // ✅ iOS 모달 렌더링 버그 해결: 바텀 시트가 닫힌 후 결과 모달을 띄웁니다.
+      closeEditModal(() => {
+        setTimeout(() => {
+          showResultModal('성공', '이용권이 성공적으로 등록되었습니다.', 'success');
+          fetchUsers(token!);
+        }, 300);
+      });
+      
     } catch (error: any) {
       const serverMessage = error.response?.data?.message || '이용권 등록에 실패했습니다.';
       
-      if (serverMessage?.includes("is_deleted") || serverMessage?.includes("default value")) {
-        showResultModal(
-          '서버 설정 오류',
-          'Membership 엔티티의 is_deleted 필드에 기본값이 없습니다.\n백엔드 서버를 수정해주세요.',
-          'error'
-        );
-        return;
-      }
-      showResultModal('오류', serverMessage, 'error');
+      closeEditModal(() => {
+        setTimeout(() => {
+          if (serverMessage?.includes("is_deleted") || serverMessage?.includes("default value")) {
+            showResultModal(
+              '서버 설정 오류',
+              'Membership 엔티티의 is_deleted 필드에 기본값이 없습니다.\n백엔드 서버를 수정해주세요.',
+              'error'
+            );
+          } else {
+            showResultModal('오류', serverMessage, 'error');
+          }
+        }, 300);
+      });
     }
   };
 
@@ -288,7 +351,7 @@ const ManagerTicket = ({ navigation }: any) => {
     });
   };
 
-  // ✅ 이용권 삭제 실행
+  // ✅ 이용권 삭제 실행 (즉시 반영 로직 수정)
   const executeDeleteTicket = async (membershipId: number) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
@@ -296,6 +359,10 @@ const ManagerTicket = ({ navigation }: any) => {
         showResultModal('오류', '인증 정보가 없습니다. 다시 로그인해주세요.', 'error');
         return;
       }
+      
+      // ✅ 핵심 수정: API 응답을 기다리되, 프론트 상태(users)에서도 깊은 조건으로 즉시 제거하여 실시간 갱신 처리
+      setUsers(prev => prev.filter((u: any) => u.membershipId !== membershipId && u.id !== membershipId));
+
       await axios.delete(`${MEMBERSHIP_BASE_API}/${membershipId}`, {
         headers: { 
           Authorization: `Bearer ${token}`,
@@ -303,11 +370,8 @@ const ManagerTicket = ({ navigation }: any) => {
         }
       });
 
-      // ✅ 핵심 수정: API 응답 기다리지 않고 로컬 상태에서 즉시 제거
-      setUsers(prev => prev.filter((u: any) => u.membershipId !== membershipId));
-
       showResultModal('성공', '이용권이 삭제되었습니다.', 'success', async () => {
-        // 확인 버튼 누른 후 서버에서 최신 데이터 다시 조회
+        // 확인 버튼 누른 후 서버에서 최신 데이터 다시 조회 보장
         await fetchUsers(token);
       });
     } catch (error: any) {
@@ -346,13 +410,15 @@ const ManagerTicket = ({ navigation }: any) => {
     Animated.timing(editSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
   };
 
-  const closeEditModal = () => {
+  // ✅ 콜백을 전달받을 수 있도록 수정
+  const closeEditModal = (callback?: () => void) => {
     Animated.timing(editSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => {
       setEditModalVisible(false);
       setSelectedUser(null);
       setModalSearch('');
       setAddValue('');
       setEditStart('');
+      if (callback) callback();
     });
   };
 
@@ -414,44 +480,56 @@ const ManagerTicket = ({ navigation }: any) => {
       </View>
       <View style={styles.headerDivider} />
 
-        {ticketHolders.length === 0 ? (
+        {groupedHolders.length === 0 ? (
           <Text style={styles.emptyText}>보유 중인 이용권이 없습니다.</Text>
         ) : (
-          ticketHolders.map((item: any) => {
-            const displayType = resolveMembershipType(
-              item.membershipType,
-              item.startDate || '',
-              item.endDate || '',
-              item.remainingCount ?? null
-            );
-            const isCountType = displayType === '일일권';
-            const isHolding = item.membershipStatus === 'HOLDING';
+          groupedHolders.map((group: any) => {
+            const { memberId, name, memberships } = group;
+            
+            // 보유중인 티켓 타입 추출 및 중복제거하여 "회원권 / 일일권" 형태 완성
+            const displayTypes = memberships.map((m: any) => resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount));
+            const uniqueTypes = [...new Set(displayTypes)];
+            const subText = uniqueTypes.join(' / ');
+
+            const isHolding = memberships.some((m: any) => m.membershipStatus === 'HOLDING');
 
             return (
               <TouchableOpacity
-                key={item.memberId}
+                key={memberId}
                 style={styles.tableRow}
                 activeOpacity={0.7}
-                onPress={() => openManageModal(item)}
+                onPress={() => openManageModal(group)}
               >
                 <View style={styles.colInfo}>
-                  <Text style={styles.rowTextName} numberOfLines={1}>{item.name}</Text>
-                  <Text style={styles.rowTextSub}>{displayType}</Text>
+                  <Text style={styles.rowTextName} numberOfLines={1}>{name}</Text>
+                  <Text style={styles.rowTextSub}>{subText}</Text>
                 </View>
 
                 <View style={styles.colDate}>
-                  <Text style={styles.rowTextDate}>{item.startDate || '-'}</Text>
-                  <Text style={styles.rowTextDate}>
-                    {isCountType ? `잔여 ${item.remainingCount ?? 0}회` : (item.endDate || '-')}
-                  </Text>
+                  {memberships.map((m: any, idx: number) => {
+                    const type = resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount);
+                    const isCount = type === '일일권';
+                    return (
+                      <View key={m.membershipId || idx} style={idx > 0 ? { marginTop: 8 } : {}}>
+                        <Text style={styles.rowTextDate}>{m.startDate || '-'}</Text>
+                        <Text style={styles.rowTextDate}>{isCount ? `잔여 ${m.remainingCount ?? 0}회` : (m.endDate || '-')}</Text>
+                      </View>
+                    );
+                  })}
                 </View>
 
                 <View style={styles.colDday}>
-                  <Text style={styles.rowTextDday} numberOfLines={1} adjustsFontSizeToFit>
-                    {isCountType
-                      ? `${item.remainingCount ?? 0}회`
-                      : calculateDDay(item.endDate)}
-                  </Text>
+                  {memberships.map((m: any, idx: number) => {
+                    const type = resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount);
+                    const isCount = type === '일일권';
+                    return (
+                      <View key={m.membershipId || idx} style={[styles.center, idx > 0 ? { marginTop: 22 } : {}]}>
+                        <Text style={styles.rowTextDday} numberOfLines={1} adjustsFontSizeToFit>
+                          {isCount ? `${m.remainingCount ?? 0}회` : calculateDDay(m.endDate)}
+                        </Text>
+                      </View>
+                    );
+                  })}
                 </View>
 
                 <View style={[styles.colStatus, styles.center]}>
@@ -517,7 +595,7 @@ const ManagerTicket = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ✅ 관리 바텀시트 모달 */}
+      {/* ✅ 관리 바텀시트 모달 (복수 관리 개편) */}
       <Modal visible={isManageVisible} transparent={true} animationType="fade" onRequestClose={() => closeManageModal()}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => closeManageModal()}>
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: manageSlideAnim }] }]}>
@@ -532,47 +610,60 @@ const ManagerTicket = ({ navigation }: any) => {
               <View style={styles.horizontalDivider} />
 
               {selectedManageItem && (() => {
-                const manageDisplayType = resolveMembershipType(
-                  selectedManageItem.membershipType,
-                  selectedManageItem.startDate || '',
-                  selectedManageItem.endDate || '',
-                  selectedManageItem.remainingCount ?? null
-                );
-                const manageIsHolding = selectedManageItem.membershipStatus === 'HOLDING';
-                const manageIsCountType = manageDisplayType === '일일권';
+                const { name, memberships } = selectedManageItem;
+                const displayTypes = memberships.map((m: any) => resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount));
+                const uniqueTypes = [...new Set(displayTypes)];
+                const manageDisplayType = uniqueTypes.join(' / ');
+                const manageIsHolding = memberships.some((m: any) => m.membershipStatus === 'HOLDING');
 
                 return (
-                  <View>
+                  <View style={{ flexShrink: 1 }}>
                     {/* 회원 정보 요약 */}
                     <View style={styles.manageInfoBox}>
-                      <Text style={styles.manageItemName}>{selectedManageItem.name}</Text>
+                      <Text style={styles.manageItemName}>{name}</Text>
                       <Text style={styles.manageItemSub}>
-                        {manageDisplayType} · {manageIsHolding ? '정지중' : '이용중'}
+                        {manageDisplayType} · {manageIsHolding ? '정지 포함' : '이용중'}
                       </Text>
                     </View>
 
-                    {/* 일시정지 / 정지해제 (일일권 제외) */}
-                    {!manageIsCountType && (
-                      <TouchableOpacity
-                        style={styles.manageActionBtn}
-                        onPress={() => togglePauseStatus(selectedManageItem.membershipId, selectedManageItem.membershipStatus)}
-                      >
-                        <Text style={styles.manageActionBtnText}>
-                          {manageIsHolding ? '이용권 정지 해제' : '이용권 일시정지'}
-                        </Text>
-                      </TouchableOpacity>
-                    )}
+                    {/* 회원권/일일권 복수 관리 렌더링 */}
+                    <ScrollView style={{ maxHeight: 350 }} showsVerticalScrollIndicator={false}>
+                      {memberships.map((m: any) => {
+                        const mType = resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount);
+                        const mIsHolding = m.membershipStatus === 'HOLDING';
+                        const mIsCountType = mType === '일일권';
+                        const currentId = m.membershipId || m.id;
 
-                    {/* 이용권 삭제 */}
-                    <TouchableOpacity
-                      style={[styles.manageActionBtn, styles.manageActionBtnDanger]}
-                      onPress={() => confirmDeleteTicket(selectedManageItem.membershipId)}
-                    >
-                      <Text style={styles.manageActionBtnDangerText}>이용권 삭제</Text>
-                    </TouchableOpacity>
+                        return (
+                          <View key={currentId} style={styles.manageActionGroup}>
+                            <Text style={styles.manageActionGroupTitle}>{mType} 관리</Text>
+                            
+                            {/* 일시정지 / 정지해제 (일일권 제외) */}
+                            {!mIsCountType && (
+                              <TouchableOpacity
+                                style={styles.manageActionBtn}
+                                onPress={() => togglePauseStatus(currentId, m.membershipStatus)}
+                              >
+                                <Text style={styles.manageActionBtnText}>
+                                  {mIsHolding ? '이용권 정지 해제' : '이용권 일시정지'}
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+
+                            {/* 이용권 삭제 */}
+                            <TouchableOpacity
+                              style={[styles.manageActionBtn, styles.manageActionBtnDanger]}
+                              onPress={() => confirmDeleteTicket(currentId)}
+                            >
+                              <Text style={styles.manageActionBtnDangerText}>이용권 삭제</Text>
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      })}
+                    </ScrollView>
 
                     {/* 닫기 */}
-                    <TouchableOpacity style={[styles.closeFullBtn, { marginTop: 6 }]} onPress={() => closeManageModal()}>
+                    <TouchableOpacity style={[styles.closeFullBtn, { marginTop: 10 }]} onPress={() => closeManageModal()}>
                       <Text style={styles.closeFullBtnText}>닫기</Text>
                     </TouchableOpacity>
                   </View>
@@ -585,13 +676,13 @@ const ManagerTicket = ({ navigation }: any) => {
 
       {/* 이용권 등록 바텀 시트 모달 */}
       <Modal visible={isEditModalVisible} transparent={true} animationType="fade">
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeEditModal}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => closeEditModal()}>
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: editSlideAnim }] }]}>
             <TouchableOpacity activeOpacity={1}>
               <View style={styles.dragHandle} />
               <View style={styles.sheetHeader}>
                 <Text style={styles.sheetTitle}>이용권 등록</Text>
-                <TouchableOpacity onPress={closeEditModal}><Text style={styles.closeIcon}>✕</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => closeEditModal()}><Text style={styles.closeIcon}>✕</Text></TouchableOpacity>
               </View>
               <View style={styles.horizontalDivider} />
 
@@ -619,27 +710,24 @@ const ManagerTicket = ({ navigation }: any) => {
 
                   <View style={{ height: 160, marginBottom: 20 }}>
                     <ScrollView style={styles.searchResultTable} nestedScrollEnabled={true}>
-                      {searchResults.length === 0 ? (
+                      {groupedSearchResults.length === 0 ? (
                         <Text style={styles.modalEmptyText}>검색된 회원이 없습니다.</Text>
                       ) : (
-                        searchResults.map((u: any) => {
-                          const isSelected = selectedUser && selectedUser.memberId === u.memberId;
-                          const ticketTypeStr = resolveMembershipType(
-                            u.membershipType || '',
-                            u.startDate || '',
-                            u.endDate || '',
-                            u.remainingCount ?? null
-                          );
-                          const displayTicket = ticketTypeStr === '-' ? '없음' : ticketTypeStr;
+                        groupedSearchResults.map((group: any) => {
+                          const isSelected = selectedUser && selectedUser.memberId === group.memberId;
+                          
+                          const displayTypes = group.memberships.map((m: any) => resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount));
+                          const uniqueTypes = [...new Set(displayTypes)];
+                          const displayTicket = uniqueTypes.length > 0 ? uniqueTypes.join(' / ') : '없음';
 
                           return (
                             <TouchableOpacity
-                              key={u.memberId}
+                              key={group.memberId}
                               style={[styles.searchResultRow, isSelected && styles.selectedRow]}
-                              onPress={() => handleSelectUser(u)}
+                              onPress={() => handleSelectUser(group)}
                             >
-                              <Text style={[styles.resultTextName, { flex: 1.5 }]} numberOfLines={1}>{u.name}</Text>
-                              <Text style={[styles.resultTextSub, { flex: 2, textAlign: 'center' }]}>{u.phone}</Text>
+                              <Text style={[styles.resultTextName, { flex: 1.5 }]} numberOfLines={1}>{group.name}</Text>
+                              <Text style={[styles.resultTextSub, { flex: 2, textAlign: 'center' }]}>{group.phone}</Text>
                               <Text style={[styles.resultTextType, { flex: 1.5, textAlign: 'center' }]}>
                                 {displayTicket}
                               </Text>
@@ -659,13 +747,15 @@ const ManagerTicket = ({ navigation }: any) => {
                           style={[styles.typeBtn, editType === 'PERIOD' && styles.typeBtnActive]}
                           onPress={() => { setEditType('PERIOD'); setAddValue(''); }}
                         >
-                          <Text style={[styles.typeBtnText, editType === 'PERIOD' && styles.typeBtnTextActive]}>기간권 (월권)</Text>
+                          {/* 💡 기간권(월권) -> 회원권 텍스트 변경 */}
+                          <Text style={[styles.typeBtnText, editType === 'PERIOD' && styles.typeBtnTextActive]}>회원권</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={[styles.typeBtn, editType === 'COUNT' && styles.typeBtnActive]}
                           onPress={() => { setEditType('COUNT'); setAddValue(''); }}
                         >
-                          <Text style={[styles.typeBtnText, editType === 'COUNT' && styles.typeBtnTextActive]}>횟수권 (일일권)</Text>
+                          {/* 💡 횟수권(일일권) -> 일일권 텍스트 변경 */}
+                          <Text style={[styles.typeBtnText, editType === 'COUNT' && styles.typeBtnTextActive]}>일일권</Text>
                         </TouchableOpacity>
                       </View>
 
@@ -843,9 +933,11 @@ const styles = StyleSheet.create({
   manageInfoBox: { backgroundColor: '#262626', borderRadius: 16, padding: 20, marginBottom: 16 },
   manageItemName: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 6 },
   manageItemSub: { color: '#999999', fontSize: 15 },
+  manageActionGroup: { backgroundColor: '#1E1E1E', borderWidth: 1, borderColor: '#333', borderRadius: 12, padding: 16, marginBottom: 16 },
+  manageActionGroupTitle: { color: '#A1BE44', fontSize: 16, fontWeight: 'bold', marginBottom: 12 },
   manageActionBtn: { width: '100%', backgroundColor: '#262626', borderRadius: 12, paddingVertical: 18, alignItems: 'center', marginBottom: 10 },
   manageActionBtnText: { color: '#ffffff', fontSize: 17, fontWeight: 'bold' },
-  manageActionBtnDanger: { backgroundColor: 'rgba(255, 77, 77, 0.15)', borderWidth: 1, borderColor: '#FF4D4D' },
+  manageActionBtnDanger: { backgroundColor: 'rgba(255, 77, 77, 0.15)', borderWidth: 1, borderColor: '#FF4D4D', marginBottom: 0 },
   manageActionBtnDangerText: { color: '#FF4D4D', fontSize: 17, fontWeight: 'bold' },
   closeFullBtn: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 18, alignItems: 'center' },
   closeFullBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },

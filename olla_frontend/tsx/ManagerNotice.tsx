@@ -40,6 +40,9 @@ interface NoticeBody {
   content:  string;
   imageUrl: string;
   important: boolean;
+  topFixed: boolean;
+  isImportant: boolean;
+  isTopFixed: boolean;
 }
 
 const ManagerNotice = ({ route, navigation }: any) => {
@@ -140,7 +143,10 @@ const ManagerNotice = ({ route, navigation }: any) => {
     setNewContent('');
     setIsImportant(false);
     setWriteModalVisible(true);
-    Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+    // iOS 렌더링 버그 수정: 모달이 완전히 마운트된 후 애니메이션이 동작하도록 지연(50ms) 추가
+    setTimeout(() => {
+      Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+    }, 50);
   };
 
   const openEditModal = async (notice: Notice) => {
@@ -153,7 +159,10 @@ const ManagerNotice = ({ route, navigation }: any) => {
     setNewContent(detail.content);
     setIsImportant(detail.important);
     setWriteModalVisible(true);
-    Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+    // iOS 렌더링 버그 수정: 모달 마운트 지연 시간 추가
+    setTimeout(() => {
+      Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+    }, 50);
   };
 
   const openEditModalById = async (id: number) => {
@@ -165,12 +174,17 @@ const ManagerNotice = ({ route, navigation }: any) => {
     setNewContent(detail.content);
     setIsImportant(detail.important);
     setWriteModalVisible(true);
-    Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+    // iOS 렌더링 버그 수정: 모달 마운트 지연 시간 추가
+    setTimeout(() => {
+      Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+    }, 50);
   };
 
-  const closeWriteModal = () => {
+  const closeWriteModal = (callback?: () => void) => {
     Animated.timing(slideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => {
       setWriteModalVisible(false);
+      // 모달이 닫힌 후 연속으로 다른 모달을 띄울 수 있도록 콜백 처리
+      if (callback) callback();
     });
   };
 
@@ -179,10 +193,13 @@ const ManagerNotice = ({ route, navigation }: any) => {
     setSaving(true);
 
     const body: NoticeBody = {
-      title:     newTitle.trim(),
-      content:   newContent.trim(),
-      imageUrl:  '',
-      important: isImportant,
+      title:       newTitle.trim(),
+      content:     newContent.trim(),
+      imageUrl:    '',
+      important:   isImportant,
+      topFixed:    isImportant,
+      isImportant: isImportant,
+      isTopFixed:  isImportant,
     };
 
     try {
@@ -192,13 +209,21 @@ const ManagerNotice = ({ route, navigation }: any) => {
         await axios.put(`${NOTICE_API}/${selectedNoticeId}`, body);
       }
 
-      closeWriteModal();
-      showResultModal('성공', modalMode === 'create' ? '새 공지가 등록되었습니다.' : '공지가 수정되었습니다.', 'success');
+      // iOS 버그 수정: 작성 모달이 완전히 닫힌 후(250ms+알파) 결과 모달 렌더링
+      closeWriteModal(() => {
+        setTimeout(() => {
+          showResultModal('성공', modalMode === 'create' ? '새 공지가 등록되었습니다.' : '공지가 수정되었습니다.', 'success');
+        }, 300);
+      });
       await fetchNotices(true); // 저장 후에도 부드러운 갱신을 위해 중앙 로딩 생략
     } catch (error: any) {
       // ✅ 에러 메시지 처리 적용
       const msg = error?.response?.data?.message ?? '저장에 실패했습니다.';
-      showResultModal('오류', msg, 'error');
+      closeWriteModal(() => {
+        setTimeout(() => {
+          showResultModal('오류', msg, 'error');
+        }, 300);
+      });
     } finally {
       setSaving(false);
     }
@@ -219,12 +244,18 @@ const ManagerNotice = ({ route, navigation }: any) => {
     try {
       await axios.delete(`${NOTICE_API}/${noticeToDelete}`);
       cancelDelete();
-      showResultModal('성공', '공지사항이 삭제되었습니다.', 'success');
+      // iOS 버그 수정: 삭제 모달이 닫힌 뒤 결과 모달이 열리도록 딜레이 추가
+      setTimeout(() => {
+        showResultModal('성공', '공지사항이 삭제되었습니다.', 'success');
+      }, 300);
       await fetchNotices(true); // 삭제 후에도 부드러운 갱신
     } catch (error: any) {
       // ✅ 에러 메시지 처리 적용
       const errorMessage = error.response?.data?.message || '삭제에 실패했습니다.';
-      showResultModal('오류', errorMessage, 'error');
+      cancelDelete();
+      setTimeout(() => {
+        showResultModal('오류', errorMessage, 'error');
+      }, 300);
     }
   };
 
@@ -307,7 +338,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
 
       {/* 💡 작성 / 수정 바텀 시트 모달 */}
       <Modal visible={isWriteModalVisible} animationType="fade" transparent={true}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeWriteModal}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => closeWriteModal()}>
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: slideAnim }] }]}>
             <TouchableOpacity activeOpacity={1}>
               <View style={styles.dragHandle} />
@@ -315,7 +346,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
                 <Text style={styles.sheetTitle}>
                   {modalMode === 'create' ? '새 공지 작성' : '공지 수정'}
                 </Text>
-                <TouchableOpacity onPress={closeWriteModal}>
+                <TouchableOpacity onPress={() => closeWriteModal()}>
                   <Text style={styles.closeIcon}>✕</Text>
                 </TouchableOpacity>
               </View>
@@ -352,7 +383,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
                   </TouchableOpacity>
 
                   <View style={styles.btnRow}>
-                    <TouchableOpacity style={styles.cancelBtn} onPress={closeWriteModal} disabled={saving}>
+                    <TouchableOpacity style={styles.cancelBtn} onPress={() => closeWriteModal()} disabled={saving}>
                       <Text style={styles.cancelBtnText}>취소</Text>
                     </TouchableOpacity>
                     <TouchableOpacity

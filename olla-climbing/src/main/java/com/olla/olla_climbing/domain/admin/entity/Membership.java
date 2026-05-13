@@ -104,6 +104,7 @@ public class Membership extends BaseTimeEntity {
 
     public void markAsDeleted() {
         this.isDeleted = true;
+        this.status = MembershipStatus.EXPIRED;
     }
 
     public void addDuration(int addMonths) {

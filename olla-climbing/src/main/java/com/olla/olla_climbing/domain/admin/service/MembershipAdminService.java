@@ -14,6 +14,7 @@ import com.olla.olla_climbing.domain.member.enums.Role;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
 import com.olla.olla_climbing.domain.member.service.NotificationService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +27,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class MembershipAdminService {
@@ -39,38 +41,42 @@ public class MembershipAdminService {
 
     @Transactional
     public void grantMembership(Long memberId, Integer addMonths, Integer addCount, LocalDate startDate) {
+        // 1. 회원 조회
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new IllegalArgumentException("회원을 찾을 수 없습니다."));
 
-        // 기존에 활성화된 회원권이 있는지 찾기
-        Membership activeMembership = membershipRepository.findByMemberIdAndStatusIn(
-                memberId, List.of(MembershipStatus.ACTIVE, MembershipStatus.HOLDING)
-        ).orElse(null);
+        // 💡 [핵심 추가] 기존 이용권의 최대 종료일 찾기
+        LocalDate latestEndDate = membershipRepository.findMaxEndDateByMemberId(memberId).orElse(null);
 
-        if (activeMembership != null) {
-            // 이미 있으면 새로 만들지 말고 기간/횟수를 연장함
-            if (addMonths != null && addMonths > 0) activeMembership.addDuration(addMonths);
-            if (addCount != null && addCount > 0) activeMembership.addRemainingCount(addCount);
+        // 💡 [핵심 로직] 시작 날짜 결정
+        LocalDate effectiveStartDate;
+        if (latestEndDate != null && latestEndDate.isAfter(LocalDate.now().minusDays(1))) {
+            // 이미 유효한 이용권이 있다면, 그 종료일이 새로운 시작일이 됨 (연장)
+            effectiveStartDate = latestEndDate;
         } else {
-            // 없으면 새로 생성
-            Membership newMembership;
-            if (addMonths != null && addMonths > 0) {
-                newMembership = Membership.builder()
-                        .member(member)
-                        .startDate(startDate)
-                        .durationMonth(addMonths)
-                        .build();
-            } else if (addCount != null && addCount > 0) {
-                newMembership = Membership.builder()
-                        .member(member)
-                        .startDate(startDate)
-                        .remainingCount(addCount)
-                        .build();
-            } else {
-                throw new IllegalArgumentException("기간(개월) 또는 횟수 중 하나를 입력해야 합니다.");
-            }
-            membershipRepository.save(newMembership);
+            // 기존 이용권이 없거나 이미 예전에 만료되었다면, 입력받은 날짜 혹은 오늘부터 시작
+            effectiveStartDate = (startDate != null) ? startDate : LocalDate.now();
         }
+
+        int safeMonths = (addMonths != null) ? addMonths : 0;
+        int safeCount = (addCount != null) ? addCount : 0;
+
+        if (safeMonths == 0 && safeCount == 0) {
+            throw new IllegalArgumentException("기간(개월) 또는 횟수 중 하나는 반드시 입력해야 합니다.");
+        }
+
+        // 2. 새로운 이용권 레코드 생성
+        Membership newMembership = Membership.builder()
+                .member(member)
+                .startDate(effectiveStartDate) // 계산된 연장 시작일 적용
+                .durationMonth(safeMonths > 0 ? safeMonths : null)
+                .remainingCount(safeCount > 0 ? safeCount : null)
+                .build();
+
+        membershipRepository.save(newMembership);
+
+        log.info("이용권 연장 부여 성공 : 회원={}, 시작일={}, 기간={}개월",
+                member.getName(), effectiveStartDate, safeMonths);
     }
 
     @Transactional
@@ -82,31 +88,23 @@ public class MembershipAdminService {
 
     @Transactional
     public MemberResponse createOfflineMember(AdminMemberCreateRequest request) {
-
         if (memberRepository.findByPhone(request.getPhone()).isPresent()) {
             throw new IllegalArgumentException("이미 등록된 전화번호입니다.");
         }
-        // 1. 오프라인 회원용 더미 이메일 자동 생성 (예: offline_01012345678@ollagaja.com)
-        // 전화번호에서 하이픈(-)이 넘어올 경우를 대비해 제거해줍니다.
         String cleanPhone = request.getPhone().replaceAll("-", "");
         String dummyEmail = "offline_" + cleanPhone + "@ollagaja.com";
-
-        // 2. 임시 비밀번호 설정 (오프라인 회원이 나중에 앱 연동을 원할 경우를 대비)
-        // 보통 오프라인 회원은 전화번호 뒷자리 등을 임시 비밀번호로 사용합니다.
         String tempPassword = passwordEncoder.encode(cleanPhone);
 
-        // 3. Member 엔티티 빌드 (생성)
         Member offlineMember = Member.builder()
                 .name(request.getName())
                 .gender(request.getGender())
                 .birthDate(request.getBirthDate())
                 .phone(request.getPhone())
-                .email(dummyEmail)        // ✨ 핵심: 누락된 이메일 필드에 더미 이메일 주입
-                .password(tempPassword)   // 필수값인 비밀번호 주입
-                .role(Role.USER)          // 룰북에 따른 기본 권한 (또는 Role.OFFLINE_MEMBER)
+                .email(dummyEmail)
+                .password(tempPassword)
+                .role(Role.USER)
                 .build();
 
-        // 4. DB 저장 및 응답 반환
         Member savedMember = memberRepository.save(offlineMember);
         return MemberResponse.from(savedMember);
     }
@@ -123,22 +121,29 @@ public class MembershipAdminService {
         Membership membership = membershipRepository.findById(membershipId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 이용권입니다."));
         membership.unpause();
-
         String newEndDateStr = membership.getEndDate() != null ? membership.getEndDate().format(DateTimeFormatter.ofPattern("yyyy. MM. dd")) : "";
         googleSheetsService.unpauseMembershipData(membership.getMember().getId(), newEndDateStr);
     }
 
+    private Membership getRepresentativeMembership(Long memberId) {
+        List<Membership> activeMemberships = membershipRepository.findAllByMemberIdAndStatusIn(
+                memberId, List.of(MembershipStatus.ACTIVE, MembershipStatus.HOLDING)
+        );
+
+        if (activeMemberships.isEmpty()) return null;
+
+        // 기간권(durationMonth가 있는 것)을 최우선으로 리턴, 없으면 일일권/횟수권 리턴
+        return activeMemberships.stream()
+                .filter(m -> m.getDurationMonth() != null)
+                .findFirst()
+                .orElse(activeMemberships.get(0));
+    }
+
     @Transactional(readOnly = true)
     public MembershipResponse getMyMembership(Long memberId) {
-        Membership activeOrHoldingMembership = membershipRepository.findByMemberIdAndStatusIn(
-                memberId, List.of(MembershipStatus.ACTIVE, MembershipStatus.HOLDING)
-        ).orElse(null);
-
-        if (activeOrHoldingMembership == null) {
-            return null;
-        }
-
-        return MembershipResponse.from(activeOrHoldingMembership);
+        Membership repMembership = getRepresentativeMembership(memberId);
+        if (repMembership == null) return null;
+        return MembershipResponse.from(repMembership);
     }
 
     @Transactional(readOnly = true)
@@ -152,15 +157,12 @@ public class MembershipAdminService {
         }
 
         return memberPage.map(member -> {
-            Membership activeOrHolding = membershipRepository.findByMemberIdAndStatusIn(
-                    member.getId(), List.of(MembershipStatus.ACTIVE, MembershipStatus.HOLDING)
-            ).orElse(null);
-
-            return AdminMemberResponse.from(member, activeOrHolding);
+            Membership repMembership = getRepresentativeMembership(member.getId());
+            return AdminMemberResponse.from(member, repMembership);
         });
     }
 
-    @Scheduled(cron = "0 0 9 * * *")    //
+    @Scheduled(cron = "0 0 9 * * *")
     @Transactional
     public void generateExpirySummaryAlert() {
         LocalDate today = LocalDate.now();
