@@ -38,11 +38,12 @@ public abstract class BaseRankingService {
 
         if (ranking != null) {
             if (newScore > ranking.getScore()) {
-                ranking.updateScore(newScore);
+                ranking.updateScore(newScore, null);
                 isRankingChanged = true;
             }
         } else {
-            ranking = Ranking.builder().member(member).baseDate(LocalDateTime.now()).rankType(rankType).difficulty(null).score(newScore).isMaster(false).build();
+            // 💡 [수정] 빌더에도 null 추가 (혹은 빌더에서 제외 가능)
+            ranking = Ranking.builder().member(member).baseDate(LocalDateTime.now()).rankType(rankType).difficulty(null).score(newScore).isMaster(false).attemptType(null).build();
             rankingRepository.save(ranking);
             isRankingChanged = true;
         }
@@ -63,7 +64,7 @@ public abstract class BaseRankingService {
             isRankingChanged = true;
         } else {
             if (!ranking.getScore().equals(bestScore)) {
-                ranking.syncBestRecord(bestScore, false);
+                ranking.syncBestRecord(bestScore, false, null);
                 isRankingChanged = true;
             }
         }

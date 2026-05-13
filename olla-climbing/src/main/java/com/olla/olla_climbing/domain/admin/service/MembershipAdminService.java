@@ -169,6 +169,6 @@ public class MembershipAdminService {
     public void deleteMember(Long memberId) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
-        member.withdraw(); // 💡 반드시 Soft Delete 메서드 호출
+        member.withdraw();
     }
 }
