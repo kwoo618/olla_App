@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import messaging from '@react-native-firebase/messaging';
 import axios from 'axios';
 import { 
   View, 
@@ -59,6 +60,31 @@ const LoginScreen = ({ navigation }: any) => {
         await AsyncStorage.setItem('userToken', token);
         if (refreshToken) await AsyncStorage.setItem('refreshToken', refreshToken);
         if (role) await AsyncStorage.setItem('userRole', role);
+
+        // 로그인 성공 시 기기의 FCM 토큰을 발급받아 서버에 저장 요청 [FCM]
+        /* try {
+          // 기기 알림 권한 승인 요청 (iOS 필수)
+          const authStatus = await messaging().requestPermission();
+          const enabled =
+            authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+            authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+
+          if (enabled) {
+            // 디바이스 토큰 획득
+            const fcmToken = await messaging().getToken();
+            
+            // 백엔드에 토큰 전달 (백엔드 팀에 해당 API 생성 요청 필요)
+            await axios.post(`${API_BASE_URL}/members/fcm-token`, 
+              { deviceToken: fcmToken }, 
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            console.log('FCM 토큰 전송 성공:', fcmToken);
+          }
+        } catch (fcmError) {
+          console.error('FCM 토큰 발급/전송 오류:', fcmError);
+        }
+          */ 
+
         
         navigation.replace('Home');
       } else {

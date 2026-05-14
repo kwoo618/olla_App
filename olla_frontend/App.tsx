@@ -1,8 +1,9 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, StatusBar, Modal } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, StatusBar, Modal, Alert } from 'react-native';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import messaging from '@react-native-firebase/messaging'; // FCM 추가 
 
 // 💡 1. Notification 스크린 타입 추가
 type RootParamList = {
@@ -62,6 +63,22 @@ const BottomNavItem = ({ name, label, icon, currentRoute, nav, isAdmin = false }
 };
 
 const AppContent = () => {
+  /* useEffect(() => { //임시 주석 처리 FCM 관련 
+
+  // 앱 켜져 있을 때 알림 받기 FCM 
+  const unsubscribe = messaging().onMessage(async remoteMessage => {
+
+    console.log('Foreground Message:', remoteMessage);
+
+    Alert.alert(
+      remoteMessage.notification?.title || '알림',
+      remoteMessage.notification?.body || ''
+    );
+  });
+
+  return unsubscribe;
+
+}, []); */ 
   const navigationRef = useNavigationContainerRef<RootParamList>();
   const insets = useSafeAreaInsets(); 
   const [routeName, setRouteName] = useState<string>('');

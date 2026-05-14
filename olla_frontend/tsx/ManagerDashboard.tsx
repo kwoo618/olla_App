@@ -14,21 +14,30 @@ const MEMBER_API_URL      = `${API_BASE_URL}/admin/memberships/members`;
 const MEMBERSHIP_API_URL  = `${API_BASE_URL}/admin/memberships`;
 const VISIT_TODAY_API_URL = `${API_BASE_URL}/admin/visits/today`;
 const QR_SCAN_API_URL     = `${API_BASE_URL}/admin/visits/scan`; 
-const PROFILE_API_URL     = `${API_BASE_URL}/members`; // 💡 회원 프로필 상세 조회용
+const PROFILE_API_URL     = `${API_BASE_URL}/members`;
 
-// 💡 화면의 가로 길이를 가져와 완벽한 정사각형 사이즈(화면의 80%)를 계산합니다.
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SCANNER_SIZE = SCREEN_WIDTH * 0.8; 
 
+const translateGender = (gender: string) => {
+  if (!gender || gender === '-') return '-';
+  const g = String(gender).toUpperCase();
+  if (g === 'MALE' || g === 'M') return '남자';
+  if (g === 'FEMALE' || g === 'F') return '여자';
+  return gender;
+};
+
+const isValidImageUrl = (url: string | null | undefined) => {
+  return url && typeof url === 'string' && url.trim() !== '' && url !== 'null' && url !== 'undefined';
+};
+
 const ManagerDashboard = ({ navigation }: any) => {
   const [refreshing, setRefreshing] = useState(false);
-  
   const [loading, setLoading] = useState(true);
   const [notices, setNotices] = useState<any[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
   const [recentMembers, setRecentMembers] = useState<any[]>([]);
 
-  // ─── 커스텀 알림 모달 상태 ───
   const [resultModalVisible, setResultModalVisible] = useState(false);
   const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info', onConfirm: () => {} });
 
@@ -37,11 +46,9 @@ const ManagerDashboard = ({ navigation }: any) => {
     setResultModalVisible(true);
   };
 
-  // ─── 삭제 확인 모달 상태 ───
   const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ type: 'notice' | 'post', id: number } | null>(null);
 
-  // ─── QR 에러 모달 상태 ───
   const [qrErrorVisible, setQrErrorVisible] = useState(false);
   const [qrErrorMsg, setQrErrorMsg] = useState('');
 
@@ -57,7 +64,6 @@ const ManagerDashboard = ({ navigation }: any) => {
   const [cameraReady, setCameraReady] = useState(false);
   const scannedRef = useRef(false);
 
-  // ─── 💡 회원 정보 상세 팝업 상태 ───
   const [isDetailVisible, setDetailVisible] = useState(false);
   const detailSlideAnim = useRef(new Animated.Value(800)).current;
   const [selectedUser, setSelectedUser] = useState<any>(null);
@@ -151,24 +157,19 @@ const ManagerDashboard = ({ navigation }: any) => {
     try {
       const response = await axios.get(MEMBER_API_URL, {
         headers: { Authorization: `Bearer ${token}` },
-        // 💡 총 회원 수를 정확히 파악하기 위해 여유 있게 1000개를 불러옵니다.
         params: { page: 0, size: 1000, sort: 'id,desc' },
       });
-      // ✅ Depth 1단계 추가 반영
       const rawList = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
       const list = Array.isArray(rawList) ? rawList : [];
       
-      // 💡 탈퇴한 회원(deleted: true) 완벽 필터링
       const validMembers = list.filter((user: any) => {
         const memberInfo = user.member || user;
         const isDeleted = user.deleted === true || memberInfo.isDeleted === true || memberInfo.status === 'DELETED';
         return !isDeleted;
       });
 
-      // 💡 백엔드의 totalElements 대신 필터링이 완료된 실제 유효 회원 수를 사용합니다.
       const actualTotalElements = validMembers.length;
       
-      // 최신 2명만 잘라서 세팅
       setRecentMembers(validMembers.slice(0, 2));
       setMetrics(prev => ({ ...prev, totalMembers: actualTotalElements }));
     } catch (error: any) {
@@ -268,7 +269,6 @@ const ManagerDashboard = ({ navigation }: any) => {
     return dateString.split('T')[0];
   };
 
-  // ─── 💡 회원 정보 상세 팝업 오픈 함수 ───
   const openDetailModal = async (memberId: number, fallbackName: string, fallbackPhone: string) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
@@ -288,7 +288,8 @@ const ManagerDashboard = ({ navigation }: any) => {
       setSelectedUser({
         name: d.name || fallbackName,
         phone: d.phone || fallbackPhone || '-', 
-        profileImageUrl: d.profileImageUrl,
+        profileImageUrl: d.profileImageUrl || d.profileImage,
+        gender: translateGender(detail.gender || d.gender || '-'),
         age: detail.age || d.age || '-',
         height: detail.height || d.height || '-',
         weight: detail.weight || d.weight || '-',
@@ -478,17 +479,19 @@ const ManagerDashboard = ({ navigation }: any) => {
               const userName = member.name || '이름 없음';
               const userPhone = member.phone || '전화번호 없음';
               const memberId = member.memberId || member.id;
+              
+              const profileUrl = member.profileImageUrl || member.profileImage;
+              const hasValidImage = isValidImageUrl(profileUrl);
 
               return (
-                // 💡 클릭 가능하게 TouchableOpacity로 변경하고 상세 정보 모달 연결
                 <TouchableOpacity 
                   key={member.id || index} 
                   style={[styles.rowItem, index > 0 && { marginTop: 15 }]}
                   activeOpacity={0.7}
                   onPress={() => openDetailModal(memberId, userName, userPhone)}
                 >
-                  {member.profileImageUrl ? (
-                    <Image source={{ uri: member.profileImageUrl }} style={styles.profileImg} />
+                  {hasValidImage ? (
+                    <Image source={{ uri: profileUrl }} style={styles.profileImg} />
                   ) : userName === '최강우' ? (
                     <View style={styles.textProfileImg}>
                       <Text style={styles.textProfileText}>최</Text>
@@ -496,6 +499,7 @@ const ManagerDashboard = ({ navigation }: any) => {
                   ) : (
                     <Image source={require('../assets/profile.png')} style={styles.profileImg} />
                   )}
+                  
                   <View style={styles.infoCol}>
                     <Text style={styles.nameText}>{userName}</Text>
                     <Text style={styles.subText}>{userPhone}</Text>
@@ -594,7 +598,6 @@ const ManagerDashboard = ({ navigation }: any) => {
         <Image source={require('../assets/Camera.png')} style={styles.fabIcon} />
       </TouchableOpacity>
 
-      {/* ─── 커스텀 알림 결과 모달 ─── */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -614,7 +617,6 @@ const ManagerDashboard = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 삭제 확인 모달 ─── */}
       <Modal visible={isDeleteModalVisible} animationType="fade" transparent onRequestClose={() => setDeleteModalVisible(false)}>
         <View style={styles.deleteModalOverlay}>
           <View style={styles.deleteModalBox}>
@@ -633,7 +635,6 @@ const ManagerDashboard = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── QR 에러 확인 모달 (투버튼) ─── */}
       <Modal visible={qrErrorVisible} animationType="fade" transparent onRequestClose={() => setQrErrorVisible(false)}>
         <View style={styles.deleteModalOverlay}>
           <View style={styles.deleteModalBox}>
@@ -651,7 +652,6 @@ const ManagerDashboard = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 💡 회원 정보 상세 팝업 (바텀시트) ─── */}
       <Modal visible={isDetailVisible} transparent={true} animationType="fade" onRequestClose={closeDetailModal}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeDetailModal}>
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: detailSlideAnim }] }]}>
@@ -666,7 +666,7 @@ const ManagerDashboard = ({ navigation }: any) => {
               {selectedUser && (
                 <View style={styles.detailContainer}>
                   <View style={styles.detailProfileWrapper}>
-                    {selectedUser.profileImageUrl ? (
+                    {isValidImageUrl(selectedUser.profileImageUrl) ? (
                       <Image source={{ uri: selectedUser.profileImageUrl }} style={styles.profileBig} />
                     ) : selectedUser.name === '최강우' ? (
                       <View style={[styles.textProfileImg, { width: 80, height: 80, borderRadius: 40 }]}>
@@ -680,6 +680,7 @@ const ManagerDashboard = ({ navigation }: any) => {
                   
                   <View style={styles.infoBox}>
                     {renderDetailRow('이름', selectedUser.name)}
+                    {renderDetailRow('성별', selectedUser.gender)}
                     {renderDetailRow('전화번호', selectedUser.phone)}
                     {renderDetailRow('나이', selectedUser.age, '세')}
                     {renderDetailRow('키', selectedUser.height, 'cm')}
@@ -721,9 +722,8 @@ const ManagerDashboard = ({ navigation }: any) => {
                   onReadCode={(event: any) =>
                     handleBarCodeScanned(event.nativeEvent.codeStringValue)
                   }
-                  showFrame={false} // 💡 네이티브 기본 프레임 숨김 처리
+                  showFrame={false} 
                 />
-                {/* 💡 추가된 부분: 카메라 배경은 그대로 두고 중앙에 완벽한 정사각형 가이드라인 생성 */}
                 <View style={styles.customFrameOverlay}>
                   <View style={styles.customSquareGuide} />
                 </View>
@@ -754,7 +754,6 @@ const ManagerDashboard = ({ navigation }: any) => {
   );
 };
 
-// ─────────────────────────── 스타일 ───────────────────────────
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A', paddingHorizontal: 20, paddingTop: 10 },
   scrollContent: { paddingBottom: 80 },
@@ -805,7 +804,6 @@ const styles = StyleSheet.create({
   closeIcon: { color: '#999999', fontSize: 32 }, 
   scannerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
   
-  // 💡 추가된 커스텀 프레임 오버레이 스타일 (정사각형 가이드)
   customFrameOverlay: {
     position: 'absolute',
     top: 0,
@@ -817,7 +815,7 @@ const styles = StyleSheet.create({
   },
   customSquareGuide: {
     width: '65%',
-    aspectRatio: 1, // 화면 너비의 65% 크기를 갖는 완벽한 정사각형
+    aspectRatio: 1, 
     borderWidth: 3,
     borderColor: '#A1BE44',
     backgroundColor: 'transparent',
@@ -839,7 +837,6 @@ const styles = StyleSheet.create({
   scannerFooter: { padding: 40, alignItems: 'center', backgroundColor: '#1A1A1A' },
   scannerDesc: { color: '#ffffff', fontSize: 18, marginTop: 5 }, 
 
-  // ─── 커스텀 알림 모달 전용 스타일 ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, 
   resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, 
@@ -856,7 +853,6 @@ const styles = StyleSheet.create({
   deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
   deleteBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
 
-  // ─── 회원 상세 정보 팝업 전용 스타일 ───
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%', maxHeight: '85%' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
@@ -872,7 +868,7 @@ const styles = StyleSheet.create({
   detailLabel: { color: '#999', fontSize: 17, fontWeight: 'bold' }, 
   detailValue: { color: '#fff', fontSize: 17, fontWeight: 'bold' }, 
   closeFullBtn: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
-  closeFullBtnText: { color: '#00', fontSize: 18, fontWeight: 'bold' },
+  closeFullBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
 });
 
 export default ManagerDashboard;

@@ -31,10 +31,8 @@ const HomeScreen = ({ navigation }: any) => {
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const slideAnim = useRef(new Animated.Value(500)).current;
 
-  // ─── 당겨서 새로고침(Pull-to-Refresh) 상태 ───
   const [refreshing, setRefreshing] = useState(false);
 
-  // ─── 커스텀 알림 모달 상태 추가 ───
   const [resultModalVisible, setResultModalVisible] = useState(false);
   const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info' });
 
@@ -88,13 +86,11 @@ const HomeScreen = ({ navigation }: any) => {
       const response = await axios.get(`${API_BASE_URL}/visit/qr`, {
         headers: { Authorization: `Bearer ${userToken}` }
       });
-      // ✅ Depth 1단계 추가 적용
       const qrData = response.data?.data?.data;
       if (qrData) {
         setQrToken(qrData);
       }
     } catch (error: any) {
-      // ✅ 에러 메시지 처리 적용
       const errorMessage = error.response?.data?.message || 'QR 코드 발급에 실패했습니다.';
       console.error('QR 토큰 발급 실패:', errorMessage);
       showResultModal('오류', errorMessage, 'error');
@@ -142,7 +138,7 @@ const HomeScreen = ({ navigation }: any) => {
     endDate: string,
     remainingCount: number | null
   ): string => {
-    const upper = typeStr.toUpperCase();
+    const upper = typeStr?.toUpperCase() || '';
     if (upper === 'COUNT' || upper.includes('횟수') || upper.includes('COUNT')) return '일일권';
     if (upper === 'PERIOD' || upper.includes('기간') || upper.includes('PERIOD') || upper.includes('MONTH')) {
       if (startDate && endDate) {
@@ -151,16 +147,15 @@ const HomeScreen = ({ navigation }: any) => {
         start.setHours(0, 0, 0, 0);
         end.setHours(0, 0, 0, 0);
         const totalDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-        return totalDays <= 1 ? '일일권' : '기간권';
+        return totalDays <= 1 ? '일일권' : '회원권';
       }
-      return '기간권';
+      return '회원권';
     }
     if (remainingCount !== null && remainingCount !== undefined) return '일일권';
-    if (endDate) return '기간권';
+    if (endDate) return '회원권';
     return '-';
   };
 
-  // ─── 메인 데이터 패치 함수 ───
   const fetchMainData = async () => {
     try {
       const userToken = await AsyncStorage.getItem('userToken');
@@ -177,10 +172,8 @@ const HomeScreen = ({ navigation }: any) => {
       let nickname = '';
       let memberId: number | null = null;
       
-      // [1] 내 정보(프로필) 로드
       try {
         const profileRes = await axios.get(`${API_BASE_URL}/members/me`, config);
-        // ✅ Depth 1단계 추가 적용
         const pData = profileRes.data?.data?.data;
         if (pData) {
           nickname = pData.nickname || pData.name || '';
@@ -192,10 +185,8 @@ const HomeScreen = ({ navigation }: any) => {
         console.error('프로필 로드 실패:', error.response?.data?.message || error.message);
       }
 
-      // [2] 공지사항 로드
       try {
         const noticeResponse = await axios.get(`${API_BASE_URL}/admin/notices`);
-        // ✅ Depth 1단계 추가 적용
         const noticeList: any[] = noticeResponse.data?.data?.data.content ?? noticeResponse.data?.data?.data ?? [];
 
         if (noticeList.length > 0) {
@@ -223,21 +214,18 @@ const HomeScreen = ({ navigation }: any) => {
         setNotice({ title: '공지사항을 불러올 수 없습니다.', content: '', important: false });
       }
 
-      // [3] 회원권 로드
       try {
         const memResponse = await axios.get(`${API_BASE_URL}/memberships/me`, config);
-        // ✅ Depth 1단계 추가 적용
         const data = memResponse.data?.data?.data;
         if (data) {
-          const currentDate = new Date();
-          currentDate.setHours(0, 0, 0, 0);
-          const rawType = String(data.membershipType || '');
-          const displayType = resolveMembershipType(rawType, data.startDate || '', data.endDate || '', data.remainingCount ?? null);
+          const displayType = resolveMembershipType(String(data.membershipType || ''), data.startDate || '', data.endDate || '', data.remainingCount ?? null);
           let remainingDays = 0;
           if (data.endDate) {
             const end = new Date(data.endDate);
             end.setHours(0, 0, 0, 0);
-            const diff = Math.ceil((end.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24));
+            const todayStr = new Date();
+            todayStr.setHours(0, 0, 0, 0);
+            const diff = Math.round((end.getTime() - todayStr.getTime()) / (1000 * 60 * 60 * 24));
             remainingDays = diff >= 0 ? diff : 0;
           }
           setMembership({
@@ -257,7 +245,6 @@ const HomeScreen = ({ navigation }: any) => {
         setMembership(prev => ({ ...prev, isLoading: false }));
       }
 
-      // [4] 랭킹 및 기록 로드 (프로필이 있을 경우)
       if (nickname || memberId !== null) {
         let myEndRank = 0;
         let myEndMin = 0;
@@ -265,7 +252,6 @@ const HomeScreen = ({ navigation }: any) => {
 
         try {
           const endRes = await axios.get(`${API_BASE_URL}/rankings/endurance/distance`, config);
-          // ✅ Depth 1단계 추가 적용
           const endList = extractList(endRes.data?.data?.data);
           const myEndRecord = endList.find((item: any) => isMyRecord(item, memberId, nickname));
           if (myEndRecord) {
@@ -297,7 +283,6 @@ const HomeScreen = ({ navigation }: any) => {
           let myRealBestRecords: any[] = [];
           [bestRes, historyRes, allRes].forEach(res => {
             if (res) {
-              // ✅ Depth 1단계 추가 적용
               const data = res.data?.data?.data;
               if (Array.isArray(data)) myRealBestRecords = [...myRealBestRecords, ...data];
               else if (data?.list && Array.isArray(data.list)) myRealBestRecords = [...myRealBestRecords, ...data.list];
@@ -345,7 +330,6 @@ const HomeScreen = ({ navigation }: any) => {
     }
   };
 
-  // ─── 출석 데이터 패치 함수 ───
   const fetchVisitHistory = async () => {
     try {
       const userToken = await AsyncStorage.getItem('userToken');
@@ -359,7 +343,6 @@ const HomeScreen = ({ navigation }: any) => {
         { headers: { Authorization: `Bearer ${userToken}` } }
       );
       
-      // Depth 1단계 추가 적용
       let rawData = response.data?.data?.data;
       if (rawData && !Array.isArray(rawData) && rawData.data) rawData = rawData.data;
       
@@ -396,7 +379,6 @@ const HomeScreen = ({ navigation }: any) => {
     fetchVisitHistory();
   }, [viewDate.getFullYear(), viewDate.getMonth()]);
 
-  // ─── 새로고침(Pull to Refresh) 핸들러 ───
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([fetchMainData(), fetchVisitHistory()]);
@@ -455,6 +437,16 @@ const HomeScreen = ({ navigation }: any) => {
     }
   };
 
+  // 💡 게이지바 채움 정도 (사용한 기간 퍼센트 계산)
+  let fillPercentage = 0;
+  if (!isCountType && hasMembership && membership.startDate && membership.endDate) {
+    const s = new Date(membership.startDate); s.setHours(0, 0, 0, 0);
+    const e = new Date(membership.endDate); e.setHours(0, 0, 0, 0);
+    const totalDays = Math.max(1, Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)));
+    const usedDays = Math.max(0, totalDays - membership.remainingDays);
+    fillPercentage = Math.min((usedDays / totalDays) * 100, 100);
+  }
+
   return (
     <View style={styles.background}>
       <ScrollView
@@ -491,7 +483,6 @@ const HomeScreen = ({ navigation }: any) => {
 
           <TouchableOpacity style={styles.UserCardCentered} onPress={() => handlePopupPress('회원권')}>
             <View style={[styles.circleGraphDummy, !hasMembership && { borderColor: '#444444' }]}>
-              {/* 💡 크기 확대 */}
               <Text style={[styles.circleGraphText, !hasMembership && { color: '#999999', fontSize: 15 }]}>
                 {membership.isLoading
                   ? ''
@@ -676,7 +667,7 @@ const HomeScreen = ({ navigation }: any) => {
                       <View style={styles.progressBarBg}>
                         <View style={[
                           styles.progressBarFill,
-                          { width: `${Math.min((membership.remainingDays / 30) * 100, 100)}%` },
+                          { width: `${fillPercentage}%` }, // 💡 남은 기간이 적을수록 게이지가 꽉 참
                           !hasMembership && { backgroundColor: 'transparent' }
                         ]} />
                       </View>
@@ -684,7 +675,6 @@ const HomeScreen = ({ navigation }: any) => {
                     <View style={[styles.memCardDates, !hasMembership && { justifyContent: 'center' }]}>
                       {hasMembership ? (
                         isCountType ? (
-                          // 💡 크기 확대
                           <Text style={[styles.memDateText, { fontSize: 18, color: '#A1BE44' }]}>
                             {membership.remainingCount}회 남음
                           </Text>
@@ -706,7 +696,6 @@ const HomeScreen = ({ navigation }: any) => {
                       </Text>
                       <Text style={[
                         styles.memHalfValueGreen,
-                        // 💡 크기 확대
                         !hasMembership && { color: '#999999', fontSize: 18 }
                       ]} numberOfLines={1} adjustsFontSizeToFit>
                         {hasMembership
@@ -720,7 +709,6 @@ const HomeScreen = ({ navigation }: any) => {
                       <Text style={styles.memHalfTitle}>상태</Text>
                       <Text style={[
                         styles.memHalfValueWhite,
-                        // 💡 크기 확대
                         !hasMembership && { fontSize: 18, color: '#FF6B6B' }
                       ]} numberOfLines={1} adjustsFontSizeToFit>
                         {hasMembership ? displayStatus : '구매 필요'}
@@ -737,7 +725,6 @@ const HomeScreen = ({ navigation }: any) => {
   );
 };
 
-// 💡 전체적으로 fontSize +2~3씩 확대
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
   scrollContent: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 60 },

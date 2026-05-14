@@ -16,7 +16,7 @@ import {
   Dimensions, 
   PanResponder, 
   TouchableWithoutFeedback,
-  TextInput  // 💡 missing TextInput added
+  TextInput
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
@@ -34,15 +34,30 @@ const authHeader = async () => {
   return { Authorization: `Bearer ${token}` };
 };
 
-// ─── 댓글 임시 타입 정의 ───
+// 💡 빈 문자열이나 "null" 텍스트 방지 헬퍼 함수
+const getProfileImage = (url: string | null | undefined) => {
+  if (url && typeof url === 'string' && url.trim() !== '' && url !== 'null' && url !== 'undefined') {
+    return { uri: url };
+  }
+  return require('../assets/profile.png');
+};
+
+// 💡 날짜 포맷 함수 (YYYY.MM.DD HH:MM)
+const formatCommentDate = (dateStr: string) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  return `${d.getFullYear()}.${p(d.getMonth()+1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
 interface CommentType {
   id: number;
-  author: string;
-  date: string;
   content: string;
-  likes: number;
-  isLiked: boolean;
-  parentId: number | null; 
+  writerId: number;
+  writerName: string;
+  profileImageUrl: string | null;
+  createdAt: string;
+  children: CommentType[]; // 대댓글 리스트
 }
 
 const ManagerCommunity = ({ navigation }: any) => {
@@ -53,11 +68,10 @@ const ManagerCommunity = ({ navigation }: any) => {
   const [selectedTab, setSelectedTab] = useState('전체');
   const tabs = ['전체', '센터', '아웃도어'];
 
-  // 관리자 본인의 정보 (좋아요 기능을 위해 Me API 조회)
   const [myNickname, setMyNickname] = useState('관리자');
   const [myUserId, setMyUserId] = useState<number | null>(null);
+  const [myProfileImageUrl, setMyProfileImageUrl] = useState<string | null>(null); 
 
-  // ─── 커스텀 알림 모달 상태 추가 ───
   const [resultModalVisible, setResultModalVisible] = useState(false);
   const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info' });
 
@@ -67,7 +81,6 @@ const ManagerCommunity = ({ navigation }: any) => {
   };
 
   const initData = async () => {
-    // 좋아요 기능을 위해 내 정보 조회
     try {
       const headers = await authHeader();
       const { data } = await axios.get(`${MEMBERS_API}/me`, { headers });
@@ -75,6 +88,7 @@ const ManagerCommunity = ({ navigation }: any) => {
       if (d) {
         setMyNickname(d.nickname || d.name || '관리자');
         setMyUserId(d.id || d.memberId || null);
+        setMyProfileImageUrl(d.profileImageUrl || d.profileImage || null);
       }
     } catch (e: any) {
       console.log('ManagerCommunity Me Fetch Error:', e.message);
@@ -90,7 +104,7 @@ const ManagerCommunity = ({ navigation }: any) => {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await initData(); // 새로고침 시에도 내 정보와 글 목록 같이 조회
+    await initData(); 
     setRefreshing(false);
   }, []);
 
@@ -130,9 +144,9 @@ const ManagerCommunity = ({ navigation }: any) => {
           postDate: isNaN(cd.getTime()) ? item.createdAt : `${cd.getFullYear()}.${p(cd.getMonth()+1)}.${p(cd.getDate())}`,
           isPast,
           viewCount: item.viewCount || 0,
-          // 💡 좋아요 관련 데이터 추가 매핑
           likeCount: item.likeCount || 0,
           isLiked: item.liked === true || item.isLiked === true,
+          profileImageUrl: item.writerProfileImageUrl || item.profileImageUrl || null,
         };
       });
 
@@ -140,20 +154,17 @@ const ManagerCommunity = ({ navigation }: any) => {
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || '게시글 목록을 불러오지 못했습니다.';
       showResultModal('오류', errorMessage, 'error');
-      console.log('ManagerCommunity Fetch Error:', errorMessage);
     } finally {
       if (!isRefresh) setLoading(false); 
     }
   };
 
-  // ─── 💡 좋아요 기능 로직 ───
   const updatePostState = (id: number, changes: Record<string, any>) =>
     setPosts(prev => prev.map(post => post.id !== id ? post :
       { ...post, ...Object.fromEntries(Object.entries(changes).map(([k,v]) => [k, typeof v==='function' ? v(post) : v])) }
     ));
 
   const toggleLike = async (id: number, liked: boolean) => {
-    // UI 우선 업데이트 (Optimistic Update)
     updatePostState(id, {
       isLiked: !liked,
       likeCount: (post: any) => liked ? Math.max(post.likeCount - 1, 0) : post.likeCount + 1
@@ -169,7 +180,6 @@ const ManagerCommunity = ({ navigation }: any) => {
       const headers = await authHeader();
       await axios.post(`${POSTS_API}/${id}/like`, {}, { headers });
     } catch (e: any) {
-      // 실패 시 롤백
       updatePostState(id, {
         isLiked: liked,
         likeCount: (post: any) => liked ? post.likeCount + 1 : Math.max(post.likeCount - 1, 0)
@@ -223,24 +233,26 @@ const ManagerCommunity = ({ navigation }: any) => {
         showResultModal('프로필 조회 불가', '정보를 불러올 수 없습니다.', 'error'); 
         return; 
       }
+
+      const detail = d.detail || {};
       
       setSelectedUser({
         name: d.name || authorName,
         phone: '-', 
-        profileImageUrl: d.profileImageUrl,
-        age: d.age || '-',
-        height: d.height || '-',
-        weight: d.weight || '-',
-        arm: d.armSpan || '-',
-        shoe: d.footSize || '-',
+        profileImageUrl: d.profileImageUrl || d.profileImage,
+        age: detail.age || d.age || '-',
+        height: detail.height || d.height || '-',
+        weight: detail.weight || d.weight || '-',
+        arm: detail.armSpan || d.armSpan || '-',
+        shoe: detail.footSize || d.footSize || '-',
         toggles: {
           showName: true,
           showPhone: false,
-          showAge: !!d.age,
-          showHeight: !!d.height,
-          showWeight: !!d.weight,
-          showArm: !!d.armSpan,
-          showShoe: !!d.footSize,
+          showAge: !!(detail.age || d.age),
+          showHeight: !!(detail.height || d.height),
+          showWeight: !!(detail.weight || d.weight),
+          showArm: !!(detail.armSpan || d.armSpan),
+          showShoe: !!(detail.footSize || d.footSize),
         },
       });
       setDetailVisible(true);
@@ -248,7 +260,6 @@ const ManagerCommunity = ({ navigation }: any) => {
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || '해당 회원의 정보를 불러올 수 없습니다.';
       showResultModal('프로필 조회 불가', errorMessage, 'error');
-      console.log('Profile Fetch Error:', errorMessage);
     }
   };
 
@@ -269,7 +280,7 @@ const ManagerCommunity = ({ navigation }: any) => {
     );
   };
 
-  // ─── 💡 댓글 기능 로직 (일반 창과 동일) ───
+  // ─── 💡 댓글/게시물 상세 기능 로직 ───
   const { height: SCREEN_HEIGHT } = Dimensions.get('window');
   const HALF_SCREEN = SCREEN_HEIGHT * 0.6; 
   const FULL_SCREEN = SCREEN_HEIGHT * 0.95; 
@@ -277,12 +288,10 @@ const ManagerCommunity = ({ navigation }: any) => {
   const CLOSE_THRESHOLD = HALF_SCREEN * 0.7; 
 
   const [isCommentVisible, setCommentVisible] = useState(false);
-  const [selectedCommentPostId, setSelectedCommentPostId] = useState<number | null>(null);
+  const [selectedPost, setSelectedPost] = useState<any>(null); 
   const [comments, setComments] = useState<CommentType[]>([]);
   const [commentInput, setCommentInput] = useState('');
   const [replyingTo, setReplyingTo] = useState<{id: number, name: string} | null>(null);
-  
-  // 댓글 삭제용 확인 모달 상태
   const [commentDeleteTarget, setCommentDeleteTarget] = useState<number | null>(null);
 
   const commentHeightAnim = useRef(new Animated.Value(0)).current;
@@ -316,16 +325,23 @@ const ManagerCommunity = ({ navigation }: any) => {
     })
   ).current;
 
-  const openCommentModal = (postId: number) => {
-    setSelectedCommentPostId(postId);
-    const dummyComments: CommentType[] = [
-      { id: 1, author: '권클라이밍', date: '2026.05.13', content: '같이 가고 싶습니다!', likes: 2, isLiked: false, parentId: null },
-      { id: 2, author: '김초보', date: '2026.05.14', content: '저도 참여할게요!', likes: 5, isLiked: true, parentId: null },
-      { id: 3, author: '이중수', date: '2026.05.14', content: '환영합니다~', likes: 0, isLiked: false, parentId: 2 }, 
-    ];
-    setComments(dummyComments);
-    setCommentVisible(true);
+  const fetchComments = async (postId: number) => {
+    try {
+      const headers = await authHeader();
+      const { data } = await axios.get(`${POSTS_API}/${postId}/comments?page=0&size=100`, { headers });
+      const fetchedComments = data?.data?.content ?? data?.data?.data?.content ?? [];
+      setComments(fetchedComments);
+    } catch (e: any) {
+      console.log('댓글 조회 실패:', e.response?.data?.message || e.message);
+    }
+  };
+
+  const openPostDetail = async (post: any) => {
+    setSelectedPost(post);
+    // 💡 관리자는 조회수를 올리지 않습니다. (increment API 미호출)
+    await fetchComments(post.id);
     
+    setCommentVisible(true);
     currentSnap.current = HALF_SCREEN;
     commentHeightAnim.setValue(0);
     Animated.timing(commentHeightAnim, { toValue: HALF_SCREEN, duration: 300, useNativeDriver: false }).start();
@@ -336,59 +352,88 @@ const ManagerCommunity = ({ navigation }: any) => {
       setCommentVisible(false);
       setReplyingTo(null);
       setCommentInput('');
+      setSelectedPost(null);
     });
   };
 
-  const toggleCommentLike = (commentId: number) => {
-    setComments(prev => prev.map(c => {
-      if (c.id === commentId) {
-        return { ...c, isLiked: !c.isLiked, likes: c.isLiked ? c.likes - 1 : c.likes + 1 };
-      }
-      return c;
-    }));
-  };
-
-  const submitComment = () => {
-    if (!commentInput.trim()) return;
-    
-    const newComment: CommentType = {
-      id: Date.now(), 
-      author: myNickname || '관리자', 
-      date: new Date().toISOString().split('T')[0].replace(/-/g, '.'), 
-      content: commentInput.trim(),
-      likes: 0,
-      isLiked: false,
-      parentId: replyingTo ? replyingTo.id : null 
-    };
-
-    setComments(prev => [...prev, newComment]);
-    setCommentInput('');
-    setReplyingTo(null); 
-    Keyboard.dismiss(); 
-  };
-
-  // 관리자 권한 댓글 삭제 실행
-  const executeCommentDelete = () => {
-    if (commentDeleteTarget !== null) {
-      // 대댓글이면 본인만 삭제, 부모 댓글이면 자식까지 삭제
-      setComments(prev => prev.filter(c => c.id !== commentDeleteTarget && c.parentId !== commentDeleteTarget));
-      showResultModal('성공', '해당 댓글이 삭제되었습니다.', 'success');
+  const submitComment = async () => {
+    if (!commentInput.trim() || !selectedPost) return;
+    try {
+      const headers = await authHeader();
+      const payload = {
+        content: commentInput.trim(),
+        parentId: replyingTo ? replyingTo.id : null
+      };
+      await axios.post(`${POSTS_API}/${selectedPost.id}/comments`, payload, { headers });
+      
+      setCommentInput('');
+      setReplyingTo(null);
+      Keyboard.dismiss();
+      
+      await fetchComments(selectedPost.id);
+    } catch (e: any) {
+      const errorMessage = e.response?.data?.message || '댓글을 작성할 수 없습니다.';
+      showResultModal('오류', errorMessage, 'error');
     }
-    setCommentDeleteTarget(null);
   };
 
-  const sortCommentsLogic = (list: CommentType[]) => {
-    return [...list].sort((a, b) => {
-      if (b.likes !== a.likes) return b.likes - a.likes; 
-      return new Date(b.date).getTime() - new Date(a.date).getTime(); 
-    });
+  const executeCommentDelete = async () => {
+    if (commentDeleteTarget === null || !selectedPost) return;
+    try {
+      const headers = await authHeader();
+      await axios.delete(`${POSTS_API}/${selectedPost.id}/comments/${commentDeleteTarget}`, { headers });
+      
+      setCommentDeleteTarget(null);
+      await fetchComments(selectedPost.id);
+      
+      setTimeout(() => {
+        showResultModal('성공', '해당 댓글이 삭제되었습니다.', 'success');
+      }, Platform.OS === 'ios' ? 500 : 300);
+    } catch (e: any) {
+      setCommentDeleteTarget(null);
+      setTimeout(() => {
+        const errorMessage = e.response?.data?.message || '댓글을 삭제할 수 없습니다.';
+        showResultModal('오류', errorMessage, 'error');
+      }, Platform.OS === 'ios' ? 500 : 300);
+    }
   };
-
-  const parentComments = sortCommentsLogic(comments.filter(c => c.parentId === null));
-  const getChildComments = (parentId: number) => sortCommentsLogic(comments.filter(c => c.parentId === parentId));
-
 
   const filteredPosts = posts.filter((post: any) => selectedTab === '전체' || post.type === selectedTab);
+
+  // 💡 iOS 모달 겹침 방지: 프로필 컴포넌트를 독립적인 함수로 분리하여 필요시 뷰로 덮어씌움
+  const ProfileModalUI = () => (
+    <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeDetailModal}>
+      <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: detailSlideAnim }] }]}>
+        <TouchableOpacity activeOpacity={1} style={{ width: '100%' }}>
+          <View style={styles.dragHandle} />
+          <View style={styles.sheetHeader}>
+            <Text style={styles.sheetTitle}>회원 정보 확인</Text>
+            <TouchableOpacity onPress={closeDetailModal}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity>
+          </View>
+          <View style={styles.horizontalDivider} />
+          {selectedUser && (
+            <View style={styles.detailContainer}>
+              <View style={styles.detailProfileWrapper}>
+                <Image source={getProfileImage(selectedUser.profileImageUrl)} style={{ width: 90, height: 90, borderRadius: 45, backgroundColor: '#444444' }} /> 
+              </View>
+              <View style={styles.detailInfoBox}>
+                {renderDetailRow('이름', selectedUser.name, selectedUser.toggles?.showName ?? true)}
+                {renderDetailRow('전화번호', selectedUser.phone, selectedUser.toggles?.showPhone ?? true)}
+                {renderDetailRow('나이', selectedUser.age, selectedUser.toggles?.showAge ?? true, '세')}
+                {renderDetailRow('키', selectedUser.height, selectedUser.toggles?.showHeight ?? true, 'cm')}
+                {renderDetailRow('몸무게', selectedUser.weight, selectedUser.toggles?.showWeight ?? true, 'kg')}
+                {renderDetailRow('팔길이', selectedUser.arm, selectedUser.toggles?.showArm ?? true, 'cm')}
+                {renderDetailRow('암벽화 사이즈', selectedUser.shoe, selectedUser.toggles?.showShoe ?? true, 'mm')}
+              </View>
+              <TouchableOpacity style={styles.closeFullBtn} onPress={closeDetailModal}>
+                <Text style={styles.closeFullBtnText}>닫기</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </TouchableOpacity>
+      </Animated.View>
+    </TouchableOpacity>
+  );
 
   if (loading) {
     return (
@@ -430,7 +475,13 @@ const ManagerCommunity = ({ navigation }: any) => {
           const badgeTextColor = isPast ? '#888888' : (isOutdoor ? '#2CDE00' : '#009DFF');
 
           return (
-            <View key={post.id} style={[styles.postCard, isPast && styles.postCardDimmed]}>
+            // 💡 게시글 카드 전체를 터치하면 댓글/상세 모달이 열립니다.
+            <TouchableOpacity 
+              key={post.id} 
+              style={[styles.postCard, isPast && styles.postCardDimmed]}
+              activeOpacity={0.95} 
+              onPress={() => openPostDetail(post)} 
+            >
               <View style={styles.cardHeader}>
                 <View style={[styles.badge, { backgroundColor: badgeBgColor }]}>
                   <Text style={[styles.badgeText, { color: badgeTextColor }]}>{post.type}</Text>
@@ -452,7 +503,6 @@ const ManagerCommunity = ({ navigation }: any) => {
               <Text style={[styles.postTitle, isPast && { color: '#888888' }]}>{post.title}</Text>
               <Text style={[styles.postDesc, isPast && { color: '#666666' }]}>{post.desc}</Text>
               
-              {/* 장소/날짜 정보 부분 (일반 창과 디자인 통일) */}
               <View style={styles.infoRow}>
                 {([['point.png',post.location],['DATE.png',post.date],['people.png',post.people]] as [string,string][]).map(([img,val],i) => (
                   <View key={i} style={styles.infoItem}>
@@ -466,39 +516,27 @@ const ManagerCommunity = ({ navigation }: any) => {
               
               <View style={styles.cardFooter}>
                 <TouchableOpacity style={styles.profileRow} onPress={() => openDetailModal(post.writerId, post.author)}>
-                  {post.author === '최강우' ? (
-                    <View style={[styles.textProfileImg, isPast && { opacity: 0.5 }]}>
-                      <Text style={styles.textProfileText}>최</Text>
-                    </View>
-                  ) : (
-                    <Image source={require('../assets/profile.png')} style={[styles.profileImg, isPast && { opacity: 0.5 }]} />
-                  )}
+                  <Image source={getProfileImage(post.profileImageUrl)} style={[styles.profileImg, isPast && { opacity: 0.5 }]} />
                   <Text style={[styles.authorText, isPast && { color: '#666666' }]}>{post.author}</Text>
                 </TouchableOpacity>
 
-                {/* 우측 하단 액션 묶음 */}
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  
-                  {/* 💡 모집 글 좋아요 버튼 추가 (기능 연결) */}
                   <TouchableOpacity style={{ marginRight: 20 }} onPress={() => toggleLike(post.id, post.isLiked)}>
                     <Text style={[styles.statBottomText, post.isLiked && {color:'#FF4D4D'}, { marginRight: 0 }]}>
                       {post.isLiked ? '♥' : '♡'} {post.likeCount}
                     </Text>
                   </TouchableOpacity>
 
-                  {/* 댓글 버튼 추가 */}
-                  <TouchableOpacity style={{ marginRight: 10 }} onPress={() => openCommentModal(post.id)}>
+                  <TouchableOpacity style={{ marginRight: 10 }} onPress={() => openPostDetail(post)}>
                     <Image source={require('../assets/ChatText.png')} style={{ width: 22, height: 22, tintColor: '#ffffff' }} />
                   </TouchableOpacity>
 
-                  {/* 게시글 삭제 버튼 (유저 창에는 없고 관리자 창에만 존재) */}
                   <TouchableOpacity style={styles.trashBtn} onPress={() => confirmDelete(post.id)}>
                     <Image source={require('../assets/trash.png')} style={[styles.trashIcon, isPast && { tintColor: '#666666' }]} />
                   </TouchableOpacity>
                 </View>
-            
               </View>
-            </View>
+            </TouchableOpacity>
           );
         })}
         {filteredPosts.length === 0 && (
@@ -506,91 +544,45 @@ const ManagerCommunity = ({ navigation }: any) => {
         )}
       </ScrollView>
 
-      {/* 커스텀 알림 결과 모달 */}
-      <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
-        <View style={styles.resultModalOverlay}>
-          <View style={styles.resultModalBox}>
-            <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>
-              {resultModalConfig.title}
-            </Text>
-            <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
-            <TouchableOpacity style={styles.resultModalBtn} onPress={() => setResultModalVisible(false)}>
-              <Text style={styles.resultModalBtnText}>확인</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* 게시글 삭제 확인 모달 */}
-      <Modal visible={isDeleteModalVisible} animationType="fade" transparent={true} onRequestClose={cancelDelete}>
-        <View style={styles.deleteModalOverlay}>
-          <View style={styles.deleteModalBox}>
-            <Text style={styles.deleteModalText}>삭제하시겠습니까?</Text>
-            <View style={styles.deleteBtnRow}>
-              <TouchableOpacity style={styles.deleteBtnYes} onPress={executeDelete}><Text style={styles.deleteBtnYesText}>예</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.deleteBtnNo} onPress={cancelDelete}><Text style={styles.deleteBtnNoText}>아니오</Text></TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* 💡 댓글 삭제 확인 모달 (관리자 전용) */}
-      <Modal visible={commentDeleteTarget !== null} animationType="fade" transparent={true} onRequestClose={() => setCommentDeleteTarget(null)}>
-        <View style={styles.deleteModalOverlay}>
-          <View style={styles.deleteModalBox}>
-            <Text style={styles.deleteModalText}>해당 댓글을 삭제하시겠습니까?</Text>
-            <View style={styles.deleteBtnRow}>
-              <TouchableOpacity style={styles.deleteBtnYes} onPress={executeCommentDelete}><Text style={styles.deleteBtnYesText}>예</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.deleteBtnNo} onPress={() => setCommentDeleteTarget(null)}><Text style={styles.deleteBtnNoText}>아니오</Text></TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* 프로필 정보 바텀시트 모달 */}
-      <Modal visible={isDetailVisible} transparent={true} animationType="fade" onRequestClose={closeDetailModal}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeDetailModal}>
-          <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: detailSlideAnim }] }]}>
-            <TouchableOpacity activeOpacity={1} style={{ width: '100%' }}>
-              <View style={styles.dragHandle} />
-              <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle}>회원 정보 확인</Text>
-                <TouchableOpacity onPress={closeDetailModal}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity>
+      {/* 💡 기본 화면에 떠있는 모달들 (댓글 창이 열려 있지 않을 때만 렌더링) */}
+      {!isCommentVisible && (
+        <>
+          {/* 커스텀 알림 결과 모달 */}
+          <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
+            <View style={styles.resultModalOverlay}>
+              <View style={styles.resultModalBox}>
+                <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>
+                  {resultModalConfig.title}
+                </Text>
+                <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
+                <TouchableOpacity style={styles.resultModalBtn} onPress={() => setResultModalVisible(false)}>
+                  <Text style={styles.resultModalBtnText}>확인</Text>
+                </TouchableOpacity>
               </View>
-              <View style={styles.horizontalDivider} />
-              {selectedUser && (
-                <View style={styles.detailContainer}>
-                  <View style={styles.detailProfileWrapper}>
-                    {selectedUser.profileImageUrl ? (
-                       <Image source={{ uri: selectedUser.profileImageUrl }} style={{ width: 90, height: 90, borderRadius: 45, backgroundColor: '#444444' }} /> 
-                    ) : selectedUser.name === '최강우' ? (
-                       <View style={[styles.textProfileImg, { width: 90, height: 90, borderRadius: 45 }]}>
-                         <Text style={[styles.textProfileText, { fontSize: 32 }]}>최</Text>
-                       </View> 
-                    ) : (
-                       <Image source={require('../assets/profile.png')} style={{ width: 90, height: 90, borderRadius: 45, backgroundColor: '#444444' }} /> 
-                    )}
-                  </View>
-                  <View style={styles.detailInfoBox}>
-                    {renderDetailRow('이름', selectedUser.name, selectedUser.toggles.showName)}
-                    {renderDetailRow('전화번호', selectedUser.phone, selectedUser.toggles.showPhone)}
-                    {renderDetailRow('나이', selectedUser.age, selectedUser.toggles.showAge, '세')}
-                    {renderDetailRow('키', selectedUser.height, selectedUser.toggles.showHeight, 'cm')}
-                    {renderDetailRow('몸무게', selectedUser.weight, selectedUser.toggles.showWeight, 'kg')}
-                    {renderDetailRow('팔길이', selectedUser.arm, selectedUser.toggles.showArm, 'cm')}
-                    {renderDetailRow('암벽화 사이즈', selectedUser.shoe, selectedUser.toggles.showShoe, 'mm')}
-                  </View>
-                  <TouchableOpacity style={styles.closeFullBtn} onPress={closeDetailModal}>
-                    <Text style={styles.closeFullBtnText}>닫기</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </TouchableOpacity>
-          </Animated.View>
-        </TouchableOpacity>
-      </Modal>
+            </View>
+          </Modal>
 
-      {/* 🌟 새로운 댓글/대댓글 모달 창 (드래그 지원 + 관리자 전용 삭제) 🌟 */}
+          {/* 게시글 삭제 확인 모달 */}
+          <Modal visible={isDeleteModalVisible} animationType="fade" transparent={true} onRequestClose={cancelDelete}>
+            <View style={styles.deleteModalOverlay}>
+              <View style={styles.deleteModalBox}>
+                <Text style={styles.deleteModalText}>삭제하시겠습니까?</Text>
+                <View style={styles.deleteBtnRow}>
+                  <TouchableOpacity style={styles.deleteBtnYes} onPress={executeDelete}><Text style={styles.deleteBtnYesText}>예</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.deleteBtnNo} onPress={cancelDelete}><Text style={styles.deleteBtnNoText}>아니오</Text></TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
+
+          {/* 메인 리스트에서 열린 프로필 정보 모달 */}
+          <Modal visible={isDetailVisible} transparent={true} animationType="fade" onRequestClose={closeDetailModal}>
+            <ProfileModalUI />
+          </Modal>
+        </>
+      )}
+
+      {/* 🌟 새로운 댓글/대댓글 모달 창 (게시글 상세 포함) 🌟 */}
       <Modal visible={isCommentVisible} transparent animationType="fade" onRequestClose={closeCommentModal}>
         <View style={styles.modalOverlay}>
           <TouchableWithoutFeedback onPress={closeCommentModal}>
@@ -603,7 +595,7 @@ const ManagerCommunity = ({ navigation }: any) => {
               <View {...panResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
                 <View style={styles.dragHandle} />
                 <View style={styles.sheetHeader}>
-                  <Text style={styles.sheetTitle}>댓글</Text>
+                  <Text style={styles.sheetTitle}>게시글 보기</Text>
                   <TouchableOpacity onPress={closeCommentModal} hitSlop={{top:10, bottom:10, left:10, right:10}}>
                     <Text style={styles.closeBtn}>✕</Text>
                   </TouchableOpacity>
@@ -612,64 +604,112 @@ const ManagerCommunity = ({ navigation }: any) => {
               </View>
               
               <ScrollView showsVerticalScrollIndicator={true} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }}>
-                {parentComments.map(parent => (
-                  <View key={parent.id}>
-                    {/* 부모 댓글 렌더링 */}
-                    <View style={styles.commentItem}>
-                      <Image source={require('../assets/profile.png')} style={styles.commentAvatar} />
-                      <View style={styles.commentContentArea}>
-                        <View style={styles.commentHeaderLine}>
-                          <Text style={styles.commentAuthorName}>{parent.author}</Text>
-                          <Text style={styles.commentDateText}>{parent.date}</Text>
-                        </View>
-                        <Text style={styles.commentBodyText}>{parent.content}</Text>
-                        <TouchableOpacity onPress={() => setReplyingTo({ id: parent.id, name: parent.author })}>
-                          <Text style={styles.commentReplyBtnText}>답글 달기</Text>
-                        </TouchableOpacity>
+                
+                {/* 💡 선택된 게시물 정보 상단 렌더링 */}
+                {selectedPost && (
+                  <View style={styles.postDetailContainer}>
+                    <View style={styles.cardHeader}>
+                      <View style={[styles.badge, { backgroundColor: selectedPost.isPast ? '#333' : (selectedPost.type==='아웃도어' ? '#00810F' : '#0072B9') }]}>
+                        <Text style={[styles.badgeText, { color: selectedPost.isPast ? '#888' : (selectedPost.type==='아웃도어' ? '#2CDE00' : '#009DFF') }]}>{selectedPost.type}</Text>
                       </View>
-                      
-                      {/* 💡 관리자 전용: 좋아요(♥)와 삭제(휴지통) 세로 배치 */}
-                      <View style={{ alignItems: 'flex-end', justifyContent: 'flex-start', paddingTop: 2 }}>
-                        {/* 좋아요 */}
-                        <TouchableOpacity style={{ paddingBottom: 8 }} onPress={() => toggleCommentLike(parent.id)}>
-                          <Text style={[styles.commentStatText, parent.isLiked && { color: '#FF4D4D' }]}>{parent.isLiked ? '♥' : '♡'} {parent.likes}</Text>
-                        </TouchableOpacity>
-                        
-                        {/* 💡 PNG 삭제 버튼으로 교체 (빨간색, 휴지통, 배경 없음) */}
-                        <TouchableOpacity style={styles.commentAdminDeletePngBtn} onPress={() => setCommentDeleteTarget(parent.id)}>
-                          <Image source={require('../assets/trash.png')} style={styles.commentAdminTrashIcon} />
-                        </TouchableOpacity>
+                      <View style={styles.statsRow}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 4 }}>
+                          <Image source={require('../assets/Eye.png')} style={{ width: 17, height: 17, tintColor: '#999', marginRight: 4 }} />
+                          <Text style={styles.statTopText}>{selectedPost.viewCount}</Text>
+                        </View>
+                        <Text style={styles.postDateText}>{selectedPost.postDate}</Text>
                       </View>
                     </View>
 
-                    {/* 대댓글 렌더링 (들여쓰기 적용) */}
-                    {getChildComments(parent.id).map(child => (
-                      <View key={child.id} style={[styles.commentItem, styles.childCommentItem]}>
-                        <Image source={require('../assets/profile.png')} style={styles.commentAvatar} />
+                    <Text style={[styles.postTitle, selectedPost.isPast && { color: '#888888' }]}>{selectedPost.title}</Text>
+                    <Text style={[styles.postDesc, selectedPost.isPast && { color: '#666666' }]}>{selectedPost.desc}</Text>
+
+                    <View style={styles.infoRow}>
+                      <View style={styles.infoItem}>
+                        <Image source={require('../assets/point.png')} style={styles.infoIcon}/>
+                        <Text style={styles.infoText}>{selectedPost.location}</Text>
+                      </View>
+                      <View style={styles.infoItem}>
+                        <Image source={require('../assets/DATE.png')} style={styles.infoIcon}/>
+                        <Text style={styles.infoText}>{selectedPost.date}</Text>
+                      </View>
+                      <View style={styles.infoItem}>
+                        <Image source={require('../assets/people.png')} style={styles.infoIcon}/>
+                        <Text style={styles.infoText}>{selectedPost.people}</Text>
+                      </View>
+                    </View>
+                    <View style={[styles.divider, { marginBottom: 5 }]}/>
+                    <Text style={styles.commentSectionTitle}>댓글 {comments.length}개</Text>
+                  </View>
+                )}
+
+                {comments.map((parent) => {
+                  const isParentDeleted = parent.content === "삭제된 댓글입니다.";
+                  
+                  return (
+                    <View key={`comment-${parent.id}`}>
+                      <View style={styles.commentItem}>
+                        <TouchableOpacity onPress={() => openDetailModal(parent.writerId, parent.writerName)}>
+                          <Image source={getProfileImage(parent.profileImageUrl)} style={styles.commentAvatar} />
+                        </TouchableOpacity>
                         <View style={styles.commentContentArea}>
                           <View style={styles.commentHeaderLine}>
-                            <Text style={styles.commentAuthorName}>{child.author}</Text>
-                            <Text style={styles.commentDateText}>{child.date}</Text>
+                            <TouchableOpacity onPress={() => openDetailModal(parent.writerId, parent.writerName)}>
+                              <Text style={styles.commentAuthorName}>{parent.writerName}</Text>
+                            </TouchableOpacity>
+                            <Text style={styles.commentDateText}>{formatCommentDate(parent.createdAt)}</Text>
                           </View>
-                          <Text style={styles.commentBodyText}>{child.content}</Text>
-                        </View>
-
-                        {/* 💡 관리자 전용: 좋아요(♥)와 삭제(휴지통) 세로 배치 */}
-                        <View style={{ alignItems: 'flex-end', justifyContent: 'flex-start', paddingTop: 2 }}>
-                          {/* 좋아요 */}
-                          <TouchableOpacity style={{ paddingBottom: 8 }} onPress={() => toggleCommentLike(child.id)}>
-                            <Text style={[styles.commentStatText, child.isLiked && { color: '#FF4D4D' }]}>{child.isLiked ? '♥' : '♡'} {child.likes}</Text>
-                          </TouchableOpacity>
+                          {/* 💡 삭제 문구 변환 없이 원래 응답 노출 */}
+                          <Text style={[styles.commentBodyText, isParentDeleted && { color: '#888' }]}>{parent.content}</Text>
                           
-                          {/* 💡 PNG 삭제 버튼으로 교체 (빨간색, 휴지통, 배경 없음) */}
-                          <TouchableOpacity style={styles.commentAdminDeletePngBtn} onPress={() => setCommentDeleteTarget(child.id)}>
-                            <Image source={require('../assets/trash.png')} style={styles.commentAdminTrashIcon} />
-                          </TouchableOpacity>
+                          {!isParentDeleted && (
+                            <TouchableOpacity onPress={() => setReplyingTo({ id: parent.id, name: parent.writerName })}>
+                              <Text style={styles.commentReplyBtnText}>답글 달기</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                        
+                        {/* 💡 관리자 전용 삭제 버튼 (이미 삭제된 댓글이 아닐 경우 노출) */}
+                        <View style={{ alignItems: 'flex-end', justifyContent: 'flex-start', paddingTop: 2 }}>
+                          {!isParentDeleted && (
+                            <TouchableOpacity style={styles.commentAdminDeletePngBtn} onPress={() => setCommentDeleteTarget(parent.id)}>
+                              <Image source={require('../assets/trash.png')} style={styles.commentAdminTrashIcon} />
+                            </TouchableOpacity>
+                          )}
                         </View>
                       </View>
-                    ))}
-                  </View>
-                ))}
+
+                      {parent.children?.map((child) => {
+                        const isChildDeleted = child.content === "삭제된 댓글입니다.";
+
+                        return (
+                          <View key={`reply-${child.id}`} style={[styles.commentItem, styles.childCommentItem]}>
+                            <TouchableOpacity onPress={() => openDetailModal(child.writerId, child.writerName)}>
+                              <Image source={getProfileImage(child.profileImageUrl)} style={styles.commentAvatar} />
+                            </TouchableOpacity>
+                            <View style={styles.commentContentArea}>
+                              <View style={styles.commentHeaderLine}>
+                                <TouchableOpacity onPress={() => openDetailModal(child.writerId, child.writerName)}>
+                                  <Text style={styles.commentAuthorName}>{child.writerName}</Text>
+                                </TouchableOpacity>
+                                <Text style={styles.commentDateText}>{formatCommentDate(child.createdAt)}</Text>
+                              </View>
+                              <Text style={[styles.commentBodyText, isChildDeleted && { color: '#888' }]}>{child.content}</Text>
+                            </View>
+
+                            <View style={{ alignItems: 'flex-end', justifyContent: 'flex-start', paddingTop: 2 }}>
+                              {!isChildDeleted && (
+                                <TouchableOpacity style={styles.commentAdminDeletePngBtn} onPress={() => setCommentDeleteTarget(child.id)}>
+                                  <Image source={require('../assets/trash.png')} style={styles.commentAdminTrashIcon} />
+                                </TouchableOpacity>
+                              )}
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  );
+                })}
                 {comments.length === 0 && <Text style={{color:'#999',fontSize:16,textAlign:'center',marginTop:30}}>등록된 댓글이 없습니다.</Text>}
               </ScrollView>
 
@@ -682,7 +722,7 @@ const ManagerCommunity = ({ navigation }: any) => {
                   </View>
                 )}
                 <View style={styles.commentInputRow}>
-                  <Image source={require('../assets/profile.png')} style={styles.commentInputAvatar} />
+                  <Image source={getProfileImage(myProfileImageUrl)} style={styles.commentInputAvatar} />
                   <TextInput
                     style={styles.commentTextInput}
                     placeholder="댓글을 작성해주세요."
@@ -698,6 +738,43 @@ const ManagerCommunity = ({ navigation }: any) => {
               </View>
             </Animated.View>
           </KeyboardAvoidingView>
+
+          {/* 💡 iOS 모달 겹침 버그 방지용 (내부 Absolute 뷰로 렌더링) */}
+          {commentDeleteTarget !== null && (
+            <View style={[StyleSheet.absoluteFill, { zIndex: 999, elevation: 999 }]}>
+              <View style={styles.deleteModalOverlay}>
+                <View style={styles.deleteModalBox}>
+                  <Text style={styles.deleteModalText}>해당 댓글을 삭제하시겠습니까?</Text>
+                  <View style={styles.deleteBtnRow}>
+                    <TouchableOpacity style={styles.deleteBtnYes} onPress={executeCommentDelete}><Text style={styles.deleteBtnYesText}>예</Text></TouchableOpacity>
+                    <TouchableOpacity style={styles.deleteBtnNo} onPress={() => setCommentDeleteTarget(null)}><Text style={styles.deleteBtnNoText}>아니오</Text></TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {resultModalVisible && (
+            <View style={[StyleSheet.absoluteFill, { zIndex: 999, elevation: 999 }]}>
+              <View style={styles.resultModalOverlay}>
+                <View style={styles.resultModalBox}>
+                  <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>
+                    {resultModalConfig.title}
+                  </Text>
+                  <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
+                  <TouchableOpacity style={styles.resultModalBtn} onPress={() => setResultModalVisible(false)}>
+                    <Text style={styles.resultModalBtnText}>확인</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {isDetailVisible && (
+            <View style={[StyleSheet.absoluteFill, { zIndex: 999, elevation: 999 }]}>
+              <ProfileModalUI />
+            </View>
+          )}
         </View>
       </Modal>
 
@@ -733,7 +810,6 @@ const styles = StyleSheet.create({
   infoIcon: { width: 14, height: 14, resizeMode: 'contain', marginRight: 4, tintColor: '#999999' }, 
   infoText: { color: '#999999', fontSize: 13, flexShrink: 1 }, 
   
-  // 모집 글 하단 좋아요 숫자 스타일
   statBottomText: { color: '#999', fontSize: 14, fontWeight: '500' },
 
   trashBtn: { padding: 10, marginRight: -8 }, 
@@ -780,8 +856,9 @@ const styles = StyleSheet.create({
   resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, 
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
 
-  // ─── 💡 댓글 모달 전용 스타일 (드래그 지원) ───
   commentSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: Platform.OS === 'ios' ? 30 : 20, width: '100%', overflow: 'hidden' },
+  postDetailContainer: { paddingBottom: 10, paddingTop: 10 },
+  commentSectionTitle: { color: '#A1BE44', fontSize: 16, fontWeight: 'bold', marginBottom: 10 },
   commentItem: { flexDirection: 'row', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#333' },
   childCommentItem: { marginLeft: 45, borderLeftWidth: 1.5, borderLeftColor: '#444', paddingLeft: 12 },
   commentAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#444', marginRight: 12 },
@@ -792,11 +869,9 @@ const styles = StyleSheet.create({
   commentBodyText: { color: '#ffffff', fontSize: 16, lineHeight: 22, marginBottom: 6 },
   commentReplyBtnText: { color: '#888888', fontSize: 13, fontWeight: 'bold' },
   
-  // 댓글 내 좋아요 숫자 스타일
   commentStatText: { color: '#999', fontSize: 14, fontWeight: '500' },
   
-  // 💡 관리자 전용: PNG 삭제 버튼 스타일 (빨간색 휴지통, 배경 없음)
-  commentAdminDeletePngBtn: { padding: 4, marginTop: 4 }, // 좋아요 아래 공간 확보
+  commentAdminDeletePngBtn: { padding: 4, marginTop: 4 }, 
   commentAdminTrashIcon: { width: 18, height: 18, resizeMode: 'contain', tintColor: '#FF0000' },
   
   commentInputWrapper: { borderTopWidth: 1, borderTopColor: '#333', paddingTop: 12, backgroundColor: '#1E1E1E' },

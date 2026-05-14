@@ -31,7 +31,7 @@ const MAX_HOLDS: Record<string, number> = {
   '빨강': 26, '보라': 25, '주황': 28, '검정': 30,
 };
 
-// 난이도별 기본 점수 (연속 완등 점수 계산용)
+// 난이도별 기본 점수 (연속 완등 점수 화면 표시용 - 실제 저장은 서버에서 계산)
 const BASE_SCORES: Record<string, number> = {
   '흰색': 10, '노랑': 20, '주황': 30, '초록': 40,
   '파랑': 50, '빨강': 60, '보라': 70, '검정': 80,
@@ -91,7 +91,6 @@ const getSectionLabel = (oneWayCount: number, additionalBlocks: number): string 
   if (oneWayCount === 0 && additionalBlocks === 0) return '0';
   if (additionalBlocks > 0 && additionalBlocks <= BOX_SEQUENCE.length)
     return BOX_SEQUENCE[additionalBlocks - 1];
-  // (수정) 완주 시 '완주'가 아닌 마지막 구간 '4-2' 리턴
   return '4-2'; 
 };
 
@@ -183,7 +182,7 @@ const RecodeScreen = ({
     action();
   };
 
-  // ── 초보벽 최고기록 조회 ──
+  // ── 초보벽 최고기록 조회 (🚀 수정포인트 1: 백엔드 점수 신뢰 로직) ──
   const fetchBestRecords = async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/records/beginner/best`);
@@ -200,10 +199,9 @@ const RecodeScreen = ({
           let highestScore = -1;
 
           recordsForColor.forEach(r => {
-            const isRoundTrip = String(r.attemptType ?? '').toUpperCase() === 'ROUND_TRIP';
-            const rawHold = r.maxHoldNo !== undefined ? r.maxHoldNo : r.score;
-            const holdCount = r.success ? maxHold : (rawHold ?? 0);
-            const score     = (isRoundTrip ? 50_000 : 0) + Number(holdCount);
+            // [수정 완료] 프론트엔드 임의 계산 제거 (50_000 하드코딩 등). 백엔드 score를 최우선으로 신뢰합니다.
+            const holdCount = r.success ? maxHold : (r.maxHoldNo ?? 0);
+            const score = r.score ?? holdCount; // 백엔드 score가 없으면 임시로 홀드수만 적용 (서버 점수화 필수)
 
             if (score > highestScore) {
               highestScore = score;
@@ -242,7 +240,6 @@ const RecodeScreen = ({
       const mapped = list.map((item: EnduranceRecord) => ({
         id:      item.id,
         type:    '편도',
-        // (수정) 짝수/0회는 ->, 홀수/1회는 <- 처리
         arrow:   item.oneWayCount % 2 !== 0 ? '<-' : '->', 
         laps:    String(item.oneWayCount),
         time:    formatTime(item.timeSeconds),
@@ -365,7 +362,6 @@ const RecodeScreen = ({
     const finalHold    = isSuccess ? currentMaxHolds : holdCount;
     const enumDifficulty = KR_TO_ENUM[selectedDifficulty] ?? 'WHITE';
 
-    // (수정) 400 Bad Request 에러 해결: success -> isSuccess 로 변경!
     const payload = {
       difficulty:  enumDifficulty,
       attemptType: selectedType === '편도' ? 'ONE_WAY' : 'ROUND_TRIP',
@@ -551,7 +547,6 @@ const RecodeScreen = ({
       setTimerRunning(false);
       if (timerRef.current) clearInterval(timerRef.current);
     }
-    // 0.5초 딜레이를 주어 안전하게 종료 모달을 띄움
     setTimeout(() => {
       setFinishModalVisible(true);
     }, 500);
@@ -624,7 +619,7 @@ const RecodeScreen = ({
   const removeConsecutiveItem = (indexToRemove: number) =>
     setSelectedConsecutiveList(prev => prev.filter((_, i) => i !== indexToRemove));
 
-  // (수정) 백엔드의 연속 완등 점수 계산 방식과 똑같이 매핑
+  // 이 점수는 화면 노출용(Preview)으로만 사용하며 실제 저장은 sequenceLog만 전송합니다.
   const totalConsecutiveScore = selectedConsecutiveList.reduce(
     (acc: number, curr: any, index: number) => {
       const baseScore = BASE_SCORES[curr.color] ?? 10;
@@ -679,7 +674,7 @@ const RecodeScreen = ({
         }
       >
 
-        {/* 기록 추가 버튼 카드 */}
+        {/* 요약 카드 영역 */}
         <View style={styles.summaryContainer}>
           <TouchableOpacity style={styles.summaryItemVertical} onPress={openRecordModal} activeOpacity={0.8}>
             <View style={styles.summaryLeft}>
@@ -920,10 +915,10 @@ const RecodeScreen = ({
         </TouchableOpacity>
       </Modal>
 
-      {/* ─── 지구력 스톱워치 / 타이머 모달 ─── */}
+      {/* ─── 지구력 스톱워치 / 타이머 모달 (🚀 수정포인트 2: absoluteFill, zIndex 꼼수 제거) ─── */}
       <Modal visible={isEnduranceModalVisible} animationType="fade" transparent onRequestClose={closeEnduranceModal}>
         {isTimerActive ? (
-          <SafeAreaView style={[StyleSheet.absoluteFill, styles.timerModalBackground, { zIndex: 1000 }]}>
+          <SafeAreaView style={styles.timerModalBackground}>
             <View style={styles.timerHeader}>
               <Text style={styles.timerHeaderTitle}>지구력 측정</Text>
               <TouchableOpacity onPress={() => { if (timerRef.current) clearInterval(timerRef.current); setTimerRunning(false); setIsTimerActive(false); }}>
@@ -1119,7 +1114,6 @@ const RecodeScreen = ({
                     <Text style={styles.detailButtonText}>{showDetails ? '닫기' : '상세보기'}</Text>
                   </TouchableOpacity>
                 </View>
-                {/* (수정) 백엔드 로직에 맞춘 점수 화면에 렌더링 */}
                 <Text style={styles.totalScoreText}>{displayTotalScore} 점</Text>
 
                 {showDetails && (
@@ -1149,7 +1143,7 @@ const RecodeScreen = ({
         </TouchableOpacity>
       </Modal>
 
-      {/* ─── 커스텀 알림 모달 (모달 안에 중첩되지 않도록 루트 레벨에서 선언하여 안전하게 띄움) ─── */}
+      {/* ─── 커스텀 알림 모달 ─── */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -1293,6 +1287,7 @@ const styles = StyleSheet.create({
   timerDisplayText: { color: '#ffffff', fontSize: 32, fontWeight: 'bold', minWidth: 45, textAlign: 'center' }, 
   timerLabel: { color: '#999999', fontSize: 18, fontWeight: 'bold', marginBottom: 4, marginRight: 8, marginLeft: 4 }, 
 
+  // 🚀 타이머 모달용 수정된 스타일
   timerModalBackground: { flex: 1, backgroundColor: '#1A1A1A', padding: 20 },
   timerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20 },
   timerHeaderTitle: { color: '#A1BE44', fontSize: 24, fontWeight: 'bold' }, 
@@ -1342,4 +1337,4 @@ const styles = StyleSheet.create({
   deleteBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
 });
 
-export default RecodeScreen; 
+export default RecodeScreen;
