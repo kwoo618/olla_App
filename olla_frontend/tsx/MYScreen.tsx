@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Image, Switch, Modal, Animated, TextInput, ActivityIndicator, Linking, RefreshControl,
-  Platform, StyleSheet as RNStyleSheet
+  Platform, StyleSheet as RNStyleSheet, Dimensions, PanResponder, TouchableWithoutFeedback, KeyboardAvoidingView
 } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -36,19 +36,58 @@ const MYScreen = ({ navigation }: any) => {
   const isFocused = useIsFocused();
   const [loading, setLoading] = useState(true);
 
-  // ─── 모달 및 애니메이션 상태 (원래 코드 참조) ───
+  // ─── 모달 및 애니메이션 상태 ───
   const [isProfileModalVisible, setProfileModalVisible] = useState(false);
   const [isMembershipExpanded, setIsMembershipExpanded] = useState(false);
   const [isPauseModalVisible, setPauseModalVisible] = useState(false);
   const [isContactModalVisible, setContactModalVisible] = useState(false);
   const [isLogoutModalVisible, setLogoutModalVisible] = useState(false);
   const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [isAdminModalVisible, setAdminModalVisible] = useState(false); // 💡 관리자 모드 확인 모달 상태 추가
+
   const [resultModalVisible, setResultModalVisible] = useState(false);
   const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info' });
 
-  const profileSlideAnim = useRef(new Animated.Value(800)).current;
   const pauseSlideAnim = useRef(new Animated.Value(800)).current;
   const contactSlideAnim = useRef(new Animated.Value(800)).current;
+
+  // ─── 🌟 프로필 수정 창 전용 드래그 앤 드롭 치수 및 로직 🌟 ───
+  const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+  const HALF_SCREEN = SCREEN_HEIGHT * 0.65; 
+  const FULL_SCREEN = SCREEN_HEIGHT * 0.95; 
+  const THRESHOLD = (HALF_SCREEN + FULL_SCREEN) / 2; 
+  const CLOSE_THRESHOLD = HALF_SCREEN * 0.7; 
+
+  const profileHeightAnim = useRef(new Animated.Value(0)).current;
+  const currentProfileSnap = useRef(HALF_SCREEN);
+
+  const profilePanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
+      onPanResponderGrant: () => {
+        profileHeightAnim.setOffset(currentProfileSnap.current);
+        profileHeightAnim.setValue(0);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        profileHeightAnim.setValue(-gestureState.dy);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        profileHeightAnim.flattenOffset();
+        const finalHeight = currentProfileSnap.current - gestureState.dy;
+
+        if (finalHeight > THRESHOLD) {
+          currentProfileSnap.current = FULL_SCREEN;
+          Animated.spring(profileHeightAnim, { toValue: FULL_SCREEN, useNativeDriver: false }).start();
+        } else if (finalHeight < CLOSE_THRESHOLD) {
+          closeProfileModal();
+        } else {
+          currentProfileSnap.current = HALF_SCREEN;
+          Animated.spring(profileHeightAnim, { toValue: HALF_SCREEN, useNativeDriver: false }).start();
+        }
+      }
+    })
+  ).current;
 
   // ─── 데이터 상태 ───
   const [isAdmin, setIsAdmin] = useState(false);
@@ -115,21 +154,29 @@ const MYScreen = ({ navigation }: any) => {
     setRefreshing(false);
   }, []);
 
-  // ─── 팝업 제어 (원래 코드의 애니메이션 방식 완벽 적용) ───
+  // ─── 팝업 제어 ───
   const openProfileModal = () => {
     setProfileModalVisible(true);
-    Animated.timing(profileSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+    currentProfileSnap.current = HALF_SCREEN;
+    profileHeightAnim.setValue(0);
+    Animated.timing(profileHeightAnim, { toValue: HALF_SCREEN, duration: 300, useNativeDriver: false }).start();
   };
+  
   const closeProfileModal = () => {
-    Animated.timing(profileSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => setProfileModalVisible(false));
+    Animated.timing(profileHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
+      setProfileModalVisible(false);
+    });
   };
+
   const openPauseModal = () => {
     setPauseModalVisible(true);
     Animated.timing(pauseSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
   };
+  
   const closePauseModal = () => {
     Animated.timing(pauseSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => setPauseModalVisible(false));
   };
+  
   const handleInquireClick = () => {
     Animated.timing(pauseSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => {
       setPauseModalVisible(false);
@@ -139,6 +186,7 @@ const MYScreen = ({ navigation }: any) => {
       }, 100);
     });
   };
+  
   const closeContactModal = () => {
     Animated.timing(contactSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => setContactModalVisible(false));
   };
@@ -251,7 +299,7 @@ const MYScreen = ({ navigation }: any) => {
         </View>
 
         {isAdmin && (
-          <TouchableOpacity style={styles.adminCard} activeOpacity={0.8} onPress={() => navigation.navigate('ManagerDashboard')}>
+          <TouchableOpacity style={styles.adminCard} activeOpacity={0.8} onPress={() => setAdminModalVisible(true)}>
             <Image source={require('../assets/SquaresFour.png')} style={styles.adminIcon} /><Text style={styles.adminText}>관리자 모드 실행</Text>
           </TouchableOpacity>
         )}
@@ -262,25 +310,58 @@ const MYScreen = ({ navigation }: any) => {
         <TouchableOpacity style={styles.deleteAccountBtn} onPress={() => setDeleteModalVisible(true)}><Text style={styles.deleteAccountText}>회원탈퇴</Text></TouchableOpacity>
       </ScrollView>
 
-      {/* ─── 프로필 수정 모달 (원래의 Bottom Sheet 디자인 복구) ─── */}
-      <Modal visible={isProfileModalVisible} transparent animationType="fade">
+      {/* ─── 🌟 프로필 수정 모달 (상하 드래그 및 확장 지원) 🌟 ─── */}
+      <Modal visible={isProfileModalVisible} transparent animationType="fade" onRequestClose={closeProfileModal}>
         <View style={styles.modalOverlay}>
-          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={closeProfileModal} />
-          <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: profileSlideAnim }], maxHeight: '90%' }]}>
-            <View style={styles.dragHandle} />
-            <View style={styles.sheetHeader}><Text style={styles.sheetTitle}>프로필 수정</Text><TouchableOpacity onPress={closeProfileModal}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity></View>
-            <View style={styles.horizontalDivider} />
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }} keyboardShouldPersistTaps="handled">
-              <View style={styles.profileEditContainer}>
-                <TouchableOpacity style={styles.profileImageEditWrapper} activeOpacity={0.7}><Image source={require('../assets/profile.png')} style={styles.profileImageLarge} /><View style={styles.profileImageEditOverlay}><Text style={styles.profileImageEditText}>수정</Text></View></TouchableOpacity>
-                <View style={styles.editFieldWrapper}><View style={styles.editFieldHeader}><Text style={styles.editFieldTitle}>이름</Text></View><View style={styles.editInputBox}><TextInput style={styles.editInput} value={profileData.name} onChangeText={(txt) => setProfileData({ ...profileData, name: txt })} placeholderTextColor="#666666" /></View></View>
-                <View style={styles.editFieldWrapper}><View style={styles.editFieldHeader}><Text style={styles.editFieldTitle}>성별</Text></View><View style={styles.genderRow}><TouchableOpacity style={[styles.genderBtn, profileData.gender === '남' && styles.genderBtnActive]} onPress={() => setProfileData({ ...profileData, gender: '남' })}><Text style={[styles.genderBtnText, profileData.gender === '남' && styles.genderBtnTextActive]}>남자</Text></TouchableOpacity><TouchableOpacity style={[styles.genderBtn, profileData.gender === '여' && styles.genderBtnActive]} onPress={() => setProfileData({ ...profileData, gender: '여' })}><Text style={[styles.genderBtnText, profileData.gender === '여' && styles.genderBtnTextActive]}>여자</Text></TouchableOpacity></View></View>
-                <View style={styles.editFieldWrapper}><View style={styles.editFieldHeader}><Text style={styles.editFieldTitle}>생년월일</Text></View><View style={styles.editInputBox}><TextInput style={styles.editInput} value={profileData.birthDate} onChangeText={(txt) => setProfileData({ ...profileData, birthDate: txt })} placeholder="YYYY-MM-DD" keyboardType="numeric" maxLength={10} /></View></View>
-                {renderEditField('전화번호', 'phone', '')}{renderEditField('키', 'height', 'cm')}{renderEditField('몸무게', 'weight', 'kg')}{renderEditField('팔길이', 'arm', 'cm')}{renderEditField('암벽화 사이즈', 'shoe', 'mm')}
-                <TouchableOpacity style={styles.saveProfileButton} onPress={handleSaveProfile}><Text style={styles.saveProfileButtonText}>저장하기</Text></TouchableOpacity>
+          <TouchableWithoutFeedback onPress={closeProfileModal}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', flex: 1, justifyContent: 'flex-end' }} pointerEvents="box-none">
+            <Animated.View style={[styles.bottomSheet, { height: profileHeightAnim }]}>
+              
+              <View {...profilePanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
+                <View style={styles.dragHandle} />
+                <View style={styles.sheetHeader}>
+                  <Text style={styles.sheetTitle}>프로필 수정</Text>
+                  <TouchableOpacity onPress={closeProfileModal} hitSlop={{top:10, bottom:10, left:10, right:10}}>
+                    <Text style={styles.closeBtn}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.horizontalDivider} />
               </View>
-            </ScrollView>
-          </Animated.View>
+
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }} keyboardShouldPersistTaps="handled">
+                <View style={styles.profileEditContainer}>
+                  <TouchableOpacity style={styles.profileImageEditWrapper} activeOpacity={0.7}><Image source={require('../assets/profile.png')} style={styles.profileImageLarge} /><View style={styles.profileImageEditOverlay}><Text style={styles.profileImageEditText}>수정</Text></View></TouchableOpacity>
+                  <View style={styles.editFieldWrapper}><View style={styles.editFieldHeader}><Text style={styles.editFieldTitle}>이름</Text></View><View style={styles.editInputBox}><TextInput style={styles.editInput} value={profileData.name} onChangeText={(txt) => setProfileData({ ...profileData, name: txt })} placeholderTextColor="#666666" /></View></View>
+                  <View style={styles.editFieldWrapper}><View style={styles.editFieldHeader}><Text style={styles.editFieldTitle}>성별</Text></View><View style={styles.genderRow}><TouchableOpacity style={[styles.genderBtn, profileData.gender === '남' && styles.genderBtnActive]} onPress={() => setProfileData({ ...profileData, gender: '남' })}><Text style={[styles.genderBtnText, profileData.gender === '남' && styles.genderBtnTextActive]}>남자</Text></TouchableOpacity><TouchableOpacity style={[styles.genderBtn, profileData.gender === '여' && styles.genderBtnActive]} onPress={() => setProfileData({ ...profileData, gender: '여' })}><Text style={[styles.genderBtnText, profileData.gender === '여' && styles.genderBtnTextActive]}>여자</Text></TouchableOpacity></View></View>
+                  <View style={styles.editFieldWrapper}><View style={styles.editFieldHeader}><Text style={styles.editFieldTitle}>생년월일</Text></View><View style={styles.editInputBox}><TextInput style={styles.editInput} value={profileData.birthDate} onChangeText={(txt) => setProfileData({ ...profileData, birthDate: txt })} placeholder="YYYY-MM-DD" keyboardType="numeric" maxLength={10} /></View></View>
+                  {renderEditField('전화번호', 'phone', '')}{renderEditField('키', 'height', 'cm')}{renderEditField('몸무게', 'weight', 'kg')}{renderEditField('팔길이', 'arm', 'cm')}{renderEditField('암벽화 사이즈', 'shoe', 'mm')}
+                  <TouchableOpacity style={styles.saveProfileButton} onPress={handleSaveProfile}><Text style={styles.saveProfileButtonText}>저장하기</Text></TouchableOpacity>
+                </View>
+              </ScrollView>
+            </Animated.View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* 🌟 관리자 모드 실행 확인 모달 🌟 */}
+      <Modal visible={isAdminModalVisible} transparent animationType="fade">
+        <View style={styles.centerModalOverlay}>
+          <View style={styles.centerModalBox}>
+            <Text style={styles.centerModalText}>관리자 모드로 들어가시겠습니까?</Text>
+            <View style={styles.centerBtnRow}>
+              <TouchableOpacity style={styles.centerBtnYes} onPress={() => {
+                setAdminModalVisible(false);
+                navigation.navigate('ManagerDashboard');
+              }}>
+                <Text style={styles.centerBtnYesText}>예</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.centerBtnNo} onPress={() => setAdminModalVisible(false)}>
+                <Text style={styles.centerBtnNoText}>아니오</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
 
@@ -353,7 +434,8 @@ const styles = StyleSheet.create({
   deleteAccountBtn: { alignItems: 'center', paddingVertical: 10, marginBottom: 20 },
   deleteAccountText: { color: '#666666', fontSize: 16, textDecorationLine: 'underline' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
-  bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%' },
+  // 💡 드래그 시 내용이 넘치지 않도록 overflow: 'hidden' 적용
+  bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%', overflow: 'hidden' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   sheetTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' },

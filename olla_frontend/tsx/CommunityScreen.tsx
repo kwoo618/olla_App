@@ -77,15 +77,15 @@ const CommunityScreen = ({ route, navigation }: any) => {
   const [commentDeleteTarget, setCommentDeleteTarget] = useState<number | null>(null);
 
   const detailAnim = useRef(new Animated.Value(800)).current;
-  const createAnim = useRef(new Animated.Value(800)).current;
 
-  // ─── 댓글창 드래그 앤 드롭 (점프/튕김 현상 완벽 해결) ───
+  // ─── 댓글 및 작성창 공통 드래그 앤 드롭 치수 ───
   const { height: SCREEN_HEIGHT } = Dimensions.get('window');
   const HALF_SCREEN = SCREEN_HEIGHT * 0.6; 
   const FULL_SCREEN = SCREEN_HEIGHT * 0.95; 
   const THRESHOLD = (HALF_SCREEN + FULL_SCREEN) / 2; 
   const CLOSE_THRESHOLD = HALF_SCREEN * 0.7; 
 
+  // ─── 댓글창 전용 애니메이션/PanResponder ───
   const commentHeightAnim = useRef(new Animated.Value(0)).current;
   const currentSnap = useRef(HALF_SCREEN); 
 
@@ -112,6 +112,38 @@ const CommunityScreen = ({ route, navigation }: any) => {
         } else {
           currentSnap.current = HALF_SCREEN;
           Animated.spring(commentHeightAnim, { toValue: HALF_SCREEN, useNativeDriver: false }).start();
+        }
+      }
+    })
+  ).current;
+
+  // ─── 🌟 작성창 전용 애니메이션/PanResponder 🌟 ───
+  const createHeightAnim = useRef(new Animated.Value(0)).current;
+  const currentCreateSnap = useRef(HALF_SCREEN);
+
+  const createPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
+      onPanResponderGrant: () => {
+        createHeightAnim.setOffset(currentCreateSnap.current);
+        createHeightAnim.setValue(0);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        createHeightAnim.setValue(-gestureState.dy);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        createHeightAnim.flattenOffset();
+        const finalHeight = currentCreateSnap.current - gestureState.dy;
+
+        if (finalHeight > THRESHOLD) {
+          currentCreateSnap.current = FULL_SCREEN;
+          Animated.spring(createHeightAnim, { toValue: FULL_SCREEN, useNativeDriver: false }).start();
+        } else if (finalHeight < CLOSE_THRESHOLD) {
+          closeCreateModal();
+        } else {
+          currentCreateSnap.current = HALF_SCREEN;
+          Animated.spring(createHeightAnim, { toValue: HALF_SCREEN, useNativeDriver: false }).start();
         }
       }
     })
@@ -441,7 +473,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
   const openCommentModal = (postId: number) => {
     setSelectedCommentPostId(postId);
     const dummyComments: CommentType[] = [
-      // 💡 더미 데이터 생성 시 내 닉네임과 일치하면 isMine을 true로 줌
       { id: 1, author: '권클라이밍', date: '2026.05.13', content: '같이 가고 싶습니다!', likes: 2, isLiked: false, parentId: null, isMine: (myNickname || '나') === '권클라이밍' },
       { id: 2, author: '김초보', date: '2026.05.14', content: '저도 참여할게요!', likes: 5, isLiked: true, parentId: null, isMine: (myNickname || '나') === '김초보' },
       { id: 3, author: '이중수', date: '2026.05.14', content: '환영합니다~', likes: 0, isLiked: false, parentId: 2, isMine: (myNickname || '나') === '이중수' }, 
@@ -482,7 +513,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
       likes: 0,
       isLiked: false,
       parentId: replyingTo ? replyingTo.id : null,
-      isMine: true // 💡 내가 방금 쓴 댓글이므로 isMine은 true
+      isMine: true 
     };
 
     setComments(prev => [...prev, newComment]);
@@ -510,11 +541,15 @@ const CommunityScreen = ({ route, navigation }: any) => {
   const parentComments = sortCommentsLogic(comments.filter(c => c.parentId === null));
   const getChildComments = (parentId: number) => sortCommentsLogic(comments.filter(c => c.parentId === parentId));
 
+  // ─── 💡 모집 글 작성/수정 로직 ───
   const openCreateModal = () => {
     setIsEditMode(false); setEditPostId(null);
     setForm({ category:'센터', title:'', desc:'', date:'', time:'', people:'2', location:'' });
     setCreateVisible(true);
-    setTimeout(() => Animated.timing(createAnim,{toValue:0,duration:300,useNativeDriver:true}).start(), 50);
+    
+    currentCreateSnap.current = HALF_SCREEN;
+    createHeightAnim.setValue(0);
+    Animated.timing(createHeightAnim, { toValue: HALF_SCREEN, duration: 300, useNativeDriver: false }).start();
   };
 
   const openEditModal = (post: any) => {
@@ -527,11 +562,17 @@ const CommunityScreen = ({ route, navigation }: any) => {
       people: String(post.maxMember), location: post.gymPlace||'',
     });
     setCreateVisible(true);
-    setTimeout(() => Animated.timing(createAnim,{toValue:0,duration:300,useNativeDriver:true}).start(), 50);
+    
+    currentCreateSnap.current = HALF_SCREEN;
+    createHeightAnim.setValue(0);
+    Animated.timing(createHeightAnim, { toValue: HALF_SCREEN, duration: 300, useNativeDriver: false }).start();
   };
 
-  const closeCreateModal = () =>
-    Animated.timing(createAnim,{toValue:800,duration:250,useNativeDriver:true}).start(() => setCreateVisible(false));
+  const closeCreateModal = () => {
+    Animated.timing(createHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
+      setCreateVisible(false);
+    });
+  };
 
   const submitPost = async () => {
     const { category, title, desc, date, time, people, location } = form;
@@ -952,67 +993,78 @@ const CommunityScreen = ({ route, navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 작성/수정 창 */}
+      {/* 🌟 작성/수정 창 (드래그 지원 추가) 🌟 */}
       <Modal visible={isCreateVisible} transparent animationType="fade" onRequestClose={closeCreateModal}>
-        <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={closeCreateModal}>
-          <Animated.View style={[s.sheet,{transform:[{translateY:createAnim}],maxHeight:'90%'}]}>
-            <TouchableOpacity activeOpacity={1} style={{width:'100%'}}>
-              <View style={s.handle}/><View style={s.sheetHeader}>
-                <Text style={s.sheetTitle}>{isEditMode?'게시글 수정':'모집 글 작성'}</Text>
-                <TouchableOpacity onPress={closeCreateModal}><Text style={s.closeBtn}>✕</Text></TouchableOpacity>
-              </View><View style={s.hr}/>
-            </TouchableOpacity>
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{paddingBottom:80}}>
-              <TouchableOpacity activeOpacity={1} style={s.formBox}>
-                <Text style={s.label}>카테고리</Text>
-                <View style={s.catRow}>
-                  {(['센터','아웃도어'] as const).map(c => (
-                    <TouchableOpacity key={c} style={[s.catBtn,form.category===c&&s.catBtnActive]} onPress={() => setForm(f=>({...f,category:c}))}>
-                      <Text style={[s.catText,form.category===c&&s.catTextActive]}>{c}</Text>
-                    </TouchableOpacity>
-                  ))}
+        <View style={s.modalOverlay}>
+          <TouchableWithoutFeedback onPress={closeCreateModal}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', flex: 1, justifyContent: 'flex-end' }} pointerEvents="box-none">
+            <Animated.View style={[s.sheet, { height: createHeightAnim, maxHeight: '100%' }]}>
+              
+              <View {...createPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
+                <View style={s.handle} />
+                <View style={s.sheetHeader}>
+                  <Text style={s.sheetTitle}>{isEditMode ? '게시글 수정' : '모집 글 작성'}</Text>
+                  <TouchableOpacity onPress={closeCreateModal} hitSlop={{top:10, bottom:10, left:10, right:10}}>
+                    <Text style={s.closeBtn}>✕</Text>
+                  </TouchableOpacity>
                 </View>
-                <View style={s.innerHr}/>
+                <View style={s.hr} />
+              </View>
 
-                <Text style={s.label}>제목</Text>
-                <View style={s.inputWrap}><TextInput style={s.input} placeholder="모집 제목을 작성하세요." placeholderTextColor="#666" value={form.title} onChangeText={v=>setForm(f=>({...f,title:v}))}/></View>
-
-                <Text style={s.label}>내용</Text>
-                <View style={s.inputWrap}><TextInput style={[s.input,{minHeight:45,textAlignVertical:'top'}]} placeholder="모집 내용을 입력하세요." placeholderTextColor="#666" multiline value={form.desc} onChangeText={v=>setForm(f=>({...f,desc:v}))}/></View>
-
-                <View style={{flexDirection:'row'}}>
-                  <View style={{flex:1,marginRight:8}}>
-                    <Text style={s.label}>날짜</Text>
-                    <View style={s.inputWrap}><TextInput style={s.input} placeholder="YYYY/MM/DD" placeholderTextColor="#666" value={form.date} onChangeText={v=>{const n=v.replace(/\D/g,'');setForm(f=>({...f,date:n.length>6?`${n.slice(0,4)}/${n.slice(4,6)}/${n.slice(6,8)}`:n.length>4?`${n.slice(0,4)}/${n.slice(4)}`:n}));}} keyboardType="numeric" maxLength={10}/></View>
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{paddingBottom:80}}>
+                <TouchableOpacity activeOpacity={1} style={s.formBox}>
+                  <Text style={s.label}>카테고리</Text>
+                  <View style={s.catRow}>
+                    {(['센터','아웃도어'] as const).map(c => (
+                      <TouchableOpacity key={c} style={[s.catBtn,form.category===c&&s.catBtnActive]} onPress={() => setForm(f=>({...f,category:c}))}>
+                        <Text style={[s.catText,form.category===c&&s.catTextActive]}>{c}</Text>
+                      </TouchableOpacity>
+                    ))}
                   </View>
-                  <View style={{flex:1}}>
-                    <Text style={s.label}>시간</Text>
-                    <View style={s.inputWrap}><TextInput style={s.input} placeholder="00:00" placeholderTextColor="#666" value={form.time} onChangeText={v=>{const n=v.replace(/\D/g,'');setForm(f=>({...f,time:n.length>2?`${n.slice(0,2)}:${n.slice(2,4)}`:n}));}} keyboardType="numeric" maxLength={5}/></View>
+                  <View style={s.innerHr}/>
+
+                  <Text style={s.label}>제목</Text>
+                  <View style={s.inputWrap}><TextInput style={s.input} placeholder="모집 제목을 작성하세요." placeholderTextColor="#666" value={form.title} onChangeText={v=>setForm(f=>({...f,title:v}))}/></View>
+
+                  <Text style={s.label}>내용</Text>
+                  <View style={s.inputWrap}><TextInput style={[s.input,{minHeight:45,textAlignVertical:'top'}]} placeholder="모집 내용을 입력하세요." placeholderTextColor="#666" multiline value={form.desc} onChangeText={v=>setForm(f=>({...f,desc:v}))}/></View>
+
+                  <View style={{flexDirection:'row'}}>
+                    <View style={{flex:1,marginRight:8}}>
+                      <Text style={s.label}>날짜</Text>
+                      <View style={s.inputWrap}><TextInput style={s.input} placeholder="YYYY/MM/DD" placeholderTextColor="#666" value={form.date} onChangeText={v=>{const n=v.replace(/\D/g,'');setForm(f=>({...f,date:n.length>6?`${n.slice(0,4)}/${n.slice(4,6)}/${n.slice(6,8)}`:n.length>4?`${n.slice(0,4)}/${n.slice(4)}`:n}));}} keyboardType="numeric" maxLength={10}/></View>
+                    </View>
+                    <View style={{flex:1}}>
+                      <Text style={s.label}>시간</Text>
+                      <View style={s.inputWrap}><TextInput style={s.input} placeholder="00:00" placeholderTextColor="#666" value={form.time} onChangeText={v=>{const n=v.replace(/\D/g,'');setForm(f=>({...f,time:n.length>2?`${n.slice(0,2)}:${n.slice(2,4)}`:n}));}} keyboardType="numeric" maxLength={5}/></View>
+                    </View>
                   </View>
-                </View>
 
-                <Text style={s.label}>모집인원</Text>
-                <View style={s.counterRow}>
-                  <TouchableOpacity style={s.counterBtn} onPress={() => setForm(f=>({...f,people:String(Math.max(2,parseInt(f.people||'2')-1))}))}><Text style={s.counterBtnText}>-</Text></TouchableOpacity>
-                  <View style={{flexDirection:'row',alignItems:'center',marginHorizontal:15}}>
-                    <TextInput style={s.counterInput} value={form.people} onChangeText={v=>setForm(f=>({...f,people:v.replace(/\D/g,'')}))} onBlur={()=>{const n=parseInt(form.people);setForm(f=>({...f,people:String(isNaN(n)||n<2?2:n)}));}} keyboardType="numeric"/>
-                    <Text style={s.counterUnit}>명</Text>
+                  <Text style={s.label}>모집인원</Text>
+                  <View style={s.counterRow}>
+                    <TouchableOpacity style={s.counterBtn} onPress={() => setForm(f=>({...f,people:String(Math.max(2,parseInt(f.people||'2')-1))}))}><Text style={s.counterBtnText}>-</Text></TouchableOpacity>
+                    <View style={{flexDirection:'row',alignItems:'center',marginHorizontal:15}}>
+                      <TextInput style={s.counterInput} value={form.people} onChangeText={v=>setForm(f=>({...f,people:v.replace(/\D/g,'')}))} onBlur={()=>{const n=parseInt(form.people);setForm(f=>({...f,people:String(isNaN(n)||n<2?2:n)}));}} keyboardType="numeric"/>
+                      <Text style={s.counterUnit}>명</Text>
+                    </View>
+                    <TouchableOpacity style={s.counterBtn} onPress={() => setForm(f=>({...f,people:String(parseInt(f.people||'2')+1)}))}><Text style={s.counterBtnText}>+</Text></TouchableOpacity>
                   </View>
-                  <TouchableOpacity style={s.counterBtn} onPress={() => setForm(f=>({...f,people:String(parseInt(f.people||'2')+1)}))}><Text style={s.counterBtnText}>+</Text></TouchableOpacity>
-                </View>
 
-                {form.category==='아웃도어' && (
-                  <><View style={s.innerHr}/>
-                  <Text style={s.label}>장소정보</Text>
-                  <View style={s.inputWrap}><TextInput style={s.input} placeholder="위치" placeholderTextColor="#666" value={form.location} onChangeText={v=>setForm(f=>({...f,location:v}))}/></View></>
-                )}
+                  {form.category==='아웃도어' && (
+                    <><View style={s.innerHr}/>
+                    <Text style={s.label}>장소정보</Text>
+                    <View style={s.inputWrap}><TextInput style={s.input} placeholder="위치" placeholderTextColor="#666" value={form.location} onChangeText={v=>setForm(f=>({...f,location:v}))}/></View></>
+                  )}
 
-                <TouchableOpacity style={s.submitBtn} onPress={submitPost}>
-                  <Text style={s.submitText}>{isEditMode?'게시글 수정':'모집 글 게시'}</Text>
+                  <TouchableOpacity style={s.submitBtn} onPress={submitPost}>
+                    <Text style={s.submitText}>{isEditMode?'게시글 수정':'모집 글 게시'}</Text>
+                  </TouchableOpacity>
                 </TouchableOpacity>
-              </TouchableOpacity>
-            </ScrollView>
-          </Animated.View>
+              </ScrollView>
+            </Animated.View>
+          </KeyboardAvoidingView>
 
           {/* iOS 모달 겹침 버그 방지용 알림 */}
           {createAlertVisible && (
@@ -1026,7 +1078,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
               </View>
             </View>
           )}
-        </TouchableOpacity>
+        </View>
       </Modal>
     </View>
   );
@@ -1102,7 +1154,8 @@ const s = StyleSheet.create({
   
   overlay:{flex:1,backgroundColor:'rgba(0,0,0,0.7)',justifyContent:'center',alignItems:'center'},
   modalOverlay:{flex:1,backgroundColor:'rgba(0,0,0,0.7)',justifyContent:'flex-end'},
-  sheet:{backgroundColor:'#1E1E1E',borderTopLeftRadius:24,borderTopRightRadius:24,paddingHorizontal:20,paddingBottom:40,width:'100%'},
+  // 💡 모집 글 작성 창 역시 애니메이션 도중 콘텐츠가 튀어나오지 않도록 overflow: 'hidden'을 적용했습니다.
+  sheet:{backgroundColor:'#1E1E1E',borderTopLeftRadius:24,borderTopRightRadius:24,paddingHorizontal:20,paddingBottom:40,width:'100%', overflow: 'hidden'},
   handle:{width:40,height:4,backgroundColor:'#333',borderRadius:2,marginTop:12,marginBottom:20,alignSelf:'center'},
   sheetHeader:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginBottom:15},
   sheetTitle:{color:'#fff',fontSize:23,fontWeight:'bold'}, 

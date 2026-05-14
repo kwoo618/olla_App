@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
   View, Text, StyleSheet, TextInput, TouchableOpacity, 
-  ScrollView, Image, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Animated, RefreshControl 
+  ScrollView, Image, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Animated, RefreshControl, Dimensions, PanResponder, TouchableWithoutFeedback
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
@@ -84,35 +84,118 @@ const ManagerTicket = ({ navigation }: any) => {
     setConfirmModalVisible(true);
   };
 
+  // ─── 상태 및 드래그 앤 드롭 치수 ───
   const [isEditModalVisible, setEditModalVisible] = useState(false);
-  const editSlideAnim = useRef(new Animated.Value(800)).current;
-
   const [modalSearch, setModalSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<any>(null);
-
   const [isStartCalendarVisible, setStartCalendarVisible] = useState(false);
-  
   const [editStart, setEditStart] = useState('');
   const [editType, setEditType] = useState<'PERIOD' | 'COUNT'>('PERIOD');
   const [addValue, setAddValue] = useState('');
 
-  // ✅ 관리 바텀시트 상태
   const [isManageVisible, setManageVisible] = useState(false);
-  const manageSlideAnim = useRef(new Animated.Value(800)).current;
   const [selectedManageItem, setSelectedManageItem] = useState<any>(null);
+  const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+  
+  // 💡 개별 팝업 높이 설정
+  const MANAGE_MODAL_HEIGHT = SCREEN_HEIGHT * 0.65; // 이용권 관리 팝업 (늘어나지 않음)
+  const ADD_MODAL_HEIGHT = SCREEN_HEIGHT * 0.65;    // 이용권 등록 팝업: 65% (확장 가능)
+  const FULL_SCREEN = SCREEN_HEIGHT * 0.95;
+
+  // 1️⃣ 이용권 관리 팝업 애니메이션 (위로 확장 불가)
+  const manageHeightAnim = useRef(new Animated.Value(0)).current;
+  const currentManageSnap = useRef(MANAGE_MODAL_HEIGHT);
+
+  const managePanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
+      onPanResponderGrant: () => {
+        manageHeightAnim.setOffset(currentManageSnap.current);
+        manageHeightAnim.setValue(0);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        // 위로 드래그 시 확장 막음
+        manageHeightAnim.setValue(Math.min(0, -gestureState.dy));
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        manageHeightAnim.flattenOffset();
+        const finalHeight = currentManageSnap.current - gestureState.dy;
+        const CLOSE_THRESHOLD = currentManageSnap.current * 0.7;
+
+        if (finalHeight < CLOSE_THRESHOLD) {
+          closeManageModal();
+        } else {
+          Animated.spring(manageHeightAnim, { toValue: currentManageSnap.current, useNativeDriver: false }).start();
+        }
+      }
+    })
+  ).current;
+
+  // 2️⃣ 이용권 등록 팝업 애니메이션 (전체화면 확장 가능)
+  const editHeightAnim = useRef(new Animated.Value(0)).current;
+  const currentEditSnap = useRef(ADD_MODAL_HEIGHT);
+
+  const editPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
+      onPanResponderGrant: () => {
+        editHeightAnim.setOffset(currentEditSnap.current);
+        editHeightAnim.setValue(0);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        editHeightAnim.setValue(-gestureState.dy);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        editHeightAnim.flattenOffset();
+        const finalHeight = currentEditSnap.current - gestureState.dy;
+        const THRESHOLD = (ADD_MODAL_HEIGHT + FULL_SCREEN) / 2;
+        const CLOSE_THRESHOLD = ADD_MODAL_HEIGHT * 0.7;
+
+        if (finalHeight > THRESHOLD) {
+          currentEditSnap.current = FULL_SCREEN;
+          Animated.spring(editHeightAnim, { toValue: FULL_SCREEN, useNativeDriver: false }).start();
+        } else if (finalHeight < CLOSE_THRESHOLD) {
+          closeEditModal();
+        } else {
+          currentEditSnap.current = ADD_MODAL_HEIGHT;
+          Animated.spring(editHeightAnim, { toValue: ADD_MODAL_HEIGHT, useNativeDriver: false }).start();
+        }
+      }
+    })
+  ).current;
 
   const openManageModal = (group: any) => {
     setSelectedManageItem(group);
     setManageVisible(true);
-    setTimeout(() => {
-      Animated.timing(manageSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
-    }, 50);
+    currentManageSnap.current = MANAGE_MODAL_HEIGHT;
+    manageHeightAnim.setValue(0);
+    Animated.timing(manageHeightAnim, { toValue: MANAGE_MODAL_HEIGHT, duration: 300, useNativeDriver: false }).start();
   };
 
   const closeManageModal = (callback?: () => void) => {
-    Animated.timing(manageSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => {
+    Animated.timing(manageHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
       setManageVisible(false);
       setSelectedManageItem(null);
+      if (callback) callback();
+    });
+  };
+
+  const openEditModal = () => {
+    setEditModalVisible(true);
+    currentEditSnap.current = ADD_MODAL_HEIGHT;
+    editHeightAnim.setValue(0);
+    Animated.timing(editHeightAnim, { toValue: ADD_MODAL_HEIGHT, duration: 300, useNativeDriver: false }).start();
+  };
+
+  const closeEditModal = (callback?: () => void) => {
+    Animated.timing(editHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
+      setEditModalVisible(false);
+      setSelectedUser(null);
+      setModalSearch('');
+      setAddValue('');
+      setEditStart('');
       if (callback) callback();
     });
   };
@@ -175,18 +258,13 @@ const ManagerTicket = ({ navigation }: any) => {
     return days >= 0 ? `${days}일` : '만료';
   };
 
-  // ✅ 핵심 수정: 회원(memberId) 기준으로 그룹화하여 복수 이용권 동시 표기
   const groupedHolders = useMemo(() => {
     const map = new Map();
     
     users.forEach((u: any) => {
-      // 삭제된 이용권은 목록에서 제외
       if (u.isDeleted === true || u.deleted === true || u.status === 'DELETED') return;
-
       const isTicketActive = u.membershipStatus === 'ACTIVE' || u.membershipStatus === 'HOLDING';
       if (!isTicketActive) return;
-
-      // 검색어 필터
       if (searchQuery && !u.name?.includes(searchQuery) && !u.phone?.includes(searchQuery)) return;
 
       const mId = u.memberId || u.id;
@@ -202,7 +280,6 @@ const ManagerTicket = ({ navigation }: any) => {
     });
 
     return Array.from(map.values()).map(group => {
-      // 회원권이 앞에, 일일권이 뒤에 오도록 정렬
       group.memberships.sort((a: any, b: any) => {
         const typeA = resolveMembershipType(a.membershipType, a.startDate, a.endDate, a.remainingCount);
         const typeB = resolveMembershipType(b.membershipType, b.startDate, b.endDate, b.remainingCount);
@@ -214,11 +291,9 @@ const ManagerTicket = ({ navigation }: any) => {
     });
   }, [users, searchQuery]);
 
-  // ✅ 회원권 등록 모달의 검색 결과도 그룹화하여 동시 표시
   const groupedSearchResults = useMemo(() => {
     const map = new Map();
     users.forEach((u: any) => {
-      // 🔥 등록 모달의 검색 목록에서도 탈퇴한 회원(deleted: true)을 완전 제외합니다.
       if (u.isDeleted === true || u.deleted === true || u.status === 'DELETED') return;
 
       const name = u.name || '';
@@ -231,7 +306,6 @@ const ManagerTicket = ({ navigation }: any) => {
         }
         
         const isTicketActive = u.membershipStatus === 'ACTIVE' || u.membershipStatus === 'HOLDING';
-        
         if (isTicketActive) {
           map.get(mId).memberships.push(u);
         }
@@ -271,26 +345,13 @@ const ManagerTicket = ({ navigation }: any) => {
       const startDate = editStart || getToday();
 
       const requestBody = editType === 'PERIOD'
-        ? {
-            memberId,
-            addMonths: Number(addValue),
-            addCount: 0,
-            startDate,
-          }
-        : {
-            memberId,
-            addMonths: 0,
-            addCount: addValue && !isNaN(Number(addValue)) && Number(addValue) > 0
-              ? Number(addValue)
-              : 1,
-            startDate,
-          };
+        ? { memberId, addMonths: Number(addValue), addCount: 0, startDate }
+        : { memberId, addMonths: 0, addCount: addValue && !isNaN(Number(addValue)) && Number(addValue) > 0 ? Number(addValue) : 1, startDate };
 
       await axios.post(MEMBERSHIP_GRANT_API, requestBody, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      // ✅ iOS 모달 렌더링 버그 해결: 바텀 시트가 닫힌 후 결과 모달을 띄웁니다.
       closeEditModal(() => {
         setTimeout(() => {
           showResultModal('성공', '이용권이 성공적으로 등록되었습니다.', 'success');
@@ -300,15 +361,10 @@ const ManagerTicket = ({ navigation }: any) => {
       
     } catch (error: any) {
       const serverMessage = error.response?.data?.message || '이용권 등록에 실패했습니다.';
-      
       closeEditModal(() => {
         setTimeout(() => {
           if (serverMessage?.includes("is_deleted") || serverMessage?.includes("default value")) {
-            showResultModal(
-              '서버 설정 오류',
-              'Membership 엔티티의 is_deleted 필드에 기본값이 없습니다.\n백엔드 서버를 수정해주세요.',
-              'error'
-            );
+            showResultModal('서버 설정 오류', 'Membership 엔티티의 is_deleted 필드에 기본값이 없습니다.\n백엔드 서버를 수정해주세요.', 'error');
           } else {
             showResultModal('오류', serverMessage, 'error');
           }
@@ -317,7 +373,6 @@ const ManagerTicket = ({ navigation }: any) => {
     }
   };
 
-  // ✅ 일시정지 / 정지해제
   const togglePauseStatus = (membershipId: number, currentStatus: string) => {
     if (!membershipId) {
       showResultModal('오류', '이용권 ID를 확인할 수 없습니다.', 'error');
@@ -351,7 +406,6 @@ const ManagerTicket = ({ navigation }: any) => {
     });
   };
 
-  // ✅ 이용권 삭제 실행 (즉시 반영 로직 수정)
   const executeDeleteTicket = async (membershipId: number) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
@@ -360,18 +414,13 @@ const ManagerTicket = ({ navigation }: any) => {
         return;
       }
       
-      // ✅ 핵심 수정: API 응답을 기다리되, 프론트 상태(users)에서도 깊은 조건으로 즉시 제거하여 실시간 갱신 처리
       setUsers(prev => prev.filter((u: any) => u.membershipId !== membershipId && u.id !== membershipId));
 
       await axios.delete(`${MEMBERSHIP_BASE_API}/${membershipId}`, {
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        }
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
       });
 
       showResultModal('성공', '이용권이 삭제되었습니다.', 'success', async () => {
-        // 확인 버튼 누른 후 서버에서 최신 데이터 다시 조회 보장
         await fetchUsers(token);
       });
     } catch (error: any) {
@@ -379,11 +428,9 @@ const ManagerTicket = ({ navigation }: any) => {
         || error.response?.data?.data?.message 
         || '이용권 삭제에 실패했습니다.';
       showResultModal('오류', errorMessage, 'error');
-      console.log('Delete Ticket Error:', error.response?.data);
     }
   };
 
-  // ✅ 이용권 삭제 확인
   const confirmDeleteTicket = (membershipId: number) => {
     if (!membershipId) {
       showResultModal('오류', '이용권 ID를 확인할 수 없습니다.', 'error');
@@ -402,23 +449,6 @@ const ManagerTicket = ({ navigation }: any) => {
           '삭제'
         );
       }, 300);
-    });
-  };
-
-  const openEditModal = () => {
-    setEditModalVisible(true);
-    Animated.timing(editSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
-  };
-
-  // ✅ 콜백을 전달받을 수 있도록 수정
-  const closeEditModal = (callback?: () => void) => {
-    Animated.timing(editSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => {
-      setEditModalVisible(false);
-      setSelectedUser(null);
-      setModalSearch('');
-      setAddValue('');
-      setEditStart('');
-      if (callback) callback();
     });
   };
 
@@ -453,9 +483,7 @@ const ManagerTicket = ({ navigation }: any) => {
       <ScrollView 
         showsVerticalScrollIndicator={false} 
         contentContainerStyle={[styles.listContainer, { paddingBottom: 150 }]}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />}
       >
         
       {/* 상단 검색바 */}
@@ -486,7 +514,6 @@ const ManagerTicket = ({ navigation }: any) => {
           groupedHolders.map((group: any) => {
             const { memberId, name, memberships } = group;
             
-            // 보유중인 티켓 타입 추출 및 중복제거하여 "회원권 / 일일권" 형태 완성
             const displayTypes = memberships.map((m: any) => resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount));
             const uniqueTypes = [...new Set(displayTypes)];
             const subText = uniqueTypes.join(' / ');
@@ -574,15 +601,17 @@ const ManagerTicket = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 투 버튼 확인(Confirm) 모달 ─── */}
+      {/* ─── 투 버튼 확인(Confirm) 모달 (색상 통일 반영) ─── */}
       <Modal visible={confirmModalVisible} animationType="fade" transparent onRequestClose={() => setConfirmModalVisible(false)}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.deleteModalBox}>
-            <Text style={styles.deleteTitle}>{confirmModalConfig.title}</Text>
+            <Text style={[styles.deleteTitle, { color: confirmModalConfig.isDestructive ? '#A1BE44' : '#ffffff' }]}>
+              {confirmModalConfig.title}
+            </Text>
             <Text style={[styles.resultModalMessage, { marginBottom: 25 }]}>{confirmModalConfig.message}</Text>
             <View style={styles.deleteBtnRow}>
               <TouchableOpacity 
-                style={[styles.btnYes, confirmModalConfig.isDestructive && { backgroundColor: '#FF4D4D' }]} 
+                style={[styles.btnYes, { backgroundColor: '#A1BE44' }]} 
                 onPress={confirmModalConfig.onConfirm}
               >
                 <Text style={styles.btnTextBlack}>{confirmModalConfig.confirmText}</Text>
@@ -595,211 +624,211 @@ const ManagerTicket = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ✅ 관리 바텀시트 모달 (복수 관리 개편) */}
+      {/* ✅ 1. 이용권 관리 바텀시트 모달 (위로 확장 불가, 드래그 닫기 지원) */}
       <Modal visible={isManageVisible} transparent={true} animationType="fade" onRequestClose={() => closeManageModal()}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => closeManageModal()}>
-          <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: manageSlideAnim }] }]}>
-            <TouchableOpacity activeOpacity={1} style={{ width: '100%' }}>
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={() => closeManageModal()}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+          <Animated.View style={[styles.bottomSheet, { height: manageHeightAnim, overflow: 'hidden' }]}>
+            
+            <View {...managePanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
               <View style={styles.dragHandle} />
               <View style={styles.sheetHeader}>
                 <Text style={styles.sheetTitle}>이용권 관리</Text>
-                <TouchableOpacity onPress={() => closeManageModal()}>
+                <TouchableOpacity onPress={() => closeManageModal()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                   <Text style={styles.closeIcon}>✕</Text>
                 </TouchableOpacity>
               </View>
               <View style={styles.horizontalDivider} />
+            </View>
 
-              {selectedManageItem && (() => {
-                const { name, memberships } = selectedManageItem;
-                const displayTypes = memberships.map((m: any) => resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount));
-                const uniqueTypes = [...new Set(displayTypes)];
-                const manageDisplayType = uniqueTypes.join(' / ');
-                const manageIsHolding = memberships.some((m: any) => m.membershipStatus === 'HOLDING');
+            {selectedManageItem && (() => {
+              const { name, memberships } = selectedManageItem;
+              const displayTypes = memberships.map((m: any) => resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount));
+              const uniqueTypes = [...new Set(displayTypes)];
+              const manageDisplayType = uniqueTypes.join(' / ');
+              const manageIsHolding = memberships.some((m: any) => m.membershipStatus === 'HOLDING');
 
-                return (
-                  <View style={{ flexShrink: 1 }}>
-                    {/* 회원 정보 요약 */}
-                    <View style={styles.manageInfoBox}>
-                      <Text style={styles.manageItemName}>{name}</Text>
-                      <Text style={styles.manageItemSub}>
-                        {manageDisplayType} · {manageIsHolding ? '정지 포함' : '이용중'}
-                      </Text>
-                    </View>
-
-                    {/* 회원권/일일권 복수 관리 렌더링 */}
-                    <ScrollView style={{ maxHeight: 350 }} showsVerticalScrollIndicator={false}>
-                      {memberships.map((m: any) => {
-                        const mType = resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount);
-                        const mIsHolding = m.membershipStatus === 'HOLDING';
-                        const mIsCountType = mType === '일일권';
-                        const currentId = m.membershipId || m.id;
-
-                        return (
-                          <View key={currentId} style={styles.manageActionGroup}>
-                            <Text style={styles.manageActionGroupTitle}>{mType} 관리</Text>
-                            
-                            {/* 일시정지 / 정지해제 (일일권 제외) */}
-                            {!mIsCountType && (
-                              <TouchableOpacity
-                                style={styles.manageActionBtn}
-                                onPress={() => togglePauseStatus(currentId, m.membershipStatus)}
-                              >
-                                <Text style={styles.manageActionBtnText}>
-                                  {mIsHolding ? '이용권 정지 해제' : '이용권 일시정지'}
-                                </Text>
-                              </TouchableOpacity>
-                            )}
-
-                            {/* 이용권 삭제 */}
-                            <TouchableOpacity
-                              style={[styles.manageActionBtn, styles.manageActionBtnDanger]}
-                              onPress={() => confirmDeleteTicket(currentId)}
-                            >
-                              <Text style={styles.manageActionBtnDangerText}>이용권 삭제</Text>
-                            </TouchableOpacity>
-                          </View>
-                        );
-                      })}
-                    </ScrollView>
-
-                    {/* 닫기 */}
-                    <TouchableOpacity style={[styles.closeFullBtn, { marginTop: 10 }]} onPress={() => closeManageModal()}>
-                      <Text style={styles.closeFullBtnText}>닫기</Text>
-                    </TouchableOpacity>
-                  </View>
-                );
-              })()}
-            </TouchableOpacity>
-          </Animated.View>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* 이용권 등록 바텀 시트 모달 */}
-      <Modal visible={isEditModalVisible} transparent={true} animationType="fade">
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => closeEditModal()}>
-          <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: editSlideAnim }] }]}>
-            <TouchableOpacity activeOpacity={1}>
-              <View style={styles.dragHandle} />
-              <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle}>이용권 등록</Text>
-                <TouchableOpacity onPress={() => closeEditModal()}><Text style={styles.closeIcon}>✕</Text></TouchableOpacity>
-              </View>
-              <View style={styles.horizontalDivider} />
-
-              <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 50 }}>
-                  
-                  {/* 검색 영역 */}
-                  <View style={styles.modalSearchBox}>
-                    <Text style={styles.searchIcon}>🔎</Text>
-                    <TextInput
-                      style={styles.modalSearchInput}
-                      placeholder="부여할 회원을 검색하세요"
-                      placeholderTextColor="#666"
-                      value={modalSearch}
-                      onChangeText={setModalSearch}
-                    />
+              return (
+                <View style={{ flex: 1 }}>
+                  <View style={styles.manageInfoBox}>
+                    <Text style={styles.manageItemName}>{name}</Text>
+                    <Text style={styles.manageItemSub}>
+                      {manageDisplayType} · {manageIsHolding ? '정지 포함' : '이용중'}
+                    </Text>
                   </View>
 
-                  <View style={styles.modalTableHeader}>
-                    <Text style={[styles.modalHeaderText, { flex: 1.5 }]}>회원정보</Text>
-                    <Text style={[styles.modalHeaderText, { flex: 2, textAlign: 'center' }]}>연락처</Text>
-                    <Text style={[styles.modalHeaderText, { flex: 1.5, textAlign: 'center' }]}>현재 이용권</Text>
-                  </View>
-                  <View style={styles.headerDivider} />
+                  <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+                    {memberships.map((m: any) => {
+                      const mType = resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount);
+                      const mIsHolding = m.membershipStatus === 'HOLDING';
+                      const mIsCountType = mType === '일일권';
+                      const currentId = m.membershipId || m.id;
 
-                  <View style={{ height: 160, marginBottom: 20 }}>
-                    <ScrollView style={styles.searchResultTable} nestedScrollEnabled={true}>
-                      {groupedSearchResults.length === 0 ? (
-                        <Text style={styles.modalEmptyText}>검색된 회원이 없습니다.</Text>
-                      ) : (
-                        groupedSearchResults.map((group: any) => {
-                          const isSelected = selectedUser && selectedUser.memberId === group.memberId;
+                      return (
+                        <View key={currentId} style={styles.manageActionGroup}>
+                          <Text style={styles.manageActionGroupTitle}>{mType} 관리</Text>
                           
-                          const displayTypes = group.memberships.map((m: any) => resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount));
-                          const uniqueTypes = [...new Set(displayTypes)];
-                          const displayTicket = uniqueTypes.length > 0 ? uniqueTypes.join(' / ') : '없음';
-
-                          return (
+                          {!mIsCountType && (
                             <TouchableOpacity
-                              key={group.memberId}
-                              style={[styles.searchResultRow, isSelected && styles.selectedRow]}
-                              onPress={() => handleSelectUser(group)}
+                              style={styles.manageActionBtn}
+                              onPress={() => togglePauseStatus(currentId, m.membershipStatus)}
                             >
-                              <Text style={[styles.resultTextName, { flex: 1.5 }]} numberOfLines={1}>{group.name}</Text>
-                              <Text style={[styles.resultTextSub, { flex: 2, textAlign: 'center' }]}>{group.phone}</Text>
-                              <Text style={[styles.resultTextType, { flex: 1.5, textAlign: 'center' }]}>
-                                {displayTicket}
+                              <Text style={styles.manageActionBtnText}>
+                                {mIsHolding ? '이용권 정지 해제' : '이용권 일시정지'}
                               </Text>
                             </TouchableOpacity>
-                          );
-                        })
-                      )}
-                    </ScrollView>
-                  </View>
-
-                  {/* 입력 폼 영역 */}
-                  {selectedUser && (
-                    <View style={styles.formContainer}>
-                      <Text style={styles.inputLabel}>이용권 종류</Text>
-                      <View style={styles.typeToggleRow}>
-                        <TouchableOpacity
-                          style={[styles.typeBtn, editType === 'PERIOD' && styles.typeBtnActive]}
-                          onPress={() => { setEditType('PERIOD'); setAddValue(''); }}
-                        >
-                          {/* 💡 기간권(월권) -> 회원권 텍스트 변경 */}
-                          <Text style={[styles.typeBtnText, editType === 'PERIOD' && styles.typeBtnTextActive]}>회원권</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.typeBtn, editType === 'COUNT' && styles.typeBtnActive]}
-                          onPress={() => { setEditType('COUNT'); setAddValue(''); }}
-                        >
-                          {/* 💡 횟수권(일일권) -> 일일권 텍스트 변경 */}
-                          <Text style={[styles.typeBtnText, editType === 'COUNT' && styles.typeBtnTextActive]}>일일권</Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      <View style={styles.horizontalDateRow}>
-                        <View style={styles.dateBlock}>
-                          <Text style={styles.inputLabel}>시작일</Text>
-                          <TouchableOpacity style={styles.dateInputBox} onPress={() => setStartCalendarVisible(true)}>
-                            <Text style={styles.dateText}>{editStart || getToday()}</Text>
-                            <Image source={require('../assets/DATE.png')} style={styles.dateIcon} />
-                          </TouchableOpacity>
-                          {editStart && editStart !== getToday() && (
-                            <TouchableOpacity onPress={() => setEditStart('')} style={styles.resetDateBtn}>
-                              <Text style={styles.resetDateText}>오늘로 초기화</Text>
-                            </TouchableOpacity>
                           )}
+
+                          <TouchableOpacity
+                            style={[styles.manageActionBtn, styles.manageActionBtnDanger]}
+                            onPress={() => confirmDeleteTicket(currentId)}
+                          >
+                            <Text style={styles.manageActionBtnDangerText}>이용권 삭제</Text>
+                          </TouchableOpacity>
                         </View>
+                      );
+                    })}
+                  </ScrollView>
 
-                        <View style={styles.dateSpacer} />
+                  <TouchableOpacity style={[styles.closeFullBtn, { marginTop: 10, marginBottom: 20 }]} onPress={() => closeManageModal()}>
+                    <Text style={styles.closeFullBtnText}>닫기</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })()}
+          </Animated.View>
+        </View>
+      </Modal>
 
-                        <View style={styles.dateBlock}>
-                          <Text style={styles.inputLabel}>
-                            {editType === 'PERIOD' ? '개월 수' : '횟수 (비우면 1회)'}
-                          </Text>
-                          <TextInput
-                            style={styles.amountInput}
-                            placeholder={editType === 'PERIOD' ? '개월 수 입력' : '기본 1회'}
-                            placeholderTextColor="#666"
-                            keyboardType="numeric"
-                            value={addValue}
-                            onChangeText={setAddValue}
-                          />
-                        </View>
-                      </View>
+      {/* ✅ 2. 이용권 등록 바텀 시트 모달 (전체화면 확장 및 드래그 닫기 지원) */}
+      <Modal visible={isEditModalVisible} transparent={true} animationType="fade" onRequestClose={() => closeEditModal()}>
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={() => closeEditModal()}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', flex: 1, justifyContent: 'flex-end' }} pointerEvents="box-none">
+            <Animated.View style={[styles.bottomSheet, { height: editHeightAnim, overflow: 'hidden' }]}>
+              
+              <View {...editPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
+                <View style={styles.dragHandle} />
+                <View style={styles.sheetHeader}>
+                  <Text style={styles.sheetTitle}>이용권 등록</Text>
+                  <TouchableOpacity onPress={() => closeEditModal()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <Text style={styles.closeIcon}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.horizontalDivider} />
+              </View>
 
-                      <TouchableOpacity style={styles.submitBtn} onPress={handleGrantTicket}>
-                        <Text style={styles.submitBtnText}>등록 완료</Text>
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 50 }}>
+                
+                <View style={styles.modalSearchBox}>
+                  <Text style={styles.searchIcon}>🔎</Text>
+                  <TextInput
+                    style={styles.modalSearchInput}
+                    placeholder="부여할 회원을 검색하세요"
+                    placeholderTextColor="#666"
+                    value={modalSearch}
+                    onChangeText={setModalSearch}
+                  />
+                </View>
+
+                <View style={styles.modalTableHeader}>
+                  <Text style={[styles.modalHeaderText, { flex: 1.5 }]}>회원정보</Text>
+                  <Text style={[styles.modalHeaderText, { flex: 2, textAlign: 'center' }]}>연락처</Text>
+                  <Text style={[styles.modalHeaderText, { flex: 1.5, textAlign: 'center' }]}>현재 이용권</Text>
+                </View>
+                <View style={styles.headerDivider} />
+
+                <View style={{ height: 160, marginBottom: 20 }}>
+                  <ScrollView style={styles.searchResultTable} nestedScrollEnabled={true}>
+                    {groupedSearchResults.length === 0 ? (
+                      <Text style={styles.modalEmptyText}>검색된 회원이 없습니다.</Text>
+                    ) : (
+                      groupedSearchResults.map((group: any) => {
+                        const isSelected = selectedUser && selectedUser.memberId === group.memberId;
+                        const displayTypes = group.memberships.map((m: any) => resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount));
+                        const uniqueTypes = [...new Set(displayTypes)];
+                        const displayTicket = uniqueTypes.length > 0 ? uniqueTypes.join(' / ') : '없음';
+
+                        return (
+                          <TouchableOpacity
+                            key={group.memberId}
+                            style={[styles.searchResultRow, isSelected && styles.selectedRow]}
+                            onPress={() => handleSelectUser(group)}
+                          >
+                            <Text style={[styles.resultTextName, { flex: 1.5 }]} numberOfLines={1}>{group.name}</Text>
+                            <Text style={[styles.resultTextSub, { flex: 2, textAlign: 'center' }]}>{group.phone}</Text>
+                            <Text style={[styles.resultTextType, { flex: 1.5, textAlign: 'center' }]}>
+                              {displayTicket}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })
+                    )}
+                  </ScrollView>
+                </View>
+
+                {selectedUser && (
+                  <View style={styles.formContainer}>
+                    <Text style={styles.inputLabel}>이용권 종류</Text>
+                    <View style={styles.typeToggleRow}>
+                      <TouchableOpacity
+                        style={[styles.typeBtn, editType === 'PERIOD' && styles.typeBtnActive]}
+                        onPress={() => { setEditType('PERIOD'); setAddValue(''); }}
+                      >
+                        <Text style={[styles.typeBtnText, editType === 'PERIOD' && styles.typeBtnTextActive]}>회원권</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.typeBtn, editType === 'COUNT' && styles.typeBtnActive]}
+                        onPress={() => { setEditType('COUNT'); setAddValue(''); }}
+                      >
+                        <Text style={[styles.typeBtnText, editType === 'COUNT' && styles.typeBtnTextActive]}>일일권</Text>
                       </TouchableOpacity>
                     </View>
-                  )}
-                </ScrollView>
-              </KeyboardAvoidingView>
-            </TouchableOpacity>
-          </Animated.View>
-        </TouchableOpacity>
+
+                    <View style={styles.horizontalDateRow}>
+                      <View style={styles.dateBlock}>
+                        <Text style={styles.inputLabel}>시작일</Text>
+                        <TouchableOpacity style={styles.dateInputBox} onPress={() => setStartCalendarVisible(true)}>
+                          <Text style={styles.dateText}>{editStart || getToday()}</Text>
+                          <Image source={require('../assets/DATE.png')} style={styles.dateIcon} />
+                        </TouchableOpacity>
+                        {editStart && editStart !== getToday() && (
+                          <TouchableOpacity onPress={() => setEditStart('')} style={styles.resetDateBtn}>
+                            <Text style={styles.resetDateText}>오늘로 초기화</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+
+                      <View style={styles.dateSpacer} />
+
+                      <View style={styles.dateBlock}>
+                        <Text style={styles.inputLabel}>
+                          {editType === 'PERIOD' ? '개월 수' : '횟수 (비우면 1회)'}
+                        </Text>
+                        <TextInput
+                          style={styles.amountInput}
+                          placeholder={editType === 'PERIOD' ? '개월 수 입력' : '기본 1회'}
+                          placeholderTextColor="#666"
+                          keyboardType="numeric"
+                          value={addValue}
+                          onChangeText={setAddValue}
+                        />
+                      </View>
+                    </View>
+
+                    <TouchableOpacity style={styles.submitBtn} onPress={handleGrantTicket}>
+                      <Text style={styles.submitBtnText}>등록 완료</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </ScrollView>
+            </Animated.View>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       {/* 시작일 달력 모달 */}
@@ -867,7 +896,7 @@ const styles = StyleSheet.create({
   fabText: { color: '#000', fontSize: 18, fontWeight: 'bold' },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
-  bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%', maxHeight: '90%' },
+  bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, width: '100%' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, paddingHorizontal: 5 },
   sheetTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' },
@@ -937,8 +966,8 @@ const styles = StyleSheet.create({
   manageActionGroupTitle: { color: '#A1BE44', fontSize: 16, fontWeight: 'bold', marginBottom: 12 },
   manageActionBtn: { width: '100%', backgroundColor: '#262626', borderRadius: 12, paddingVertical: 18, alignItems: 'center', marginBottom: 10 },
   manageActionBtnText: { color: '#ffffff', fontSize: 17, fontWeight: 'bold' },
-  manageActionBtnDanger: { backgroundColor: 'rgba(255, 77, 77, 0.15)', borderWidth: 1, borderColor: '#FF4D4D', marginBottom: 0 },
-  manageActionBtnDangerText: { color: '#FF4D4D', fontSize: 17, fontWeight: 'bold' },
+  manageActionBtnDanger: { backgroundColor: 'rgba(161, 190, 68, 0.15)', borderWidth: 1, borderColor: '#A1BE44', marginBottom: 0 },
+  manageActionBtnDangerText: { color: '#A1BE44', fontSize: 17, fontWeight: 'bold' },
   closeFullBtn: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 18, alignItems: 'center' },
   closeFullBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
 });

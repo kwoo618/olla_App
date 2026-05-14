@@ -1,5 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, RefreshControl } from 'react-native';
+import { 
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, 
+  Modal, Animated, RefreshControl, Dimensions, PanResponder, TouchableWithoutFeedback 
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -91,7 +94,6 @@ const getSectionLabel = (oneWayCount: number, additionalBlocks: number): string 
   if (oneWayCount === 0 && additionalBlocks === 0) return '0';
   if (additionalBlocks > 0 && additionalBlocks <= BOX_SEQUENCE.length)
     return BOX_SEQUENCE[additionalBlocks - 1];
-  // (수정) 완주 시 '완주'가 아닌 마지막 구간 '4-2' 리턴
   return '4-2'; 
 };
 
@@ -150,7 +152,6 @@ const RecodeScreen = ({
     setRefreshing(false);
   }, []);
 
-  // ── 멤버십 확인 ──
   const checkMembership = async () => {
     try {
       const res = await axios.get(MEMBERSHIP_URL);
@@ -183,7 +184,6 @@ const RecodeScreen = ({
     action();
   };
 
-  // ── 초보벽 최고기록 조회 ──
   const fetchBestRecords = async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/records/beginner/best`);
@@ -232,7 +232,6 @@ const RecodeScreen = ({
     }
   };
 
-  // ── 지구력 기록 조회 ──
   const fetchEnduranceRecords = async () => {
     try {
       const res = await axios.get(`${ENDURANCE_BASE_URL}/history`);
@@ -242,7 +241,6 @@ const RecodeScreen = ({
       const mapped = list.map((item: EnduranceRecord) => ({
         id:      item.id,
         type:    '편도',
-        // (수정) 짝수/0회는 ->, 홀수/1회는 <- 처리
         arrow:   item.oneWayCount % 2 !== 0 ? '<-' : '->', 
         laps:    String(item.oneWayCount),
         time:    formatTime(item.timeSeconds),
@@ -255,7 +253,6 @@ const RecodeScreen = ({
     }
   };
 
-  // ── 연속 완등 기록 조회 ──
   const fetchSeriesRecords = async () => {
     try {
       const res = await axios.get(`${SERIES_BASE_URL}/history`);
@@ -322,9 +319,110 @@ const RecodeScreen = ({
 
   const cancelDelete = () => { setDeleteModalVisible(false); setItemToDelete(null); };
 
+  // ─────────────────────────── 🌟 팝업창 드래그 애니메이션 상태 설정 ───────────────────────────
+  const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+  
+  // 💡 각 팝업별 높이 설정
+  const BEGINNER_MODAL_HEIGHT = SCREEN_HEIGHT * 0.70;       // 초보벽 (70%, 늘어나지 않음)
+  const ENDURANCE_HALF_HEIGHT = SCREEN_HEIGHT * 0.55;       // 지구력 절반 (55%)
+  const ENDURANCE_FULL_HEIGHT = SCREEN_HEIGHT * 0.95;       // 지구력 전체 (95%)
+  const CONSECUTIVE_MODAL_HEIGHT = SCREEN_HEIGHT * 0.77;    // 연속완등
+
+  const beginnerHeightAnim = useRef(new Animated.Value(0)).current;
+  const enduranceHeightAnim = useRef(new Animated.Value(0)).current;
+  const consecutiveHeightAnim = useRef(new Animated.Value(0)).current;
+
+  const beginnerSnap = useRef(BEGINNER_MODAL_HEIGHT);
+  const enduranceSnap = useRef(ENDURANCE_HALF_HEIGHT);
+  const consecutiveSnap = useRef(CONSECUTIVE_MODAL_HEIGHT);
+
+  // 1️⃣ 초보벽 PanResponder (위로 확장 불가, 아래로 닫기만 가능)
+  const beginnerPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
+      onPanResponderGrant: () => {
+        beginnerHeightAnim.setOffset(beginnerSnap.current);
+        beginnerHeightAnim.setValue(0);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        // dy < 0 (위로 드래그)일 때는 0으로 제한하여 커지지 않도록 함
+        beginnerHeightAnim.setValue(Math.min(0, -gestureState.dy));
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        beginnerHeightAnim.flattenOffset();
+        const finalHeight = beginnerSnap.current - gestureState.dy;
+        const CLOSE_THRESHOLD = beginnerSnap.current * 0.7; 
+
+        if (finalHeight < CLOSE_THRESHOLD) {
+          closeRecordModal();
+        } else {
+          Animated.spring(beginnerHeightAnim, { toValue: beginnerSnap.current, useNativeDriver: false }).start();
+        }
+      }
+    })
+  ).current;
+
+  // 2️⃣ 지구력 PanResponder (위로 확장 가능, 아래로 닫기 가능)
+  const endurancePanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
+      onPanResponderGrant: () => {
+        enduranceHeightAnim.setOffset(enduranceSnap.current);
+        enduranceHeightAnim.setValue(0);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        enduranceHeightAnim.setValue(-gestureState.dy);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        enduranceHeightAnim.flattenOffset();
+        const finalHeight = enduranceSnap.current - gestureState.dy;
+        const THRESHOLD = (ENDURANCE_HALF_HEIGHT + ENDURANCE_FULL_HEIGHT) / 2;
+        const CLOSE_THRESHOLD = ENDURANCE_HALF_HEIGHT * 0.7;
+
+        if (finalHeight > THRESHOLD) {
+          enduranceSnap.current = ENDURANCE_FULL_HEIGHT;
+          Animated.spring(enduranceHeightAnim, { toValue: ENDURANCE_FULL_HEIGHT, useNativeDriver: false }).start();
+        } else if (finalHeight < CLOSE_THRESHOLD) {
+          closeEnduranceModal();
+        } else {
+          enduranceSnap.current = ENDURANCE_HALF_HEIGHT;
+          Animated.spring(enduranceHeightAnim, { toValue: ENDURANCE_HALF_HEIGHT, useNativeDriver: false }).start();
+        }
+      }
+    })
+  ).current;
+
+  // 3️⃣ 연속완등 PanResponder (위로 확장 불가, 아래로 닫기만 가능)
+  const consecutivePanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
+      onPanResponderGrant: () => {
+        consecutiveHeightAnim.setOffset(consecutiveSnap.current);
+        consecutiveHeightAnim.setValue(0);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        // 위로 확장을 막기 위해 최소값을 0으로 설정
+        consecutiveHeightAnim.setValue(Math.min(0, -gestureState.dy));
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        consecutiveHeightAnim.flattenOffset();
+        const finalHeight = consecutiveSnap.current - gestureState.dy;
+        const CLOSE_THRESHOLD = consecutiveSnap.current * 0.7;
+
+        if (finalHeight < CLOSE_THRESHOLD) {
+          closeConsecutiveModal();
+        } else {
+          Animated.spring(consecutiveHeightAnim, { toValue: consecutiveSnap.current, useNativeDriver: false }).start();
+        }
+      }
+    })
+  ).current;
+
   // ─── 초보벽 모달 및 로직 ───
   const [isRecordModalVisible,  setRecordModalVisible]  = useState(false);
-  const beginnerSlideAnim = useRef(new Animated.Value(800)).current;
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('흰색');
   const [selectedType,   setSelectedType]   = useState<string | null>(null);
   const [selectedResult, setSelectedResult] = useState<string | null>(null);
@@ -335,20 +433,19 @@ const RecodeScreen = ({
   const openRecordModal = () => {
     requireMembership(() => {
       setRecordModalVisible(true);
-      setTimeout(() => {
-        Animated.timing(beginnerSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
-      }, 50);
+      beginnerSnap.current = BEGINNER_MODAL_HEIGHT;
+      beginnerHeightAnim.setValue(0);
+      Animated.timing(beginnerHeightAnim, { toValue: BEGINNER_MODAL_HEIGHT, duration: 300, useNativeDriver: false }).start();
     });
   };
 
   const closeRecordModal = () => {
-    Animated.timing(beginnerSlideAnim, { toValue: 800, duration: 200, useNativeDriver: true }).start();
-    setTimeout(() => {
+    Animated.timing(beginnerHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
       setRecordModalVisible(false);
       setSelectedType(null);
       setSelectedResult(null);
       setHoldCount(0);
-    }, 200);
+    });
   };
 
   const currentMaxHolds = useMemo(() => {
@@ -365,7 +462,6 @@ const RecodeScreen = ({
     const finalHold    = isSuccess ? currentMaxHolds : holdCount;
     const enumDifficulty = KR_TO_ENUM[selectedDifficulty] ?? 'WHITE';
 
-    // (수정) 400 Bad Request 에러 해결: success -> isSuccess 로 변경!
     const payload = {
       difficulty:  enumDifficulty,
       attemptType: selectedType === '편도' ? 'ONE_WAY' : 'ROUND_TRIP',
@@ -394,7 +490,6 @@ const RecodeScreen = ({
 
   // ─── 지구력 모달 ───
   const [isEnduranceModalVisible, setEnduranceModalVisible] = useState(false);
-  const enduranceSlideAnim = useRef(new Animated.Value(800)).current;
   const [enduranceLaps,    setEnduranceLaps]    = useState(0);
   const [selectedMapNode,  setSelectedMapNode]  = useState<string | null>(null);
   const [enduranceMin,     setEnduranceMin]     = useState('');
@@ -412,9 +507,9 @@ const RecodeScreen = ({
   const openEnduranceModal = () => {
     requireMembership(() => {
       setEnduranceModalVisible(true);
-      setTimeout(() => {
-        Animated.timing(enduranceSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
-      }, 50);
+      enduranceSnap.current = ENDURANCE_HALF_HEIGHT;
+      enduranceHeightAnim.setValue(0);
+      Animated.timing(enduranceHeightAnim, { toValue: ENDURANCE_HALF_HEIGHT, duration: 300, useNativeDriver: false }).start();
     });
   };
 
@@ -422,15 +517,14 @@ const RecodeScreen = ({
     if (timerRef.current) clearInterval(timerRef.current);
     setTimerRunning(false);
 
-    Animated.timing(enduranceSlideAnim, { toValue: 800, duration: 200, useNativeDriver: true }).start();
-    setTimeout(() => {
+    Animated.timing(enduranceHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
       setEnduranceModalVisible(false);
       setEnduranceLaps(0);
       setSelectedMapNode(null);
       setEnduranceMin('');
       setEnduranceSec('');
       setIsTimerActive(false);
-    }, 200);
+    });
   };
 
   const SPACING = 24; const GAP = 10; const BASE_X = 30; const BASE_Y = 40; const TEXT_OFFSET = 24;
@@ -551,7 +645,6 @@ const RecodeScreen = ({
       setTimerRunning(false);
       if (timerRef.current) clearInterval(timerRef.current);
     }
-    // 0.5초 딜레이를 주어 안전하게 종료 모달을 띄움
     setTimeout(() => {
       setFinishModalVisible(true);
     }, 500);
@@ -599,32 +692,29 @@ const RecodeScreen = ({
 
   // ─── 연속 완등 모달 ───
   const [isConsecutiveModalVisible, setConsecutiveModalVisible] = useState(false);
-  const consecutiveSlideAnim = useRef(new Animated.Value(800)).current;
   const [selectedConsecutiveList, setSelectedConsecutiveList] = useState<any[]>([]);
   const [showDetails, setShowDetails] = useState(false);
 
   const openConsecutiveModal = () => {
     requireMembership(() => {
       setConsecutiveModalVisible(true);
-      setTimeout(() => {
-        Animated.timing(consecutiveSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
-      }, 50);
+      consecutiveSnap.current = CONSECUTIVE_MODAL_HEIGHT;
+      consecutiveHeightAnim.setValue(0);
+      Animated.timing(consecutiveHeightAnim, { toValue: CONSECUTIVE_MODAL_HEIGHT, duration: 300, useNativeDriver: false }).start();
     });
   };
 
   const closeConsecutiveModal = () => {
-    Animated.timing(consecutiveSlideAnim, { toValue: 800, duration: 200, useNativeDriver: true }).start();
-    setTimeout(() => {
+    Animated.timing(consecutiveHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
       setConsecutiveModalVisible(false);
       setSelectedConsecutiveList([]);
       setShowDetails(false);
-    }, 200);
+    });
   };
 
   const removeConsecutiveItem = (indexToRemove: number) =>
     setSelectedConsecutiveList(prev => prev.filter((_, i) => i !== indexToRemove));
 
-  // (수정) 백엔드의 연속 완등 점수 계산 방식과 똑같이 매핑
   const totalConsecutiveScore = selectedConsecutiveList.reduce(
     (acc: number, curr: any, index: number) => {
       const baseScore = BASE_SCORES[curr.color] ?? 10;
@@ -822,17 +912,23 @@ const RecodeScreen = ({
 
       </ScrollView>
 
-      {/* ─── 초보벽 기록 모달 ─── */}
+      {/* ─── 초보벽 기록 모달 (위로 확장 방지 + 드래그 지원) ─── */}
       <Modal visible={isRecordModalVisible} animationType="fade" transparent onRequestClose={closeRecordModal}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeRecordModal}>
-          <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: beginnerSlideAnim }] }]}>
-            <TouchableOpacity activeOpacity={1} style={{ width: '100%' }}>
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={closeRecordModal}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+
+          <Animated.View style={[styles.bottomSheet, { height: beginnerHeightAnim }]}>
+            <View {...beginnerPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
               <View style={styles.dragHandle} />
               <View style={styles.sheetHeader}>
                 <Text style={styles.sheetTitle}>초보벽 기록 저장</Text>
-                <TouchableOpacity onPress={closeRecordModal}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity>
+                <TouchableOpacity onPress={closeRecordModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Text style={styles.closeBtn}>✕</Text>
+                </TouchableOpacity>
               </View>
-            </TouchableOpacity>
+            </View>
             <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%' }}>
               <TouchableOpacity activeOpacity={1} style={{ width: '100%', paddingBottom: 20 }}>
                 
@@ -917,10 +1013,10 @@ const RecodeScreen = ({
               </TouchableOpacity>
             </ScrollView>
           </Animated.View>
-        </TouchableOpacity>
+        </View>
       </Modal>
 
-      {/* ─── 지구력 스톱워치 / 타이머 모달 ─── */}
+      {/* ─── 지구력 스톱워치 / 타이머 모달 (전체 확장 + 드래그 지원) ─── */}
       <Modal visible={isEnduranceModalVisible} animationType="fade" transparent onRequestClose={closeEnduranceModal}>
         {isTimerActive ? (
           <SafeAreaView style={[StyleSheet.absoluteFill, styles.timerModalBackground, { zIndex: 1000 }]}>
@@ -1001,15 +1097,21 @@ const RecodeScreen = ({
 
           </SafeAreaView>
         ) : (
-          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeEnduranceModal}>
-            <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: enduranceSlideAnim }] }]}>
-              <TouchableOpacity activeOpacity={1} style={{ width: '100%' }}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback onPress={closeEnduranceModal}>
+              <View style={StyleSheet.absoluteFill} />
+            </TouchableWithoutFeedback>
+            
+            <Animated.View style={[styles.bottomSheet, { height: enduranceHeightAnim }]}>
+              <View {...endurancePanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
                 <View style={styles.dragHandle} />
                 <View style={styles.sheetHeader}>
                   <Text style={styles.sheetTitle}>지구력 기록 저장</Text>
-                  <TouchableOpacity onPress={closeEnduranceModal}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={closeEnduranceModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <Text style={styles.closeBtn}>✕</Text>
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
+              </View>
               <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%' }}>
                 <TouchableOpacity activeOpacity={1} style={{ width: '100%', paddingBottom: 20 }}>
                   <Text style={styles.sectionTitle}>편도 횟수</Text>
@@ -1070,21 +1172,27 @@ const RecodeScreen = ({
                 </TouchableOpacity>
               </ScrollView>
             </Animated.View>
-          </TouchableOpacity>
+          </View>
         )}
       </Modal>
 
-      {/* ─── 연속 완등 모달 ─── */}
+      {/* ─── 연속 완등 모달 (위로 확장 방지 + 드래그 지원) ─── */}
       <Modal visible={isConsecutiveModalVisible} animationType="fade" transparent onRequestClose={closeConsecutiveModal}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeConsecutiveModal}>
-          <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: consecutiveSlideAnim }] }]}>
-            <TouchableOpacity activeOpacity={1} style={{ width: '100%' }}>
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={closeConsecutiveModal}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+
+          <Animated.View style={[styles.bottomSheet, { height: consecutiveHeightAnim }]}>
+            <View {...consecutivePanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
               <View style={styles.dragHandle} />
               <View style={styles.sheetHeader}>
                 <Text style={styles.sheetTitle}>연속 기록 저장</Text>
-                <TouchableOpacity onPress={closeConsecutiveModal}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity>
+                <TouchableOpacity onPress={closeConsecutiveModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Text style={styles.closeBtn}>✕</Text>
+                </TouchableOpacity>
               </View>
-            </TouchableOpacity>
+            </View>
             <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%' }}>
               <TouchableOpacity activeOpacity={1} style={{ width: '100%', paddingBottom: 20 }}>
                 <Text style={styles.sectionTitle}>난이도 입력</Text>
@@ -1119,7 +1227,6 @@ const RecodeScreen = ({
                     <Text style={styles.detailButtonText}>{showDetails ? '닫기' : '상세보기'}</Text>
                   </TouchableOpacity>
                 </View>
-                {/* (수정) 백엔드 로직에 맞춘 점수 화면에 렌더링 */}
                 <Text style={styles.totalScoreText}>{displayTotalScore} 점</Text>
 
                 {showDetails && (
@@ -1146,10 +1253,10 @@ const RecodeScreen = ({
               </TouchableOpacity>
             </ScrollView>
           </Animated.View>
-        </TouchableOpacity>
+        </View>
       </Modal>
 
-      {/* ─── 커스텀 알림 모달 (모달 안에 중첩되지 않도록 루트 레벨에서 선언하여 안전하게 띄움) ─── */}
+      {/* ─── 커스텀 알림 모달 ─── */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -1247,7 +1354,8 @@ const styles = StyleSheet.create({
   emptyText: { color: '#999999', fontSize: 16, textAlign: 'center', width: '100%' }, 
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)', justifyContent: 'flex-end' },
-  bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 50, alignItems: 'center' },
+  // 💡 드래그 모달에 맞추어 width: '100%', overflow: 'hidden' 추가
+  bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 50, alignItems: 'center', width: '100%', overflow: 'hidden' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
   sheetHeader: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
   sheetTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold', marginLeft: 10 }, 
@@ -1342,4 +1450,4 @@ const styles = StyleSheet.create({
   deleteBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
 });
 
-export default RecodeScreen; 
+export default RecodeScreen;

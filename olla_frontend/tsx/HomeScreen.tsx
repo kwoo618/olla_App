@@ -11,7 +11,10 @@ import {
   Image,
   Modal,
   Animated,
-  RefreshControl
+  RefreshControl,
+  Dimensions,
+  PanResponder,
+  TouchableWithoutFeedback
 } from 'react-native';
 import { API_BASE_URL } from '../src/constants/Config';
 
@@ -29,7 +32,6 @@ const HomeScreen = ({ navigation }: any) => {
   const scrollViewRef = useRef<ScrollView>(null);
 
   const [activeModal, setActiveModal] = useState<string | null>(null);
-  const slideAnim = useRef(new Animated.Value(500)).current;
 
   // ─── 당겨서 새로고침(Pull-to-Refresh) 상태 ───
   const [refreshing, setRefreshing] = useState(false);
@@ -81,6 +83,45 @@ const HomeScreen = ({ navigation }: any) => {
   const [viewDate, setViewDate] = useState(new Date());
   const [selectedFullDate, setSelectedFullDate] = useState<Date | null>(null);
 
+  // ─── 🌟 팝업창 드래그 앤 드롭 (각 팝업별 높이 개별 설정) ───
+  const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+  
+  // 💡 여기서 각 팝업창의 높이를 자유롭게 조절하실 수 있습니다!
+  const QR_MODAL_HEIGHT = SCREEN_HEIGHT * 0.55;
+  const MEMBERSHIP_MODAL_HEIGHT = SCREEN_HEIGHT * 0.53;
+
+  const modalHeightAnim = useRef(new Animated.Value(0)).current;
+  const currentSnap = useRef(0); // 현재 열려있는 팝업의 타겟 높이를 저장
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
+      onPanResponderGrant: () => {
+        modalHeightAnim.setOffset(currentSnap.current);
+        modalHeightAnim.setValue(0);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        // 💡 위로 드래그(dy < 0)할 때는 크기가 커지지 않도록 0으로 제한, 아래로 드래그(dy > 0)할 때만 줄어들게 처리
+        modalHeightAnim.setValue(Math.min(0, -gestureState.dy));
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        modalHeightAnim.flattenOffset();
+        const finalHeight = currentSnap.current - gestureState.dy;
+        
+        // 💡 고정값이 아닌 "현재 창 높이의 70% 이하"로 내려갔을 때 닫히도록 동적 계산
+        const CLOSE_THRESHOLD = currentSnap.current * 0.7; 
+
+        if (finalHeight < CLOSE_THRESHOLD) {
+          closeModal();
+        } else {
+          // 닫히지 않을 경우 원래의 높이로 복귀
+          Animated.spring(modalHeightAnim, { toValue: currentSnap.current, useNativeDriver: false }).start();
+        }
+      }
+    })
+  ).current;
+
   const fetchQrToken = async () => {
     try {
       const userToken = await AsyncStorage.getItem('userToken');
@@ -107,13 +148,17 @@ const HomeScreen = ({ navigation }: any) => {
       setQrToken(null);
       fetchQrToken();
     }
-    setTimeout(() => {
-      Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
-    }, 50);
+    
+    // 💡 열리는 팝업의 종류에 따라 타겟 높이 결정
+    const targetHeight = type === 'QR' ? QR_MODAL_HEIGHT : MEMBERSHIP_MODAL_HEIGHT;
+    currentSnap.current = targetHeight;
+    
+    modalHeightAnim.setValue(0);
+    Animated.timing(modalHeightAnim, { toValue: targetHeight, duration: 300, useNativeDriver: false }).start();
   };
 
   const closeModal = () => {
-    Animated.timing(slideAnim, { toValue: 500, duration: 250, useNativeDriver: true }).start(() => {
+    Animated.timing(modalHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
       setActiveModal(null);
     });
   };
@@ -180,7 +225,6 @@ const HomeScreen = ({ navigation }: any) => {
       // [1] 내 정보(프로필) 로드
       try {
         const profileRes = await axios.get(`${API_BASE_URL}/members/me`, config);
-        // ✅ Depth 1단계 추가 적용
         const pData = profileRes.data?.data?.data;
         if (pData) {
           nickname = pData.nickname || pData.name || '';
@@ -195,7 +239,6 @@ const HomeScreen = ({ navigation }: any) => {
       // [2] 공지사항 로드
       try {
         const noticeResponse = await axios.get(`${API_BASE_URL}/admin/notices`);
-        // ✅ Depth 1단계 추가 적용
         const noticeList: any[] = noticeResponse.data?.data?.data.content ?? noticeResponse.data?.data?.data ?? [];
 
         if (noticeList.length > 0) {
@@ -226,7 +269,6 @@ const HomeScreen = ({ navigation }: any) => {
       // [3] 회원권 로드
       try {
         const memResponse = await axios.get(`${API_BASE_URL}/memberships/me`, config);
-        // ✅ Depth 1단계 추가 적용
         const data = memResponse.data?.data?.data;
         if (data) {
           const currentDate = new Date();
@@ -265,7 +307,6 @@ const HomeScreen = ({ navigation }: any) => {
 
         try {
           const endRes = await axios.get(`${API_BASE_URL}/rankings/endurance/distance`, config);
-          // ✅ Depth 1단계 추가 적용
           const endList = extractList(endRes.data?.data?.data);
           const myEndRecord = endList.find((item: any) => isMyRecord(item, memberId, nickname));
           if (myEndRecord) {
@@ -297,7 +338,6 @@ const HomeScreen = ({ navigation }: any) => {
           let myRealBestRecords: any[] = [];
           [bestRes, historyRes, allRes].forEach(res => {
             if (res) {
-              // ✅ Depth 1단계 추가 적용
               const data = res.data?.data?.data;
               if (Array.isArray(data)) myRealBestRecords = [...myRealBestRecords, ...data];
               else if (data?.list && Array.isArray(data.list)) myRealBestRecords = [...myRealBestRecords, ...data.list];
@@ -359,7 +399,6 @@ const HomeScreen = ({ navigation }: any) => {
         { headers: { Authorization: `Bearer ${userToken}` } }
       );
       
-      // Depth 1단계 추가 적용
       let rawData = response.data?.data?.data;
       if (rawData && !Array.isArray(rawData) && rawData.data) rawData = rawData.data;
       
@@ -491,7 +530,6 @@ const HomeScreen = ({ navigation }: any) => {
 
           <TouchableOpacity style={styles.UserCardCentered} onPress={() => handlePopupPress('회원권')}>
             <View style={[styles.circleGraphDummy, !hasMembership && { borderColor: '#444444' }]}>
-              {/* 💡 크기 확대 */}
               <Text style={[styles.circleGraphText, !hasMembership && { color: '#999999', fontSize: 15 }]}>
                 {membership.isLoading
                   ? ''
@@ -628,26 +666,35 @@ const HomeScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 하단 팝업 모달 ─── */}
+      {/* 🌟 하단 팝업 모달 (위로 확장 방지 + 동적 높이 적용) 🌟 */}
       <Modal
         visible={activeModal !== null}
         animationType="fade"
         transparent={true}
         onRequestClose={closeModal}
       >
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeModal}>
-          <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: slideAnim }] }]}>
-            <TouchableOpacity activeOpacity={1} style={{ width: '100%', alignItems: 'center' }}>
+        <View style={styles.modalOverlay}>
+          {/* 바깥쪽 어두운 배경을 클릭했을 때 창이 꺼지도록 구성 */}
+          <TouchableWithoutFeedback onPress={closeModal}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+
+          <Animated.View style={[styles.bottomSheet, { height: modalHeightAnim }]}>
+            {/* 드래그 핸들러 영역 */}
+            <View {...panResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
               <View style={styles.dragHandle} />
               <View style={styles.sheetHeader}>
                 <Text style={styles.sheetTitle}>
                   {activeModal === 'QR' ? 'QR 체크인' : (hasMembership ? membership.membershipType : '이용권')}
                 </Text>
-                <TouchableOpacity onPress={closeModal}>
+                <TouchableOpacity onPress={closeModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                   <Text style={styles.closeBtn}>✕</Text>
                 </TouchableOpacity>
               </View>
+            </View>
 
+            {/* 내부 콘텐츠 스크롤 영역 */}
+            <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1, width: '100%' }} contentContainerStyle={{ alignItems: 'center' }}>
               {activeModal === 'QR' ? (
                 <>
                   <View style={{ marginBottom: 20, alignItems: 'center', justifyContent: 'center', height: 200, width: 200 }}>
@@ -684,7 +731,6 @@ const HomeScreen = ({ navigation }: any) => {
                     <View style={[styles.memCardDates, !hasMembership && { justifyContent: 'center' }]}>
                       {hasMembership ? (
                         isCountType ? (
-                          // 💡 크기 확대
                           <Text style={[styles.memDateText, { fontSize: 18, color: '#A1BE44' }]}>
                             {membership.remainingCount}회 남음
                           </Text>
@@ -706,7 +752,6 @@ const HomeScreen = ({ navigation }: any) => {
                       </Text>
                       <Text style={[
                         styles.memHalfValueGreen,
-                        // 💡 크기 확대
                         !hasMembership && { color: '#999999', fontSize: 18 }
                       ]} numberOfLines={1} adjustsFontSizeToFit>
                         {hasMembership
@@ -720,7 +765,6 @@ const HomeScreen = ({ navigation }: any) => {
                       <Text style={styles.memHalfTitle}>상태</Text>
                       <Text style={[
                         styles.memHalfValueWhite,
-                        // 💡 크기 확대
                         !hasMembership && { fontSize: 18, color: '#FF6B6B' }
                       ]} numberOfLines={1} adjustsFontSizeToFit>
                         {hasMembership ? displayStatus : '구매 필요'}
@@ -729,15 +773,14 @@ const HomeScreen = ({ navigation }: any) => {
                   </View>
                 </View>
               )}
-            </TouchableOpacity>
+            </ScrollView>
           </Animated.View>
-        </TouchableOpacity>
+        </View>
       </Modal>
     </View>
   );
 };
 
-// 💡 전체적으로 fontSize +2~3씩 확대
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
   scrollContent: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 60 },
@@ -785,7 +828,7 @@ const styles = StyleSheet.create({
   attendedText: { color: '#A1BE44', fontWeight: 'bold' },
   
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)', justifyContent: 'flex-end' },
-  bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 50, alignItems: 'center' },
+  bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 50, alignItems: 'center', width: '100%', overflow: 'hidden' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
   sheetHeader: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
   sheetTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold', marginLeft: 10 },

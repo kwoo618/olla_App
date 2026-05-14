@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Image, ActivityIndicator, Modal, Platform, PermissionsAndroid, RefreshControl, Animated, Dimensions
+  Image, ActivityIndicator, Modal, Platform, PermissionsAndroid, RefreshControl, Animated, Dimensions, PanResponder, TouchableWithoutFeedback
 } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -14,9 +14,8 @@ const MEMBER_API_URL      = `${API_BASE_URL}/admin/memberships/members`;
 const MEMBERSHIP_API_URL  = `${API_BASE_URL}/admin/memberships`;
 const VISIT_TODAY_API_URL = `${API_BASE_URL}/admin/visits/today`;
 const QR_SCAN_API_URL     = `${API_BASE_URL}/admin/visits/scan`; 
-const PROFILE_API_URL     = `${API_BASE_URL}/members`; // 💡 회원 프로필 상세 조회용
+const PROFILE_API_URL     = `${API_BASE_URL}/members`; 
 
-// 💡 화면의 가로 길이를 가져와 완벽한 정사각형 사이즈(화면의 80%)를 계산합니다.
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SCANNER_SIZE = SCREEN_WIDTH * 0.8; 
 
@@ -57,10 +56,44 @@ const ManagerDashboard = ({ navigation }: any) => {
   const [cameraReady, setCameraReady] = useState(false);
   const scannedRef = useRef(false);
 
-  // ─── 💡 회원 정보 상세 팝업 상태 ───
+  // ─── 🌟 회원 정보 상세 팝업 상태 및 드래그 애니메이션 로직 🌟 ───
   const [isDetailVisible, setDetailVisible] = useState(false);
-  const detailSlideAnim = useRef(new Animated.Value(800)).current;
   const [selectedUser, setSelectedUser] = useState<any>(null);
+
+  const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+  
+  const DETAIL_MODAL_HEIGHT = SCREEN_HEIGHT * 0.47; 
+  const FULL_SCREEN = SCREEN_HEIGHT * 0.95; 
+  const THRESHOLD = (DETAIL_MODAL_HEIGHT + FULL_SCREEN) / 2; 
+
+  const detailHeightAnim = useRef(new Animated.Value(0)).current;
+  const currentDetailSnap = useRef(DETAIL_MODAL_HEIGHT);
+
+  const detailPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
+      onPanResponderGrant: () => {
+        detailHeightAnim.setOffset(currentDetailSnap.current);
+        detailHeightAnim.setValue(0);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        // 위로 확장되지 않도록 0으로 제한
+        detailHeightAnim.setValue(Math.min(0, -gestureState.dy));
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        detailHeightAnim.flattenOffset();
+        const finalHeight = currentDetailSnap.current - gestureState.dy;
+        const CLOSE_THRESHOLD = currentDetailSnap.current * 0.7;
+
+        if (finalHeight < CLOSE_THRESHOLD) {
+          closeDetailModal();
+        } else {
+          Animated.spring(detailHeightAnim, { toValue: currentDetailSnap.current, useNativeDriver: false }).start();
+        }
+      }
+    })
+  ).current;
 
   useEffect(() => {
     if (isScannerVisible) {
@@ -151,24 +184,19 @@ const ManagerDashboard = ({ navigation }: any) => {
     try {
       const response = await axios.get(MEMBER_API_URL, {
         headers: { Authorization: `Bearer ${token}` },
-        // 💡 총 회원 수를 정확히 파악하기 위해 여유 있게 1000개를 불러옵니다.
         params: { page: 0, size: 1000, sort: 'id,desc' },
       });
-      // ✅ Depth 1단계 추가 반영
       const rawList = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
       const list = Array.isArray(rawList) ? rawList : [];
       
-      // 💡 탈퇴한 회원(deleted: true) 완벽 필터링
       const validMembers = list.filter((user: any) => {
         const memberInfo = user.member || user;
         const isDeleted = user.deleted === true || memberInfo.isDeleted === true || memberInfo.status === 'DELETED';
         return !isDeleted;
       });
 
-      // 💡 백엔드의 totalElements 대신 필터링이 완료된 실제 유효 회원 수를 사용합니다.
       const actualTotalElements = validMembers.length;
       
-      // 최신 2명만 잘라서 세팅
       setRecentMembers(validMembers.slice(0, 2));
       setMetrics(prev => ({ ...prev, totalMembers: actualTotalElements }));
     } catch (error: any) {
@@ -218,7 +246,6 @@ const ManagerDashboard = ({ navigation }: any) => {
 
       setMetrics(prev => ({ ...prev, activeMemberships: activeCount }));
     } catch (error: any) {
-      console.log('/active API 로드 실패, 전체 멤버십 목록에서 상태 필터링 시도');
       try {
         const fallbackRes = await axios.get(MEMBER_API_URL, {
           headers: { Authorization: `Bearer ${token}` },
@@ -268,7 +295,7 @@ const ManagerDashboard = ({ navigation }: any) => {
     return dateString.split('T')[0];
   };
 
-  // ─── 💡 회원 정보 상세 팝업 오픈 함수 ───
+  // ─── 💡 회원 정보 상세 팝업 오픈/클로즈 함수 ───
   const openDetailModal = async (memberId: number, fallbackName: string, fallbackPhone: string) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
@@ -297,7 +324,9 @@ const ManagerDashboard = ({ navigation }: any) => {
       });
 
       setDetailVisible(true);
-      setTimeout(() => { Animated.timing(detailSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(); }, 50);
+      currentDetailSnap.current = DETAIL_MODAL_HEIGHT;
+      detailHeightAnim.setValue(0);
+      Animated.timing(detailHeightAnim, { toValue: DETAIL_MODAL_HEIGHT, duration: 300, useNativeDriver: false }).start();
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || '회원 상세 정보를 불러올 수 없습니다.';
       showResultModal('프로필 조회 불가', errorMessage, 'error');
@@ -305,19 +334,10 @@ const ManagerDashboard = ({ navigation }: any) => {
   };
 
   const closeDetailModal = () => {
-    Animated.timing(detailSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => { 
+    Animated.timing(detailHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => { 
       setDetailVisible(false); 
       setSelectedUser(null); 
     });
-  };
-
-  const renderDetailRow = (label: string, value: string, unit: string = '') => {
-    return (
-      <View style={styles.detailRow}>
-        <Text style={styles.detailLabel}>{label}</Text>
-        <Text style={styles.detailValue}>{value !== '-' && value ? value + unit : '-'}</Text>
-      </View>
-    );
   };
 
   const requestCameraPermission = async () => {
@@ -480,7 +500,6 @@ const ManagerDashboard = ({ navigation }: any) => {
               const memberId = member.memberId || member.id;
 
               return (
-                // 💡 클릭 가능하게 TouchableOpacity로 변경하고 상세 정보 모달 연결
                 <TouchableOpacity 
                   key={member.id || index} 
                   style={[styles.rowItem, index > 0 && { marginTop: 15 }]}
@@ -618,15 +637,16 @@ const ManagerDashboard = ({ navigation }: any) => {
       <Modal visible={isDeleteModalVisible} animationType="fade" transparent onRequestClose={() => setDeleteModalVisible(false)}>
         <View style={styles.deleteModalOverlay}>
           <View style={styles.deleteModalBox}>
-            <Text style={styles.deleteModalText}>
-              해당 {itemToDelete?.type === 'notice' ? '공지사항' : '게시글'}을 정말 삭제하시겠습니까?
+            <Text style={[styles.resultModalTitle, { color: '#A1BE44' }]}>
+              해당 {itemToDelete?.type === 'notice' ? '공지사항' : '게시글'} 삭제
             </Text>
+            <Text style={styles.resultModalMessage}>정말 삭제하시겠습니까?</Text>
             <View style={styles.deleteBtnRow}>
               <TouchableOpacity style={styles.deleteBtnYes} onPress={executeDelete}>
-                <Text style={styles.deleteBtnYesText}>예</Text>
+                <Text style={[styles.deleteBtnYesText, { color: '#000000' }]}>삭제</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.deleteBtnNo} onPress={() => setDeleteModalVisible(false)}>
-                <Text style={styles.deleteBtnNoText}>아니오</Text>
+                <Text style={styles.deleteBtnNoText}>취소</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -640,7 +660,7 @@ const ManagerDashboard = ({ navigation }: any) => {
             <Text style={[styles.resultModalTitle, { color: '#FF4D4D', marginBottom: 15 }]}>출석 실패</Text>
             <Text style={styles.resultModalMessage}>{qrErrorMsg}</Text>
             <View style={styles.deleteBtnRow}>
-              <TouchableOpacity style={styles.deleteBtnYes} onPress={() => { setQrErrorVisible(false); scannedRef.current = false; setIsProcessing(false); }}>
+              <TouchableOpacity style={[styles.deleteBtnYes, { backgroundColor: '#FF4D4D' }]} onPress={() => { setQrErrorVisible(false); scannedRef.current = false; setIsProcessing(false); }}>
                 <Text style={styles.deleteBtnYesText}>다시 스캔</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.deleteBtnNo} onPress={() => { setQrErrorVisible(false); closeScanner(); }}>
@@ -651,51 +671,36 @@ const ManagerDashboard = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 💡 회원 정보 상세 팝업 (바텀시트) ─── */}
-      <Modal visible={isDetailVisible} transparent={true} animationType="fade" onRequestClose={closeDetailModal}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeDetailModal}>
-          <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: detailSlideAnim }] }]}>
-            <TouchableOpacity activeOpacity={1} style={{ width: '100%' }}>
+      {/* ─── 💡 회원 정보 상세 팝업 (바텀시트 + ManagerUser 디자인 통일) ─── */}
+      <Modal visible={isDetailVisible} transparent animationType="fade" onRequestClose={closeDetailModal}>
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={closeDetailModal}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+          <Animated.View style={[styles.bottomSheet, { height: detailHeightAnim }]}>
+            <View {...detailPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
               <View style={styles.dragHandle} />
-              <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle}>회원 정보</Text>
-                <TouchableOpacity onPress={closeDetailModal}><Text style={styles.closeIcon}>✕</Text></TouchableOpacity>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <Text style={styles.sheetTitle}>회원 상세 정보</Text>
+                <TouchableOpacity onPress={closeDetailModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Text style={{ color: '#999', fontSize: 24 }}>✕</Text>
+                </TouchableOpacity>
               </View>
-              <View style={styles.horizontalDivider} />
-              
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
               {selectedUser && (
-                <View style={styles.detailContainer}>
-                  <View style={styles.detailProfileWrapper}>
-                    {selectedUser.profileImageUrl ? (
-                      <Image source={{ uri: selectedUser.profileImageUrl }} style={styles.profileBig} />
-                    ) : selectedUser.name === '최강우' ? (
-                      <View style={[styles.textProfileImg, { width: 80, height: 80, borderRadius: 40 }]}>
-                        <Text style={[styles.textProfileText, { fontSize: 32 }]}>최</Text>
-                      </View>
-                    ) : (
-                      <Image source={require('../assets/profile.png')} style={styles.profileBig} />
-                    )}
-                    <Text style={styles.profileName}>{selectedUser.name}</Text>
-                  </View>
-                  
-                  <View style={styles.infoBox}>
-                    {renderDetailRow('이름', selectedUser.name)}
-                    {renderDetailRow('전화번호', selectedUser.phone)}
-                    {renderDetailRow('나이', selectedUser.age, '세')}
-                    {renderDetailRow('키', selectedUser.height, 'cm')}
-                    {renderDetailRow('몸무게', selectedUser.weight, 'kg')}
-                    {renderDetailRow('팔길이', selectedUser.arm, 'cm')}
-                    {renderDetailRow('암벽화 사이즈', selectedUser.shoe, 'mm')}
-                  </View>
-                  
-                  <TouchableOpacity style={styles.closeFullBtn} onPress={closeDetailModal}>
-                    <Text style={styles.closeFullBtnText}>닫기</Text>
-                  </TouchableOpacity>
+                <View style={styles.infoBox}>
+                  <View style={styles.detailRow}><Text style={styles.detailLabel}>이름</Text><Text style={styles.detailValue}>{selectedUser.name}</Text></View>
+                  <View style={styles.detailRow}><Text style={styles.detailLabel}>연락처</Text><Text style={styles.detailValue}>{selectedUser.phone}</Text></View>
+                  <View style={styles.detailRow}><Text style={styles.detailLabel}>키/몸무게</Text><Text style={styles.detailValue}>{selectedUser.height}cm / {selectedUser.weight}kg</Text></View>
                 </View>
               )}
-            </TouchableOpacity>
+              <TouchableOpacity style={styles.closeFullBtn} onPress={closeDetailModal}>
+                <Text style={styles.closeFullBtnText}>닫기</Text>
+              </TouchableOpacity>
+            </ScrollView>
           </Animated.View>
-        </TouchableOpacity>
+        </View>
       </Modal>
 
       <Modal
@@ -721,9 +726,8 @@ const ManagerDashboard = ({ navigation }: any) => {
                   onReadCode={(event: any) =>
                     handleBarCodeScanned(event.nativeEvent.codeStringValue)
                   }
-                  showFrame={false} // 💡 네이티브 기본 프레임 숨김 처리
+                  showFrame={false} 
                 />
-                {/* 💡 추가된 부분: 카메라 배경은 그대로 두고 중앙에 완벽한 정사각형 가이드라인 생성 */}
                 <View style={styles.customFrameOverlay}>
                   <View style={styles.customSquareGuide} />
                 </View>
@@ -805,41 +809,28 @@ const styles = StyleSheet.create({
   closeIcon: { color: '#999999', fontSize: 32 }, 
   scannerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
   
-  // 💡 추가된 커스텀 프레임 오버레이 스타일 (정사각형 가이드)
-  customFrameOverlay: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  customSquareGuide: {
-    width: '65%',
-    aspectRatio: 1, // 화면 너비의 65% 크기를 갖는 완벽한 정사각형
-    borderWidth: 3,
-    borderColor: '#A1BE44',
-    backgroundColor: 'transparent',
-    borderRadius: 16,
-  },
+  customFrameOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, justifyContent: 'center', alignItems: 'center' },
+  customSquareGuide: { width: '65%', aspectRatio: 1, borderWidth: 3, borderColor: '#A1BE44', backgroundColor: 'transparent', borderRadius: 16 },
 
-  processingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 20,
-  },
+  processingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', zIndex: 20 },
   processingText: { color: '#ffffff', fontSize: 18, marginTop: 12, fontWeight: 'bold' }, 
   scannerFooter: { padding: 40, alignItems: 'center', backgroundColor: '#1A1A1A' },
   scannerDesc: { color: '#ffffff', fontSize: 18, marginTop: 5 }, 
 
-  // ─── 커스텀 알림 모달 전용 스타일 ───
+  // ─── 💡 회원 정보 상세 팝업 및 공통 모달 디자인 통일 ───
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 25, paddingTop: 10, overflow: 'hidden', width: '100%' },
+  dragHandle: { width: 40, height: 4, backgroundColor: '#333', borderRadius: 2, alignSelf: 'center', marginTop: 10, marginBottom: 20 },
+  sheetTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+  
+  infoBox: { backgroundColor: '#262626', borderRadius: 15, padding: 20, marginBottom: 20 },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: '#333' },
+  detailLabel: { color: '#999', fontSize: 15 },
+  detailValue: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
+  closeFullBtn: { backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 10 },
+  closeFullBtnText: { color: '#000', fontWeight: 'bold', fontSize: 18 },
+
+  // ─── 커스텀 알림 및 삭제 모달 전용 스타일 ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, 
   resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, 
@@ -855,24 +846,6 @@ const styles = StyleSheet.create({
   deleteBtnYesText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
   deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
   deleteBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
-
-  // ─── 회원 상세 정보 팝업 전용 스타일 ───
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
-  bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%', maxHeight: '85%' },
-  dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
-  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, paddingHorizontal: 5 },
-  sheetTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' },
-  horizontalDivider: { height: 1, backgroundColor: '#333333', width: '100%', marginBottom: 20 },
-  detailContainer: { width: '100%' },
-  detailProfileWrapper: { alignSelf: 'center', alignItems: 'center', marginBottom: 25 },
-  profileBig: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#444' },
-  profileName: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginTop: 12 }, 
-  infoBox: { backgroundColor: '#262626', borderRadius: 16, padding: 20, marginBottom: 20 },
-  detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#333' },
-  detailLabel: { color: '#999', fontSize: 17, fontWeight: 'bold' }, 
-  detailValue: { color: '#fff', fontSize: 17, fontWeight: 'bold' }, 
-  closeFullBtn: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
-  closeFullBtnText: { color: '#00', fontSize: 18, fontWeight: 'bold' },
 });
 
 export default ManagerDashboard;

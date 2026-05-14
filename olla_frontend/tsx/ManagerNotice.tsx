@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, Modal, TextInput, KeyboardAvoidingView, Platform,
-  ActivityIndicator, Animated, RefreshControl
+  ActivityIndicator, Animated, RefreshControl, Dimensions, PanResponder, TouchableWithoutFeedback
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
@@ -60,10 +60,8 @@ const ManagerNotice = ({ route, navigation }: any) => {
     setResultModalVisible(true);
   };
 
-  // 💡 작성/수정 모달 상태 및 바텀 시트 애니메이션
+  // ─── 🌟 작성/수정 모달 상태 및 바텀 시트 드래그 애니메이션 로직 🌟 ───
   const [isWriteModalVisible, setWriteModalVisible] = useState(false);
-  const slideAnim = useRef(new Animated.Value(800)).current;
-
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [selectedNoticeId, setSelectedNoticeId] = useState<number | null>(null);
 
@@ -71,6 +69,40 @@ const ManagerNotice = ({ route, navigation }: any) => {
   const [newContent, setNewContent] = useState('');
   const [isImportant, setIsImportant] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // 💡 드래그 애니메이션용 변수
+  const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+  const WRITE_MODAL_HEIGHT = SCREEN_HEIGHT * 0.70; // 모달 기본 높이 (화면의 85%)
+  
+  const writeHeightAnim = useRef(new Animated.Value(0)).current;
+  const currentWriteSnap = useRef(WRITE_MODAL_HEIGHT);
+
+  const writePanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
+      onPanResponderGrant: () => {
+        writeHeightAnim.setOffset(currentWriteSnap.current);
+        writeHeightAnim.setValue(0);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        // 💡 위로 당겨서 커지는 기능 제한 (0으로 Math.min 적용)
+        writeHeightAnim.setValue(Math.min(0, -gestureState.dy));
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        writeHeightAnim.flattenOffset();
+        const finalHeight = currentWriteSnap.current - gestureState.dy;
+        const CLOSE_THRESHOLD = currentWriteSnap.current * 0.7; // 현재 높이의 70% 이하로 내리면 닫힘
+
+        if (finalHeight < CLOSE_THRESHOLD) {
+          closeWriteModal();
+        } else {
+          // 닫히지 않으면 원래 높이로 복귀
+          Animated.spring(writeHeightAnim, { toValue: currentWriteSnap.current, useNativeDriver: false }).start();
+        }
+      }
+    })
+  ).current;
 
   // 삭제 모달 상태
   const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
@@ -96,18 +128,15 @@ const ManagerNotice = ({ route, navigation }: any) => {
     [notices]
   );
 
-  // isRefresh 파라미터를 추가하여 새로고침 시에는 중앙 로딩 스피너를 무시하도록 처리
   const fetchNotices = async (isRefresh = false) => {
     try {
       if (!isRefresh) setLoading(true);
       const res = await axios.get(NOTICE_API, {
         params: { page: 0, size: 100, sort: 'createdAt,desc' },
       });
-      // ✅ ApiResponse Depth 1단계 추가 적용
       const list: Notice[] = res.data?.data?.data?.content ?? res.data?.data?.data ?? [];
       setNotices(list);
     } catch (error: any) {
-      // ✅ 에러 메시지 처리 적용
       const errorMessage = error.response?.data?.message || '공지사항을 불러오는데 실패했습니다.';
       showResultModal('오류', errorMessage, 'error');
     } finally {
@@ -117,17 +146,15 @@ const ManagerNotice = ({ route, navigation }: any) => {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchNotices(true); // 새로고침 시에는 true를 전달하여 중앙 로딩 방지
+    await fetchNotices(true); 
     setRefreshing(false);
   }, []);
 
   const fetchNoticeDetail = async (id: number): Promise<Notice | null> => {
     try {
       const res = await axios.get(`${NOTICE_API}/${id}`);
-      // ✅ ApiResponse Depth 1단계 추가 적용
       return res.data?.data?.data ?? null;
     } catch (error: any) {
-      // ✅ 에러 메시지 처리 적용
       const errorMessage = error.response?.data?.message || '공지 정보를 불러오는데 실패했습니다.';
       showResultModal('오류', errorMessage, 'error');
       return null;
@@ -143,10 +170,10 @@ const ManagerNotice = ({ route, navigation }: any) => {
     setNewContent('');
     setIsImportant(false);
     setWriteModalVisible(true);
-    // iOS 렌더링 버그 수정: 모달이 완전히 마운트된 후 애니메이션이 동작하도록 지연(50ms) 추가
-    setTimeout(() => {
-      Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
-    }, 50);
+    
+    currentWriteSnap.current = WRITE_MODAL_HEIGHT;
+    writeHeightAnim.setValue(0);
+    Animated.timing(writeHeightAnim, { toValue: WRITE_MODAL_HEIGHT, duration: 300, useNativeDriver: false }).start();
   };
 
   const openEditModal = async (notice: Notice) => {
@@ -159,10 +186,10 @@ const ManagerNotice = ({ route, navigation }: any) => {
     setNewContent(detail.content);
     setIsImportant(detail.important);
     setWriteModalVisible(true);
-    // iOS 렌더링 버그 수정: 모달 마운트 지연 시간 추가
-    setTimeout(() => {
-      Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
-    }, 50);
+    
+    currentWriteSnap.current = WRITE_MODAL_HEIGHT;
+    writeHeightAnim.setValue(0);
+    Animated.timing(writeHeightAnim, { toValue: WRITE_MODAL_HEIGHT, duration: 300, useNativeDriver: false }).start();
   };
 
   const openEditModalById = async (id: number) => {
@@ -174,16 +201,15 @@ const ManagerNotice = ({ route, navigation }: any) => {
     setNewContent(detail.content);
     setIsImportant(detail.important);
     setWriteModalVisible(true);
-    // iOS 렌더링 버그 수정: 모달 마운트 지연 시간 추가
-    setTimeout(() => {
-      Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
-    }, 50);
+    
+    currentWriteSnap.current = WRITE_MODAL_HEIGHT;
+    writeHeightAnim.setValue(0);
+    Animated.timing(writeHeightAnim, { toValue: WRITE_MODAL_HEIGHT, duration: 300, useNativeDriver: false }).start();
   };
 
   const closeWriteModal = (callback?: () => void) => {
-    Animated.timing(slideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => {
+    Animated.timing(writeHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
       setWriteModalVisible(false);
-      // 모달이 닫힌 후 연속으로 다른 모달을 띄울 수 있도록 콜백 처리
       if (callback) callback();
     });
   };
@@ -209,15 +235,13 @@ const ManagerNotice = ({ route, navigation }: any) => {
         await axios.put(`${NOTICE_API}/${selectedNoticeId}`, body);
       }
 
-      // iOS 버그 수정: 작성 모달이 완전히 닫힌 후(250ms+알파) 결과 모달 렌더링
       closeWriteModal(() => {
         setTimeout(() => {
           showResultModal('성공', modalMode === 'create' ? '새 공지가 등록되었습니다.' : '공지가 수정되었습니다.', 'success');
         }, 300);
       });
-      await fetchNotices(true); // 저장 후에도 부드러운 갱신을 위해 중앙 로딩 생략
+      await fetchNotices(true); 
     } catch (error: any) {
-      // ✅ 에러 메시지 처리 적용
       const msg = error?.response?.data?.message ?? '저장에 실패했습니다.';
       closeWriteModal(() => {
         setTimeout(() => {
@@ -244,13 +268,11 @@ const ManagerNotice = ({ route, navigation }: any) => {
     try {
       await axios.delete(`${NOTICE_API}/${noticeToDelete}`);
       cancelDelete();
-      // iOS 버그 수정: 삭제 모달이 닫힌 뒤 결과 모달이 열리도록 딜레이 추가
       setTimeout(() => {
         showResultModal('성공', '공지사항이 삭제되었습니다.', 'success');
       }, 300);
-      await fetchNotices(true); // 삭제 후에도 부드러운 갱신
+      await fetchNotices(true); 
     } catch (error: any) {
-      // ✅ 에러 메시지 처리 적용
       const errorMessage = error.response?.data?.message || '삭제에 실패했습니다.';
       cancelDelete();
       setTimeout(() => {
@@ -259,7 +281,6 @@ const ManagerNotice = ({ route, navigation }: any) => {
     }
   };
 
-  // 초기 로딩 시에만 렌더링
   if (loading) {
     return (
       <View style={[styles.background, styles.center]}>
@@ -336,76 +357,79 @@ const ManagerNotice = ({ route, navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 💡 작성 / 수정 바텀 시트 모달 */}
-      <Modal visible={isWriteModalVisible} animationType="fade" transparent={true}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => closeWriteModal()}>
-          <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: slideAnim }] }]}>
-            <TouchableOpacity activeOpacity={1}>
-              <View style={styles.dragHandle} />
-              <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle}>
-                  {modalMode === 'create' ? '새 공지 작성' : '공지 수정'}
-                </Text>
-                <TouchableOpacity onPress={() => closeWriteModal()}>
-                  <Text style={styles.closeIcon}>✕</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.horizontalDivider} />
-
-              <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-                  
-                  <Text style={styles.inputLabel}>공지 제목</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="공지 제목을 입력해주세요."
-                    placeholderTextColor="#666666"
-                    value={newTitle}
-                    onChangeText={setNewTitle}
-                  />
-
-                  <Text style={styles.inputLabel}>공지 내용</Text>
-                  <TextInput
-                    style={[styles.textInput, styles.contentInput]}
-                    placeholder="공지 내용을 입력해 주세요."
-                    placeholderTextColor="#666666"
-                    multiline={true}
-                    textAlignVertical="top"
-                    value={newContent}
-                    onChangeText={setNewContent}
-                  />
-
-                  <TouchableOpacity style={styles.checkboxRow} activeOpacity={0.8} onPress={() => setIsImportant(!isImportant)}>
-                    <View style={[styles.checkbox, isImportant && styles.checkboxChecked]}>
-                      {isImportant && <Text style={styles.checkmark}>✓</Text>}
-                    </View>
-                    <Text style={styles.checkboxLabel}>중요 공지로 설정</Text>
+      {/* 💡 작성 / 수정 바텀 시트 모달 (위로 확장 불가, 드래그 지원) */}
+      <Modal visible={isWriteModalVisible} animationType="fade" transparent={true} onRequestClose={() => closeWriteModal()}>
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={() => closeWriteModal()}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', flex: 1, justifyContent: 'flex-end' }} pointerEvents="box-none">
+            <Animated.View style={[styles.bottomSheet, { height: writeHeightAnim, overflow: 'hidden' }]}>
+              
+              <View {...writePanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
+                <View style={styles.dragHandle} />
+                <View style={styles.sheetHeader}>
+                  <Text style={styles.sheetTitle}>
+                    {modalMode === 'create' ? '새 공지 작성' : '공지 수정'}
+                  </Text>
+                  <TouchableOpacity onPress={() => closeWriteModal()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <Text style={styles.closeIcon}>✕</Text>
                   </TouchableOpacity>
+                </View>
+                <View style={styles.horizontalDivider} />
+              </View>
 
-                  <View style={styles.btnRow}>
-                    <TouchableOpacity style={styles.cancelBtn} onPress={() => closeWriteModal()} disabled={saving}>
-                      <Text style={styles.cancelBtnText}>취소</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.registerBtn, (!newTitle || !newContent || saving) && { opacity: 0.5 }]}
-                      onPress={handleSaveNotice}
-                      disabled={!newTitle || !newContent || saving}
-                    >
-                      {saving
-                        ? <ActivityIndicator size="small" color="#000" />
-                        : <Text style={styles.registerBtnText}>{modalMode === 'create' ? '등록하기' : '수정하기'}</Text>
-                      }
-                    </TouchableOpacity>
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+                <Text style={styles.inputLabel}>공지 제목</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="공지 제목을 입력해주세요."
+                  placeholderTextColor="#666666"
+                  value={newTitle}
+                  onChangeText={setNewTitle}
+                />
+
+                <Text style={styles.inputLabel}>공지 내용</Text>
+                <TextInput
+                  style={[styles.textInput, styles.contentInput]}
+                  placeholder="공지 내용을 입력해 주세요."
+                  placeholderTextColor="#666666"
+                  multiline={true}
+                  textAlignVertical="top"
+                  value={newContent}
+                  onChangeText={setNewContent}
+                />
+
+                <TouchableOpacity style={styles.checkboxRow} activeOpacity={0.8} onPress={() => setIsImportant(!isImportant)}>
+                  <View style={[styles.checkbox, isImportant && styles.checkboxChecked]}>
+                    {isImportant && <Text style={styles.checkmark}>✓</Text>}
                   </View>
-                </ScrollView>
-              </KeyboardAvoidingView>
-            </TouchableOpacity>
-          </Animated.View>
-        </TouchableOpacity>
+                  <Text style={styles.checkboxLabel}>중요 공지로 설정</Text>
+                </TouchableOpacity>
+
+                <View style={styles.btnRow}>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={() => closeWriteModal()} disabled={saving}>
+                    <Text style={styles.cancelBtnText}>취소</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.registerBtn, (!newTitle || !newContent || saving) && { opacity: 0.5 }]}
+                    onPress={handleSaveNotice}
+                    disabled={!newTitle || !newContent || saving}
+                  >
+                    {saving
+                      ? <ActivityIndicator size="small" color="#000" />
+                      : <Text style={styles.registerBtnText}>{modalMode === 'create' ? '등록하기' : '수정하기'}</Text>
+                    }
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </Animated.View>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       {/* 삭제 확인 모달 */}
-      <Modal visible={isDeleteModalVisible} animationType="fade" transparent={true}>
+      <Modal visible={isDeleteModalVisible} animationType="fade" transparent={true} onRequestClose={cancelDelete}>
         <View style={styles.centerModalOverlay}>
           <View style={styles.deleteModalBox}>
             <Text style={styles.deleteTitle}>공지사항을 삭제하시겠습니까?</Text>
@@ -425,87 +449,87 @@ const ManagerNotice = ({ route, navigation }: any) => {
   );
 };
 
-// ─────────────────────────── 스타일 (글씨 크기 및 여백 확대 적용) ───────────────────────────
+// ─────────────────────────── 스타일 ───────────────────────────
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A', paddingHorizontal: 20, paddingTop: 20 },
   center:     { justifyContent: 'center', alignItems: 'center' },
   scrollContent: { paddingBottom: 100 },
-  emptyText: { color: '#666', fontSize: 17, textAlign: 'center', marginTop: 60 }, // 💡 15 -> 17
+  emptyText: { color: '#666', fontSize: 17, textAlign: 'center', marginTop: 60 }, 
 
   noticeCard: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#2C2C2C', borderRadius: 16, // 💡 12 -> 16
-    paddingVertical: 18, paddingHorizontal: 20, // 💡 패딩 14, 16 -> 18, 20
-    marginBottom: 15, borderWidth: 1, borderColor: '#333333', // 💡 마진 12 -> 15
+    backgroundColor: '#2C2C2C', borderRadius: 16, 
+    paddingVertical: 18, paddingHorizontal: 20, 
+    marginBottom: 15, borderWidth: 1, borderColor: '#333333', 
   },
 
   noticeContent: { flex: 1, flexDirection: 'column', alignItems: 'flex-start', paddingRight: 10 },
 
-  noticeHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 }, // 💡 4 -> 6
-  noticeBadge: { backgroundColor: '#A1BE44', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, marginRight: 8 }, // 💡 6, 2 -> 8, 4
-  noticeBadgeText: { color: '#1A1A1A', fontSize: 12, fontWeight: 'bold' }, // 💡 10 -> 12
-  noticeTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', flex: 1 }, // 💡 15 -> 18
+  noticeHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 }, 
+  noticeBadge: { backgroundColor: '#A1BE44', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, marginRight: 8 }, 
+  noticeBadgeText: { color: '#1A1A1A', fontSize: 12, fontWeight: 'bold' }, 
+  noticeTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', flex: 1 }, 
 
-  noticeDate:   { color: '#999999', fontSize: 14 }, // 💡 12 -> 14
-  noticeAuthor: { color: '#666666', fontSize: 13, marginTop: 4 }, // 💡 11 -> 13
+  noticeDate:   { color: '#999999', fontSize: 14 }, 
+  noticeAuthor: { color: '#666666', fontSize: 13, marginTop: 4 }, 
 
   noticeActions: { flexDirection: 'row', alignItems: 'center' },
-  actionBtn:  { padding: 8, marginLeft: 4 }, // 💡 6, 2 -> 8, 4
-  deleteBtn: { borderRadius: 8 }, // 💡 삭제 버튼 강조
-  actionIcon: { width: 22, height: 22, resizeMode: 'contain' }, // 💡 18 -> 22
+  actionBtn:  { padding: 8, marginLeft: 4 }, 
+  deleteBtn: { borderRadius: 8 }, 
+  actionIcon: { width: 22, height: 22, resizeMode: 'contain' }, 
 
   fab: {
     position: 'absolute', bottom: 15, right: 20, backgroundColor: '#A1BE44',
-    paddingHorizontal: 25, paddingVertical: 18, borderRadius: 35, elevation: 5, // 💡 패딩 및 라운드 확대
+    paddingHorizontal: 25, paddingVertical: 18, borderRadius: 35, elevation: 5, 
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4
   },
-  fabText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  fabText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
 
   // 💡 바텀 시트 모달 스타일
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
-  bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%', maxHeight: '90%' },
+  bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, width: '100%' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, paddingHorizontal: 5 },
-  sheetTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' }, // 💡 20 -> 23
-  closeIcon: { color: '#999999', fontSize: 28, paddingHorizontal: 10 }, // 💡 24 -> 28
+  sheetTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' }, 
+  closeIcon: { color: '#999999', fontSize: 28, paddingHorizontal: 10 }, 
   horizontalDivider: { height: 1, backgroundColor: '#333333', width: '100%', marginBottom: 20 },
 
-  inputLabel: { color: '#ffffff', fontSize: 16, fontWeight: '600', marginBottom: 10, marginLeft: 2 }, // 💡 14 -> 16
+  inputLabel: { color: '#ffffff', fontSize: 16, fontWeight: '600', marginBottom: 10, marginLeft: 2 }, 
   textInput: {
     backgroundColor: '#000', borderWidth: 1, borderColor: '#333333',
-    borderRadius: 12, color: '#ffffff', padding: 16, fontSize: 17, marginBottom: 20 // 💡 패딩 14 -> 16, 15 -> 17
+    borderRadius: 12, color: '#ffffff', padding: 16, fontSize: 17, marginBottom: 20 
   },
-  contentInput: { height: 160, paddingTop: 16 }, // 💡 140 -> 160
+  contentInput: { height: 160, paddingTop: 16 }, 
 
-  checkboxRow:     { flexDirection: 'row', alignItems: 'center', marginBottom: 25, marginTop: 5 }, // 💡 24 -> 25
-  checkbox:        { width: 24, height: 24, borderWidth: 2, borderColor: '#666666', borderRadius: 6, alignItems: 'center', justifyContent: 'center', marginRight: 10 }, // 💡 22 -> 24
+  checkboxRow:     { flexDirection: 'row', alignItems: 'center', marginBottom: 25, marginTop: 5 }, 
+  checkbox:        { width: 24, height: 24, borderWidth: 2, borderColor: '#666666', borderRadius: 6, alignItems: 'center', justifyContent: 'center', marginRight: 10 }, 
   checkboxChecked: { backgroundColor: '#A1BE44', borderColor: '#A1BE44' },
-  checkmark:       { color: '#000000', fontSize: 16, fontWeight: 'bold' }, // 💡 14 -> 16
-  checkboxLabel:   { color: '#ffffff', fontSize: 17 }, // 💡 15 -> 17
+  checkmark:       { color: '#000000', fontSize: 16, fontWeight: 'bold' }, 
+  checkboxLabel:   { color: '#ffffff', fontSize: 17 }, 
 
   btnRow:       { flexDirection: 'row', justifyContent: 'space-between' },
-  cancelBtn:    { flex: 1, backgroundColor: '#333333', paddingVertical: 18, borderRadius: 12, alignItems: 'center', marginRight: 6 }, // 💡 15 -> 18
-  cancelBtnText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
-  registerBtn:  { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 18, borderRadius: 12, alignItems: 'center', marginLeft: 6 }, // 💡 15 -> 18
-  registerBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  cancelBtn:    { flex: 1, backgroundColor: '#333333', paddingVertical: 18, borderRadius: 12, alignItems: 'center', marginRight: 6 }, 
+  cancelBtnText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
+  registerBtn:  { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 18, borderRadius: 12, alignItems: 'center', marginLeft: 6 }, 
+  registerBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
 
   // 삭제 모달 스타일 (기존 중앙 팝업 통일)
   centerModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  deleteModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' }, // 💡 300 -> 320
-  deleteTitle:    { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginBottom: 25, textAlign: 'center' }, // 💡 16 -> 20
+  deleteModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' }, 
+  deleteTitle:    { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginBottom: 25, textAlign: 'center' }, 
   deleteBtnRow:   { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  btnYes:         { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginRight: 5 }, // 💡 12 -> 16
-  btnNo:          { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginLeft: 5 }, // 💡 12 -> 16
-  btnTextBlack:   { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
-  btnTextWhite:   { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  btnYes:         { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginRight: 5 }, 
+  btnNo:          { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginLeft: 5 }, 
+  btnTextBlack:   { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
+  btnTextWhite:   { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
 
   // ─── 커스텀 알림 모달 전용 스타일 (통일) ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, // 💡 300 -> 320
-  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, // 💡 18 -> 20
-  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, // 💡 15 -> 17
-  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, // 💡 14 -> 16
-  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, // 💡 16 -> 18
+  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, 
+  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, 
+  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, 
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, 
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
 });
 
 export default ManagerNotice;
