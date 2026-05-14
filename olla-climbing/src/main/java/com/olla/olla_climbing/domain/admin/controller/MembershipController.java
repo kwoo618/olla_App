@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/v1/memberships")
 @RequiredArgsConstructor
@@ -23,9 +25,13 @@ public class MembershipController {
 
     @GetMapping("/me")
     @Operation(summary = "내 이용권 조회")
-    public ResponseEntity<ApiResponse<MembershipResponse>> getMyMembership(@AuthenticationPrincipal Member member) {
+    // 💡 단일 객체가 아닌 List<MembershipResponse> 로 반환 타입 변경
+    public ResponseEntity<ApiResponse<List<MembershipResponse>>> getMyMembership(@AuthenticationPrincipal Member member) {
         if (member == null) throw new IllegalArgumentException("로그인 인증 정보가 없습니다.");
-        MembershipResponse response = membershipService.getMyMembership(member.getId());
+
+        // 💡 서비스에서 받아오는 타입도 List로 맞춰줍니다.
+        List<MembershipResponse> response = membershipService.getMyMembership(member.getId());
+
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 }

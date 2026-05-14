@@ -51,6 +51,7 @@ public class EnduranceRankingService extends BaseRankingService {
             return EnduranceRankingResponse.builder()
                     .memberId(r.getMember().getId())
                     .name(r.getMember().getName())
+                    .profileImageUrl(r.getMember().getProfileImageUrl()) // 💡 추가
                     .ranking(r.getRanking())
                     .score(r.getScore())
                     .oneWayCount(bestRecord != null ? bestRecord.getOneWayCount() : 0)

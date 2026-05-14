@@ -23,6 +23,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.util.StringUtils;
 import org.springframework.scheduling.annotation.Scheduled;
 
+import java.util.stream.Collectors;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -125,25 +126,13 @@ public class MembershipAdminService {
         googleSheetsService.unpauseMembershipData(membership.getMember().getId(), newEndDateStr);
     }
 
-    private Membership getRepresentativeMembership(Long memberId) {
+    @Transactional(readOnly = true)
+    public List<MembershipResponse> getMyMembership(Long memberId) {
+        // 내 이용권 조회도 여러 개가 있을 수 있으니 List 반환으로 변경 (컨트롤러 쪽 리턴 타입도 맞춰야 할 수 있음)
         List<Membership> activeMemberships = membershipRepository.findAllByMemberIdAndStatusIn(
                 memberId, List.of(MembershipStatus.ACTIVE, MembershipStatus.HOLDING)
         );
-
-        if (activeMemberships.isEmpty()) return null;
-
-        // 기간권(durationMonth가 있는 것)을 최우선으로 리턴, 없으면 일일권/횟수권 리턴
-        return activeMemberships.stream()
-                .filter(m -> m.getDurationMonth() != null)
-                .findFirst()
-                .orElse(activeMemberships.get(0));
-    }
-
-    @Transactional(readOnly = true)
-    public MembershipResponse getMyMembership(Long memberId) {
-        Membership repMembership = getRepresentativeMembership(memberId);
-        if (repMembership == null) return null;
-        return MembershipResponse.from(repMembership);
+        return activeMemberships.stream().map(MembershipResponse::from).collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
@@ -157,8 +146,11 @@ public class MembershipAdminService {
         }
 
         return memberPage.map(member -> {
-            Membership repMembership = getRepresentativeMembership(member.getId());
-            return AdminMemberResponse.from(member, repMembership);
+            // 💡 [수정] 1개를 뽑지 않고, DB에서 가져온 전체(List)를 그대로 DTO로 넘깁니다.
+            List<Membership> activeMemberships = membershipRepository.findAllByMemberIdAndStatusIn(
+                    member.getId(), List.of(MembershipStatus.ACTIVE, MembershipStatus.HOLDING)
+            );
+            return AdminMemberResponse.from(member, activeMemberships);
         });
     }
 

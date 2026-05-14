@@ -31,14 +31,17 @@ public class BeginnerRankingService {
         List<Ranking> masterRankings = rankingRepository.findByRankTypeAndDifficultyAndIsMasterTrueOrderByBaseDateDesc(RankType.BEGINNER, difficulty);
 
         List<BeginnerRankingResponse.MasterDto> masterDtos = masterRankings.stream()
-                .map(r -> BeginnerRankingResponse.MasterDto.builder()
-                        .memberId(r.getMember().getId())
-                        .name(r.getMember().getName())
-                        .score(r.getScore())
-                        .attemptType(r.getAttemptType())
-                        .achievedAt(r.getBaseDate())
-                        .build())
-                .collect(Collectors.toList());
+                .map(r -> {
+                    AttemptType type = (r.getScore() % 1 != 0) ? AttemptType.ROUND_TRIP : AttemptType.ONE_WAY;
+                    return BeginnerRankingResponse.MasterDto.builder()
+                            .memberId(r.getMember().getId())
+                            .name(r.getMember().getName())
+                            .profileImageUrl(r.getMember().getProfileImageUrl()) // 💡 추가
+                            .score(Math.floor(r.getScore()))
+                            .attemptType(type)
+                            .achievedAt(r.getBaseDate())
+                            .build();
+                }).collect(Collectors.toList());
 
         List<BeginnerRankingResponse.ChallengerDto> challengerDtos = new ArrayList<>();
         LocalDateTime latestBaseDate = rankingRepository.findLatestBaseDate(RankType.BEGINNER, difficulty).orElse(null);
@@ -47,15 +50,18 @@ public class BeginnerRankingService {
             List<Ranking> challengerRankings = rankingRepository.findByRankTypeAndDifficultyAndIsMasterFalseAndBaseDateOrderByRankingAsc(RankType.BEGINNER, difficulty, latestBaseDate);
 
             challengerDtos = challengerRankings.stream()
-                    .map(r -> BeginnerRankingResponse.ChallengerDto.builder()
-                            .memberId(r.getMember().getId())
-                            .name(r.getMember().getName())
-                            .ranking(r.getRanking())
-                            .score(r.getScore())
-                            .attemptType(r.getAttemptType())
-                            .achievedAt(r.getBaseDate())
-                            .build())
-                    .collect(Collectors.toList());
+                    .map(r -> {
+                        AttemptType type = r.getAttemptType();
+                        return BeginnerRankingResponse.ChallengerDto.builder()
+                                .memberId(r.getMember().getId())
+                                .name(r.getMember().getName())
+                                .profileImageUrl(r.getMember().getProfileImageUrl()) // 💡 추가
+                                .ranking(r.getRanking())
+                                .score(Math.floor(r.getScore()))
+                                .attemptType(type)
+                                .achievedAt(r.getBaseDate())
+                                .build();
+                    }).collect(Collectors.toList());
         }
         return BeginnerRankingResponse.builder().masters(masterDtos).challengers(challengerDtos).build();
     }

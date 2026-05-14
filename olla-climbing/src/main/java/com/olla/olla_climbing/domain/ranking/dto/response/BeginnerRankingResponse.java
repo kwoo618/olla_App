@@ -11,17 +11,18 @@ import java.util.List;
 @Builder
 public class BeginnerRankingResponse {
 
-    private List<MasterDto> masters;            // 순위 없는 명예의 전당 목록
-    private List<ChallengerDto> challengers;    // 순위가 있는 도전자 목록
+    private List<MasterDto> masters;
+    private List<ChallengerDto> challengers;
 
     @Getter
     @Builder
     public static class MasterDto {
         private Long memberId;
         private String name;
-        private Double score; // 도달 홀드 수 (만점)
+        private String profileImageUrl;
+        private Double score;
         private AttemptType attemptType;
-        private LocalDateTime achievedAt; // 달성 날짜 (baseDate 활용)
+        private LocalDateTime achievedAt;
     }
 
     @Getter
@@ -29,8 +30,9 @@ public class BeginnerRankingResponse {
     public static class ChallengerDto {
         private Long memberId;
         private String name;
-        private Integer ranking; // 현재 등수
-        private Double score; // 최고 도달 홀드 수
+        private String profileImageUrl;
+        private Integer ranking;
+        private Double score;
         private AttemptType attemptType;
         private LocalDateTime achievedAt;
     }

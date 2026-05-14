@@ -6,49 +6,63 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.time.LocalDate;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Getter
 @Builder
 public class AdminMemberResponse {
     private Long memberId;
-    private Long membershipId; // 🔥 프론트엔드의 일시정지 통신을 위해 반드시 추가되어야 하는 필드!
     private String name;
+    private String profileImageUrl; // 💡 프론트 요청: 관리자 리스트 프사 추가
     private String phone;
-
     private String role;
     private boolean isDeleted;
+    private List<MembershipDto> memberships;
 
-    private String membershipStatus;
-    private String membershipType;
-    private LocalDate startDate;
-    private LocalDate endDate;
-    private Integer remainingCount;
+    @Getter
+    @Builder
+    public static class MembershipDto {
+        private Long membershipId;
+        private String membershipStatus;
+        private String membershipType;
+        private LocalDate startDate;
+        private LocalDate endDate;
+        private Integer remainingCount;
+    }
 
-    public static AdminMemberResponse from(Member member, Membership membership) {
-        if (membership == null) {
+    public static AdminMemberResponse from(Member member, List<Membership> activeMemberships) {
+
+        if (activeMemberships == null || activeMemberships.isEmpty()) {
             return AdminMemberResponse.builder()
                     .memberId(member.getId())
-                    // membershipId는 매핑하지 않음 (null)
                     .name(member.getName())
+                    .profileImageUrl(member.getProfileImageUrl())
                     .phone(member.getPhone())
-                    .role(member.getRole() != null ? member.getRole().name() : "USER") // 💡 Null 방어
+                    .role(member.getRole() != null ? member.getRole().name() : "USER")
                     .isDeleted(member.isDeleted())
-                    .membershipStatus("NONE")
+                    .memberships(List.of())
                     .build();
         }
 
+        List<MembershipDto> membershipDtos = activeMemberships.stream()
+                .map(m -> MembershipDto.builder()
+                        .membershipId(m.getId())
+                        .membershipStatus(m.getStatus().name())
+                        .membershipType(m.getMembershipTypeName())
+                        .startDate(m.getStartDate())
+                        .endDate(m.getEndDate())
+                        .remainingCount(m.getRemainingCount())
+                        .build())
+                .collect(Collectors.toList());
+
         return AdminMemberResponse.builder()
                 .memberId(member.getId())
-                .membershipId(membership.getId()) // (동철 수정) 멤버십 아이디 주는게 없어서 추가 
                 .name(member.getName())
-                .phone(member.getPhone())
-                .role(member.getRole() != null ? member.getRole().name() : "USER") // 💡 Null 방어
+                .profileImageUrl(member.getProfileImageUrl())
+                .role(member.getRole() != null ? member.getRole().name() : "USER")
                 .isDeleted(member.isDeleted())
-                .membershipStatus(membership.getStatus().name())
-                .membershipType(membership.getMembershipTypeName())
-                .startDate(membership.getStartDate()) // (동철 수정) 시작일 
-                .endDate(membership.getEndDate())
-                .remainingCount(membership.getRemainingCount())
+                .memberships(membershipDtos)
                 .build();
     }
 }

@@ -11,8 +11,8 @@ import java.util.List;
 public class SeriesRankingResponse {
     private Long memberId;
     private String name;
+    private String profileImageUrl; // 💡 추가
     private Integer ranking;
     private Double totalScore;
-
-    private List<Difficulty> sequenceLog; // 예: [WHITE, YELLOW, GREEN]
+    private List<Difficulty> sequenceLog;
 }

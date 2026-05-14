@@ -48,6 +48,13 @@ public class MemberResponse {
         MemberPrivacy privacy = member.getMemberPrivacy();
         NotificationSetting noti = member.getNotificationSetting();
 
+        Integer calculatedYearAge = null;
+        if (member.getBirthDate() != null) {
+            calculatedYearAge = java.time.LocalDate.now().getYear() - member.getBirthDate().getYear();
+        } else if (detail != null) {
+            calculatedYearAge = detail.getAge(); // 생년월일이 없으면 기존 상세정보의 나이 사용
+        }
+
         return MemberResponse.builder()
                 .id(member.getId())
                 .loginId(member.getLoginId())
@@ -60,7 +67,7 @@ public class MemberResponse {
                 .role(member.getRole() != null ? member.getRole().name() : "USER")
 
                 // Detail 매핑 (Null 안전 보장)
-                .age(detail != null ? detail.getAge() : null)
+                .age(calculatedYearAge)
                 .height(detail != null ? detail.getHeight() : null)
                 .weight(detail != null ? detail.getWeight() : null)
                 .armSpan(detail != null ? detail.getArmSpan() : null)
