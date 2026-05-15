@@ -1,5 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, TextInput, RefreshControl, KeyboardAvoidingView, Platform, Keyboard, Dimensions, PanResponder, TouchableWithoutFeedback } from 'react-native';
+import { 
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, 
+  Animated, TextInput, RefreshControl, KeyboardAvoidingView, Platform, 
+  Keyboard, Dimensions, PanResponder, TouchableWithoutFeedback, ActivityIndicator 
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
@@ -16,7 +21,7 @@ const authHeader = async () => {
 
 const p = (n: number) => String(n).padStart(2, '0');
 
-// 💡 빈 문자열이나 "null" 텍스트로 인해 이미지가 안 뜨는 현상 방지 헬퍼 함수
+// 빈 문자열이나 "null" 텍스트 방지 헬퍼 함수
 const getProfileImage = (url: string | null | undefined) => {
   if (url && typeof url === 'string' && url.trim() !== '' && url !== 'null' && url !== 'undefined') {
     return { uri: url };
@@ -24,7 +29,15 @@ const getProfileImage = (url: string | null | undefined) => {
   return require('../assets/profile.png');
 };
 
-// 💡 성별 영문값을 한글로 변환하는 헬퍼 함수
+// 날짜 포맷 함수 (YYYY.MM.DD HH:MM)
+const formatCommentDate = (dateStr: string) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  return `${d.getFullYear()}.${p(d.getMonth()+1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
+// 성별 변환 함수
 const translateGender = (gender: string) => {
   if (!gender || gender === '-') return '-';
   const g = String(gender).toUpperCase();
@@ -33,7 +46,6 @@ const translateGender = (gender: string) => {
   return gender;
 };
 
-// 💡 백엔드 응답 규격에 맞춘 새로운 댓글 타입 정의
 interface CommentType {
   id: number;
   content: string;
@@ -43,13 +55,14 @@ interface CommentType {
   writerProfileImageUrl?: string | null;
   profileImage?: string | null;
   createdAt: string;
-  children: CommentType[]; // 대댓글 리스트
+  children: CommentType[]; 
 }
 
 const CommunityScreen = ({ route, navigation }: any) => {
   const [refreshing, setRefreshing] = useState(false);
   const isFocused = useIsFocused();
   const currentFilter = route?.params?.filter || 'ALL';
+  const [loading, setLoading] = useState(true);
 
   // ─── 공통 알림 모달 상태 ───
   const [resultModalVisible, setResultModalVisible] = useState(false);
@@ -73,7 +86,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
   const [posts, setPosts] = useState<any[]>([]);
   const [myNickname, setMyNickname] = useState('');
   const [myUserId, setMyUserId] = useState<number | null>(null);
-  const [myProfileImageUrl, setMyProfileImageUrl] = useState<string | null>(null); // 💡 나의 프로필 이미지 상태 추가
+  const [myProfileImageUrl, setMyProfileImageUrl] = useState<string | null>(null); 
   
   const [selectedTab, setSelectedTab] = useState('전체');
   const [searchKeyword, setSearchKeyword] = useState('');
@@ -81,7 +94,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
 
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
   const [closeTarget, setCloseTarget] = useState<number | null>(null);
-  const [selectedUser, setSelectedUser] = useState<any>(null);
   const [isCreateVisible, setCreateVisible] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editPostId, setEditPostId] = useState<number | null>(null);
@@ -93,24 +105,22 @@ const CommunityScreen = ({ route, navigation }: any) => {
   const [comments, setComments] = useState<CommentType[]>([]);
   const [commentInput, setCommentInput] = useState('');
   const [replyingTo, setReplyingTo] = useState<{id: number, name: string} | null>(null);
-  
-  // 본인 댓글 삭제 확인 상태
   const [commentDeleteTarget, setCommentDeleteTarget] = useState<number | null>(null);
 
-  const detailAnim = useRef(new Animated.Value(800)).current;
-  const createAnim = useRef(new Animated.Value(800)).current;
-
-  // ─── 댓글창 드래그 앤 드롭 (점프/튕김 현상 완벽 해결) ───
+  // ─── 🌟 팝업창 공통 드래그 앤 드롭 치수 및 로직 🌟 ───
   const { height: SCREEN_HEIGHT } = Dimensions.get('window');
   const HALF_SCREEN = SCREEN_HEIGHT * 0.6; 
+  const CREATE_SCREEN = SCREEN_HEIGHT * 0.85; 
   const FULL_SCREEN = SCREEN_HEIGHT * 0.95; 
+  const DETAIL_MODAL_HEIGHT = SCREEN_HEIGHT * 0.65; // 프로필 상세 높이 설정 (65%)
   const THRESHOLD = (HALF_SCREEN + FULL_SCREEN) / 2; 
   const CLOSE_THRESHOLD = HALF_SCREEN * 0.7; 
 
+  // 1️⃣ 댓글창 전용 애니메이션/PanResponder
   const commentHeightAnim = useRef(new Animated.Value(0)).current;
   const currentSnap = useRef(HALF_SCREEN); 
 
-  const panResponder = useRef(
+  const commentPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
@@ -138,6 +148,69 @@ const CommunityScreen = ({ route, navigation }: any) => {
     })
   ).current;
 
+  // 2️⃣ 작성창 전용 애니메이션/PanResponder
+  const createHeightAnim = useRef(new Animated.Value(0)).current;
+  const currentCreateSnap = useRef(HALF_SCREEN);
+
+  const createPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
+      onPanResponderGrant: () => {
+        createHeightAnim.setOffset(currentCreateSnap.current);
+        createHeightAnim.setValue(0);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        createHeightAnim.setValue(-gestureState.dy);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        createHeightAnim.flattenOffset();
+        const finalHeight = currentCreateSnap.current - gestureState.dy;
+
+        if (finalHeight > THRESHOLD) {
+          currentCreateSnap.current = FULL_SCREEN;
+          Animated.spring(createHeightAnim, { toValue: FULL_SCREEN, useNativeDriver: false }).start();
+        } else if (finalHeight < CLOSE_THRESHOLD) {
+          closeCreateModal();
+        } else {
+          currentCreateSnap.current = HALF_SCREEN;
+          Animated.spring(createHeightAnim, { toValue: HALF_SCREEN, useNativeDriver: false }).start();
+        }
+      }
+    })
+  ).current;
+
+  // 3️⃣ 회원 정보 상세 팝업 애니메이션 (위로 확장 불가)
+  const [isDetailVisible, setDetailVisible] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  
+  const detailHeightAnim = useRef(new Animated.Value(0)).current;
+  const currentDetailSnap = useRef(DETAIL_MODAL_HEIGHT);
+
+  const detailPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
+      onPanResponderGrant: () => {
+        detailHeightAnim.setOffset(currentDetailSnap.current);
+        detailHeightAnim.setValue(0);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        detailHeightAnim.setValue(Math.min(0, -gestureState.dy));
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        detailHeightAnim.flattenOffset();
+        const finalHeight = currentDetailSnap.current - gestureState.dy;
+
+        if (finalHeight < currentDetailSnap.current * 0.7) {
+          closeDetailModal();
+        } else {
+          Animated.spring(detailHeightAnim, { toValue: currentDetailSnap.current, useNativeDriver: false }).start();
+        }
+      }
+    })
+  ).current;
+
   useEffect(() => { 
     if (isFocused) {
       initData(currentFilter); 
@@ -160,8 +233,8 @@ const CommunityScreen = ({ route, navigation }: any) => {
         uName = d.name || ''; 
         uNick = d.nickname || d.name || ''; 
         uId = d.id || d.memberId || null;
-        setMyNickname(uNick || uName); setMyUserId(uId);
-        // 💡 프로필 이미지 키값 다양성 대응 (profileImageUrl, profileImage 등)
+        setMyNickname(uNick || uName); 
+        setMyUserId(uId);
         setMyProfileImageUrl(d.profileImageUrl || d.profileImage || null); 
       }
     } catch (e: any) {
@@ -187,6 +260,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
 
   const fetchPosts = async (uName: string, uNick: string, uId: number | null, filterToUse: string) => {
     try {
+      setLoading(true);
       const headers = await authHeader();
       const urlMap: any = { MY_WRITTEN: `${POSTS}/me`, MY_APPLIED: `${POSTS}/me/applied` };
       const url = `${urlMap[filterToUse] || POSTS}?page=0&size=100`;
@@ -212,6 +286,8 @@ const CommunityScreen = ({ route, navigation }: any) => {
     } catch (e: any) {
       const errorMessage = e.response?.data?.message || '게시글을 가져오지 못했습니다.';
       showResultModal('불러오기 실패', errorMessage, 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -247,7 +323,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
         viewCount: item.viewCount||0,
         likeCount: item.likeCount||0, isLiked: item.liked === true || item.isLiked === true,
         differentGym: item.differentGym, gymPlace: item.gymPlace,
-        // 💡 게시글 목록용 프로필 이미지 연동 (백엔드 키값의 다양성 방어)
         profileImageUrl: item.writerProfileImageUrl || item.writerProfileImage || item.memberProfileImageUrl || item.profileImageUrl || item.profileImage || null, 
       };
     });
@@ -404,7 +479,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
       
       if (!d) { showResultModal('프로필 조회 불가', '정보를 불러올 수 없습니다.', 'error'); return; }
       
-      // 💡 서버에서 보내는 JSON 플랫 구조 (isPublicPhone 등) 및 중첩 구조 모두 대응
       const detail = d.detail || d;
       const privacy = d.privacy || d;
 
@@ -412,15 +486,14 @@ const CommunityScreen = ({ route, navigation }: any) => {
         name: d.name || authorName,
         phone: d.phone || '-',
         age: detail.age || d.age || '-',
-        gender: translateGender(detail.gender || d.gender || '-'), // 💡 MALE 등을 남자로 한글 변환 적용
+        gender: translateGender(detail.gender || d.gender || '-'),
         height: detail.height || d.height || '-',
         weight: detail.weight || d.weight || '-',
         arm: detail.armSpan || d.armSpan || '-',
         shoe: detail.footSize || d.footSize || '-',
-        profileImageUrl: d.profileImageUrl || d.profileImage || null, // 💡 프로필 이미지 키값 방어
+        profileImageUrl: d.profileImageUrl || d.profileImage || null, 
         toggles: {
           showName: true,
-          // 💡 본인이면 무조건 노출, 타인이면 공개 설정(true)에 따라 노출
           showPhone: isMine || privacy.isPublicPhone === true || privacy.phonePublic === true,
           showAge: true,
           showHeight: isMine || privacy.isHeightPublic === true || privacy.heightPublic === true,
@@ -430,17 +503,25 @@ const CommunityScreen = ({ route, navigation }: any) => {
         },
         isMe: isMine
       });
-      setTimeout(() => Animated.timing(detailAnim,{toValue:0,duration:300,useNativeDriver:true}).start(), 50);
+
+      setDetailVisible(true);
+      currentDetailSnap.current = DETAIL_MODAL_HEIGHT;
+      detailHeightAnim.setValue(0);
+      Animated.timing(detailHeightAnim, { toValue: DETAIL_MODAL_HEIGHT, duration: 300, useNativeDriver: false }).start();
     } catch (e: any) {
       const errorMessage = e.response?.data?.message || '정보를 불러올 수 없습니다.';
       showResultModal('프로필 조회 불가', errorMessage, 'error');
     }
   };
 
-  const closeDetailModal = () =>
-    Animated.timing(detailAnim,{toValue:800,duration:250,useNativeDriver:true}).start(() => setSelectedUser(null));
+  const closeDetailModal = () => {
+    Animated.timing(detailHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => { 
+      setDetailVisible(false); 
+      setSelectedUser(null); 
+    });
+  };
 
-  // ─── 💡 실제 API 통신 댓글 기능 로직 ───
+  // ─── 💡 댓글 기능 로직 ───
   const fetchComments = async (postId: number) => {
     try {
       const headers = await authHeader();
@@ -487,7 +568,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
       setReplyingTo(null);
       Keyboard.dismiss();
       
-      await fetchComments(selectedPost.id); // 작성 후 즉시 새로고침
+      await fetchComments(selectedPost.id); 
     } catch (e: any) {
       const errorMessage = e.response?.data?.message || '댓글을 작성할 수 없습니다.';
       showResultModal('오류', errorMessage, 'error');
@@ -501,7 +582,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
       await axios.delete(`${POSTS}/${selectedPost.id}/comments/${commentDeleteTarget}`, { headers });
       
       setCommentDeleteTarget(null);
-      await fetchComments(selectedPost.id); // 삭제 후 즉시 새로고침
+      await fetchComments(selectedPost.id); 
       
       setTimeout(() => {
         showResultModal('성공', '해당 댓글이 삭제되었습니다.', 'success');
@@ -515,19 +596,15 @@ const CommunityScreen = ({ route, navigation }: any) => {
     }
   };
 
-  // 날짜 포맷 함수 (YYYY.MM.DD HH:MM)
-  const formatCommentDate = (dateStr: string) => {
-    if (!dateStr) return '';
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    return `${d.getFullYear()}.${p(d.getMonth()+1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-  };
-
+  // ─── 💡 모집 글 작성/수정 로직 ───
   const openCreateModal = () => {
     setIsEditMode(false); setEditPostId(null);
     setForm({ category:'센터', title:'', desc:'', date:'', time:'', people:'2', location:'' });
     setCreateVisible(true);
-    setTimeout(() => Animated.timing(createAnim,{toValue:0,duration:300,useNativeDriver:true}).start(), 50);
+    
+    currentCreateSnap.current = CREATE_SCREEN;
+    createHeightAnim.setValue(0);
+    Animated.timing(createHeightAnim, { toValue: CREATE_SCREEN, duration: 300, useNativeDriver: false }).start();
   };
 
   const openEditModal = (post: any) => {
@@ -540,11 +617,17 @@ const CommunityScreen = ({ route, navigation }: any) => {
       people: String(post.maxMember), location: post.gymPlace||'',
     });
     setCreateVisible(true);
-    setTimeout(() => Animated.timing(createAnim,{toValue:0,duration:300,useNativeDriver:true}).start(), 50);
+    
+    currentCreateSnap.current = CREATE_SCREEN;
+    createHeightAnim.setValue(0);
+    Animated.timing(createHeightAnim, { toValue: CREATE_SCREEN, duration: 300, useNativeDriver: false }).start();
   };
 
-  const closeCreateModal = () =>
-    Animated.timing(createAnim,{toValue:800,duration:250,useNativeDriver:true}).start(() => setCreateVisible(false));
+  const closeCreateModal = () => {
+    Animated.timing(createHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
+      setCreateVisible(false);
+    });
+  };
 
   const submitPost = async () => {
     const { category, title, desc, date, time, people, location } = form;
@@ -610,44 +693,16 @@ const CommunityScreen = ({ route, navigation }: any) => {
 
   const filteredPosts = posts.filter(post => selectedTab === '전체' || post.type === selectedTab);
 
-  // 💡 iOS 모달 겹침 방지: 프로필 컴포넌트를 독립적인 함수로 분리하여 필요시 뷰로 덮어씌움
-  const ProfileModalUI = () => (
-    <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={closeDetailModal}>
-      <Animated.View style={[s.sheet,{transform:[{translateY:detailAnim}]}]}>
-        <TouchableOpacity activeOpacity={1} style={{width:'100%'}}>
-          <View style={s.handle}/><View style={s.sheetHeader}>
-            <Text style={s.sheetTitle}>{selectedUser?.isMe?'내 정보':'회원 정보'}</Text>
-            <TouchableOpacity onPress={closeDetailModal}><Text style={s.closeBtn}>✕</Text></TouchableOpacity>
-          </View><View style={s.hr}/>
-          {selectedUser && (
-            <View>
-              <View style={s.profileCenter}>
-                {/* 💡 백엔드에서 받아온 이미지 렌더링, 없으면 기본 이미지 (빈 문자열 오류 방지) */}
-                <Image source={getProfileImage(selectedUser.profileImageUrl)} style={s.profileBig}/>
-                <Text style={s.profileName}>{selectedUser.name}</Text>
-              </View>
-              <View style={s.infoBox}>
-                {/* 💡 응답 스펙에 맞게 성별(gender) 표시 항목 추가 */}
-                {([['이름',selectedUser.name,selectedUser.toggles.showName,''],['성별',selectedUser.gender,true,''],['전화번호',selectedUser.phone,selectedUser.toggles.showPhone,''],['나이',selectedUser.age,selectedUser.toggles.showAge,'세'],['키',selectedUser.height,selectedUser.toggles.showHeight,'cm'],['몸무게',selectedUser.weight,selectedUser.toggles.showWeight,'kg'],['팔길이',selectedUser.arm,selectedUser.toggles.showArm,'cm'],['암벽화 사이즈',selectedUser.shoe,selectedUser.toggles.showShoe,'mm']] as [string,string,boolean,string][])
-                  .filter(([,,show]) => show)
-                  .map(([label,val,,unit]) => (
-                    <View key={label} style={s.infoRowDetail}>
-                      <Text style={s.infoLabel}>{label}</Text>
-                      <Text style={s.infoVal}>{val!=='-'?val+unit:'-'}</Text>
-                    </View>
-                  ))}
-              </View>
-              <TouchableOpacity style={s.closeFullBtn} onPress={closeDetailModal}><Text style={s.closeFullText}>닫기</Text></TouchableOpacity>
-            </View>
-          )}
-        </TouchableOpacity>
-      </Animated.View>
-    </TouchableOpacity>
-  );
+  if (loading) {
+    return (
+      <SafeAreaView style={[s.bg, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#A1BE44" />
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <View style={s.bg}>
-      {/* 검색 */}
+    <SafeAreaView style={s.bg} edges={[]}>
       <View style={s.searchRow}>
         <View style={s.searchBox}>
           <TextInput style={s.searchInput} placeholder="제목 / 내용 / 작성자 / 지역 검색" placeholderTextColor="#666" value={searchKeyword} onChangeText={setSearchKeyword} onSubmitEditing={searchPosts} returnKeyType="search" />
@@ -678,7 +733,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
         </View>
       )}
 
-      {/* 게시글 목록 */}
       <ScrollView 
         showsVerticalScrollIndicator={false} 
         contentContainerStyle={s.scroll}
@@ -742,7 +796,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
               <View style={s.divider}/>
               <View style={s.footer}>
                 <TouchableOpacity style={s.profileRow} onPress={() => openDetailModal(post.writerId, post.author, post.isMine)}>
-                  {/* 💡 작성자 프로필 이미지 연동 (빈 문자열 오류 방지 적용) */}
                   <Image source={getProfileImage(post.profileImageUrl)} style={[s.avatar, isPast && { opacity: 0.5 }]}/>
                   <Text style={[s.author, isPast && { color: '#666' }]}>{post.author}</Text>
                 </TouchableOpacity>
@@ -828,8 +881,49 @@ const CommunityScreen = ({ route, navigation }: any) => {
           </Modal>
 
           {/* 메인 리스트에서 열린 회원 정보 모달 */}
-          <Modal visible={selectedUser!==null} transparent animationType="fade" onRequestClose={closeDetailModal}>
-            <ProfileModalUI />
+          <Modal visible={isDetailVisible} transparent animationType="fade" onRequestClose={closeDetailModal}>
+            <View style={s.modalOverlay}>
+              <TouchableWithoutFeedback onPress={closeDetailModal}>
+                <View style={StyleSheet.absoluteFill} />
+              </TouchableWithoutFeedback>
+              <Animated.View style={[s.sheet, { height: detailHeightAnim, overflow: 'hidden' }]}>
+                
+                <View {...detailPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
+                  <View style={s.handle} />
+                  <View style={s.sheetHeader}>
+                    <Text style={s.sheetTitle}>{selectedUser?.isMe?'내 정보':'회원 정보'}</Text>
+                    <TouchableOpacity onPress={closeDetailModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                      <Text style={s.closeBtn}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={s.hr} />
+                </View>
+
+                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
+                  {selectedUser && (
+                    <View>
+                      <View style={s.profileCenter}>
+                        <Image source={getProfileImage(selectedUser.profileImageUrl)} style={s.profileBig} />
+                        <Text style={s.profileName}>{selectedUser.name}</Text>
+                      </View>
+                      <View style={s.infoBox}>
+                        {([['이름',selectedUser.name,selectedUser.toggles.showName,''],['성별',selectedUser.gender,true,''],['전화번호',selectedUser.phone,selectedUser.toggles.showPhone,''],['나이',selectedUser.age,selectedUser.toggles.showAge,'세'],['키',selectedUser.height,selectedUser.toggles.showHeight,'cm'],['몸무게',selectedUser.weight,selectedUser.toggles.showWeight,'kg'],['팔길이',selectedUser.arm,selectedUser.toggles.showArm,'cm'],['암벽화 사이즈',selectedUser.shoe,selectedUser.toggles.showShoe,'mm']] as [string,string,boolean,string][])
+                          .filter(([,,show]) => show)
+                          .map(([label,val,,unit]) => (
+                            <View key={label} style={s.infoRowDetail}>
+                              <Text style={s.infoLabel}>{label}</Text>
+                              <Text style={s.infoVal}>{val!=='-'?val+unit:'-'}</Text>
+                            </View>
+                          ))}
+                      </View>
+                      <TouchableOpacity style={s.closeFullBtn} onPress={closeDetailModal}>
+                        <Text style={s.closeFullText}>닫기</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </ScrollView>
+              </Animated.View>
+            </View>
           </Modal>
         </>
       )}
@@ -844,7 +938,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', flex: 1, justifyContent: 'flex-end' }} pointerEvents="box-none">
             <Animated.View style={[s.commentSheet, { height: commentHeightAnim }]}>
               
-              <View {...panResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
+              <View {...commentPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
                 <View style={s.handle} />
                 <View style={s.sheetHeader}>
                   <Text style={s.sheetTitle}>게시글 보기</Text>
@@ -896,66 +990,72 @@ const CommunityScreen = ({ route, navigation }: any) => {
                 )}
 
                 {/* 💡 API를 통해 가져온 댓글 / 대댓글 렌더링 + 아바타 터치 연동 */}
-                {comments.map((parent) => (
-                  <View key={`comment-${parent.id}`}>
-                    <View style={s.commentItem}>
-                      <TouchableOpacity onPress={() => openDetailModal(parent.writerId, parent.writerName, myUserId === parent.writerId)}>
-                        {/* 💡 백엔드 키값의 다양성 방어 적용 */}
-                        <Image source={getProfileImage(parent.writerProfileImageUrl || parent.profileImageUrl || parent.profileImage)} style={s.commentAvatar} />
-                      </TouchableOpacity>
-                      <View style={s.commentContentArea}>
-                        <View style={s.commentHeaderLine}>
-                          <TouchableOpacity onPress={() => openDetailModal(parent.writerId, parent.writerName, myUserId === parent.writerId)}>
-                            <Text style={s.commentAuthorName}>{parent.writerName}</Text>
-                          </TouchableOpacity>
-                          <Text style={s.commentDateText}>{formatCommentDate(parent.createdAt)}</Text>
-                        </View>
-                        <Text style={s.commentBodyText}>{parent.content}</Text>
-                        {/* 삭제된 댓글이 아닐 때만 답글 달기 표시 */}
-                        {parent.content !== "삭제된 댓글입니다." && (
-                          <TouchableOpacity onPress={() => setReplyingTo({ id: parent.id, name: parent.writerName })}>
-                            <Text style={s.commentReplyBtnText}>답글 달기</Text>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                      
-                      {/* 본인 댓글 삭제 (백엔드 연동) */}
-                      <View style={{ alignItems: 'flex-end', justifyContent: 'flex-start', paddingTop: 2 }}>
-                        {myUserId === parent.writerId && parent.content !== "삭제된 댓글입니다." && (
-                          <TouchableOpacity style={s.commentDeletePngBtn} onPress={() => setCommentDeleteTarget(parent.id)}>
-                            <Image source={require('../assets/trash.png')} style={s.commentTrashIcon} />
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
-
-                    {/* 대댓글 렌더링 + 아바타 터치 연동 */}
-                    {parent.children?.map((child) => (
-                      <View key={`reply-${child.id}`} style={[s.commentItem, s.childCommentItem]}>
-                        <TouchableOpacity onPress={() => openDetailModal(child.writerId, child.writerName, myUserId === child.writerId)}>
-                          <Image source={getProfileImage(child.writerProfileImageUrl || child.profileImageUrl || child.profileImage)} style={s.commentAvatar} />
+                {comments.map((parent) => {
+                  const isParentDeleted = parent.content === "삭제된 댓글입니다.";
+                  
+                  return (
+                    <View key={`comment-${parent.id}`}>
+                      <View style={s.commentItem}>
+                        <TouchableOpacity onPress={() => openDetailModal(parent.writerId, parent.writerName, myUserId === parent.writerId)}>
+                          <Image source={getProfileImage(parent.writerProfileImageUrl || parent.profileImageUrl || parent.profileImage)} style={s.commentAvatar} />
                         </TouchableOpacity>
                         <View style={s.commentContentArea}>
                           <View style={s.commentHeaderLine}>
-                            <TouchableOpacity onPress={() => openDetailModal(child.writerId, child.writerName, myUserId === child.writerId)}>
-                              <Text style={s.commentAuthorName}>{child.writerName}</Text>
+                            <TouchableOpacity onPress={() => openDetailModal(parent.writerId, parent.writerName, myUserId === parent.writerId)}>
+                              <Text style={s.commentAuthorName}>{parent.writerName}</Text>
                             </TouchableOpacity>
-                            <Text style={s.commentDateText}>{formatCommentDate(child.createdAt)}</Text>
+                            <Text style={s.commentDateText}>{formatCommentDate(parent.createdAt)}</Text>
                           </View>
-                          <Text style={s.commentBodyText}>{child.content}</Text>
+                          <Text style={[s.commentBodyText, isParentDeleted && { color: '#888' }]}>{parent.content}</Text>
+                          {/* 삭제된 댓글이 아닐 때만 답글 달기 표시 */}
+                          {!isParentDeleted && (
+                            <TouchableOpacity onPress={() => setReplyingTo({ id: parent.id, name: parent.writerName })}>
+                              <Text style={s.commentReplyBtnText}>답글 달기</Text>
+                            </TouchableOpacity>
+                          )}
                         </View>
-
+                        
+                        {/* 본인 댓글 삭제 (백엔드 연동) */}
                         <View style={{ alignItems: 'flex-end', justifyContent: 'flex-start', paddingTop: 2 }}>
-                          {myUserId === child.writerId && child.content !== "삭제된 댓글입니다." && (
-                            <TouchableOpacity style={s.commentDeletePngBtn} onPress={() => setCommentDeleteTarget(child.id)}>
+                          {myUserId === parent.writerId && !isParentDeleted && (
+                            <TouchableOpacity style={s.commentDeletePngBtn} onPress={() => setCommentDeleteTarget(parent.id)}>
                               <Image source={require('../assets/trash.png')} style={s.commentTrashIcon} />
                             </TouchableOpacity>
                           )}
                         </View>
                       </View>
-                    ))}
-                  </View>
-                ))}
+
+                      {/* 대댓글 렌더링 */}
+                      {parent.children?.map((child) => {
+                        const isChildDeleted = child.content === "삭제된 댓글입니다.";
+                        return (
+                          <View key={`reply-${child.id}`} style={[s.commentItem, s.childCommentItem]}>
+                            <TouchableOpacity onPress={() => openDetailModal(child.writerId, child.writerName, myUserId === child.writerId)}>
+                              <Image source={getProfileImage(child.writerProfileImageUrl || child.profileImageUrl || child.profileImage)} style={s.commentAvatar} />
+                            </TouchableOpacity>
+                            <View style={s.commentContentArea}>
+                              <View style={s.commentHeaderLine}>
+                                <TouchableOpacity onPress={() => openDetailModal(child.writerId, child.writerName, myUserId === child.writerId)}>
+                                  <Text style={s.commentAuthorName}>{child.writerName}</Text>
+                                </TouchableOpacity>
+                                <Text style={s.commentDateText}>{formatCommentDate(child.createdAt)}</Text>
+                              </View>
+                              <Text style={[s.commentBodyText, isChildDeleted && { color: '#888' }]}>{child.content}</Text>
+                            </View>
+
+                            <View style={{ alignItems: 'flex-end', justifyContent: 'flex-start', paddingTop: 2 }}>
+                              {myUserId === child.writerId && !isChildDeleted && (
+                                <TouchableOpacity style={s.commentDeletePngBtn} onPress={() => setCommentDeleteTarget(child.id)}>
+                                  <Image source={require('../assets/trash.png')} style={s.commentTrashIcon} />
+                                </TouchableOpacity>
+                              )}
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  );
+                })}
                 {comments.length === 0 && <Text style={s.empty}>등록된 댓글이 없습니다.</Text>}
               </ScrollView>
 
@@ -968,7 +1068,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
                   </View>
                 )}
                 <View style={s.commentInputRow}>
-                  {/* 💡 내 프로필 이미지 적용 */}
                   <Image source={getProfileImage(myProfileImageUrl)} style={s.commentInputAvatar} />
                   <TextInput
                     style={s.commentTextInput}
@@ -1021,76 +1120,128 @@ const CommunityScreen = ({ route, navigation }: any) => {
           )}
 
           {/* 💡 댓글 창 내부에서 열린 프로필 창 (iOS 모달 겹침 버그 원천 차단) */}
-          {selectedUser !== null && (
+          {isDetailVisible && (
             <View style={[StyleSheet.absoluteFill, { zIndex: 999, elevation: 999 }]}>
-              <ProfileModalUI />
+              <View style={s.modalOverlay}>
+                <TouchableWithoutFeedback onPress={closeDetailModal}>
+                  <View style={StyleSheet.absoluteFill} />
+                </TouchableWithoutFeedback>
+                <Animated.View style={[s.sheet, { height: detailHeightAnim, overflow: 'hidden' }]}>
+                  
+                  <View {...detailPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
+                    <View style={s.handle} />
+                    <View style={s.sheetHeader}>
+                      <Text style={s.sheetTitle}>{selectedUser?.isMe?'내 정보':'회원 정보'}</Text>
+                      <TouchableOpacity onPress={closeDetailModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                        <Text style={s.closeBtn}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <View style={s.hr} />
+                  </View>
+
+                  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
+                    {selectedUser && (
+                      <View>
+                        <View style={s.profileCenter}>
+                          <Image source={getProfileImage(selectedUser.profileImageUrl)} style={s.profileBig} />
+                          <Text style={s.profileName}>{selectedUser.name}</Text>
+                        </View>
+                        <View style={s.infoBox}>
+                          {([['이름',selectedUser.name,selectedUser.toggles.showName,''],['성별',selectedUser.gender,true,''],['전화번호',selectedUser.phone,selectedUser.toggles.showPhone,''],['나이',selectedUser.age,selectedUser.toggles.showAge,'세'],['키',selectedUser.height,selectedUser.toggles.showHeight,'cm'],['몸무게',selectedUser.weight,selectedUser.toggles.showWeight,'kg'],['팔길이',selectedUser.arm,selectedUser.toggles.showArm,'cm'],['암벽화 사이즈',selectedUser.shoe,selectedUser.toggles.showShoe,'mm']] as [string,string,boolean,string][])
+                            .filter(([,,show]) => show)
+                            .map(([label,val,,unit]) => (
+                              <View key={label} style={s.infoRowDetail}>
+                                <Text style={s.infoLabel}>{label}</Text>
+                                <Text style={s.infoVal}>{val!=='-'?val+unit:'-'}</Text>
+                              </View>
+                            ))}
+                        </View>
+                        <TouchableOpacity style={s.closeFullBtn} onPress={closeDetailModal}>
+                          <Text style={s.closeFullText}>닫기</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </ScrollView>
+                </Animated.View>
+              </View>
             </View>
           )}
 
         </View>
       </Modal>
 
-      {/* 작성/수정 창 */}
+      {/* 🌟 작성/수정 창 (드래그 지원 추가) 🌟 */}
       <Modal visible={isCreateVisible} transparent animationType="fade" onRequestClose={closeCreateModal}>
-        <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={closeCreateModal}>
-          <Animated.View style={[s.sheet,{transform:[{translateY:createAnim}],maxHeight:'90%'}]}>
-            <TouchableOpacity activeOpacity={1} style={{width:'100%'}}>
-              <View style={s.handle}/><View style={s.sheetHeader}>
-                <Text style={s.sheetTitle}>{isEditMode?'게시글 수정':'모집 글 작성'}</Text>
-                <TouchableOpacity onPress={closeCreateModal}><Text style={s.closeBtn}>✕</Text></TouchableOpacity>
-              </View><View style={s.hr}/>
-            </TouchableOpacity>
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{paddingBottom:80}}>
-              <TouchableOpacity activeOpacity={1} style={s.formBox}>
-                <Text style={s.label}>카테고리</Text>
-                <View style={s.catRow}>
-                  {(['센터','아웃도어'] as const).map(c => (
-                    <TouchableOpacity key={c} style={[s.catBtn,form.category===c&&s.catBtnActive]} onPress={() => setForm(f=>({...f,category:c}))}>
-                      <Text style={[s.catText,form.category===c&&s.catTextActive]}>{c}</Text>
-                    </TouchableOpacity>
-                  ))}
+        <View style={s.modalOverlay}>
+          <TouchableWithoutFeedback onPress={closeCreateModal}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', flex: 1, justifyContent: 'flex-end' }} pointerEvents="box-none">
+            <Animated.View style={[s.sheet, { height: createHeightAnim, maxHeight: '100%' }]}>
+              
+              <View {...createPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
+                <View style={s.handle} />
+                <View style={s.sheetHeader}>
+                  <Text style={s.sheetTitle}>{isEditMode ? '게시글 수정' : '모집 글 작성'}</Text>
+                  <TouchableOpacity onPress={closeCreateModal} hitSlop={{top:10, bottom:10, left:10, right:10}}>
+                    <Text style={s.closeBtn}>✕</Text>
+                  </TouchableOpacity>
                 </View>
-                <View style={s.innerHr}/>
+                <View style={s.hr} />
+              </View>
 
-                <Text style={s.label}>제목</Text>
-                <View style={s.inputWrap}><TextInput style={s.input} placeholder="모집 제목을 작성하세요." placeholderTextColor="#666" value={form.title} onChangeText={v=>setForm(f=>({...f,title:v}))}/></View>
-
-                <Text style={s.label}>내용</Text>
-                <View style={s.inputWrap}><TextInput style={[s.input,{minHeight:45,textAlignVertical:'top'}]} placeholder="모집 내용을 입력하세요." placeholderTextColor="#666" multiline value={form.desc} onChangeText={v=>setForm(f=>({...f,desc:v}))}/></View>
-
-                <View style={{flexDirection:'row'}}>
-                  <View style={{flex:1,marginRight:8}}>
-                    <Text style={s.label}>날짜</Text>
-                    <View style={s.inputWrap}><TextInput style={s.input} placeholder="YYYY/MM/DD" placeholderTextColor="#666" value={form.date} onChangeText={v=>{const n=v.replace(/\D/g,'');setForm(f=>({...f,date:n.length>6?`${n.slice(0,4)}/${n.slice(4,6)}/${n.slice(6,8)}`:n.length>4?`${n.slice(0,4)}/${n.slice(4)}`:n}));}} keyboardType="numeric" maxLength={10}/></View>
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{paddingBottom:80}}>
+                <TouchableOpacity activeOpacity={1} style={s.formBox}>
+                  <Text style={s.label}>카테고리</Text>
+                  <View style={s.catRow}>
+                    {(['센터','아웃도어'] as const).map(c => (
+                      <TouchableOpacity key={c} style={[s.catBtn,form.category===c&&s.catBtnActive]} onPress={() => setForm(f=>({...f,category:c}))}>
+                        <Text style={[s.catText,form.category===c&&s.catTextActive]}>{c}</Text>
+                      </TouchableOpacity>
+                    ))}
                   </View>
-                  <View style={{flex:1}}>
-                    <Text style={s.label}>시간</Text>
-                    <View style={s.inputWrap}><TextInput style={s.input} placeholder="00:00" placeholderTextColor="#666" value={form.time} onChangeText={v=>{const n=v.replace(/\D/g,'');setForm(f=>({...f,time:n.length>2?`${n.slice(0,2)}:${n.slice(2,4)}`:n}));}} keyboardType="numeric" maxLength={5}/></View>
+                  <View style={s.innerHr}/>
+
+                  <Text style={s.label}>제목</Text>
+                  <View style={s.inputWrap}><TextInput style={s.input} placeholder="모집 제목을 작성하세요." placeholderTextColor="#666" value={form.title} onChangeText={v=>setForm(f=>({...f,title:v}))}/></View>
+
+                  <Text style={s.label}>내용</Text>
+                  <View style={s.inputWrap}><TextInput style={[s.input,{minHeight:45,textAlignVertical:'top'}]} placeholder="모집 내용을 입력하세요." placeholderTextColor="#666" multiline value={form.desc} onChangeText={v=>setForm(f=>({...f,desc:v}))}/></View>
+
+                  <View style={{flexDirection:'row'}}>
+                    <View style={{flex:1,marginRight:8}}>
+                      <Text style={s.label}>날짜</Text>
+                      <View style={s.inputWrap}><TextInput style={s.input} placeholder="YYYY/MM/DD" placeholderTextColor="#666" value={form.date} onChangeText={v=>{const n=v.replace(/\D/g,'');setForm(f=>({...f,date:n.length>6?`${n.slice(0,4)}/${n.slice(4,6)}/${n.slice(6,8)}`:n.length>4?`${n.slice(0,4)}/${n.slice(4)}`:n}));}} keyboardType="numeric" maxLength={10}/></View>
+                    </View>
+                    <View style={{flex:1}}>
+                      <Text style={s.label}>시간</Text>
+                      <View style={s.inputWrap}><TextInput style={s.input} placeholder="00:00" placeholderTextColor="#666" value={form.time} onChangeText={v=>{const n=v.replace(/\D/g,'');setForm(f=>({...f,time:n.length>2?`${n.slice(0,2)}:${n.slice(2,4)}`:n}));}} keyboardType="numeric" maxLength={5}/></View>
+                    </View>
                   </View>
-                </View>
 
-                <Text style={s.label}>모집인원</Text>
-                <View style={s.counterRow}>
-                  <TouchableOpacity style={s.counterBtn} onPress={() => setForm(f=>({...f,people:String(Math.max(2,parseInt(f.people||'2')-1))}))}><Text style={s.counterBtnText}>-</Text></TouchableOpacity>
-                  <View style={{flexDirection:'row',alignItems:'center',marginHorizontal:15}}>
-                    <TextInput style={s.counterInput} value={form.people} onChangeText={v=>setForm(f=>({...f,people:v.replace(/\D/g,'')}))} onBlur={()=>{const n=parseInt(form.people);setForm(f=>({...f,people:String(isNaN(n)||n<2?2:n)}));}} keyboardType="numeric"/>
-                    <Text style={s.counterUnit}>명</Text>
+                  <Text style={s.label}>모집인원</Text>
+                  <View style={s.counterRow}>
+                    <TouchableOpacity style={s.counterBtn} onPress={() => setForm(f=>({...f,people:String(Math.max(2,parseInt(f.people||'2')-1))}))}><Text style={s.counterBtnText}>-</Text></TouchableOpacity>
+                    <View style={{flexDirection:'row',alignItems:'center',marginHorizontal:15}}>
+                      <TextInput style={s.counterInput} value={form.people} onChangeText={v=>setForm(f=>({...f,people:v.replace(/\D/g,'')}))} onBlur={()=>{const n=parseInt(form.people);setForm(f=>({...f,people:String(isNaN(n)||n<2?2:n)}));}} keyboardType="numeric"/>
+                      <Text style={s.counterUnit}>명</Text>
+                    </View>
+                    <TouchableOpacity style={s.counterBtn} onPress={() => setForm(f=>({...f,people:String(parseInt(f.people||'2')+1)}))}><Text style={s.counterBtnText}>+</Text></TouchableOpacity>
                   </View>
-                  <TouchableOpacity style={s.counterBtn} onPress={() => setForm(f=>({...f,people:String(parseInt(f.people||'2')+1)}))}><Text style={s.counterBtnText}>+</Text></TouchableOpacity>
-                </View>
 
-                {form.category==='아웃도어' && (
-                  <><View style={s.innerHr}/>
-                  <Text style={s.label}>장소정보</Text>
-                  <View style={s.inputWrap}><TextInput style={s.input} placeholder="위치" placeholderTextColor="#666" value={form.location} onChangeText={v=>setForm(f=>({...f,location:v}))}/></View></>
-                )}
+                  {form.category==='아웃도어' && (
+                    <><View style={s.innerHr}/>
+                    <Text style={s.label}>장소정보</Text>
+                    <View style={s.inputWrap}><TextInput style={s.input} placeholder="위치" placeholderTextColor="#666" value={form.location} onChangeText={v=>setForm(f=>({...f,location:v}))}/></View></>
+                  )}
 
-                <TouchableOpacity style={s.submitBtn} onPress={submitPost}>
-                  <Text style={s.submitText}>{isEditMode?'게시글 수정':'모집 글 게시'}</Text>
+                  <TouchableOpacity style={s.submitBtn} onPress={submitPost}>
+                    <Text style={s.submitText}>{isEditMode?'게시글 수정':'모집 글 게시'}</Text>
+                  </TouchableOpacity>
                 </TouchableOpacity>
-              </TouchableOpacity>
-            </ScrollView>
-          </Animated.View>
+              </ScrollView>
+            </Animated.View>
+          </KeyboardAvoidingView>
 
           {/* iOS 작성창 모달 겹침 버그 방지용 내장 알림 */}
           {createAlertVisible && (
@@ -1104,24 +1255,9 @@ const CommunityScreen = ({ route, navigation }: any) => {
               </View>
             </View>
           )}
-          {resultModalVisible && (
-            <View style={[StyleSheet.absoluteFill, { zIndex: 999, elevation: 999 }]}>
-              <View style={s.resultModalOverlay}>
-                <View style={s.resultModalBox}>
-                  <Text style={[s.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>
-                    {resultModalConfig.title}
-                  </Text>
-                  <Text style={s.resultModalMessage}>{resultModalConfig.message}</Text>
-                  <TouchableOpacity style={s.resultModalBtn} onPress={() => { setResultModalVisible(false); resultModalConfig.onConfirm(); }}>
-                    <Text style={s.resultModalBtnText}>확인</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          )}
-        </TouchableOpacity>
+        </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -1195,7 +1331,7 @@ const s = StyleSheet.create({
   
   overlay:{flex:1,backgroundColor:'rgba(0,0,0,0.7)',justifyContent:'center',alignItems:'center'},
   modalOverlay:{flex:1,backgroundColor:'rgba(0,0,0,0.7)',justifyContent:'flex-end'},
-  sheet:{backgroundColor:'#1E1E1E',borderTopLeftRadius:24,borderTopRightRadius:24,paddingHorizontal:20,paddingBottom:40,width:'100%'},
+  sheet:{backgroundColor:'#1E1E1E',borderTopLeftRadius:24,borderTopRightRadius:24,paddingHorizontal:20,paddingBottom:40,width:'100%', overflow: 'hidden'},
   handle:{width:40,height:4,backgroundColor:'#333',borderRadius:2,marginTop:12,marginBottom:20,alignSelf:'center'},
   sheetHeader:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginBottom:15},
   sheetTitle:{color:'#fff',fontSize:23,fontWeight:'bold'}, 

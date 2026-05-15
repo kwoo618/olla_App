@@ -42,22 +42,18 @@ const ENUM_TO_KR: Record<string, string> = {
   RED: '빨강', PURPLE: '보라', ORANGE: '주황', BLACK: '검정',
 };
 
-// 각 색상 최대 홀드 수 (완등 시 사용)
 const MAX_HOLDS: Record<string, number> = {
   '흰색': 26, '노랑': 33, '초록': 28, '파랑': 26,
   '빨강': 26, '보라': 25, '주황': 28, '검정': 30,
 };
 
-// 난이도별 기본 점수 (연속 완등 점수 계산용)
 const BASE_SCORES: Record<string, number> = {
   '흰색': 10, '노랑': 20, '주황': 30, '초록': 40,
   '파랑': 50, '빨강': 60, '보라': 70, '검정': 80,
 };
 
-// 색 이름 → 색 인덱스 (점수 계산용)
 const COLOR_ORDER = ['흰색', '노랑', '초록', '파랑', '빨강', '보라', '주황', '검정'];
 
-// 지구력 구간 순서 (additionalBlocks 값 → 구간명)
 const BOX_SEQUENCE = [
   '1-1','1-2','1-3','1-4','1-5','1-6',
   '2-1','2-2','2-3','2-4','2-5','2-6','2-7','2-8','2-9','2-10','2-11','2-12',
@@ -68,8 +64,8 @@ const BOX_SEQUENCE = [
 // ─────────────────────────── 타입 ───────────────────────────
 interface BeginnerRecord {
   id: number;
-  difficulty: string;       
-  attemptType: string;      
+  difficulty: string;
+  attemptType: string;
   maxHoldNo?: number;
   score?: number;
   recordDate: string;
@@ -81,6 +77,7 @@ interface EnduranceRankItem {
   memberId?: number;
   name?: string;
   nickname?: string;
+  profileImageUrl?: string;
   oneWayCount: number;
   additionalBlocks: number;
   timeSeconds: number;
@@ -94,6 +91,7 @@ interface SeriesRankItem {
   memberId?: number;
   name?: string;
   nickname?: string;
+  profileImageUrl?: string;
   sequenceLog: string[];
   totalScore?: number;
   score?: number;
@@ -150,10 +148,18 @@ const formatTime = (seconds: number): string => {
   return `${m}:${s}`;
 };
 
+// ─────────────────────────── 프로필 이미지 컴포넌트 ───────────────────────────
+const ProfileImage = ({ uri, style }: { uri?: string | null; style: any }) => {
+  if (uri) {
+    return <Image source={{ uri }} style={style} />;
+  }
+  return <Image source={require('../assets/profile.png')} style={style} />;
+};
+
 // ─────────────────────────── 컴포넌트 ───────────────────────────
 const RankingScreen = ({ route }: any) => {
   const [refreshing, setRefreshing] = useState(false);
-  
+
   const loadAllData = async () => {
     const userData = await fetchMyProfile();
     await Promise.all([
@@ -170,8 +176,9 @@ const RankingScreen = ({ route }: any) => {
   const [enduranceRankings,   setEnduranceRankings]   = useState<any[]>([]);
   const [consecutiveRankings, setConsecutiveRankings] = useState<any[]>([]);
 
-  const [myNickname, setMyNickname] = useState<string>('알 수 없음');
-  const [myMemberId, setMyMemberId] = useState<number | null>(null);
+  const [myNickname,        setMyNickname]        = useState<string>('알 수 없음');
+  const [myMemberId,        setMyMemberId]        = useState<number | null>(null);
+  const [myProfileImageUrl, setMyProfileImageUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (route?.params?.targetTab) setMainTab(route.params.targetTab);
@@ -188,26 +195,28 @@ const RankingScreen = ({ route }: any) => {
   }, []);
 
   // ── 내 프로필 ──
-  const fetchMyProfile = async (): Promise<{ id: number | null; nickname: string }> => {
+  const fetchMyProfile = async (): Promise<{ id: number | null; nickname: string; profileImageUrl: string | null }> => {
     try {
       const res = await axios.get(MY_PROFILE_URL);
-      const data = res.data?.data?.data; 
-      
+      const data = res.data?.data?.data;
+
       if (data) {
-        const nickname = data.nickname ?? data.name ?? '알 수 없음';
-        const id       = data.memberId ?? data.id ?? null;
+        const nickname        = data.nickname ?? data.name ?? '알 수 없음';
+        const id              = data.memberId ?? data.id ?? null;
+        const profileImageUrl = data.profileImageUrl ?? null;
         setMyNickname(nickname);
+        setMyProfileImageUrl(profileImageUrl);
         if (id !== null) setMyMemberId(Number(id));
-        return { id: id !== null ? Number(id) : null, nickname };
+        return { id: id !== null ? Number(id) : null, nickname, profileImageUrl };
       }
     } catch (error: any) {
       console.log('내 프로필 로드 실패:', error.response?.data?.message || error.message);
     }
-    return { id: null, nickname: '알 수 없음' };
+    return { id: null, nickname: '알 수 없음', profileImageUrl: null };
   };
 
   // ── 초보벽 랭킹 ──
-  const fetchBeginnerRankings = async (userData: { id: number | null; nickname: string }) => {
+  const fetchBeginnerRankings = async (userData: { id: number | null; nickname: string; profileImageUrl: string | null }) => {
     try {
       const rankResponses = await Promise.all(
         colors.map(c =>
@@ -230,45 +239,44 @@ const RankingScreen = ({ route }: any) => {
       rankResponses.forEach((response, colorIdx) => {
         const currentColor = colors[colorIdx];
         const maxHold      = MAX_HOLDS[currentColor.name] ?? 0;
-        
+
         const rawList = extractList(response.data?.data?.data);
 
         const mappedList = rawList.map((item: any, i: number) => {
-          // ★ 수정: score에 .5(소수점)가 포함되어 있다면 attemptType을 왕복으로 무조건 강제 인식시킴
-          const hasDecimal = item.score !== undefined && item.score !== null && item.score % 1 !== 0;
-          const attemptStr = String(item.attemptType ?? '').toUpperCase();
+          const hasDecimal  = item.score !== undefined && item.score !== null && item.score % 1 !== 0;
+          const attemptStr  = String(item.attemptType ?? '').toUpperCase();
           const isRoundTrip = attemptStr === 'ROUND_TRIP' || hasDecimal;
 
-          // 소수점이 있다면 Math.floor로 내려서 화면에는 순수 홀드 수만 노출
-          const rawHold = item.maxHoldNo !== undefined ? item.maxHoldNo : (item.score !== undefined ? Math.floor(item.score) : undefined);
+          const rawHold   = item.maxHoldNo !== undefined ? item.maxHoldNo : (item.score !== undefined ? Math.floor(item.score) : undefined);
           const holdCount = (item.success === true || rawHold === undefined || rawHold === null)
             ? maxHold
             : Number(rawHold);
 
           const recordTimeStr = item.recordDate || item.achievedAt;
-          const recordTime = recordTimeStr ? new Date(recordTimeStr).getTime() : 9_999_999_999_999;
+          const recordTime    = recordTimeStr ? new Date(recordTimeStr).getTime() : 9_999_999_999_999;
 
           return {
-            id:        item.memberId ?? `rank-beginner-${colorIdx}-${i}`,
-            memberId:  item.memberId ?? null,
-            name:      item.name ?? item.nickname ?? '알 수 없음',
-            colorName: currentColor.name,
-            colorHex:  currentColor.hex,
-            type:      isRoundTrip ? '왕복' : '편도',
-            hold:      holdCount,
-            rawScore:  calcBeginnerScore(currentColor.name, isRoundTrip, holdCount),
-            achievedAt: recordTime,
+            id:              item.memberId ?? `rank-beginner-${colorIdx}-${i}`,
+            memberId:        item.memberId ?? null,
+            name:            item.name ?? item.nickname ?? '알 수 없음',
+            profileImageUrl: item.profileImageUrl ?? null,
+            colorName:       currentColor.name,
+            colorHex:        currentColor.hex,
+            type:            isRoundTrip ? '왕복' : '편도',
+            hold:            holdCount,
+            rawScore:        calcBeginnerScore(currentColor.name, isRoundTrip, holdCount),
+            achievedAt:      recordTime,
           };
         });
 
         const myRecord = myBestList
           .filter(r => r.difficulty === currentColor.enum)
           .reduce<{ score: number; entry: any } | null>((best, r) => {
-            const hasDec  = r.score !== undefined && r.score !== null && r.score % 1 !== 0;
-            const isRT    = String(r.attemptType ?? '').toUpperCase() === 'ROUND_TRIP' || hasDec;
-            const rawH    = r.maxHoldNo !== undefined ? r.maxHoldNo : (r.score !== undefined ? Math.floor(r.score) : undefined);
-            const hold    = (r.success === true || rawH === undefined || rawH === null) ? maxHold : Number(rawH);
-            const score   = calcBeginnerScore(currentColor.name, isRT, hold);
+            const hasDec = r.score !== undefined && r.score !== null && r.score % 1 !== 0;
+            const isRT   = String(r.attemptType ?? '').toUpperCase() === 'ROUND_TRIP' || hasDec;
+            const rawH   = r.maxHoldNo !== undefined ? r.maxHoldNo : (r.score !== undefined ? Math.floor(r.score) : undefined);
+            const hold   = (r.success === true || rawH === undefined || rawH === null) ? maxHold : Number(rawH);
+            const score  = calcBeginnerScore(currentColor.name, isRT, hold);
             if (!best || score > best.score) return { score, entry: r };
             return best;
           }, null);
@@ -276,12 +284,12 @@ const RankingScreen = ({ route }: any) => {
         let finalList = [...mappedList];
 
         if (myRecord) {
-          const r     = myRecord.entry as BeginnerRecord;
-          const hasDec  = r.score !== undefined && r.score !== null && r.score % 1 !== 0;
-          const isRT  = String(r.attemptType ?? '').toUpperCase() === 'ROUND_TRIP' || hasDec;
-          const rawH  = r.maxHoldNo !== undefined ? r.maxHoldNo : (r.score !== undefined ? Math.floor(r.score) : undefined);
-          const hold  = (r.success === true || rawH === undefined || rawH === null) ? maxHold : Number(rawH);
-          const score = calcBeginnerScore(currentColor.name, isRT, hold);
+          const r      = myRecord.entry as BeginnerRecord;
+          const hasDec = r.score !== undefined && r.score !== null && r.score % 1 !== 0;
+          const isRT   = String(r.attemptType ?? '').toUpperCase() === 'ROUND_TRIP' || hasDec;
+          const rawH   = r.maxHoldNo !== undefined ? r.maxHoldNo : (r.score !== undefined ? Math.floor(r.score) : undefined);
+          const hold   = (r.success === true || rawH === undefined || rawH === null) ? maxHold : Number(rawH);
+          const score  = calcBeginnerScore(currentColor.name, isRT, hold);
 
           finalList = finalList.filter(item =>
             userData.id
@@ -290,15 +298,16 @@ const RankingScreen = ({ route }: any) => {
           );
 
           finalList.push({
-            id:        userData.id ?? `my-beginner-${colorIdx}`,
-            memberId:  userData.id ?? null,
-            name:      userData.nickname,
-            colorName: currentColor.name,
-            colorHex:  currentColor.hex,
-            type:      isRT ? '왕복' : '편도',
+            id:              userData.id ?? `my-beginner-${colorIdx}`,
+            memberId:        userData.id ?? null,
+            name:            userData.nickname,
+            profileImageUrl: userData.profileImageUrl,
+            colorName:       currentColor.name,
+            colorHex:        currentColor.hex,
+            type:            isRT ? '왕복' : '편도',
             hold,
-            rawScore:  score,
-            achievedAt: r.recordDate ? new Date(r.recordDate).getTime() : Date.now(),
+            rawScore:        score,
+            achievedAt:      r.recordDate ? new Date(r.recordDate).getTime() : Date.now(),
           });
         }
 
@@ -314,20 +323,21 @@ const RankingScreen = ({ route }: any) => {
   // ── 지구력 랭킹 ──
   const fetchEnduranceRankings = async () => {
     try {
-      const res = await axios.get(RANKING_ENDURANCE_URL);
+      const res     = await axios.get(RANKING_ENDURANCE_URL);
       const rawList = extractList(res.data?.data?.data);
 
       const mapped = rawList.map((item: EnduranceRankItem, i: number) => ({
-        id:               item.memberId ?? `rank-endurance-${i}`,
-        memberId:         item.memberId ?? null,
-        name:             item.name ?? item.nickname ?? '알 수 없음',
-        laps:             item.oneWayCount  ?? 0,
-        timeSeconds:      item.timeSeconds  ?? 0,
-        time:             formatTime(item.timeSeconds ?? 0),
-        section:          getSectionLabel(item.oneWayCount ?? 0, item.additionalBlocks ?? 0),
-        totalScore:       item.totalScore   ?? 0,
-        rawRank:          item.ranking      ?? i + 1,
-        recordDate:       item.recordDate,
+        id:              item.memberId ?? `rank-endurance-${i}`,
+        memberId:        item.memberId ?? null,
+        name:            item.name ?? item.nickname ?? '알 수 없음',
+        profileImageUrl: item.profileImageUrl ?? null,
+        laps:            item.oneWayCount  ?? 0,
+        timeSeconds:     item.timeSeconds  ?? 0,
+        time:            formatTime(item.timeSeconds ?? 0),
+        section:         getSectionLabel(item.oneWayCount ?? 0, item.additionalBlocks ?? 0),
+        totalScore:      item.totalScore   ?? 0,
+        rawRank:         item.ranking      ?? i + 1,
+        recordDate:      item.recordDate,
       }));
 
       setEnduranceRankings(mapped);
@@ -339,7 +349,7 @@ const RankingScreen = ({ route }: any) => {
   // ── 연속 완등 랭킹 ──
   const fetchConsecutiveRankings = async () => {
     try {
-      const res = await axios.get(RANKING_SERIES_URL);
+      const res     = await axios.get(RANKING_SERIES_URL);
       const rawList = extractList(res.data?.data?.data);
 
       const mapped = rawList.map((item: SeriesRankItem, i: number) => {
@@ -348,27 +358,24 @@ const RankingScreen = ({ route }: any) => {
           return colors.find(c => c.name === krName)?.hex ?? '#999999';
         });
 
-        // ★ 수정: 백엔드에서 82점 등 이상한 값을 줘도 프론트엔드에서 기록 탭과 완벽히 동일한 공식으로 자체 계산
         const calculatedScore = (item.sequenceLog ?? []).reduce((acc: number, diffEnum: string, idx: number) => {
-          const krName = ENUM_TO_KR[diffEnum] ?? '흰색';
+          const krName    = ENUM_TO_KR[diffEnum] ?? '흰색';
           const baseScore = BASE_SCORES[krName] ?? 10;
           const multiplier = 1.0 + (idx * 0.1);
           return acc + (baseScore * multiplier);
         }, 0);
-        
-        // 반올림 처리
+
         const displayScore = Math.round(calculatedScore * 10) / 10;
-        
-        // 만약 자체 계산값이 0보다 크면 사용하고, 아니면 서버 데이터 폴백
-        const finalScore = displayScore > 0 ? displayScore : (item.score ?? item.totalScore ?? 0);
+        const finalScore   = displayScore > 0 ? displayScore : (item.score ?? item.totalScore ?? 0);
 
         return {
-          id:         item.memberId ?? item.id ?? `rank-series-${i}`,
-          memberId:   item.memberId ?? null,
-          name:       item.name ?? item.nickname ?? '알 수 없음',
-          colors:     colorHexList,
-          score:      finalScore,
-          recordDate: item.recordDate,
+          id:              item.memberId ?? item.id ?? `rank-series-${i}`,
+          memberId:        item.memberId ?? null,
+          name:            item.name ?? item.nickname ?? '알 수 없음',
+          profileImageUrl: item.profileImageUrl ?? null,
+          colors:          colorHexList,
+          score:           finalScore,
+          recordDate:      item.recordDate,
         };
       });
 
@@ -396,7 +403,7 @@ const RankingScreen = ({ route }: any) => {
 
       const userMap = new Map<string, any>();
       list.forEach(item => {
-        const key = item.memberId != null ? `id_${item.memberId}` : `name_${item.name}`;
+        const key  = item.memberId != null ? `id_${item.memberId}` : `name_${item.name}`;
         const prev = userMap.get(key);
         if (!prev) {
           userMap.set(key, item);
@@ -437,55 +444,54 @@ const RankingScreen = ({ route }: any) => {
   // ─────────────────────────── 렌더 ───────────────────────────
   return (
     <View style={styles.background}>
-      <ScrollView 
-        showsVerticalScrollIndicator={false} 
+      <ScrollView
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
         }
       >
 
-      {/* 내 랭킹 카드 */}
-      <View style={styles.myRankingWrapper}>
-        <View style={styles.myRankingCard}>
-          <View style={styles.myRankingContent}>
-            <View style={styles.myRankingLeft}>
-              <Image source={require('../assets/profile.png')} style={styles.myProfileImg} />
-              <View>
-                <Text style={styles.myNameText}>{myNickname}</Text>
-                <Text style={styles.myRankSubText}>{mainTab} 나의 순위</Text>
+        {/* 내 랭킹 카드 */}
+        <View style={styles.myRankingWrapper}>
+          <View style={styles.myRankingCard}>
+            <View style={styles.myRankingContent}>
+              <View style={styles.myRankingLeft}>
+                <ProfileImage uri={myProfileImageUrl} style={styles.myProfileImg} />
+                <View>
+                  <Text style={styles.myNameText}>{myNickname}</Text>
+                  <Text style={styles.myRankSubText}>{mainTab} 나의 순위</Text>
+                </View>
               </View>
-            </View>
-            <View style={styles.myRankingRight}>
-              <Text style={styles.myRankNumText}>{myCurrentRank}</Text>
-              <Text style={styles.myRankUnitText}>위</Text>
+              <View style={styles.myRankingRight}>
+                <Text style={styles.myRankNumText}>{myCurrentRank}</Text>
+                <Text style={styles.myRankUnitText}>위</Text>
+              </View>
             </View>
           </View>
         </View>
-      </View>
 
-      {/* 메인 탭 */}
-      <View style={styles.mainTabContainer}>
-        {(['초보벽', '지구력', '연속'] as const).map(tab => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.mainTabButton, mainTab === tab && styles.activeMainTab]}
-            onPress={() => setMainTab(tab)}
-          >
-            <Text style={[styles.mainTabText, mainTab === tab && styles.activeMainTabText]}>{tab}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+        {/* 메인 탭 */}
+        <View style={styles.mainTabContainer}>
+          {(['초보벽', '지구력', '연속'] as const).map(tab => (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.mainTabButton, mainTab === tab && styles.activeMainTab]}
+              onPress={() => setMainTab(tab)}
+            >
+              <Text style={[styles.mainTabText, mainTab === tab && styles.activeMainTabText]}>{tab}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
         {/* 색상 탭 (초보벽 전용) */}
         {mainTab === '초보벽' && (
           <View style={styles.colorTabRow}>
-            {/* 전체 버튼 */}
             <TouchableOpacity
               style={[
                 styles.colorBtn,
-                { borderColor: '#A1BE44' }, // 기본 테두리 색상
-                colorTab === '전체' && { backgroundColor: '#A1BE44', borderWidth: 1.5 } // 선택 시 배경 채우기
+                { borderColor: '#A1BE44' },
+                colorTab === '전체' && { backgroundColor: '#A1BE44', borderWidth: 1.5 }
               ]}
               onPress={() => setColorTab('전체')}
             >
@@ -502,7 +508,6 @@ const RankingScreen = ({ route }: any) => {
               </Text>
             </TouchableOpacity>
 
-            {/* 개별 색상 버튼 */}
             {colors.map(c => {
               const isSelected = colorTab === c.name;
               return (
@@ -510,15 +515,14 @@ const RankingScreen = ({ route }: any) => {
                   key={c.name}
                   style={[
                     styles.colorBtn,
-                    { borderColor: c.hex }, // 기본 테두리 색상
-                    isSelected && { backgroundColor: c.hex, borderWidth: 1.5 } // 선택 시 배경 꽉 채우기
+                    { borderColor: c.hex },
+                    isSelected && { backgroundColor: c.hex, borderWidth: 1.5 }
                   ]}
                   onPress={() => setColorTab(c.name)}
                 >
                   <Text style={[
                     styles.colorBtnText,
-                    // 기본 글씨색 (검정색 버튼일 때는 잘 보이도록 기본 글씨도 흰색으로)
-                    { color: c.name === '검정' ? '#ffffff' : c.hex }, 
+                    { color: c.name === '검정' ? '#ffffff' : c.hex },
                     isSelected && {
                       color: '#ffffff',
                       textShadowColor: 'rgba(0, 0, 0, 0.7)',
@@ -551,7 +555,7 @@ const RankingScreen = ({ route }: any) => {
 
                 {/* 프로필 + 이름 */}
                 <View style={styles.rankCenter}>
-                  <Image source={require('../assets/profile.png')} style={styles.rankProfileImg} />
+                  <ProfileImage uri={item.profileImageUrl} style={styles.rankProfileImg} />
                   <Text style={styles.rankNameText}>{item.name}</Text>
                 </View>
 
@@ -573,7 +577,6 @@ const RankingScreen = ({ route }: any) => {
                       <Text style={styles.enduranceLapsText}>편도 {item.laps}회</Text>
                       <Text style={styles.enduranceTimeText}>{item.time}</Text>
                       <View style={styles.enduranceSectionRow}>
-                        {/* ★ 수정: 1바퀴(홀수)일때 왼쪽 화살표, 0바퀴(짝수)일때 오른쪽 화살표 */}
                         {item.laps % 2 !== 0 && (
                           <Text style={[styles.enduranceSectionArrow, { color: getSectionColor(item.section) }]}>← </Text>
                         )}
@@ -613,69 +616,59 @@ const RankingScreen = ({ route }: any) => {
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A', paddingHorizontal: 20, paddingTop: 10 },
 
-  // 내 랭킹 카드
   myRankingWrapper: { marginBottom: 20, marginTop: 10 },
-  myRankingCard: { height: 110, borderRadius: 16, borderWidth: 1, borderColor: '#718A26', backgroundColor: '#5E731F', justifyContent: 'center' }, // 높이 100->110
+  myRankingCard: { height: 110, borderRadius: 16, borderWidth: 1, borderColor: '#718A26', backgroundColor: '#5E731F', justifyContent: 'center' },
   myRankingContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 25 },
   myRankingLeft: { flexDirection: 'row', alignItems: 'center' },
-  myProfileImg: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#444444', marginRight: 15 }, // 프사 56->64
-  myNameText: { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginBottom: 4 }, // 18->20
-  myRankSubText: { color: '#EBEBEB', fontSize: 15, fontWeight: '500' }, // 13->15
+  myProfileImg: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#444444', marginRight: 15 },
+  myNameText: { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginBottom: 4 },
+  myRankSubText: { color: '#EBEBEB', fontSize: 15, fontWeight: '500' },
   myRankingRight: { flexDirection: 'row', alignItems: 'baseline' },
-  myRankNumText: { color: '#A1BE44', fontSize: 48, fontWeight: '900', marginRight: 4, textShadowColor: 'rgba(0,0,0,0.4)', textShadowOffset: { width: 1, height: 2 }, textShadowRadius: 3 }, // 42->48
-  myRankUnitText: { color: '#EBEBEB', fontSize: 20, fontWeight: 'bold', marginBottom: 6 }, // 18->20
+  myRankNumText: { color: '#A1BE44', fontSize: 48, fontWeight: '900', marginRight: 4, textShadowColor: 'rgba(0,0,0,0.4)', textShadowOffset: { width: 1, height: 2 }, textShadowRadius: 3 },
+  myRankUnitText: { color: '#EBEBEB', fontSize: 20, fontWeight: 'bold', marginBottom: 6 },
 
-  // 메인 탭
   mainTabContainer: { flexDirection: 'row', backgroundColor: '#3A3A3A', borderRadius: 24, padding: 4, marginBottom: 20 },
-  mainTabButton: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 20 }, // 패딩 10->12
+  mainTabButton: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 20 },
   activeMainTab: { backgroundColor: '#1D1D1D' },
-  mainTabText: { color: '#999999', fontSize: 17, fontWeight: 'bold' }, // 15->17
+  mainTabText: { color: '#999999', fontSize: 17, fontWeight: 'bold' },
   activeMainTabText: { color: '#ffffff' },
 
   scrollContent: { paddingBottom: 50 },
 
-  // 색상 탭
   colorTabRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
-  colorBtn: { flex: 1, borderWidth: 1, borderRadius: 8, paddingVertical: 6, alignItems: 'center', marginHorizontal: 2 }, // 패딩 8->10
-  colorBtnText: { fontSize: 13, fontWeight: 'bold' }, // 11->13
-  colorBtnTextActive: { color: '#ffffff', fontSize: 13, fontWeight: 'bold' }, // 11->13
-  colorBtnTextGray: { color: '#999999', fontSize: 13, fontWeight: 'bold' }, // 11->13
+  colorBtn: { flex: 1, borderWidth: 1, borderRadius: 8, paddingVertical: 6, alignItems: 'center', marginHorizontal: 2 },
+  colorBtnText: { fontSize: 13, fontWeight: 'bold' },
+  colorBtnTextActive: { color: '#ffffff', fontSize: 13, fontWeight: 'bold' },
+  colorBtnTextGray: { color: '#999999', fontSize: 13, fontWeight: 'bold' },
 
-  // 랭킹 목록
   rankingListContainer: { paddingBottom: 20 },
-  emptyText: { color: '#999', textAlign: 'center', marginTop: 30, fontSize: 16 }, // 14->16
-  rankItemCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#212121', borderWidth: 1, borderColor: '#333333', borderRadius: 16, paddingVertical: 18, paddingHorizontal: 15, marginBottom: 12 }, // 패딩 조절
+  emptyText: { color: '#999', textAlign: 'center', marginTop: 30, fontSize: 16 },
+  rankItemCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#212121', borderWidth: 1, borderColor: '#333333', borderRadius: 16, paddingVertical: 18, paddingHorizontal: 15, marginBottom: 12 },
   myRankItemHighlight: { borderColor: '#A1BE44', backgroundColor: '#2A2F1D' },
 
-  // 순위 원
-  rankCircle: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginRight: 15 }, // 크기 36->40
-  rankNumberText: { fontSize: 16, fontWeight: '900' }, // 14->16
+  rankCircle: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginRight: 15 },
+  rankNumberText: { fontSize: 16, fontWeight: '900' },
 
-  // 프로필 + 이름
   rankCenter: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  rankProfileImg: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#444444', marginRight: 12 }, // 36->40
-  rankNameText: { color: '#ffffff', fontSize: 17, fontWeight: 'bold' }, // 15->17
+  rankProfileImg: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#444444', marginRight: 12 },
+  rankNameText: { color: '#ffffff', fontSize: 17, fontWeight: 'bold' },
 
-  // 우측 정보
-  rankRight: { alignItems: 'center', justifyContent: 'center', minWidth: 95 }, // 85->95
+  rankRight: { alignItems: 'center', justifyContent: 'center', minWidth: 95 },
 
-  // 초보벽
-  rankTypeText: { fontSize: 16, fontWeight: '900', marginBottom: 4, textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }, // 14->16
+  rankTypeText: { fontSize: 16, fontWeight: '900', marginBottom: 4, textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
   rankInfoBottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  rankColorText: { fontSize: 17, fontWeight: 'bold', marginRight: 6, textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }, // 15->17
-  rankHoldText: { color: '#ffffff', fontSize: 17, fontWeight: '600', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }, // 15->17
+  rankColorText: { fontSize: 17, fontWeight: 'bold', marginRight: 6, textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
+  rankHoldText: { color: '#ffffff', fontSize: 17, fontWeight: '600', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
 
-  // 지구력
-  enduranceLapsText: { color: '#A1BE44', fontSize: 17, fontWeight: 'bold', marginBottom: 3, textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }, // 15->17
-  enduranceTimeText: { color: '#ffffff', fontSize: 16, fontWeight: '600', marginBottom: 3, textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }, // 14->16
+  enduranceLapsText: { color: '#A1BE44', fontSize: 17, fontWeight: 'bold', marginBottom: 3, textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
+  enduranceTimeText: { color: '#ffffff', fontSize: 16, fontWeight: '600', marginBottom: 3, textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
   enduranceSectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  enduranceSectionText: { fontSize: 17, fontWeight: 'bold', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }, // 15->17
-  enduranceSectionArrow: { fontSize: 17, fontWeight: 'bold', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }, // 15->17
+  enduranceSectionText: { fontSize: 17, fontWeight: 'bold', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
+  enduranceSectionArrow: { fontSize: 17, fontWeight: 'bold', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
 
-  // 연속 완등
   consecutiveColorsRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', maxWidth: 90, marginBottom: 5 },
-  miniColorCircle: { width: 16, height: 16, borderRadius: 8, margin: 2, borderWidth: 0.5, borderColor: '#555555' }, // 14->16
-  consecutiveScoreText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }, // 16->18
+  miniColorCircle: { width: 16, height: 16, borderRadius: 8, margin: 2, borderWidth: 0.5, borderColor: '#555555' },
+  consecutiveScoreText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
 });
 
 export default RankingScreen;
