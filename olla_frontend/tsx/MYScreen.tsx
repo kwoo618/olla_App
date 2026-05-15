@@ -54,6 +54,8 @@ const MYScreen = ({ navigation }: any) => {
   const isFocused = useIsFocused();
   const [loading, setLoading] = useState(true);
 
+  const [isImageUploading, setIsImageUploading] = useState(false); // 프로필 이미지 저장 
+
   // ─── 모달 및 애니메이션 상태 ───
   const [isProfileModalVisible, setProfileModalVisible] = useState(false);
   const [isMembershipExpanded, setIsMembershipExpanded] = useState(false);
@@ -186,17 +188,56 @@ const MYScreen = ({ navigation }: any) => {
   }, []);
 
   const handleSelectImage = () => {
-    launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, (response) => {
-      if (response.didCancel) {
-        return;
-      } else if (response.errorCode) {
-        console.log('이미지 선택 오류:', response.errorMessage);
-        return;
-      } else if (response.assets && response.assets.length > 0) {
-        setProfileData((prev: any) => ({ ...prev, profileImageUrl: response.assets![0].uri }));
+  launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, async (response) => {
+    if (response.didCancel || response.errorCode) return;
+    
+    if (response.assets && response.assets.length > 0) {
+      const asset = response.assets[0];
+      
+      // 미리보기용으로만 로컬 URI 표시
+      setProfileData((prev: any) => ({ ...prev, profileImageUrl: asset.uri }));
+      
+      try {
+        setIsImageUploading(true);
+        const userToken = await AsyncStorage.getItem('userToken');
+        
+        const formData = new FormData();
+        formData.append('image', {
+          uri: asset.uri,
+          type: asset.type || 'image/jpeg',
+          name: asset.fileName || 'profile.jpg',
+        } as any);
+        
+        const uploadRes = await axios.post(
+          `${API_BASE_URL}/members/me/profile-image`,
+          formData,
+          {
+            headers: {
+              Authorization: `Bearer ${userToken}`,
+              'Content-Type': 'multipart/form-data',
+            },
+          }
+        );
+        
+        const uploadedUrl =
+          uploadRes.data?.data?.profileImageUrl ||
+          uploadRes.data?.profileImageUrl;
+        
+        if (uploadedUrl) {
+          // 로컬 URI를 실제 S3 URL로 교체
+          setProfileData((prev: any) => ({ ...prev, profileImageUrl: uploadedUrl }));
+        }
+      } catch (e: any) {
+        console.log('이미지 업로드 실패:', e.response?.data?.message || e.message);
+        showResultModal('오류', '이미지 업로드에 실패했습니다.', 'error');
+        // 실패 시 기존 이미지로 복구
+        fetchMyInfo();
+      } finally {
+        setIsImageUploading(false);
       }
-    });
-  };
+    }
+  });
+};
 
   // ─── 팝업 제어 ───
   const openProfileModal = () => {
@@ -261,24 +302,37 @@ const MYScreen = ({ navigation }: any) => {
   };
 
   const handleSaveProfile = async () => {
-    try {
-      const userToken = await AsyncStorage.getItem('userToken');
-      const requestBody = {
-        name: profileData.name, phone: profileData.phone, gender: profileData.gender === '남' ? 'MALE' : 'FEMALE',
-        birthDate: profileData.birthDate, height: parseFloat(profileData.height) || 0, weight: parseFloat(profileData.weight) || 0,
-        armSpan: parseFloat(profileData.arm) || 0, footSize: parseFloat(profileData.shoe) || 0,
-        isPublicPhone: profileToggles.showPhone, isEmailPublic: true, isHeightPublic: profileToggles.showHeight, isWeightPublic: profileToggles.showWeight,
-        isArmSpanPublic: profileToggles.showArm, isFootSizePublic: profileToggles.showShoe,
-        age: parseInt(calcAgeFromBirth(profileData.birthDate)) || 0,
-        profileImageUrl: profileData.profileImageUrl
-      };
-      
-      await axios.patch(`${API_BASE_URL}/members/me/info`, requestBody, { headers: { Authorization: `Bearer ${userToken}` } });
-      closeProfileModal();
-      setTimeout(() => showResultModal('성공', '정보가 저장되었습니다.', 'success'), 500);
-      fetchMyInfo();
-    } catch (e) { showResultModal('오류', '저장 실패', 'error'); }
-  };
+  try {
+    const userToken = await AsyncStorage.getItem('userToken');
+    const requestBody = {
+      name: profileData.name,
+      phone: profileData.phone,
+      gender: profileData.gender === '남' ? 'MALE' : 'FEMALE',
+      birthDate: profileData.birthDate,
+      height: parseFloat(profileData.height) || 0,
+      weight: parseFloat(profileData.weight) || 0,
+      armSpan: parseFloat(profileData.arm) || 0,
+      footSize: parseFloat(profileData.shoe) || 0,
+      isPublicPhone: profileToggles.showPhone,
+      isEmailPublic: true,
+      isHeightPublic: profileToggles.showHeight,
+      isWeightPublic: profileToggles.showWeight,
+      isArmSpanPublic: profileToggles.showArm,
+      isFootSizePublic: profileToggles.showShoe,
+      age: parseInt(calcAgeFromBirth(profileData.birthDate)) || 0,
+      // profileImageUrl 제거 → 이미지는 선택 즉시 별도 API로 저장됨
+    };
+    
+    await axios.patch(`${API_BASE_URL}/members/me/info`, requestBody, {
+      headers: { Authorization: `Bearer ${userToken}` },
+    });
+    closeProfileModal();
+    setTimeout(() => showResultModal('성공', '정보가 저장되었습니다.', 'success'), 500);
+    fetchMyInfo();
+  } catch (e) {
+    showResultModal('오류', '저장 실패', 'error');
+  }
+};
 
   const renderEditField = (title: string, fieldKey: string, unit: string) => {
     const toggleKey = `show${fieldKey.charAt(0).toUpperCase() + fieldKey.slice(1)}`;
@@ -393,9 +447,24 @@ const MYScreen = ({ navigation }: any) => {
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }} keyboardShouldPersistTaps="handled">
                 <View style={styles.profileEditContainer}>
                   
-                  <TouchableOpacity style={styles.profileImageEditWrapper} activeOpacity={0.7} onPress={handleSelectImage}>
-                    <Image source={profileData.profileImageUrl ? { uri: profileData.profileImageUrl } : require('../assets/profile.png')} style={styles.profileImageLarge} />
-                    <View style={styles.profileImageEditOverlay}><Text style={styles.profileImageEditText}>수정</Text></View>
+                  <TouchableOpacity 
+                    style={styles.profileImageEditWrapper} 
+                    activeOpacity={0.7} 
+                    onPress={handleSelectImage}
+                    disabled={isImageUploading}
+                  >
+                    <Image 
+                      source={profileData.profileImageUrl 
+                        ? { uri: profileData.profileImageUrl } 
+                        : require('../assets/profile.png')} 
+                      style={styles.profileImageLarge} 
+                    />
+                    <View style={styles.profileImageEditOverlay}>
+                      {isImageUploading 
+                        ? <ActivityIndicator size="small" color="#ffffff" />
+                        : <Text style={styles.profileImageEditText}>수정</Text>
+                      }
+                    </View>
                   </TouchableOpacity>
 
                   <View style={styles.editFieldWrapper}>
