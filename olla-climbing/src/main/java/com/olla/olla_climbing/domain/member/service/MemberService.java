@@ -8,6 +8,7 @@ import com.olla.olla_climbing.domain.member.dto.request.NotificationUpdateReques
 import com.olla.olla_climbing.domain.member.dto.response.NotificationResponse;
 import com.olla.olla_climbing.domain.member.dto.response.MemberResponse;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
+import com.olla.olla_climbing.global.infra.s3.S3ImageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -15,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.olla.olla_climbing.domain.member.dto.request.MemberUpdateRequest;
 import com.olla.olla_climbing.domain.member.entity.MemberDetail;
 import com.olla.olla_climbing.domain.member.entity.MemberPrivacy;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 
@@ -25,6 +27,7 @@ public class MemberService {
 
     private final MemberRepository memberRepository;
     private final GoogleSheetsService googleSheetsService;
+    private final S3ImageService s3ImageService;
 
     // 회원가입 화면에서 DB 아이디 중복 확인 로직 (동철 수정)
     @Transactional(readOnly = true)
@@ -189,5 +192,19 @@ public class MemberService {
     @Transactional(readOnly = true)
     public boolean existsByPhone(String phone) {
         return memberRepository.existsByPhone(phone);
+    }
+
+    @Transactional
+    public String updateProfileImage(String loginId, MultipartFile file) {
+        Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
+                .orElseThrow(() -> new IllegalArgumentException("회원 정보가 없습니다."));
+
+        // 1. S3에 이미지 업로드
+        String imageUrl = s3ImageService.uploadImage(file);
+
+        // 2. 회원 엔티티에 URL 업데이트
+        member.updateProfileImage(imageUrl);
+
+        return imageUrl;
     }
 }

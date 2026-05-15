@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 public class AdminMemberResponse {
     private Long memberId;
     private String name;
-    private String profileImageUrl; // 💡 프론트 요청: 관리자 리스트 프사 추가
+    private String profileImageUrl;
     private String phone;
     private String role;
     private boolean isDeleted;
@@ -32,20 +32,7 @@ public class AdminMemberResponse {
     }
 
     public static AdminMemberResponse from(Member member, List<Membership> activeMemberships) {
-
-        if (activeMemberships == null || activeMemberships.isEmpty()) {
-            return AdminMemberResponse.builder()
-                    .memberId(member.getId())
-                    .name(member.getName())
-                    .profileImageUrl(member.getProfileImageUrl())
-                    .phone(member.getPhone())
-                    .role(member.getRole() != null ? member.getRole().name() : "USER")
-                    .isDeleted(member.isDeleted())
-                    .memberships(List.of())
-                    .build();
-        }
-
-        List<MembershipDto> membershipDtos = activeMemberships.stream()
+        List<MembershipDto> membershipDtos = (activeMemberships == null) ? List.of() : activeMemberships.stream()
                 .map(m -> MembershipDto.builder()
                         .membershipId(m.getId())
                         .membershipStatus(m.getStatus().name())
@@ -60,6 +47,7 @@ public class AdminMemberResponse {
                 .memberId(member.getId())
                 .name(member.getName())
                 .profileImageUrl(member.getProfileImageUrl())
+                .phone(member.getPhone())
                 .role(member.getRole() != null ? member.getRole().name() : "USER")
                 .isDeleted(member.isDeleted())
                 .memberships(membershipDtos)
