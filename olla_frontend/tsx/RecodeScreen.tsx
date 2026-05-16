@@ -115,6 +115,7 @@ const RecodeScreen = ({
 }: any) => {
 
   const [refreshing, setRefreshing] = useState(false);
+  const [showTimerFinishConfirm, setShowTimerFinishConfirm] = useState(false); // 타이머 확인 모달 
   
   const loadAllData = async () => {
     setEnduranceData([]);
@@ -664,11 +665,12 @@ const RecodeScreen = ({
   const confirmStopTimer = () => {
     if (timerRunning) {
       setTimerRunning(false);
-      if (timerRef.current) clearInterval(timerRef.current);
+
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
     }
-    setTimeout(() => {
-      setFinishModalVisible(true);
-    }, 500);
+    setShowTimerFinishConfirm(true);
   };
 
   const cancelStopTimer = () => {
@@ -676,21 +678,16 @@ const RecodeScreen = ({
   };
 
   const stopTimerAndSave = () => {
+    setShowTimerFinishConfirm(false); // 확인 모달 먼저 닫기
+    setIsTimerActive(false);
+    
+    // 모달이 완전히 사라진 후(약 0.5초) 나머지 로직 수행
     if (timerRef.current) clearInterval(timerRef.current);
     setTimerRunning(false);
-    
-    let elapsed = 0;
-    if (timerMode === 'stopwatch') {
-      elapsed = timerSeconds; 
-    } else {
-      elapsed = initialTimerValue - timerSeconds; 
-    }
-    
+    let elapsed = timerMode === 'stopwatch' ? timerSeconds : initialTimerValue - timerSeconds;
     const [m, s] = formatTime(elapsed).split(':');
     setEnduranceMin(m);
     setEnduranceSec(s);
-    setIsTimerActive(false);
-    setFinishModalVisible(false); 
   };
 
   const openTimerModal = () => { 
@@ -1116,6 +1113,28 @@ const RecodeScreen = ({
               </TouchableOpacity>
             </View>
 
+            {showTimerFinishConfirm && (
+              <View style={{
+                position: 'absolute',
+                top: 0, left: 0, right: 0, bottom: 0,
+                backgroundColor: 'rgba(0,0,0,0.85)',
+                justifyContent: 'center',
+                alignItems: 'center',
+                zIndex: 999
+              }}>
+                <View style={styles.deleteModalBox}>
+                  <Text style={styles.deleteModalText}>종료하시겠습니까?</Text>
+                  <View style={styles.deleteBtnRow}>
+                    <TouchableOpacity style={styles.deleteBtnYes} onPress={stopTimerAndSave}>
+                      <Text style={styles.deleteBtnYesText}>예</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.deleteBtnNo} onPress={() => setShowTimerFinishConfirm(false)}>
+                      <Text style={styles.deleteBtnNoText}>아니오</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            )}
           </SafeAreaView>
         ) : (
           <View style={styles.modalOverlay}>
