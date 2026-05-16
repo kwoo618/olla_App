@@ -820,7 +820,7 @@ const HomeScreen = ({ navigation }: any) => {
                           ? isCountType
                             ? `${membership.remainingCount}회`
                             : `${membership.remainingDays}일`
-                          : membership.hasFuture 
+                          : membership.hasFuture
                             ? '시작 예정'
                             : '구매 필요'}
                       </Text>

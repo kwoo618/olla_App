@@ -15,6 +15,8 @@ const MEMBERSHIP_API_URL  = `${API_BASE_URL}/admin/memberships`;
 const VISIT_TODAY_API_URL = `${API_BASE_URL}/admin/visits/today`;
 const QR_SCAN_API_URL     = `${API_BASE_URL}/admin/visits/scan`;
 const PROFILE_API_URL     = `${API_BASE_URL}/members`;
+// 혼잡도 관련 API 임시 URL (실제 백엔드 API 주소로 수정 필요)
+const CONGESTION_API_URL  = `${API_BASE_URL}/admin/visits/congestion`; 
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -48,8 +50,12 @@ const ManagerDashboard = ({ navigation }: any) => {
   const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ type: 'notice' | 'post', id: number } | null>(null);
 
-  // ✅ 출석한 회원 ID를 로컬에서 추적
+  // 출석한 회원 ID를 로컬에서 추적
   const [visitedMemberIds, setVisitedMemberIds] = useState<Set<number>>(new Set());
+
+  // ✅ 주간 및 시간대별 혼잡도 상태 추가
+  const [weeklyCongestion, setWeeklyCongestion] = useState<number[]>([]);
+  const [hourlyCongestion, setHourlyCongestion] = useState<any>(null);
 
   const [metrics, setMetrics] = useState({
     totalMembers: 0,
@@ -138,11 +144,33 @@ const ManagerDashboard = ({ navigation }: any) => {
         fetchMembers(token),
         fetchVisits(token),
         fetchActiveMemberships(token),
+        fetchCongestionData(token), // ✅ 혼잡도 데이터 Fetch 추가
       ]);
     } catch (error: any) {
       console.error('데이터 로딩 실패:', error.response?.data?.message || error.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ✅ 혼잡도 데이터 불러오기 함수 추가
+  const fetchCongestionData = async (token: string) => {
+    try {
+      const response = await axios.get(CONGESTION_API_URL, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = response.data?.data || {};
+      
+      // 주간 혼잡도 배열 저장
+      if (data.weeklyCongestion) {
+        setWeeklyCongestion(data.weeklyCongestion);
+      }
+      // 시간대별 혼잡도 Map 저장
+      if (data.hourlyCongestionByDay) {
+        setHourlyCongestion(data.hourlyCongestionByDay);
+      }
+    } catch (error: any) {
+      console.error('혼잡도 데이터 로드 실패:', error.response?.data?.message || error.message);
     }
   };
 
@@ -206,16 +234,28 @@ const ManagerDashboard = ({ navigation }: any) => {
     }
   };
 
-  // ✅ today API에서 visitLogs로 출석한 회원 추적 + 카운트
   const fetchVisits = async (token: string) => {
     try {
       const response = await axios.get(VISIT_TODAY_API_URL, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      // 가능한 모든 depth 커버
       const data = response.data?.data?.data ?? response.data?.data ?? response.data;
+      
       const todayCount = data?.totalVisitsToday ?? 0;
       setMetrics(prev => ({ ...prev, todayVisitors: todayCount }));
+
+      const logs = data?.visitLogs || [];
+      const visitedIds = new Set<number>();
+      
+      logs.forEach((log: any) => {
+        const memberId = log.memberId || log.member?.id || log.member?.memberId || log.id;
+        if (memberId) {
+          visitedIds.add(memberId);
+        }
+      });
+      
+      setVisitedMemberIds(visitedIds);
+
     } catch (error: any) {
       console.error('금일 방문자 로드 실패:', error.response?.data?.message || error.message);
     }
@@ -384,7 +424,6 @@ const ManagerDashboard = ({ navigation }: any) => {
     }, 800);
   };
 
-  // handleBarCodeScanned: ALREADY/WARNING(오늘이미출석) / SUCCESS / ERROR 분기
   const handleBarCodeScanned = async (qrData: string) => {
     if (scannedRef.current || isProcessing) return;
     scannedRef.current = true;
@@ -423,20 +462,17 @@ const ManagerDashboard = ({ navigation }: any) => {
           message.includes('이미 출석') ||
           message.includes('오늘 이미')
         ) {
-          // 오늘 이미 출석한 경우
           showResultModal(
             '금일 출석 완료 🙌',
             `${memberName}님은\n오늘 이미 출석하셨습니다.`,
             'info'
           );
         } else if (statusCode === 'ERROR') {
-          // 출석 실패
           showResultModal(
             '출석 실패',
             message || '출석 처리에 실패했습니다.',
             'error',
             () => {
-              // 확인 누르면 다시 스캔
               setTimeout(() => {
                 scannedRef.current = false;
                 setIsProcessing(false);
@@ -445,7 +481,6 @@ const ManagerDashboard = ({ navigation }: any) => {
             }
           );
         } else {
-          // SUCCESS or WARNING(잔여횟수 경고) - 성공 시 갱신
           AsyncStorage.getItem('userToken').then(t => {
             if (t) { fetchVisits(t); fetchMembers(t); }
           });
@@ -471,7 +506,6 @@ const ManagerDashboard = ({ navigation }: any) => {
           errorMsg,
           'error',
           () => {
-            // 확인 누르면 다시 스캔
             setTimeout(() => {
               scannedRef.current = false;
               setIsProcessing(false);
@@ -521,6 +555,65 @@ const ManagerDashboard = ({ navigation }: any) => {
           </View>
         </View>
 
+        {/* =========================================================================
+            [프론트엔드 주석 처리된 혼잡도 UI 및 라이브러리 가이드 영역]
+            
+            추후 UI 디자인이 완료되면 아래 주석을 해제하여 사용하세요.
+            사용 라이브러리 예시: npm install react-native-chart-kit
+
+            import { BarChart, LineChart } from "react-native-chart-kit";
+        ========================================================================= */}
+        {/*
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>주간 혼잡도 (월~일)</Text>
+          </View>
+          <View style={styles.divider} />
+          {weeklyCongestion.length > 0 ? (
+            <BarChart
+              data={{
+                labels: ["월", "화", "수", "목", "금", "토", "일"],
+                datasets: [{ data: weeklyCongestion }] // 백엔드에서 받은 배열: [15, 30, 20, 45, 80, 95, 60]
+              }}
+              width={SCREEN_WIDTH - 80}
+              height={220}
+              yAxisLabel=""
+              yAxisSuffix="명"
+              chartConfig={{
+                backgroundColor: "#2C2C2C",
+                backgroundGradientFrom: "#2C2C2C",
+                backgroundGradientTo: "#2C2C2C",
+                color: (opacity = 1) => `rgba(161, 190, 68, ${opacity})`,
+                labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+                barPercentage: 0.5,
+              }}
+              style={{ marginVertical: 8, borderRadius: 16 }}
+            />
+          ) : (
+             <Text style={styles.emptyText}>혼잡도 데이터가 없습니다.</Text>
+          )}
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>시간대별 혼잡도 (09시~23시)</Text>
+          </View>
+          <View style={styles.divider} />
+          {hourlyCongestion ? (
+            <View>
+              <Text style={{ color: '#999', fontSize: 13, marginBottom: 10 }}>
+                * 백엔드 데이터: hourlyCongestionByDay
+                * 구현 방법: X축 시간(09~23시), Y축 요일(월~일)의 히트맵 또는
+                각 요일별 데이터를 LineChart로 7개의 선을 그립니다.
+              </Text>
+              // 예: 다중 선 그래프(LineChart) 구현 로직 작성 공간
+            </View>
+          ) : (
+            <Text style={styles.emptyText}>혼잡도 데이터가 없습니다.</Text>
+          )}
+        </View>
+        */}
+
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>최근 가입회원</Text>
@@ -533,7 +626,7 @@ const ManagerDashboard = ({ navigation }: any) => {
             recentMembers.map((memberResponse, index) => {
               const member   = memberResponse.member || memberResponse;
               const memberId = member.memberId || member.id;
-              // ✅ 로컬 visitedMemberIds로 출석 뱃지 표시
+              // 로컬 visitedMemberIds로 출석 뱃지 표시
               const isVisited = visitedMemberIds.has(memberId);
               const badgeBg    = isVisited ? 'rgba(161,190,68,0.2)' : 'rgba(142,142,142,0.2)';
               const badgeColor = isVisited ? '#A1BE44' : '#8E8E8E';
