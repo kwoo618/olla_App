@@ -38,9 +38,6 @@ const ManagerDashboard = ({ navigation }: any) => {
   const [posts, setPosts] = useState<any[]>([]);
   const [recentMembers, setRecentMembers] = useState<any[]>([]);
 
-  // ✅ 수정 3/4: 금일 방문자 이름 목록을 별도 상태로 관리
-  const [todayVisitorNames, setTodayVisitorNames] = useState<Set<string>>(new Set());
-
   const [resultModalVisible, setResultModalVisible] = useState(false);
   const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info', onConfirm: () => {} });
 
@@ -225,25 +222,29 @@ const ManagerDashboard = ({ navigation }: any) => {
     }
   };
 
-  // ✅ 수정 3/4: fetchVisits - VISIT_TODAY_API_URL 응답 구조에 맞게 수정
-  // 응답: { data: { totalVisitsToday: number, visitLogs: [{ memberName, visitTime, adminName }] } }
   const fetchVisits = async (token: string) => {
     try {
-      const response = await axios.get(VISIT_TODAY_API_URL, {
+      const response = await axios.get(MEMBER_API_URL, {
         headers: { Authorization: `Bearer ${token}` },
+        params: { size: 1000 }
       });
-
-      const data = response.data?.data?.data ?? response.data?.data ?? {};
-      const todayCount = typeof data?.totalVisitsToday === 'number' ? data.totalVisitsToday : 0;
+      const list = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
       
-      // ✅ 수정 4: visitLogs에서 금일 출석한 회원 이름 Set으로 추출
-      const visitLogs: any[] = Array.isArray(data?.visitLogs) ? data.visitLogs : [];
-      const nameSet = new Set<string>(visitLogs.map((log: any) => log.memberName).filter(Boolean));
-      setTodayVisitorNames(nameSet);
+      const uniqueVisitors = list.filter((item: any) => {
+        const member = item.member || item;
+        return member.visitedToday === true || member.todayVisit === true || member.hasVisited === true;
+      }).length;
 
-      setMetrics(prev => ({ ...prev, todayVisitors: todayCount }));
+      setMetrics(prev => ({ ...prev, todayVisitors: uniqueVisitors }));
     } catch (error: any) {
-      console.error('금일 방문자 데이터 로드 실패:', error.response?.data?.message || error.message);
+      console.error('고유 방문자 데이터 로드 실패, 기존 API로 폴백:', error.response?.data?.message || error.message);
+      try {
+        const fallbackRes = await axios.get(VISIT_TODAY_API_URL, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const todayCount = fallbackRes.data?.data?.data?.totalVisitsToday ?? fallbackRes.data?.data?.data ?? 0;
+        setMetrics(prev => ({ ...prev, todayVisitors: todayCount }));
+      } catch (err) {}
     }
   };
 
@@ -469,7 +470,6 @@ const ManagerDashboard = ({ navigation }: any) => {
           () => {
             AsyncStorage.getItem('userToken').then(t => {
               if (t) {
-                // ✅ 수정 3/4: 출석 완료 후 방문자 데이터 및 회원 목록 갱신
                 fetchVisits(t); 
                 fetchMembers(t); 
               }
@@ -480,27 +480,11 @@ const ManagerDashboard = ({ navigation }: any) => {
 
     } catch (error: any) {
       console.error('QR 스캔 실패:', error.response?.data?.message || error.message);
-
-      // ✅ 수정 2: 이미 출석한 회원인 경우 별도 안내 메시지 처리
-      const httpStatus = error.response?.status;
       const errorMsg = error.response?.data?.message || '출석 처리에 실패했습니다.\n유효한 QR 코드인지 확인해주세요.';
-      const isAlreadyCheckedIn =
-        httpStatus === 409 ||
-        errorMsg.includes('이미 출석') ||
-        errorMsg.includes('already') ||
-        errorMsg.includes('중복');
 
-      setIsProcessing(false);
-
-      if (isAlreadyCheckedIn) {
-        closeScanner();
-        setTimeout(() => {
-          showResultModal('이미 출석 완료', '오늘 이미 출석 처리된 회원입니다.', 'info');
-        }, 300);
-      } else {
-        setQrErrorMsg(errorMsg);
-        setQrErrorVisible(true);
-      }
+      setIsProcessing(false); 
+      setQrErrorMsg(errorMsg);
+      setQrErrorVisible(true);
     }
   };
 
@@ -553,18 +537,12 @@ const ManagerDashboard = ({ navigation }: any) => {
           {recentMembers.length > 0 ? (
             recentMembers.map((memberResponse, index) => {
               const member     = memberResponse.member || memberResponse;
-
-              // ✅ 수정 4: todayVisitorNames Set을 기반으로 실제 출석 여부 판단
-              const userName = member.name || '이름 없음';
-              const isVisited  = todayVisitorNames.has(userName) ||
-                member.visitedToday === true ||
-                member.todayVisit === true ||
-                member.hasVisited === true;
-
+              const isVisited  = member.visitedToday === true || member.todayVisit === true || member.hasVisited === true;
               const badgeBg    = isVisited ? 'rgba(161,190,68,0.2)' : 'rgba(142,142,142,0.2)';
               const badgeColor = isVisited ? '#A1BE44' : '#8E8E8E';
               const label      = isVisited ? '출석함' : '미출석';
 
+              const userName = member.name || '이름 없음';
               const userPhone = member.phone || '전화번호 없음';
               const memberId = member.memberId || member.id;
               

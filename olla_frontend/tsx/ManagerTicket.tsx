@@ -46,32 +46,6 @@ const formatShortDate = (dateStr: string) => {
   return dateStr;
 };
 
-// ✅ 수정 1: 잔여일 계산 - 시작일이 미래인 경우 전체 기간(endDate - startDate)을 반환,
-//   시작일이 과거/오늘인 경우 오늘부터 endDate까지의 잔여일 반환
-const calcRemainingDays = (startDate: string, endDate: string): number => {
-  if (!endDate) return 0;
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const end = new Date(endDate);
-  end.setHours(0, 0, 0, 0);
-
-  // 시작일이 있고 미래인 경우 → 전체 기간(endDate - startDate) 반환
-  if (startDate) {
-    const start = new Date(startDate);
-    start.setHours(0, 0, 0, 0);
-    if (start > today) {
-      const totalDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-      return totalDiff >= 0 ? totalDiff : 0;
-    }
-  }
-
-  // 시작일이 오늘이거나 과거인 경우 → 오늘부터 종료일까지 잔여일
-  const diff = Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  return diff >= 0 ? diff : 0;
-};
-
 const ManagerTicket = ({ navigation }: any) => {
   const [refreshing, setRefreshing] = useState(false);
   const insets = useSafeAreaInsets();
@@ -346,6 +320,7 @@ const ManagerTicket = ({ navigation }: any) => {
     if (periodList.length > 0) {
       let earliestStart = '';
       let latestEnd = '';
+      let totalRemainingDays = 0;
       const isHolding = periodList.some((m: any) => String(m.membershipStatus).toUpperCase() === 'HOLDING');
 
       periodList.forEach((m: any) => {
@@ -353,8 +328,14 @@ const ManagerTicket = ({ navigation }: any) => {
         if (!latestEnd || (m.endDate && m.endDate > latestEnd)) latestEnd = m.endDate;
       });
 
-      // ✅ 수정 1: calcRemainingDays 사용 - 시작일 기준 정확한 잔여일 계산
-      const totalRemainingDays = calcRemainingDays(earliestStart, latestEnd);
+      if (latestEnd) {
+        const end = new Date(latestEnd);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        end.setHours(0, 0, 0, 0);
+        const diff = Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        totalRemainingDays = diff >= 0 ? diff : 0;
+      }
 
       merged.push({
         _merged: true,
@@ -709,7 +690,7 @@ const ManagerTicket = ({ navigation }: any) => {
               badgeTextStyle = styles.badgeTextHolding;
             } else if (holdingCount > 0 && activeCount > 0) {
               badgeText = '일부 정지';
-              badgeStyle = styles.badgePartial;
+              badgeStyle = styles.badgePartial; // 새로 추가된 파란색 뱃지 스타일
               badgeTextStyle = styles.badgeTextPartial;
             }
 
@@ -742,7 +723,6 @@ const ManagerTicket = ({ navigation }: any) => {
                       <Text key={`dday-${m._type}-${idx}`} style={[styles.rowTextDday, idx > 0 && { marginTop: 6 }]} numberOfLines={1}>
                         {isCount
                           ? `${m.remainingCount ?? 0}회`
-                          // ✅ 수정 1: _totalRemainingDays는 이미 calcRemainingDays로 계산된 값 사용
                           : (m._totalRemainingDays !== undefined ? `${m._totalRemainingDays}일` : calculateDDay(m.endDate))
                         }
                       </Text>
@@ -849,7 +829,6 @@ const ManagerTicket = ({ navigation }: any) => {
                         const isCountType = m._type === '일일권';
                         const remainText = isCountType
                           ? `[일일권] 총 잔여 ${m.remainingCount ?? 0}회`
-                          // ✅ 수정 1: _totalRemainingDays 사용 (이미 calcRemainingDays 반영됨)
                           : `[회원권] 총 잔여 ${m._totalRemainingDays}일 (${m.startDate || '-'} ~ ${m.endDate || '-'})`;
                         return (
                           <Text key={`merged-detail-${idx}`} style={styles.manageDetailText}>
@@ -1123,10 +1102,10 @@ const styles = StyleSheet.create({
   badge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
   badgeActive: { backgroundColor: 'rgba(161, 190, 68, 0.2)' },
   badgeHolding: { backgroundColor: 'rgba(255, 153, 0, 0.2)' },
-  badgePartial: { backgroundColor: 'rgba(77, 166, 255, 0.2)' },
+  badgePartial: { backgroundColor: 'rgba(77, 166, 255, 0.2)' }, // 파란색 반투명 배경
   badgeTextActive: { color: '#A1BE44', fontSize: 13, fontWeight: 'bold' },
   badgeTextHolding: { color: '#FF9900', fontSize: 13, fontWeight: 'bold' },
-  badgeTextPartial: { color: '#4DA6FF', fontSize: 13, fontWeight: 'bold' },
+  badgeTextPartial: { color: '#4DA6FF', fontSize: 13, fontWeight: 'bold' }, // 파란색 텍스트
 
   fab: { position: 'absolute', right: 20, backgroundColor: '#A1BE44', paddingHorizontal: 25, paddingVertical: 18, borderRadius: 30, elevation: 5 },
   fabText: { color: '#000', fontSize: 18, fontWeight: 'bold' },
