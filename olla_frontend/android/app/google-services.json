@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "119840646767",
+    "project_id": "olla-94e41",
+    "storage_bucket": "olla-94e41.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:119840646767:android:beded0f184c7517532cf9a",
+        "android_client_info": {
+          "package_name": "com.olla.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCOM_HkegrYW_0t1dln6IowGHDKFOLEhkI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
