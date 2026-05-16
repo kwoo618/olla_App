@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
+import {Alert} from 'react-native';
 import axios from 'axios';
 import QRCode from 'react-native-qrcode-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -253,25 +254,59 @@ const HomeScreen = ({ navigation }: any) => {
 
       try {
         const memResponse = await axios.get(`${API_BASE_URL}/memberships/me`, config);
-        const data = memResponse.data?.data?.data;
-        if (data) {
-          const displayType = resolveMembershipType(String(data.membershipType || ''), data.startDate || '', data.endDate || '', data.remainingCount ?? null);
-          let remainingDays = 0;
-          if (data.endDate) {
-            const end = new Date(data.endDate);
-            end.setHours(0, 0, 0, 0);
-            const todayStr = new Date();
-            todayStr.setHours(0, 0, 0, 0);
-            const diff = Math.round((end.getTime() - todayStr.getTime()) / (1000 * 60 * 60 * 24));
-            remainingDays = diff >= 0 ? diff : 0;
-          }
+        const dataList = memResponse.data?.data?.data;
+        
+        if (dataList && Array.isArray(dataList) && dataList.length > 0) {
+          const activeList = dataList.filter((m: any) => m.status === 'ACTIVE');
+          
+          // 회원권(PERIOD)과 일일권(COUNT) 분리
+          const periodList = activeList.filter((m: any) => 
+            String(m.membershipType).toUpperCase() === 'PERIOD'
+          );
+          const countList = activeList.filter((m: any) => 
+            String(m.membershipType).toUpperCase() === 'COUNT'
+          );
+
+          // 회원권 잔여일 합산
+          let totalRemainingDays = 0;
+          let earliestStart = '';
+          let latestEnd = '';
+          
+          periodList.forEach((m: any) => {
+            if (m.endDate) {
+              const end = new Date(m.endDate);
+              end.setHours(0, 0, 0, 0);
+              const todayDate = new Date();
+              todayDate.setHours(0, 0, 0, 0);
+              const diff = Math.round((end.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
+              totalRemainingDays += diff > 0 ? diff : 0;
+              
+              if (!earliestStart || m.startDate < earliestStart) earliestStart = m.startDate;
+              if (!latestEnd || m.endDate > latestEnd) latestEnd = m.endDate;
+            }
+          });
+
+          // 일일권 잔여 횟수 합산
+          const totalRemainingCount = countList.reduce((sum: number, m: any) => 
+            sum + (m.remainingCount ?? 0), 0
+          );
+
+          // 타입 결정 (둘 다 있으면 회원권 우선)
+          const hasPeriod = periodList.length > 0 && totalRemainingDays > 0;
+          const hasCount = countList.length > 0 && totalRemainingCount > 0;
+
+          let membershipType = '-';
+          if (hasPeriod && hasCount) membershipType = '회원권';
+          else if (hasPeriod) membershipType = '회원권';
+          else if (hasCount) membershipType = '일일권';
+
           setMembership({
-            membershipType: displayType,
-            remainingDays,
-            remainingCount: data.remainingCount ?? 0,
-            startDate: data.startDate || '',
-            endDate: data.endDate || '',
-            status: data.status === 'ACTIVE' ? '이용중' : data.status === 'HOLDING' ? '정지중' : '만료',
+            membershipType,
+            remainingDays: totalRemainingDays,
+            remainingCount: totalRemainingCount,
+            startDate: earliestStart,
+            endDate: latestEnd,
+            status: activeList.length > 0 ? '이용중' : '만료',
             isLoading: false
           });
         } else {

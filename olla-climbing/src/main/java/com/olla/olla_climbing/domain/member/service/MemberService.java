@@ -169,7 +169,12 @@ public class MemberService {
         Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("회원 정보가 없습니다."));
 
-        // 💡 팩트 체크: NotificationSetting.java의 update는 5개의 인자를 받습니다.
+        // (동철 수정)
+        if (member.getNotificationSetting() == null) {
+            member.setNotificationSetting(new NotificationSetting(member));
+        }
+
+        // 팩트 체크: NotificationSetting.java의 update는 5개의 인자를 받습니다.
         member.getNotificationSetting().update(
                 request.getIsGlobalNotificationOn(),
                 request.getIsMembershipNotificationOn(),

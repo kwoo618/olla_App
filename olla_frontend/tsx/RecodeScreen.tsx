@@ -152,26 +152,54 @@ const RecodeScreen = ({
     setRefreshing(false);
   }, []);
 
+  // 🚀 수정된 멤버십 체크 로직: 배열(리스트) 형태 대응 및 안전한 예외 처리
   const checkMembership = async () => {
     try {
       const res = await axios.get(MEMBERSHIP_URL);
-      const data = res.data?.data?.data; 
+      // 데이터 래핑 방식이 다를 수 있으므로 안전하게 가져오기
+      const rawData = res.data?.data?.data ?? res.data?.data; 
       
-      if (data) {
-        const typeStr = String(data.membershipType ?? '').toUpperCase();
-        if (typeStr.includes('COUNT') || typeStr.includes('횟수')) {
-          setHasValidMembership((data.remainingCount ?? 0) > 0);
-        } else if (data.endDate) {
-          const end = new Date(data.endDate);
-          end.setHours(23, 59, 59, 999);
-          setHasValidMembership(end.getTime() >= Date.now());
-        } else {
-          setHasValidMembership(false);
+      if (rawData) {
+        // 객체로 오든 배열로 오든 무조건 배열로 만들어서 순회
+        const memberships = Array.isArray(rawData) ? rawData : [rawData];
+        let isValid = false;
+
+        for (const m of memberships) {
+          if (!m) continue;
+
+          // 만약 백엔드에서 정지/삭제된 이용권도 같이 내려준다면 무시
+          const status = String(m.membershipStatus || '').toUpperCase();
+          if (status === 'DELETED') continue;
+          // if (status === 'HOLDING') continue; // 정지 상태일 때 기록을 막고 싶다면 주석 해제
+
+          const typeStr = String(m.membershipType ?? '').toUpperCase();
+          
+          // 1. 일일권(횟수권) 체크
+          if (typeStr.includes('COUNT') || typeStr.includes('횟수')) {
+            if ((m.remainingCount ?? 0) > 0) {
+              isValid = true;
+              break; // 유효한 이용권 하나라도 찾으면 즉시 루프 종료
+            }
+          } 
+          // 2. 회원권(기간권) 체크
+          else if (typeStr.includes('PERIOD') || typeStr.includes('기간') || m.endDate) {
+            if (m.endDate) {
+              const end = new Date(m.endDate);
+              end.setHours(23, 59, 59, 999);
+              if (end.getTime() >= Date.now()) {
+                isValid = true;
+                break; // 유효기간 내에 있으면 즉시 루프 종료
+              }
+            }
+          }
         }
+        
+        setHasValidMembership(isValid);
       } else {
         setHasValidMembership(false);
       }
-    } catch {
+    } catch (error) {
+      console.error('멤버십 확인 실패:', error);
       setHasValidMembership(false);
     }
   };
@@ -184,7 +212,7 @@ const RecodeScreen = ({
     action();
   };
 
-  // ── 초보벽 최고기록 조회 (🚀 수정포인트 1: 백엔드 점수 신뢰 로직) ──
+  // ── 초보벽 최고기록 조회 (🚀 백엔드 점수 신뢰 로직) ──
   const fetchBestRecords = async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/records/beginner/best`);
@@ -201,9 +229,8 @@ const RecodeScreen = ({
           let highestScore = -1;
 
           recordsForColor.forEach(r => {
-            // [수정 완료] 프론트엔드 임의 계산 제거 (50_000 하드코딩 등). 백엔드 score를 최우선으로 신뢰합니다.
             const holdCount = r.success ? maxHold : (r.maxHoldNo ?? 0);
-            const score = r.score ?? holdCount; // 백엔드 score가 없으면 임시로 홀드수만 적용 (서버 점수화 필수)
+            const score = r.score ?? holdCount; 
 
             if (score > highestScore) {
               highestScore = score;
@@ -322,11 +349,10 @@ const RecodeScreen = ({
   // ─────────────────────────── 🌟 팝업창 드래그 애니메이션 상태 설정 ───────────────────────────
   const { height: SCREEN_HEIGHT } = Dimensions.get('window');
   
-  // 💡 각 팝업별 높이 설정
-  const BEGINNER_MODAL_HEIGHT = SCREEN_HEIGHT * 0.70;       // 초보벽 (70%, 늘어나지 않음)
-  const ENDURANCE_HALF_HEIGHT = SCREEN_HEIGHT * 0.55;       // 지구력 절반 (55%)
-  const ENDURANCE_FULL_HEIGHT = SCREEN_HEIGHT * 0.95;       // 지구력 전체 (95%)
-  const CONSECUTIVE_MODAL_HEIGHT = SCREEN_HEIGHT * 0.77;    // 연속완등
+  const BEGINNER_MODAL_HEIGHT = SCREEN_HEIGHT * 0.70;       
+  const ENDURANCE_HALF_HEIGHT = SCREEN_HEIGHT * 0.55;       
+  const ENDURANCE_FULL_HEIGHT = SCREEN_HEIGHT * 0.95;       
+  const CONSECUTIVE_MODAL_HEIGHT = SCREEN_HEIGHT * 0.77;    
 
   const beginnerHeightAnim = useRef(new Animated.Value(0)).current;
   const enduranceHeightAnim = useRef(new Animated.Value(0)).current;
@@ -336,7 +362,6 @@ const RecodeScreen = ({
   const enduranceSnap = useRef(ENDURANCE_HALF_HEIGHT);
   const consecutiveSnap = useRef(CONSECUTIVE_MODAL_HEIGHT);
 
-  // 1️⃣ 초보벽 PanResponder (위로 확장 불가, 아래로 닫기만 가능)
   const beginnerPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -346,7 +371,6 @@ const RecodeScreen = ({
         beginnerHeightAnim.setValue(0);
       },
       onPanResponderMove: (_, gestureState) => {
-        // dy < 0 (위로 드래그)일 때는 0으로 제한하여 커지지 않도록 함
         beginnerHeightAnim.setValue(Math.min(0, -gestureState.dy));
       },
       onPanResponderRelease: (_, gestureState) => {
@@ -363,7 +387,6 @@ const RecodeScreen = ({
     })
   ).current;
 
-  // 2️⃣ 지구력 PanResponder (위로 확장 가능, 아래로 닫기 가능)
   const endurancePanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -394,7 +417,6 @@ const RecodeScreen = ({
     })
   ).current;
 
-  // 3️⃣ 연속완등 PanResponder (위로 확장 불가, 아래로 닫기만 가능)
   const consecutivePanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -404,7 +426,6 @@ const RecodeScreen = ({
         consecutiveHeightAnim.setValue(0);
       },
       onPanResponderMove: (_, gestureState) => {
-        // 위로 확장을 막기 위해 최소값을 0으로 설정
         consecutiveHeightAnim.setValue(Math.min(0, -gestureState.dy));
       },
       onPanResponderRelease: (_, gestureState) => {
@@ -715,7 +736,6 @@ const RecodeScreen = ({
   const removeConsecutiveItem = (indexToRemove: number) =>
     setSelectedConsecutiveList(prev => prev.filter((_, i) => i !== indexToRemove));
 
-  // 이 점수는 화면 노출용(Preview)으로만 사용하며 실제 저장은 sequenceLog만 전송합니다.
   const totalConsecutiveScore = selectedConsecutiveList.reduce(
     (acc: number, curr: any, index: number) => {
       const baseScore = BASE_SCORES[curr.color] ?? 10;
@@ -1017,7 +1037,7 @@ const RecodeScreen = ({
         </View>
       </Modal>
 
-      {/* ─── 지구력 스톱워치 / 타이머 모달 (🚀 수정포인트 2: absoluteFill, zIndex 꼼수 제거) ─── */}
+      {/* ─── 지구력 스톱워치 / 타이머 모달 ─── */}
       <Modal visible={isEnduranceModalVisible} animationType="fade" transparent onRequestClose={closeEnduranceModal}>
         {isTimerActive ? (
           <SafeAreaView style={styles.timerModalBackground}>
@@ -1355,7 +1375,6 @@ const styles = StyleSheet.create({
   emptyText: { color: '#999999', fontSize: 16, textAlign: 'center', width: '100%' }, 
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)', justifyContent: 'flex-end' },
-  // 💡 드래그 모달에 맞추어 width: '100%', overflow: 'hidden' 추가
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 50, alignItems: 'center', width: '100%', overflow: 'hidden' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
   sheetHeader: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
@@ -1402,7 +1421,6 @@ const styles = StyleSheet.create({
   timerDisplayText: { color: '#ffffff', fontSize: 32, fontWeight: 'bold', minWidth: 45, textAlign: 'center' }, 
   timerLabel: { color: '#999999', fontSize: 18, fontWeight: 'bold', marginBottom: 4, marginRight: 8, marginLeft: 4 }, 
 
-  // 🚀 타이머 모달용 수정된 스타일
   timerModalBackground: { flex: 1, backgroundColor: '#1A1A1A', padding: 20 },
   timerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20 },
   timerHeaderTitle: { color: '#A1BE44', fontSize: 24, fontWeight: 'bold' }, 
@@ -1434,7 +1452,6 @@ const styles = StyleSheet.create({
   detailButtonText: { color: '#999999', fontSize: 15, fontWeight: '600' }, 
   totalScoreText: { color: '#A1BE44', fontSize: 40, fontWeight: 'bold', marginBottom: 10 }, 
 
-  // ─── 커스텀 알림 모달 전용 스타일 ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
   resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, 

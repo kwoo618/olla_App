@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { Alert } from 'react-native';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, Modal, TextInput, KeyboardAvoidingView, Platform,
@@ -49,6 +50,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
   const [refreshing, setRefreshing] = useState(false);
   const [notices, setNotices]       = useState<Notice[]>([]);
   const [loading, setLoading]       = useState(true);
+  const [isImageUploading, setIsImageUploading] = useState(false); // 이미지 로딩 
 
   // ─── 커스텀 결과 알림 모달 상태 ───
   const [resultModalVisible, setResultModalVisible] = useState(false);
@@ -189,16 +191,62 @@ const ManagerNotice = ({ route, navigation }: any) => {
 
   // ─── 이미지 첨부 제어 ───
   const handleSelectImage = () => {
-    launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, (response) => {
-      if (response.didCancel) return;
-      if (response.errorCode) {
-        console.log('이미지 선택 오류:', response.errorMessage);
-        return;
-      }
+    launchImageLibrary({ 
+      mediaType: 'photo', 
+      quality: 0.5,
+      maxWidth: 1024, 
+      maxHeight: 1024,
+    }, async (response) => {
+      if (response.didCancel || response.errorCode) return;
       if (response.assets && response.assets.length > 0) {
-        const uri = response.assets[0].uri ?? '';
-        setSelectedImageUri(uri);
-        setUploadedImageUrl(uri); // TODO: 추후 업로드 API 추가 시 서버 URL로 교체
+        const asset = response.assets[0];
+        
+        // 미리보기 먼저 표시
+        setSelectedImageUri(asset.uri ?? '');
+
+        try {
+          setIsImageUploading(true);
+          const userToken = await AsyncStorage.getItem('userToken');
+          const formData = new FormData();
+          formData.append('file', {
+            uri: Platform.OS === 'ios' ? asset.uri?.replace('file://', '') : asset.uri,
+            type: asset.type || 'image/jpeg',
+            name: asset.fileName || `notice_${Date.now()}.jpg`,
+          } as any);
+
+          const uploadRes = await axios.post(
+            `${API_BASE_URL}/images`,
+            formData,
+            {
+              headers: { Authorization: `Bearer ${userToken}` },
+              timeout: 30000,
+            }
+          );
+          // Alert.alert('응답확인', JSON.stringify(uploadRes.data));
+          
+
+          const dataObj = uploadRes.data?.data?.data;
+          const uploadedUrl = dataObj && typeof dataObj === 'object'
+            ? Object.values(dataObj)[0] as string
+            : typeof dataObj === 'string' ? dataObj : null;
+
+          if (uploadedUrl) {
+            setSelectedImageUri(uploadedUrl);
+            setUploadedImageUrl(uploadedUrl);
+          } else {
+            throw new Error('URL 반환 없음');
+          }
+        } catch (e: any) {
+          // 에러 내용을 모달로 바로 표시
+          showResultModal('업로드 실패', 
+            e.response?.data?.message || e.response?.status?.toString() || e.message || '알 수 없는 오류', 
+            'error'
+          );
+          setSelectedImageUri('');
+          setUploadedImageUrl('');
+        } finally {
+          setIsImageUploading(false);
+        }
       }
     });
   };
@@ -530,7 +578,12 @@ const ManagerNotice = ({ route, navigation }: any) => {
                 />
 
                 <Text style={styles.inputLabel}>이미지 첨부 (선택)</Text>
-                <TouchableOpacity style={styles.imagePickerWrapper} activeOpacity={0.7} onPress={handleSelectImage}>
+                <TouchableOpacity 
+                  style={styles.imagePickerWrapper} 
+                  activeOpacity={0.7} 
+                  onPress={handleSelectImage}
+                  disabled={isImageUploading}  // ← 업로드 중 터치 막기
+                >
                   {selectedImageUri ? (
                     <Image source={{ uri: selectedImageUri }} style={styles.imagePreview} resizeMode="cover" />
                   ) : (
@@ -538,17 +591,19 @@ const ManagerNotice = ({ route, navigation }: any) => {
                       <Text style={styles.imagePlaceholderText}>탭하여 이미지 선택</Text>
                     </View>
                   )}
-                  {selectedImageUri ? (
+                  {/* 업로드 중 로딩 오버레이 */}
+                  {isImageUploading && (
+                    <View style={[styles.imageEditOverlay, { height: '100%', justifyContent: 'center' }]}>
+                      <ActivityIndicator size="small" color="#ffffff" />
+                      <Text style={[styles.imageEditOverlayText, { marginTop: 8 }]}>업로드 중...</Text>
+                    </View>
+                  )}
+                  {selectedImageUri && !isImageUploading ? (
                     <View style={styles.imageEditOverlay}>
                       <Text style={styles.imageEditOverlayText}>수정</Text>
                     </View>
                   ) : null}
                 </TouchableOpacity>
-                {selectedImageUri ? (
-                  <TouchableOpacity style={styles.imageRemoveBtn} onPress={handleRemoveImage}>
-                    <Text style={styles.imageRemoveBtnText}>✕ 이미지 제거</Text>
-                  </TouchableOpacity>
-                ) : null}
 
                 <View style={{ height: 20 }} />
 

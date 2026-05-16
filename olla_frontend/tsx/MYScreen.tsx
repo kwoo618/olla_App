@@ -7,10 +7,9 @@ import {
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
-import { launchImageLibrary } from 'react-native-image-picker'; 
+import { launchImageLibrary } from 'react-native-image-picker';
 import { API_BASE_URL } from '../src/constants/Config';
 
-// ─── 헬퍼 함수 ───
 const resolveMembershipType = (typeStr: string, startDate: string, endDate: string, remainingCount: number | null): string => {
   const upper = typeStr?.toUpperCase() || '';
   if (upper === 'COUNT' || upper.includes('횟수')) return '일일권';
@@ -30,33 +29,39 @@ const resolveMembershipType = (typeStr: string, startDate: string, endDate: stri
 
 const calcAgeFromBirth = (birthDate: string): string => {
   if (!birthDate || birthDate.length !== 10) return '-';
-  
   const birthYear = parseInt(birthDate.substring(0, 4), 10);
   const birthMonth = parseInt(birthDate.substring(5, 7), 10);
   const birthDay = parseInt(birthDate.substring(8, 10), 10);
-  
   if (isNaN(birthYear) || isNaN(birthMonth) || isNaN(birthDay)) return '-';
-
   const today = new Date();
   let age = today.getFullYear() - birthYear;
-  if (
-    today.getMonth() + 1 < birthMonth || 
-    (today.getMonth() + 1 === birthMonth && today.getDate() < birthDay)
-  ) {
-    age--;
-  }
-
+  if (today.getMonth() + 1 < birthMonth || (today.getMonth() + 1 === birthMonth && today.getDate() < birthDay)) { age--; }
   return String(age);
+};
+
+// ─── 알림 설정 타입 ───
+type NotiState = {
+  isGlobalNotificationOn: boolean;
+  isMembershipNotificationOn: boolean;
+  isActivityNotificationOn: boolean;
+  isCrewNotificationOn: boolean;
+  isNoticeNotificationOn: boolean;
+};
+
+const DEFAULT_NOTI_STATE: NotiState = {
+  isGlobalNotificationOn: true,
+  isMembershipNotificationOn: true,
+  isActivityNotificationOn: true,
+  isCrewNotificationOn: true,
+  isNoticeNotificationOn: true,
 };
 
 const MYScreen = ({ navigation }: any) => {
   const [refreshing, setRefreshing] = useState(false);
   const isFocused = useIsFocused();
   const [loading, setLoading] = useState(true);
+  const [isImageUploading, setIsImageUploading] = useState(false);
 
-  const [isImageUploading, setIsImageUploading] = useState(false); // 프로필 이미지 저장 
-
-  // ─── 모달 및 애니메이션 상태 ───
   const [isProfileModalVisible, setProfileModalVisible] = useState(false);
   const [isMembershipExpanded, setIsMembershipExpanded] = useState(false);
   const [isPauseModalVisible, setPauseModalVisible] = useState(false);
@@ -71,15 +76,14 @@ const MYScreen = ({ navigation }: any) => {
   const pauseSlideAnim = useRef(new Animated.Value(800)).current;
   const contactSlideAnim = useRef(new Animated.Value(800)).current;
 
-  // ─── 🌟 프로필 수정 창 전용 드래그 앤 드롭 치수 및 로직 🌟 ───
   const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-  const HALF_SCREEN = SCREEN_HEIGHT * 0.65; 
-  const FULL_SCREEN = SCREEN_HEIGHT * 0.95; 
-  const THRESHOLD = (HALF_SCREEN + FULL_SCREEN) / 2; 
-  const CLOSE_THRESHOLD = HALF_SCREEN * 0.7; 
+  const HALF_SCREEN = SCREEN_HEIGHT * 0.65;
+  const FULL_SCREEN = SCREEN_HEIGHT * 0.95;
+  const THRESHOLD = (HALF_SCREEN + FULL_SCREEN) / 2;
+  const CLOSE_THRESHOLD = HALF_SCREEN * 0.7;
 
   const profileHeightAnim = useRef(new Animated.Value(0)).current;
-  const currentProfileSnap = useRef(FULL_SCREEN); // 기본값을 FULL_SCREEN으로 설정
+  const currentProfileSnap = useRef(FULL_SCREEN);
 
   const profilePanResponder = useRef(
     PanResponder.create({
@@ -90,9 +94,8 @@ const MYScreen = ({ navigation }: any) => {
         profileHeightAnim.setValue(0);
       },
       onPanResponderMove: (_, gestureState) => {
-        // 위로 드래그시 FULL_SCREEN을 넘지 않도록
         if (currentProfileSnap.current === FULL_SCREEN && gestureState.dy < 0) {
-          profileHeightAnim.setValue(Math.max(0, -gestureState.dy * 0.1)); // 고무줄 효과
+          profileHeightAnim.setValue(Math.max(0, -gestureState.dy * 0.1));
         } else {
           profileHeightAnim.setValue(-gestureState.dy);
         }
@@ -100,7 +103,6 @@ const MYScreen = ({ navigation }: any) => {
       onPanResponderRelease: (_, gestureState) => {
         profileHeightAnim.flattenOffset();
         const finalHeight = currentProfileSnap.current - gestureState.dy;
-
         if (finalHeight > THRESHOLD) {
           currentProfileSnap.current = FULL_SCREEN;
           Animated.spring(profileHeightAnim, { toValue: FULL_SCREEN, useNativeDriver: false }).start();
@@ -114,23 +116,57 @@ const MYScreen = ({ navigation }: any) => {
     })
   ).current;
 
-  // ─── 데이터 상태 ───
   const [isAdmin, setIsAdmin] = useState(false);
-  const [memInfo, setMemInfo] = useState({ type: '구매 필요', period: '-', status: '비회원', remainingDays: -1, remainingCount: -1, isCountType: false });
-  
-  const [profileData, setProfileData] = useState<any>({ 
-    name: '', phone: '', gender: '', birthDate: '', height: '', weight: '', arm: '', shoe: '', profileImageUrl: '' 
+
+  // ─── 💡 멤버십 정보: 회원권/일일권 합산 처리 ───
+  const [memInfo, setMemInfo] = useState({
+    type: '구매 필요',
+    period: '-',
+    status: '비회원',
+    remainingDays: -1,
+    remainingCount: -1,
+    isCountType: false,
+    hasPeriod: false,
+    hasCount: false,
+    startDate: '',
+    endDate: '',
+  });
+
+  const [profileData, setProfileData] = useState<any>({
+    name: '', phone: '', gender: '', birthDate: '', height: '', weight: '', arm: '', shoe: '', profileImageUrl: ''
   });
   const [profileToggles, setProfileToggles] = useState<any>({ showPhone: true, showAge: true, showHeight: true, showWeight: true, showArm: true, showShoe: true });
-  const [isPushEnabled, setIsPushEnabled] = useState(true);
-  const [isActivityEnabled, setIsActivityEnabled] = useState(true);
+
+  const [notiState, setNotiState] = useState<NotiState>(DEFAULT_NOTI_STATE);
+  const notiLoadedRef = useRef(false);
 
   const showResultModal = (title: string, message: string, type: 'info' | 'success' | 'error' = 'info') => {
     setResultModalConfig({ title, message, type });
     setResultModalVisible(true);
   };
 
-  // ─── 데이터 불러오기 ───
+  const fetchNotiSettings = async () => {
+    try {
+      const userToken = await AsyncStorage.getItem('userToken');
+      if (!userToken) return;
+      const headers = { Authorization: `Bearer ${userToken}` };
+      const notiRes = await axios.get(`${API_BASE_URL}/members/me/notifications/settings`, { headers });
+      const nData = notiRes.data?.data?.data || notiRes.data?.data;
+      if (nData) {
+        setNotiState({
+          isGlobalNotificationOn: nData.isGlobalNotificationOn ?? true,
+          isMembershipNotificationOn: nData.isMembershipNotificationOn ?? true,
+          isActivityNotificationOn: nData.isActivityNotificationOn ?? true,
+          isCrewNotificationOn: nData.isCrewNotificationOn ?? true,
+          isNoticeNotificationOn: nData.isNoticeNotificationOn ?? true,
+        });
+        notiLoadedRef.current = true;
+      }
+    } catch (e) {
+      console.log('알림 설정 로드 실패');
+    }
+  };
+
   const fetchMyInfo = async () => {
     try {
       const userToken = await AsyncStorage.getItem('userToken');
@@ -138,118 +174,271 @@ const MYScreen = ({ navigation }: any) => {
       const headers = { Authorization: `Bearer ${userToken}` };
 
       const userRes = await axios.get(`${API_BASE_URL}/members/me`, { headers });
-      const data = userRes.data?.data?.data;
+      const data = userRes.data?.data?.data || userRes.data?.data;
+
       if (data) {
         setIsAdmin(String(data.role || '').toUpperCase().includes('ADMIN') || String(data.memberRole || '').toUpperCase().includes('ADMIN'));
+
+        const detailData = data.detail || data.memberDetail || data;
+        const privacyData = data.privacy || data.memberPrivacy || data;
+
         setProfileData({
-          name: data.name || '', phone: data.phone || '',
+          name: data.name || '',
+          phone: data.phone || '',
           gender: data.gender === 'MALE' ? '남' : data.gender === 'FEMALE' ? '여' : (data.gender || ''),
-          birthDate: data.birthDate || '', height: data.height?.toString() || '', weight: data.weight?.toString() || '',
-          arm: data.armSpan?.toString() || '', shoe: data.footSize?.toString() || '',
-          profileImageUrl: data.profileImageUrl || '' 
+          birthDate: data.birthDate || '',
+          height: detailData.height && detailData.height !== 0 ? detailData.height.toString() : '',
+          weight: detailData.weight && detailData.weight !== 0 ? detailData.weight.toString() : '',
+          arm: detailData.armSpan && detailData.armSpan !== 0 ? detailData.armSpan.toString() : '',
+          shoe: data.footSize && data.footSize !== 0 ? data.footSize.toString() : '',
+          profileImageUrl: data.profileImageUrl || ''
         });
-        if (data.privacy) {
-          setProfileToggles({
-            showPhone: data.privacy.phonePublic, showAge: true, showHeight: data.privacy.heightPublic,
-            showWeight: data.privacy.weightPublic, showArm: data.privacy.armSpanPublic, showShoe: data.privacy.footSizePublic,
-          });
-        }
+
+        const getBool = (obj: any, ...keys: string[]) => {
+          if (!obj) return true;
+          for (const key of keys) {
+            if (obj[key] !== undefined && obj[key] !== null) return obj[key];
+          }
+          return true;
+        };
+
+        setProfileToggles({
+          showPhone: getBool(privacyData, 'isPublicPhone', 'isPhonePublic', 'phonePublic', 'publicPhone'),
+          showAge: true,
+          showHeight: getBool(privacyData, 'isHeightPublic', 'heightPublic', 'isPublicHeight'),
+          showWeight: getBool(privacyData, 'isWeightPublic', 'weightPublic', 'isPublicWeight'),
+          showArm: getBool(privacyData, 'isArmSpanPublic', 'armSpanPublic', 'isPublicArmSpan'),
+          showShoe: getBool(privacyData, 'isFootSizePublic', 'footSizePublic', 'isPublicFootSize'),
+        });
       }
 
+      // ─── 💡 HomeScreen과 동일하게 배열로 처리하여 회원권/일일권 합산 ───
       const memRes = await axios.get(`${API_BASE_URL}/memberships/me`, { headers });
-      const memData = memRes.data?.data?.data || memRes.data?.data;
-      if (memData) {
-        const displayType = resolveMembershipType(String(memData.membershipType || ''), memData.startDate, memData.endDate, memData.remainingCount);
-        const isCount = displayType === '일일권';
-        let rDays = -1;
-        if (memData.endDate) {
-          const end = new Date(memData.endDate);
-          end.setHours(0, 0, 0, 0);
-          const todayStr = new Date();
-          todayStr.setHours(0, 0, 0, 0);
-          const diff = Math.round((end.getTime() - todayStr.getTime()) / (1000 * 60 * 60 * 24));
-          rDays = diff >= 0 ? diff : 0;
+      const memData = memRes.data?.data?.data;
+
+      // 배열이면 그대로, 단일 객체이면 배열로 감쌈
+      const dataList: any[] = Array.isArray(memData)
+        ? memData
+        : memData && typeof memData === 'object' && !Array.isArray(memData)
+          ? [memData]
+          : [];
+
+      if (dataList.length > 0) {
+        const activeList = dataList.filter((m: any) =>
+          String(m.status || m.membershipStatus || '').toUpperCase() === 'ACTIVE'
+        );
+
+        // 회원권(PERIOD)과 일일권(COUNT) 분리
+        const periodList = activeList.filter((m: any) =>
+          String(m.membershipType).toUpperCase() === 'PERIOD'
+        );
+        const countList = activeList.filter((m: any) =>
+          String(m.membershipType).toUpperCase() === 'COUNT'
+        );
+
+        // 회원권 잔여일 합산
+        let totalRemainingDays = 0;
+        let earliestStart = '';
+        let latestEnd = '';
+
+        periodList.forEach((m: any) => {
+          if (m.endDate) {
+            const end = new Date(m.endDate);
+            end.setHours(0, 0, 0, 0);
+            const todayDate = new Date();
+            todayDate.setHours(0, 0, 0, 0);
+            const diff = Math.round((end.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
+            totalRemainingDays += diff > 0 ? diff : 0;
+
+            if (!earliestStart || m.startDate < earliestStart) earliestStart = m.startDate;
+            if (!latestEnd || m.endDate > latestEnd) latestEnd = m.endDate;
+          }
+        });
+
+        // 일일권 잔여 횟수 합산
+        const totalRemainingCount = countList.reduce(
+          (sum: number, m: any) => sum + (m.remainingCount ?? 0), 0
+        );
+
+        const hasPeriod = periodList.length > 0 && totalRemainingDays > 0;
+        const hasCount = countList.length > 0 && totalRemainingCount > 0;
+
+        // 표시 타입 결정 (둘 다 있으면 "회원권 / 일일권" 형태로)
+        let displayType = '구매 필요';
+        let periodText = '';
+        let countText = '';
+
+        if (hasPeriod) {
+          displayType = '회원권';
+          periodText = `회원권 D-${totalRemainingDays} (${earliestStart} ~ ${latestEnd})`;
         }
+        if (hasCount) {
+          displayType = hasPeriod ? '회원권 / 일일권' : '일일권';
+          countText = `일일권 잔여 ${totalRemainingCount}회`;
+        }
+
+        // period 표시용 문자열
+        let periodDisplay = '';
+        if (hasPeriod && hasCount) {
+          periodDisplay = `${periodText}\n${countText}`;
+        } else if (hasPeriod) {
+          periodDisplay = `${earliestStart} ~ ${latestEnd}`;
+        } else if (hasCount) {
+          periodDisplay = `잔여 ${totalRemainingCount}회`;
+        } else {
+          periodDisplay = '-';
+        }
+
         setMemInfo({
-          type: displayType, period: isCount ? `잔여 ${memData.remainingCount ?? 0}회` : `${memData.startDate} ~ ${memData.endDate}`,
-          status: memData.status === 'ACTIVE' ? '이용중' : '정지/만료',
-          remainingDays: rDays, remainingCount: memData.remainingCount ?? -1, isCountType: isCount,
+          type: displayType,
+          period: periodDisplay,
+          status: activeList.length > 0 ? '이용중' : '만료',
+          remainingDays: totalRemainingDays,
+          remainingCount: totalRemainingCount,
+          // isCountType: 둘 다 있으면 false (회원권 우선), 일일권만 있으면 true
+          isCountType: !hasPeriod && hasCount,
+          hasPeriod,
+          hasCount,
+          startDate: earliestStart,
+          endDate: latestEnd,
+        });
+      } else {
+        setMemInfo({
+          type: '구매 필요',
+          period: '-',
+          status: '비회원',
+          remainingDays: -1,
+          remainingCount: -1,
+          isCountType: false,
+          hasPeriod: false,
+          hasCount: false,
+          startDate: '',
+          endDate: '',
         });
       }
-    } catch (error) { console.log('데이터 로드 실패'); } finally { setLoading(false); }
+    } catch (error) {
+      console.log('데이터 로드 실패');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { if (isFocused) fetchMyInfo(); }, [isFocused]);
+  useEffect(() => {
+    if (isFocused) {
+      fetchMyInfo();
+      if (!notiLoadedRef.current) {
+        fetchNotiSettings();
+      }
+    }
+  }, [isFocused]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchMyInfo();
+    await fetchNotiSettings();
     setRefreshing(false);
   }, []);
 
-  const handleSelectImage = () => {
-  launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, async (response) => {
-    if (response.didCancel || response.errorCode) return;
-    
-    if (response.assets && response.assets.length > 0) {
-      const asset = response.assets[0];
-      
-      // 미리보기용으로만 로컬 URI 표시
-      setProfileData((prev: any) => ({ ...prev, profileImageUrl: asset.uri }));
-      
-      try {
-        setIsImageUploading(true);
-        const userToken = await AsyncStorage.getItem('userToken');
-        
-        const formData = new FormData();
-        formData.append('image', {
-          uri: asset.uri,
-          type: asset.type || 'image/jpeg',
-          name: asset.fileName || 'profile.jpg',
-        } as any);
-        
-        const uploadRes = await axios.post(
-          `${API_BASE_URL}/members/me/profile-image`,
-          formData,
-          {
-            headers: {
-              Authorization: `Bearer ${userToken}`,
-              'Content-Type': 'multipart/form-data',
-            },
-          }
-        );
-        
-        const uploadedUrl =
-          uploadRes.data?.data?.profileImageUrl ||
-          uploadRes.data?.profileImageUrl;
-        
-        if (uploadedUrl) {
-          // 로컬 URI를 실제 S3 URL로 교체
-          setProfileData((prev: any) => ({ ...prev, profileImageUrl: uploadedUrl }));
-        }
-      } catch (e: any) {
-        console.log('이미지 업로드 실패:', e.response?.data?.message || e.message);
-        showResultModal('오류', '이미지 업로드에 실패했습니다.', 'error');
-        // 실패 시 기존 이미지로 복구
-        fetchMyInfo();
-      } finally {
-        setIsImageUploading(false);
-      }
-    }
-  });
-};
+  const handleNotiToggle = async (field: keyof NotiState) => {
+    const currentValue = notiState[field];
+    const newValue = !currentValue;
 
-  // ─── 팝업 제어 ───
+    const optimisticState = { ...notiState, [field]: newValue };
+    setNotiState(optimisticState);
+
+    const requestBody: NotiState = {
+      isGlobalNotificationOn: optimisticState.isGlobalNotificationOn,
+      isMembershipNotificationOn: optimisticState.isMembershipNotificationOn,
+      isActivityNotificationOn: optimisticState.isActivityNotificationOn,
+      isCrewNotificationOn: optimisticState.isCrewNotificationOn,
+      isNoticeNotificationOn: optimisticState.isNoticeNotificationOn,
+    };
+
+    try {
+      const userToken = await AsyncStorage.getItem('userToken');
+      const res = await axios.patch(`${API_BASE_URL}/members/me/notifications/settings`, requestBody, {
+        headers: { Authorization: `Bearer ${userToken}` }
+      });
+      const nData = res.data?.data?.data || res.data?.data;
+      if (nData) {
+        setNotiState({
+          isGlobalNotificationOn: nData.isGlobalNotificationOn ?? optimisticState.isGlobalNotificationOn,
+          isMembershipNotificationOn: nData.isMembershipNotificationOn ?? optimisticState.isMembershipNotificationOn,
+          isActivityNotificationOn: nData.isActivityNotificationOn ?? optimisticState.isActivityNotificationOn,
+          isCrewNotificationOn: nData.isCrewNotificationOn ?? optimisticState.isCrewNotificationOn,
+          isNoticeNotificationOn: nData.isNoticeNotificationOn ?? optimisticState.isNoticeNotificationOn,
+        });
+      }
+    } catch (e) {
+      setNotiState(prev => ({ ...prev, [field]: currentValue }));
+      showResultModal('오류', '알림 설정 변경에 실패했습니다.', 'error');
+    }
+  };
+
+  const handleSelectImage = () => {
+    launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, async (response) => {
+      if (response.didCancel || response.errorCode) return;
+      if (response.assets && response.assets.length > 0) {
+        const asset = response.assets[0];
+        const fileType = asset.type || 'image/jpeg';
+        const fileName = asset.fileName || `profile_${Date.now()}.jpg`;
+
+        setProfileData((prev: any) => ({ ...prev, profileImageUrl: asset.uri }));
+
+        try {
+          setIsImageUploading(true);
+          const userToken = await AsyncStorage.getItem('userToken');
+
+          const formData = new FormData();
+          formData.append('image', {
+            uri: Platform.OS === 'ios' ? asset.uri?.replace('file://', '') : asset.uri,
+            type: fileType,
+            name: fileName,
+          } as any);
+
+          const uploadRes = await axios.post(
+            `${API_BASE_URL}/members/me/profile-image`,
+            formData,
+            {
+              headers: { Authorization: `Bearer ${userToken}` },
+              timeout: 30000,
+            }
+          );
+
+          const uploadedUrl = uploadRes.data?.data?.data ||
+            uploadRes.data?.data ||
+            uploadRes.data?.profileImageUrl;
+
+          if (uploadedUrl && typeof uploadedUrl === 'string') {
+            setProfileData((prev: any) => ({ ...prev, profileImageUrl: uploadedUrl }));
+            showResultModal('성공', '프로필 이미지가 변경되었습니다.', 'success');
+          } else {
+            throw new Error('URL 반환 없음');
+          }
+        } catch (e: any) {
+          console.error('이미지 업로드 에러:', e.response?.data || e.message);
+          fetchMyInfo();
+          showResultModal('오류', '이미지 업로드에 실패했습니다.', 'error');
+        } finally {
+          setIsImageUploading(false);
+        }
+      }
+    });
+  };
+
   const openProfileModal = () => {
     setProfileModalVisible(true);
-    currentProfileSnap.current = FULL_SCREEN; // 💡 무조건 꽉 찬 화면으로 오픈
+    currentProfileSnap.current = FULL_SCREEN;
     profileHeightAnim.setValue(0);
     Animated.timing(profileHeightAnim, { toValue: FULL_SCREEN, duration: 300, useNativeDriver: false }).start();
   };
-  
-  const closeProfileModal = () => {
+
+  const closeProfileModal = (onClosed?: () => void) => {
     Animated.timing(profileHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
       setProfileModalVisible(false);
+      if (onClosed) {
+        setTimeout(onClosed, Platform.OS === 'ios' ? 400 : 100);
+      }
     });
   };
 
@@ -257,26 +446,25 @@ const MYScreen = ({ navigation }: any) => {
     setPauseModalVisible(true);
     Animated.timing(pauseSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
   };
-  
+
   const closePauseModal = () => {
     Animated.timing(pauseSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => setPauseModalVisible(false));
   };
-  
+
   const handleInquireClick = () => {
     Animated.timing(pauseSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => {
       setPauseModalVisible(false);
       setTimeout(() => {
         setContactModalVisible(true);
         Animated.timing(contactSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
-      }, 100);
+      }, Platform.OS === 'ios' ? 400 : 100);
     });
   };
-  
+
   const closeContactModal = () => {
     Animated.timing(contactSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => setContactModalVisible(false));
   };
 
-  // ─── 실행 함수들 ───
   const executeLogout = async () => {
     try {
       const accessToken = await AsyncStorage.getItem('userToken');
@@ -284,10 +472,15 @@ const MYScreen = ({ navigation }: any) => {
       if (accessToken && refreshToken) {
         await axios.post(`${API_BASE_URL}/auth/logout`, { refreshToken }, { headers: { Authorization: `Bearer ${accessToken}` }, timeout: 3000 });
       }
-    } catch (e) { console.log('로그아웃 통신 실패'); } finally {
+    } catch (e) {
+      console.log('로그아웃 통신 실패');
+    } finally {
       await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole']);
       setLogoutModalVisible(false);
-      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+      notiLoadedRef.current = false;
+      setTimeout(() => {
+        navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+      }, Platform.OS === 'ios' ? 400 : 100);
     }
   };
 
@@ -295,44 +488,72 @@ const MYScreen = ({ navigation }: any) => {
     try {
       const userToken = await AsyncStorage.getItem('userToken');
       await axios.delete(`${API_BASE_URL}/members/me`, { headers: { Authorization: `Bearer ${userToken}` } });
+      await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole']);
       setDeleteModalVisible(false);
-      showResultModal('성공', '회원탈퇴가 완료되었습니다.', 'success');
-      setTimeout(() => navigation.reset({ index: 0, routes: [{ name: 'Login' }] }), 1500);
-    } catch (e) { setDeleteModalVisible(false); showResultModal('오류', '탈퇴 실패', 'error'); }
+      notiLoadedRef.current = false;
+      setTimeout(() => {
+        showResultModal('성공', '회원탈퇴가 완료되었습니다.', 'success');
+        setTimeout(() => navigation.reset({ index: 0, routes: [{ name: 'Login' }] }), 1500);
+      }, Platform.OS === 'ios' ? 400 : 100);
+    } catch (e) {
+      setDeleteModalVisible(false);
+      setTimeout(() => showResultModal('오류', '탈퇴 실패', 'error'), Platform.OS === 'ios' ? 400 : 100);
+    }
   };
 
   const handleSaveProfile = async () => {
-  try {
-    const userToken = await AsyncStorage.getItem('userToken');
-    const requestBody = {
-      name: profileData.name,
-      phone: profileData.phone,
-      gender: profileData.gender === '남' ? 'MALE' : 'FEMALE',
-      birthDate: profileData.birthDate,
-      height: parseFloat(profileData.height) || 0,
-      weight: parseFloat(profileData.weight) || 0,
-      armSpan: parseFloat(profileData.arm) || 0,
-      footSize: parseFloat(profileData.shoe) || 0,
-      isPublicPhone: profileToggles.showPhone,
-      isEmailPublic: true,
-      isHeightPublic: profileToggles.showHeight,
-      isWeightPublic: profileToggles.showWeight,
-      isArmSpanPublic: profileToggles.showArm,
-      isFootSizePublic: profileToggles.showShoe,
-      age: parseInt(calcAgeFromBirth(profileData.birthDate)) || 0,
-      // profileImageUrl 제거 → 이미지는 선택 즉시 별도 API로 저장됨
-    };
-    
-    await axios.patch(`${API_BASE_URL}/members/me/info`, requestBody, {
-      headers: { Authorization: `Bearer ${userToken}` },
-    });
-    closeProfileModal();
-    setTimeout(() => showResultModal('성공', '정보가 저장되었습니다.', 'success'), 500);
-    fetchMyInfo();
-  } catch (e) {
-    showResultModal('오류', '저장 실패', 'error');
-  }
-};
+    try {
+      const userToken = await AsyncStorage.getItem('userToken');
+
+      const requestBody = {
+        name: profileData.name,
+        phone: profileData.phone,
+        gender: profileData.gender,
+        birthDate: profileData.birthDate,
+        height: profileData.height ? parseFloat(profileData.height) : null,
+        weight: profileData.weight ? parseFloat(profileData.weight) : null,
+        armSpan: profileData.arm ? parseFloat(profileData.arm) : null,
+        footSize: profileData.shoe ? parseFloat(profileData.shoe) : null,
+        isPublicPhone: profileToggles.showPhone,
+        publicPhone: profileToggles.showPhone,
+        isPhonePublic: profileToggles.showPhone,
+        isEmailPublic: true,
+        emailPublic: true,
+        isPublicEmail: true,
+        isHeightPublic: profileToggles.showHeight,
+        heightPublic: profileToggles.showHeight,
+        isPublicHeight: profileToggles.showHeight,
+        isWeightPublic: profileToggles.showWeight,
+        weightPublic: profileToggles.showWeight,
+        isPublicWeight: profileToggles.showWeight,
+        isArmSpanPublic: profileToggles.showArm,
+        armSpanPublic: profileToggles.showArm,
+        isPublicArmSpan: profileToggles.showArm,
+        isFootSizePublic: profileToggles.showShoe,
+        footSizePublic: profileToggles.showShoe,
+        isPublicFootSize: profileToggles.showShoe,
+        age: parseInt(calcAgeFromBirth(profileData.birthDate)) || 0,
+      };
+
+      await axios.patch(`${API_BASE_URL}/members/me/info`, requestBody, {
+        headers: { Authorization: `Bearer ${userToken}` },
+      });
+
+      closeProfileModal(() => {
+        fetchMyInfo();
+        setTimeout(() => {
+          showResultModal('성공', '정보가 저장되었습니다.', 'success');
+        }, Platform.OS === 'ios' ? 500 : 200);
+      });
+
+    } catch (e) {
+      closeProfileModal(() => {
+        setTimeout(() => {
+          showResultModal('오류', '저장 실패', 'error');
+        }, Platform.OS === 'ios' ? 500 : 200);
+      });
+    }
+  };
 
   const renderEditField = (title: string, fieldKey: string, unit: string) => {
     const toggleKey = `show${fieldKey.charAt(0).toUpperCase() + fieldKey.slice(1)}`;
@@ -342,16 +563,21 @@ const MYScreen = ({ navigation }: any) => {
           <Text style={styles.editFieldTitle}>{title}</Text>
           <View style={styles.toggleWrapper}>
             <Text style={styles.toggleLabel}>{profileToggles[toggleKey] ? '공개' : '비공개'}</Text>
-            <Switch trackColor={{ false: '#333333', true: '#A1BE44' }} thumbColor={'#ffffff'} onValueChange={() => setProfileToggles({ ...profileToggles, [toggleKey]: !profileToggles[toggleKey] })} value={profileToggles[toggleKey]} />
+            <Switch
+              trackColor={{ false: '#333333', true: '#A1BE44' }}
+              thumbColor={'#ffffff'}
+              onValueChange={() => setProfileToggles({ ...profileToggles, [toggleKey]: !profileToggles[toggleKey] })}
+              value={profileToggles[toggleKey]}
+            />
           </View>
         </View>
         <View style={styles.editInputBox}>
-          <TextInput 
-            style={styles.editInput} 
-            value={profileData[fieldKey]} 
-            onChangeText={(txt) => setProfileData({ ...profileData, [fieldKey]: txt })} 
-            placeholderTextColor="#666666" 
-            keyboardType={unit ? 'numeric' : 'default'} 
+          <TextInput
+            style={styles.editInput}
+            value={profileData[fieldKey]}
+            onChangeText={(txt) => setProfileData({ ...profileData, [fieldKey]: txt })}
+            placeholderTextColor="#666666"
+            keyboardType={unit ? 'numeric' : 'default'}
           />
           {unit ? <Text style={styles.editUnit}>{unit}</Text> : null}
         </View>
@@ -359,20 +585,34 @@ const MYScreen = ({ navigation }: any) => {
     );
   };
 
-  const hasMembership = memInfo.isCountType ? memInfo.remainingCount > 0 : memInfo.remainingDays >= 0;
-  const memSummaryText = hasMembership ? (memInfo.isCountType ? `${memInfo.type} (${memInfo.remainingCount}회 남음)` : `${memInfo.type} (D-${memInfo.remainingDays})`) : '구매 필요';
+  // ─── 💡 hasMembership: 회원권 또는 일일권 중 하나라도 있으면 true ───
+  const hasMembership = memInfo.hasPeriod || memInfo.hasCount;
+
+  // ─── 💡 멤버십 요약 텍스트: 회원권/일일권 각각 표시 ───
+  const memSummaryText = (() => {
+    if (!hasMembership) return '구매 필요';
+    const parts: string[] = [];
+    if (memInfo.hasPeriod) parts.push(`회원권 (D-${memInfo.remainingDays})`);
+    if (memInfo.hasCount) parts.push(`일일권 (${memInfo.remainingCount}회 남음)`);
+    return parts.join(' / ');
+  })();
 
   if (loading) return <View style={[styles.background, { justifyContent: 'center' }]}><ActivityIndicator size="large" color="#A1BE44" /></View>;
 
   return (
     <View style={styles.background}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />}>
-        
-        {/* 상단 프로필 클릭 시 팝업 실행 */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />}
+      >
         <TouchableOpacity style={styles.profileCard} activeOpacity={0.8} onPress={openProfileModal}>
           <View style={styles.profileLeft}>
             <View style={styles.profileImagePlaceholder}>
-              <Image source={profileData.profileImageUrl ? { uri: profileData.profileImageUrl } : require('../assets/profile.png')} style={styles.profileImage} />
+              <Image
+                source={profileData.profileImageUrl ? { uri: profileData.profileImageUrl } : require('../assets/profile.png')}
+                style={styles.profileImage}
+              />
             </View>
             <View style={styles.profileTextContainer}>
               <Text style={styles.profileName}>{profileData.name || '사용자'}</Text>
@@ -384,83 +624,164 @@ const MYScreen = ({ navigation }: any) => {
 
         {/* 멤버십 */}
         <View style={styles.card}>
-          <TouchableOpacity style={[styles.cardHeader, { marginBottom: isMembershipExpanded ? 20 : 0 }]} onPress={() => setIsMembershipExpanded(!isMembershipExpanded)} activeOpacity={0.8}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}><Image source={require('../assets/membership.png')} style={styles.cardHeaderIcon} /><Text style={styles.cardHeaderTitle}>멤버십 정보</Text></View>
+          <TouchableOpacity
+            style={[styles.cardHeader, { marginBottom: isMembershipExpanded ? 20 : 0 }]}
+            onPress={() => setIsMembershipExpanded(!isMembershipExpanded)}
+            activeOpacity={0.8}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Image source={require('../assets/membership.png')} style={styles.cardHeaderIcon} />
+              <Text style={styles.cardHeaderTitle}>멤버십 정보</Text>
+            </View>
             <Text style={styles.chevronIcon}>{isMembershipExpanded ? '∨' : '＞'}</Text>
           </TouchableOpacity>
           {isMembershipExpanded && (
             <View style={styles.memInfoContainer}>
-              <View style={styles.memInfoRow}><Text style={styles.memInfoLabel}>이용권</Text><Text style={styles.memInfoValue}>{memSummaryText}</Text></View>
-              <View style={styles.memInfoRow}><Text style={styles.memInfoLabel}>{memInfo.isCountType ? '잔여 횟수' : '기간'}</Text><Text style={styles.memInfoValue}>{memInfo.period}</Text></View>
-              <View style={styles.memInfoRow}><Text style={styles.memInfoLabel}>상태</Text><View style={[styles.activeBadge, !hasMembership && { backgroundColor: '#444444' }]}><Text style={styles.activeBadgeText}>{memInfo.status}</Text></View></View>
-              <TouchableOpacity style={styles.pauseButton} onPress={openPauseModal}><Text style={styles.pauseButtonText}>문의하기</Text></TouchableOpacity>
+              {/* 💡 이용권 종류 - 회원권/일일권 통합 표시 */}
+              <View style={styles.memInfoRow}>
+                <Text style={styles.memInfoLabel}>이용권</Text>
+                <Text style={styles.memInfoValue}>{memSummaryText}</Text>
+              </View>
+
+              {/* 💡 회원권 기간 표시 */}
+              {memInfo.hasPeriod && (
+                <View style={styles.memInfoRow}>
+                  <Text style={styles.memInfoLabel}>회원권 기간</Text>
+                  <Text style={styles.memInfoValue}>{memInfo.startDate} ~ {memInfo.endDate}</Text>
+                </View>
+              )}
+
+              {/* 💡 일일권 잔여 횟수 표시 */}
+              {memInfo.hasCount && (
+                <View style={styles.memInfoRow}>
+                  <Text style={styles.memInfoLabel}>일일권 잔여</Text>
+                  <Text style={styles.memInfoValue}>{memInfo.remainingCount}회</Text>
+                </View>
+              )}
+
+              <View style={styles.memInfoRow}>
+                <Text style={styles.memInfoLabel}>상태</Text>
+                <View style={[styles.activeBadge, !hasMembership && { backgroundColor: '#444444' }]}>
+                  <Text style={styles.activeBadgeText}>{memInfo.status}</Text>
+                </View>
+              </View>
+              <TouchableOpacity style={styles.pauseButton} onPress={openPauseModal}>
+                <Text style={styles.pauseButtonText}>문의하기</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
 
         {/* 내 활동 */}
         <View style={styles.card}>
-          <View style={[styles.cardHeader, { justifyContent: 'flex-start', marginBottom: 20 }]}><Image source={require('../assets/FilmScript.png')} style={styles.cardHeaderIcon} /><Text style={styles.cardHeaderTitle}>내 활동</Text></View>
-          <TouchableOpacity style={styles.activityRow} onPress={() => navigation.navigate('Community', { filter: 'MY_WRITTEN' })}><Text style={styles.activityText}>내가 쓴 게시글</Text><Text style={styles.chevronIcon}>＞</Text></TouchableOpacity>
-          <View style={styles.divider} /><TouchableOpacity style={styles.activityRow} onPress={() => navigation.navigate('Community', { filter: 'MY_APPLIED' })}><Text style={styles.activityText}>내가 참여한 게시글</Text><Text style={styles.chevronIcon}>＞</Text></TouchableOpacity>
+          <View style={[styles.cardHeader, { justifyContent: 'flex-start', marginBottom: 20 }]}>
+            <Image source={require('../assets/FilmScript.png')} style={styles.cardHeaderIcon} />
+            <Text style={styles.cardHeaderTitle}>내 활동</Text>
+          </View>
+          <TouchableOpacity style={styles.activityRow} onPress={() => navigation.navigate('Community', { filter: 'MY_WRITTEN' })}>
+            <Text style={styles.activityText}>내가 쓴 게시글</Text>
+            <Text style={styles.chevronIcon}>＞</Text>
+          </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity style={styles.activityRow} onPress={() => navigation.navigate('Community', { filter: 'MY_APPLIED' })}>
+            <Text style={styles.activityText}>내가 참여한 게시글</Text>
+            <Text style={styles.chevronIcon}>＞</Text>
+          </TouchableOpacity>
         </View>
 
         {/* 알림 설정 */}
         <View style={styles.card}>
-          <View style={[styles.cardHeader, { justifyContent: 'flex-start', marginBottom: 20 }]}><Image source={require('../assets/Vector.png')} style={styles.cardHeaderIcon} /><Text style={styles.cardHeaderTitle}>알림설정</Text></View>
-          <View style={styles.settingRow}><View style={styles.settingTextContainer}><Text style={styles.settingTitle}>푸시 알림</Text><Text style={styles.settingSub}>모든 알림 수신</Text></View><Switch trackColor={{ false: '#333333', true: '#A1BE44' }} thumbColor={'#ffffff'} onValueChange={() => setIsPushEnabled(!isPushEnabled)} value={isPushEnabled} /></View>
-          <View style={styles.divider} /><View style={styles.settingRow}><View style={styles.settingTextContainer}><Text style={styles.settingTitle}>활동 알림</Text><Text style={styles.settingSub}>활동 관련 알림</Text></View><Switch trackColor={{ false: '#333333', true: '#A1BE44' }} thumbColor={'#ffffff'} onValueChange={() => setIsActivityEnabled(!isActivityEnabled)} value={isActivityEnabled} /></View>
+          <View style={[styles.cardHeader, { justifyContent: 'flex-start', marginBottom: 20 }]}>
+            <Image source={require('../assets/Vector.png')} style={styles.cardHeaderIcon} />
+            <Text style={styles.cardHeaderTitle}>알림설정</Text>
+          </View>
+          <View style={styles.settingRow}>
+            <View style={styles.settingTextContainer}>
+              <Text style={styles.settingTitle}>푸시 알림</Text>
+              <Text style={styles.settingSub}>모든 알림 수신</Text>
+            </View>
+            <Switch
+              trackColor={{ false: '#333333', true: '#A1BE44' }}
+              thumbColor={'#ffffff'}
+              onValueChange={() => handleNotiToggle('isGlobalNotificationOn')}
+              value={notiState.isGlobalNotificationOn}
+            />
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.settingRow}>
+            <View style={styles.settingTextContainer}>
+              <Text style={styles.settingTitle}>활동 알림</Text>
+              <Text style={styles.settingSub}>활동 관련 알림</Text>
+            </View>
+            <Switch
+              trackColor={{ false: '#333333', true: '#A1BE44' }}
+              thumbColor={'#ffffff'}
+              onValueChange={() => handleNotiToggle('isActivityNotificationOn')}
+              value={notiState.isActivityNotificationOn}
+            />
+          </View>
         </View>
 
         {isAdmin && (
           <TouchableOpacity style={styles.adminCard} activeOpacity={0.8} onPress={() => setAdminModalVisible(true)}>
-            <Image source={require('../assets/SquaresFour.png')} style={styles.adminIcon} /><Text style={styles.adminText}>관리자 모드 실행</Text>
+            <Image source={require('../assets/SquaresFour.png')} style={styles.adminIcon} />
+            <Text style={styles.adminText}>관리자 모드 실행</Text>
           </TouchableOpacity>
         )}
 
         <TouchableOpacity style={styles.logoutCard} activeOpacity={0.8} onPress={() => setLogoutModalVisible(true)}>
-          <Image source={require('../assets/EXIT.png')} style={styles.logoutIcon} /><Text style={styles.logoutText}>로그아웃</Text>
+          <Image source={require('../assets/EXIT.png')} style={styles.logoutIcon} />
+          <Text style={styles.logoutText}>로그아웃</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.deleteAccountBtn} onPress={() => setDeleteModalVisible(true)}><Text style={styles.deleteAccountText}>회원탈퇴</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.deleteAccountBtn} onPress={() => setDeleteModalVisible(true)}>
+          <Text style={styles.deleteAccountText}>회원탈퇴</Text>
+        </TouchableOpacity>
       </ScrollView>
 
-      {/* ─── 🌟 프로필 수정 모달 (상하 드래그 및 전체화면 지원, 폼 중복 제거) 🌟 ─── */}
-      <Modal visible={isProfileModalVisible} transparent animationType="fade" onRequestClose={closeProfileModal}>
+      {/* ─── 프로필 수정 모달 ─── */}
+      <Modal visible={isProfileModalVisible} transparent animationType="fade" onRequestClose={() => closeProfileModal()}>
         <View style={styles.modalOverlay}>
-          <TouchableWithoutFeedback onPress={closeProfileModal}>
+          <TouchableWithoutFeedback onPress={() => closeProfileModal()}>
             <View style={StyleSheet.absoluteFill} />
           </TouchableWithoutFeedback>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', flex: 1, justifyContent: 'flex-end' }} pointerEvents="box-none">
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{ width: '100%', flex: 1, justifyContent: 'flex-end' }}
+            pointerEvents="box-none"
+          >
             <Animated.View style={[styles.bottomSheet, { height: profileHeightAnim }]}>
-              
               <View {...profilePanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
                 <View style={styles.dragHandle} />
                 <View style={styles.sheetHeader}>
                   <Text style={styles.sheetTitle}>프로필 수정</Text>
-                  <TouchableOpacity onPress={closeProfileModal} hitSlop={{top:10, bottom:10, left:10, right:10}}>
+                  <TouchableOpacity onPress={() => closeProfileModal()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                     <Text style={styles.closeBtn}>✕</Text>
                   </TouchableOpacity>
                 </View>
                 <View style={styles.horizontalDivider} />
               </View>
 
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }} keyboardShouldPersistTaps="handled">
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 30 }}
+                keyboardShouldPersistTaps="handled"
+              >
                 <View style={styles.profileEditContainer}>
-                  
-                  <TouchableOpacity 
-                    style={styles.profileImageEditWrapper} 
-                    activeOpacity={0.7} 
+
+                  <TouchableOpacity
+                    style={styles.profileImageEditWrapper}
+                    activeOpacity={0.7}
                     onPress={handleSelectImage}
                     disabled={isImageUploading}
                   >
-                    <Image 
-                      source={profileData.profileImageUrl 
-                        ? { uri: profileData.profileImageUrl } 
-                        : require('../assets/profile.png')} 
-                      style={styles.profileImageLarge} 
+                    <Image
+                      source={profileData.profileImageUrl
+                        ? { uri: profileData.profileImageUrl }
+                        : require('../assets/profile.png')}
+                      style={styles.profileImageLarge}
                     />
                     <View style={styles.profileImageEditOverlay}>
-                      {isImageUploading 
+                      {isImageUploading
                         ? <ActivityIndicator size="small" color="#ffffff" />
                         : <Text style={styles.profileImageEditText}>수정</Text>
                       }
@@ -469,35 +790,67 @@ const MYScreen = ({ navigation }: any) => {
 
                   <View style={styles.editFieldWrapper}>
                     <View style={styles.editFieldHeader}><Text style={styles.editFieldTitle}>이름</Text></View>
-                    <View style={styles.editInputBox}><TextInput style={styles.editInput} value={profileData.name} onChangeText={(txt) => setProfileData({ ...profileData, name: txt })} placeholderTextColor="#666666" /></View>
+                    <View style={styles.editInputBox}>
+                      <TextInput
+                        style={styles.editInput}
+                        value={profileData.name}
+                        onChangeText={(txt) => setProfileData({ ...profileData, name: txt })}
+                        placeholderTextColor="#666666"
+                      />
+                    </View>
                   </View>
-                  
+
                   <View style={styles.editFieldWrapper}>
                     <View style={styles.editFieldHeader}><Text style={styles.editFieldTitle}>성별</Text></View>
                     <View style={styles.genderRow}>
-                      <TouchableOpacity style={[styles.genderBtn, profileData.gender === '남' && styles.genderBtnActive]} onPress={() => setProfileData({ ...profileData, gender: '남' })}><Text style={[styles.genderBtnText, profileData.gender === '남' && styles.genderBtnTextActive]}>남자</Text></TouchableOpacity>
-                      <TouchableOpacity style={[styles.genderBtn, profileData.gender === '여' && styles.genderBtnActive]} onPress={() => setProfileData({ ...profileData, gender: '여' })}><Text style={[styles.genderBtnText, profileData.gender === '여' && styles.genderBtnTextActive]}>여자</Text></TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.genderBtn, profileData.gender === '남' && styles.genderBtnActive]}
+                        onPress={() => setProfileData({ ...profileData, gender: '남' })}
+                      >
+                        <Text style={[styles.genderBtnText, profileData.gender === '남' && styles.genderBtnTextActive]}>남자</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.genderBtn, profileData.gender === '여' && styles.genderBtnActive]}
+                        onPress={() => setProfileData({ ...profileData, gender: '여' })}
+                      >
+                        <Text style={[styles.genderBtnText, profileData.gender === '여' && styles.genderBtnTextActive]}>여자</Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
-                  
+
                   <View style={styles.editFieldWrapper}>
                     <View style={styles.editFieldHeader}><Text style={styles.editFieldTitle}>생년월일</Text></View>
                     <View style={styles.editInputBox}>
-                      <TextInput style={styles.editInput} value={profileData.birthDate} onChangeText={(txt) => setProfileData({ ...profileData, birthDate: txt })} placeholder="YYYY-MM-DD" keyboardType="numeric" maxLength={10} />
+                      <TextInput
+                        style={styles.editInput}
+                        value={profileData.birthDate}
+                        onChangeText={(txt) => setProfileData({ ...profileData, birthDate: txt })}
+                        placeholder="YYYY-MM-DD"
+                        keyboardType="numeric"
+                        maxLength={10}
+                      />
                     </View>
                   </View>
-                  
-                  {/* 나이 렌더링 */}
+
                   <View style={styles.editFieldWrapper}>
                     <View style={styles.editFieldHeader}>
                       <Text style={styles.editFieldTitle}>나이</Text>
                       <View style={styles.toggleWrapper}>
                         <Text style={styles.toggleLabel}>{profileToggles.showAge ? '공개' : '비공개'}</Text>
-                        <Switch trackColor={{ false: '#333333', true: '#A1BE44' }} thumbColor={'#ffffff'} onValueChange={() => setProfileToggles({ ...profileToggles, showAge: !profileToggles.showAge })} value={profileToggles.showAge} />
+                        <Switch
+                          trackColor={{ false: '#333333', true: '#A1BE44' }}
+                          thumbColor={'#ffffff'}
+                          onValueChange={() => setProfileToggles({ ...profileToggles, showAge: !profileToggles.showAge })}
+                          value={profileToggles.showAge}
+                        />
                       </View>
                     </View>
                     <View style={styles.editInputBox}>
-                      <TextInput style={[styles.editInput, { color: '#999999' }]} value={calcAgeFromBirth(profileData.birthDate)} editable={false} />
+                      <TextInput
+                        style={[styles.editInput, { color: '#999999' }]}
+                        value={calcAgeFromBirth(profileData.birthDate)}
+                        editable={false}
+                      />
                       <Text style={styles.editUnit}>세</Text>
                     </View>
                   </View>
@@ -513,21 +866,20 @@ const MYScreen = ({ navigation }: any) => {
                   </TouchableOpacity>
                 </View>
               </ScrollView>
-
             </Animated.View>
           </KeyboardAvoidingView>
         </View>
       </Modal>
 
-      {/* 🌟 관리자 모드 실행 확인 모달 🌟 */}
-      <Modal visible={isAdminModalVisible} transparent animationType="fade">
+      {/* 관리자 모달 */}
+      <Modal visible={isAdminModalVisible} transparent animationType="fade" onRequestClose={() => setAdminModalVisible(false)}>
         <View style={styles.centerModalOverlay}>
           <View style={styles.centerModalBox}>
             <Text style={styles.centerModalText}>관리자 모드로 들어가시겠습니까?</Text>
             <View style={styles.centerBtnRow}>
               <TouchableOpacity style={styles.centerBtnYes} onPress={() => {
                 setAdminModalVisible(false);
-                navigation.navigate('ManagerDashboard');
+                setTimeout(() => navigation.navigate('ManagerDashboard'), Platform.OS === 'ios' ? 400 : 100);
               }}>
                 <Text style={styles.centerBtnYesText}>예</Text>
               </TouchableOpacity>
@@ -539,29 +891,101 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 기타 모달 */}
-      <Modal visible={isLogoutModalVisible} transparent animationType="fade"><View style={styles.centerModalOverlay}><View style={styles.centerModalBox}><Text style={styles.centerModalText}>로그아웃 하시겠습니까?</Text><View style={styles.centerBtnRow}><TouchableOpacity style={styles.centerBtnYes} onPress={executeLogout}><Text style={styles.centerBtnYesText}>예</Text></TouchableOpacity><TouchableOpacity style={styles.centerBtnNo} onPress={() => setLogoutModalVisible(false)}><Text style={styles.centerBtnNoText}>아니오</Text></TouchableOpacity></View></View></View></Modal>
-      <Modal visible={isDeleteModalVisible} transparent animationType="fade"><View style={styles.centerModalOverlay}><View style={styles.centerModalBox}><Text style={[styles.centerModalText, { textAlign: 'center' }]}>정말로 탈퇴하시겠습니까?{'\n'}모든 데이터가 삭제됩니다.</Text><View style={styles.centerBtnRow}><TouchableOpacity style={[styles.centerBtnYes, { backgroundColor: '#FF4D4D' }]} onPress={executeDeleteAccount}><Text style={styles.centerBtnYesText}>탈퇴하기</Text></TouchableOpacity><TouchableOpacity style={styles.centerBtnNo} onPress={() => setDeleteModalVisible(false)}><Text style={styles.centerBtnNoText}>취소</Text></TouchableOpacity></View></View></View></Modal>
-      <Modal visible={resultModalVisible} transparent animationType="fade"><View style={styles.resultModalOverlay}><View style={styles.resultModalBox}><Text style={[styles.resultModalTitle, { color: resultModalConfig.type === 'error' ? '#FF4D4D' : '#A1BE44' }]}>{resultModalConfig.title}</Text><Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text><TouchableOpacity style={styles.resultModalBtn} onPress={() => setResultModalVisible(false)}><Text style={styles.resultModalBtnText}>확인</Text></TouchableOpacity></View></View></Modal>
+      {/* 로그아웃 모달 */}
+      <Modal visible={isLogoutModalVisible} transparent animationType="fade" onRequestClose={() => setLogoutModalVisible(false)}>
+        <View style={styles.centerModalOverlay}>
+          <View style={styles.centerModalBox}>
+            <Text style={styles.centerModalText}>로그아웃 하시겠습니까?</Text>
+            <View style={styles.centerBtnRow}>
+              <TouchableOpacity style={styles.centerBtnYes} onPress={executeLogout}>
+                <Text style={styles.centerBtnYesText}>예</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.centerBtnNo} onPress={() => setLogoutModalVisible(false)}>
+                <Text style={styles.centerBtnNoText}>아니오</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
-      <Modal visible={isPauseModalVisible} transparent animationType="fade">
+      {/* 회원탈퇴 모달 */}
+      <Modal visible={isDeleteModalVisible} transparent animationType="fade" onRequestClose={() => setDeleteModalVisible(false)}>
+        <View style={styles.centerModalOverlay}>
+          <View style={styles.centerModalBox}>
+            <Text style={[styles.centerModalText, { textAlign: 'center' }]}>
+              정말로 탈퇴하시겠습니까?{'\n'}모든 데이터가 삭제됩니다.
+            </Text>
+            <View style={styles.centerBtnRow}>
+              <TouchableOpacity style={[styles.centerBtnYes, { backgroundColor: '#FF4D4D' }]} onPress={executeDeleteAccount}>
+                <Text style={styles.centerBtnYesText}>탈퇴하기</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.centerBtnNo} onPress={() => setDeleteModalVisible(false)}>
+                <Text style={styles.centerBtnNoText}>취소</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 결과 모달 */}
+      <Modal visible={resultModalVisible} transparent animationType="fade" onRequestClose={() => setResultModalVisible(false)}>
+        <View style={styles.resultModalOverlay}>
+          <View style={styles.resultModalBox}>
+            <Text style={[styles.resultModalTitle, { color: resultModalConfig.type === 'error' ? '#FF4D4D' : '#A1BE44' }]}>
+              {resultModalConfig.title}
+            </Text>
+            <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
+            <TouchableOpacity style={styles.resultModalBtn} onPress={() => setResultModalVisible(false)}>
+              <Text style={styles.resultModalBtnText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 문의하기 모달 */}
+      <Modal visible={isPauseModalVisible} transparent animationType="fade" onRequestClose={closePauseModal}>
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={closePauseModal} />
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: pauseSlideAnim }] }]}>
-            <View style={styles.dragHandle} /><Text style={styles.sheetTitleCenter}>문의하기</Text><View style={styles.horizontalDivider} />
-            <View style={styles.pauseInfoBox}><Text style={styles.pauseInfoText}>프론트 데스크에 문의하시겠습니까?</Text></View>
-            <View style={styles.modalBtnRow}><TouchableOpacity style={styles.modalBtnCancel} onPress={closePauseModal}><Text style={styles.modalBtnCancelText}>취소</Text></TouchableOpacity><TouchableOpacity style={styles.modalBtnSubmit} onPress={handleInquireClick}><Text style={styles.modalBtnSubmitText}>문의하기</Text></TouchableOpacity></View>
+            <View style={styles.dragHandle} />
+            <Text style={styles.sheetTitleCenter}>문의하기</Text>
+            <View style={styles.horizontalDivider} />
+            <View style={styles.pauseInfoBox}>
+              <Text style={styles.pauseInfoText}>프론트 데스크에 문의하시겠습니까?</Text>
+            </View>
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity style={styles.modalBtnCancel} onPress={closePauseModal}>
+                <Text style={styles.modalBtnCancelText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalBtnSubmit} onPress={handleInquireClick}>
+                <Text style={styles.modalBtnSubmitText}>문의하기</Text>
+              </TouchableOpacity>
+            </View>
           </Animated.View>
         </View>
       </Modal>
 
-      <Modal visible={isContactModalVisible} transparent animationType="fade">
+      {/* 전화 문의 모달 */}
+      <Modal visible={isContactModalVisible} transparent animationType="fade" onRequestClose={closeContactModal}>
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={closeContactModal} />
           <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: contactSlideAnim }] }]}>
-            <View style={styles.dragHandle} /><Text style={styles.sheetTitleCenter}>프론트 데스크 문의</Text><View style={styles.horizontalDivider} />
-            <View style={styles.contactContentBox}><Image source={require('../assets/PhoneCall.png')} style={styles.phoneIcon} /><Text style={styles.contactNumber}>053-851-3322</Text><Text style={styles.contactTime}>평일 13:00~22:00 / 토 13:00~19:00 (일요일 휴무)</Text></View>
-            <View style={styles.modalBtnRow}><TouchableOpacity style={styles.modalBtnCancel} onPress={closeContactModal}><Text style={styles.modalBtnCancelText}>닫기</Text></TouchableOpacity><TouchableOpacity style={styles.modalBtnSubmit} onPress={() => Linking.openURL('tel:053-851-3322')}><Text style={styles.modalBtnSubmitText}>전화하기</Text></TouchableOpacity></View>
+            <View style={styles.dragHandle} />
+            <Text style={styles.sheetTitleCenter}>프론트 데스크 문의</Text>
+            <View style={styles.horizontalDivider} />
+            <View style={styles.contactContentBox}>
+              <Image source={require('../assets/PhoneCall.png')} style={styles.phoneIcon} />
+              <Text style={styles.contactNumber}>053-851-3322</Text>
+              <Text style={styles.contactTime}>평일 13:00~22:00 / 토 13:00~19:00 (일요일 휴무)</Text>
+            </View>
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity style={styles.modalBtnCancel} onPress={closeContactModal}>
+                <Text style={styles.modalBtnCancelText}>닫기</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalBtnSubmit} onPress={() => Linking.openURL('tel:053-851-3322')}>
+                <Text style={styles.modalBtnSubmitText}>전화하기</Text>
+              </TouchableOpacity>
+            </View>
           </Animated.View>
         </View>
       </Modal>
@@ -587,7 +1011,7 @@ const styles = StyleSheet.create({
   memInfoContainer: { marginBottom: 5 },
   memInfoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   memInfoLabel: { color: '#ffffff', fontSize: 17, fontWeight: '500' },
-  memInfoValue: { color: '#ffffff', fontSize: 17, fontWeight: 'bold' },
+  memInfoValue: { color: '#ffffff', fontSize: 17, fontWeight: 'bold', flex: 1, textAlign: 'right', marginLeft: 10 },
   activeBadge: { backgroundColor: '#A1BE44', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
   activeBadgeText: { color: '#000000', fontSize: 15, fontWeight: 'bold' },
   pauseButton: { backgroundColor: '#2C2C2C', borderWidth: 1, borderColor: '#555555', borderRadius: 8, paddingVertical: 16, alignItems: 'center', marginTop: 10 },

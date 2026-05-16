@@ -63,7 +63,7 @@ const ManagerTicket = ({ navigation }: any) => {
     setResultModalVisible(true);
   };
 
-  // ─── 확인(Confirm) 모달 상태 (디자인/폰트 타 탭과 통일) ───
+  // ─── 확인(Confirm) 모달 상태 ───
   const [confirmModalVisible, setConfirmModalVisible] = useState(false);
   const [confirmModalConfig, setConfirmModalConfig] = useState({
     message: '', confirmText: '확인', cancelText: '취소', onConfirm: () => {}, isDestructive: false
@@ -75,7 +75,6 @@ const ManagerTicket = ({ navigation }: any) => {
     setConfirmModalVisible(true);
   };
 
-  // ─── 상태 및 드래그 앤 드롭 치수 ───
   const [isEditModalVisible, setEditModalVisible] = useState(false);
   const [modalSearch, setModalSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<any>(null);
@@ -87,15 +86,13 @@ const ManagerTicket = ({ navigation }: any) => {
   const [isManageVisible, setManageVisible] = useState(false);
   const [selectedManageItem, setSelectedManageItem] = useState<any>(null);
   
-  // ─── 🌟 팝업창 공통 고무줄 텐션 및 동적 확장 로직 🌟 ───
   const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-  const GRANT_START_HEIGHT = SCREEN_HEIGHT * 0.50;    // 회원 선택 전 기본 높이 
-  const GRANT_EXPANDED_HEIGHT = SCREEN_HEIGHT * 0.85; // 회원 선택 후 등록 폼 높이에 딱 맞춤 
-  const MANAGE_HEIGHT_1 = SCREEN_HEIGHT * 0.65;       // 이용권 1개 보유 시 관리 팝업 
-  const MANAGE_HEIGHT_2 = SCREEN_HEIGHT * 0.85;       // 이용권 2개 이상 보유 시 관리 팝업 
-  const FULL_SCREEN = SCREEN_HEIGHT * 0.95;           // 위로 당겼을 때 확장되는 전체 화면 
+  const GRANT_START_HEIGHT = SCREEN_HEIGHT * 0.50;
+  const GRANT_EXPANDED_HEIGHT = SCREEN_HEIGHT * 0.85;
+  const MANAGE_HEIGHT_1 = SCREEN_HEIGHT * 0.65;
+  const MANAGE_HEIGHT_2 = SCREEN_HEIGHT * 0.85;
+  const FULL_SCREEN = SCREEN_HEIGHT * 0.95;
 
-  // 1️⃣ 이용권 관리 팝업 애니메이션 (고무줄 텐션 지원)
   const targetManageBaseSnap = useRef(MANAGE_HEIGHT_1);
   const manageHeightAnim = useRef(new Animated.Value(0)).current;
   const currentManageSnap = useRef(MANAGE_HEIGHT_1);
@@ -110,7 +107,7 @@ const ManagerTicket = ({ navigation }: any) => {
       },
       onPanResponderMove: (_, gestureState) => {
         if (currentManageSnap.current === FULL_SCREEN && gestureState.dy < 0) {
-          manageHeightAnim.setValue(-gestureState.dy * 0.1); // 최대치 이상 당길 때 고무줄 텐션
+          manageHeightAnim.setValue(-gestureState.dy * 0.1);
         } else {
           manageHeightAnim.setValue(-gestureState.dy);
         }
@@ -134,7 +131,6 @@ const ManagerTicket = ({ navigation }: any) => {
     })
   ).current;
 
-  // 2️⃣ 이용권 등록(부여) 팝업 애니메이션 (고무줄 텐션 지원)
   const targetEditBaseSnap = useRef(GRANT_START_HEIGHT);
   const editHeightAnim = useRef(new Animated.Value(0)).current;
   const currentEditSnap = useRef(GRANT_START_HEIGHT);
@@ -149,7 +145,7 @@ const ManagerTicket = ({ navigation }: any) => {
       },
       onPanResponderMove: (_, gestureState) => {
         if (currentEditSnap.current === FULL_SCREEN && gestureState.dy < 0) {
-          editHeightAnim.setValue(-gestureState.dy * 0.1); // 최대치 이상 당길 때 고무줄 텐션
+          editHeightAnim.setValue(-gestureState.dy * 0.1);
         } else {
           editHeightAnim.setValue(-gestureState.dy);
         }
@@ -177,9 +173,8 @@ const ManagerTicket = ({ navigation }: any) => {
     setSelectedManageItem(group);
     setManageVisible(true);
     
-    // 💡 보유 이용권 개수에 따라 팝업 높이 다르게 적용
-    const count = group.memberships ? group.memberships.length : 1;
-    const dynamicHeight = count > 1 ? MANAGE_HEIGHT_2 : MANAGE_HEIGHT_1;
+    const mergedCount = group.displayMemberships ? group.displayMemberships.length : 1;
+    const dynamicHeight = mergedCount > 1 ? MANAGE_HEIGHT_2 : MANAGE_HEIGHT_1;
     
     targetManageBaseSnap.current = dynamicHeight;
     currentManageSnap.current = dynamicHeight;
@@ -312,6 +307,74 @@ const ManagerTicket = ({ navigation }: any) => {
     return days >= 0 ? `${days}일` : '만료';
   };
 
+  const mergeByType = (memberships: any[]) => {
+    const periodList = memberships.filter(
+      (m: any) => resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount) === '회원권'
+    );
+    const countList = memberships.filter(
+      (m: any) => resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount) === '일일권'
+    );
+
+    const merged: any[] = [];
+
+    if (periodList.length > 0) {
+      let earliestStart = '';
+      let latestEnd = '';
+      let totalRemainingDays = 0;
+      const isHolding = periodList.some((m: any) => String(m.membershipStatus).toUpperCase() === 'HOLDING');
+
+      periodList.forEach((m: any) => {
+        if (!earliestStart || (m.startDate && m.startDate < earliestStart)) earliestStart = m.startDate;
+        if (!latestEnd || (m.endDate && m.endDate > latestEnd)) latestEnd = m.endDate;
+      });
+
+      if (latestEnd) {
+        const end = new Date(latestEnd);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        end.setHours(0, 0, 0, 0);
+        const diff = Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        totalRemainingDays = diff >= 0 ? diff : 0;
+      }
+
+      merged.push({
+        _merged: true,
+        _type: '회원권',
+        _ids: periodList.map((m: any) => m.membershipId || m.id),
+        _originals: periodList,
+        membershipType: 'PERIOD',
+        startDate: earliestStart,
+        endDate: latestEnd,
+        remainingCount: null,
+        membershipStatus: isHolding ? 'HOLDING' : 'ACTIVE',
+        _totalRemainingDays: totalRemainingDays,
+      });
+    }
+
+    if (countList.length > 0) {
+      const totalCount = countList.reduce((sum: number, m: any) => sum + (m.remainingCount ?? 0), 0);
+      const isHolding = countList.some((m: any) => String(m.membershipStatus).toUpperCase() === 'HOLDING');
+      const earliestStart = countList.reduce((earliest: string, m: any) => {
+        if (!earliest || (m.startDate && m.startDate < earliest)) return m.startDate;
+        return earliest;
+      }, '');
+
+      merged.push({
+        _merged: true,
+        _type: '일일권',
+        _ids: countList.map((m: any) => m.membershipId || m.id),
+        _originals: countList,
+        membershipType: 'COUNT',
+        startDate: earliestStart,
+        endDate: '',
+        remainingCount: totalCount,
+        membershipStatus: isHolding ? 'HOLDING' : 'ACTIVE',
+      });
+    }
+
+    return merged;
+  };
+
   const groupedHolders = useMemo(() => {
     const map = new Map();
     
@@ -361,13 +424,8 @@ const ManagerTicket = ({ navigation }: any) => {
           }
         });
 
-        group.memberships = uniqueMemberships.sort((a: any, b: any) => {
-          const typeA = resolveMembershipType(a.membershipType, a.startDate, a.endDate, a.remainingCount);
-          const typeB = resolveMembershipType(b.membershipType, b.startDate, b.endDate, b.remainingCount);
-          if (typeA === '회원권' && typeB !== '회원권') return -1;
-          if (typeA !== '회원권' && typeB === '회원권') return 1;
-          return 0;
-        });
+        group.memberships = uniqueMemberships;
+        group.displayMemberships = mergeByType(uniqueMemberships);
         return group;
       });
   }, [users, searchQuery]);
@@ -412,13 +470,8 @@ const ManagerTicket = ({ navigation }: any) => {
           uniqueMemberships.push(m);
         }
       });
-      group.memberships = uniqueMemberships.sort((a: any, b: any) => {
-        const typeA = resolveMembershipType(a.membershipType, a.startDate, a.endDate, a.remainingCount);
-        const typeB = resolveMembershipType(b.membershipType, b.startDate, b.endDate, b.remainingCount);
-        if (typeA === '회원권' && typeB !== '회원권') return -1;
-        if (typeA !== '회원권' && typeB === '회원권') return 1;
-        return 0;
-      });
+      group.memberships = uniqueMemberships;
+      group.displayMemberships = mergeByType(uniqueMemberships);
       return group;
     });
   }, [users, modalSearch]);
@@ -428,7 +481,6 @@ const ManagerTicket = ({ navigation }: any) => {
     setEditType('PERIOD');
     setAddValue('');
     
-    // 💡 회원을 선택하면 등록 폼과 버튼이 보이도록 팝업을 82% 높이로 자연스럽게 확장
     targetEditBaseSnap.current = GRANT_EXPANDED_HEIGHT;
     currentEditSnap.current = GRANT_EXPANDED_HEIGHT;
     Animated.spring(editHeightAnim, { toValue: GRANT_EXPANDED_HEIGHT, useNativeDriver: false }).start();
@@ -493,7 +545,7 @@ const ManagerTicket = ({ navigation }: any) => {
 
     closeManageModal(() => {
       showConfirmModal(
-        `해당 이용권을 ${actionText} 하시겠습니까?`,
+        `해당 내역을 ${actionText} 하시겠습니까?`,
         async () => {
           setConfirmModalVisible(false);
           try {
@@ -520,18 +572,13 @@ const ManagerTicket = ({ navigation }: any) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
       if (!token) return;
-      
-      setUsers(prev => prev.filter((u: any) => {
-        const uMembershipId = u.membershipId || u.id;
-        return uMembershipId !== membershipId;
-      }));
 
       await axios.delete(`${MEMBERSHIP_BASE_API}/${membershipId}`, {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
       });
 
       setTimeout(() => {
-        showResultModal('성공', '이용권이 삭제되었습니다.', 'success', async () => {
+        showResultModal('성공', '해당 내역 1건이 성공적으로 삭제되었습니다.', 'success', async () => {
           await fetchUsers(token);
         });
       }, Platform.OS === 'ios' ? 500 : 300);
@@ -545,14 +592,15 @@ const ManagerTicket = ({ navigation }: any) => {
     }
   };
 
-  const confirmDeleteTicket = (membershipId: number, mType: string) => {
+  const confirmDeleteSpecificTicket = (membershipId: number, description: string) => {
     if (!membershipId) {
       showResultModal('오류', '이용권 ID를 확인할 수 없습니다.', 'error');
       return;
     }
+
     closeManageModal(() => {
       showConfirmModal(
-        `해당 ${mType}을\n 정말 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`,
+        `${description}\n해당 내역을 정말 삭제하시겠습니까?`,
         () => {
           setConfirmModalVisible(false);
           setTimeout(() => {
@@ -624,13 +672,27 @@ const ManagerTicket = ({ navigation }: any) => {
           <Text style={styles.emptyText}>보유 중인 이용권이 없습니다.</Text>
         ) : (
           groupedHolders.map((group: any) => {
-            const { memberId, name, memberships } = group;
+            const { memberId, name, displayMemberships, memberships } = group;
             
-            const displayTypes = memberships.map((m: any) => resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount));
-            const uniqueTypes = [...new Set(displayTypes)];
-            const subText = uniqueTypes.join(' / '); 
+            const subText = displayMemberships.map((m: any) => m._type).join(' / ');
+            
+            // 💡 전체 상태(ACTIVE/HOLDING) 개수를 파악하여 뱃지 로직 개선
+            const activeCount = memberships.filter((m: any) => String(m.membershipStatus).toUpperCase() === 'ACTIVE').length;
+            const holdingCount = memberships.filter((m: any) => String(m.membershipStatus).toUpperCase() === 'HOLDING').length;
 
-            const isHolding = memberships.some((m: any) => String(m.membershipStatus).toUpperCase() === 'HOLDING');
+            let badgeText = '이용중';
+            let badgeStyle = styles.badgeActive;
+            let badgeTextStyle = styles.badgeTextActive;
+
+            if (holdingCount > 0 && activeCount === 0) {
+              badgeText = '정지';
+              badgeStyle = styles.badgeHolding;
+              badgeTextStyle = styles.badgeTextHolding;
+            } else if (holdingCount > 0 && activeCount > 0) {
+              badgeText = '일부 정지';
+              badgeStyle = styles.badgePartial; // 새로 추가된 파란색 뱃지 스타일
+              badgeTextStyle = styles.badgeTextPartial;
+            }
 
             return (
               <TouchableOpacity key={memberId} style={styles.tableRow} activeOpacity={0.7} onPress={() => openManageModal(group)}>
@@ -640,37 +702,37 @@ const ManagerTicket = ({ navigation }: any) => {
                   <Text style={styles.rowTextSub}>{subText}</Text>
                 </View>
 
-                {/* 💡 회원권/일일권 2개일 경우 두 줄로 표출 */}
                 <View style={styles.colDate}>
-                  {memberships.map((m: any, idx: number) => {
-                    const type = resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount);
-                    const isCount = type === '일일권';
+                  {displayMemberships.map((m: any, idx: number) => {
+                    const isCount = m._type === '일일권';
                     return (
-                      <Text key={`date-${m.membershipId || m.id || idx}`} style={[styles.rowTextDate, idx > 0 && { marginTop: 6 }]} numberOfLines={1}>
-                        {formatShortDate(m.startDate)}{isCount ? '' : ` ~ ${formatShortDate(m.endDate)}`}
+                      <Text key={`date-${m._type}-${idx}`} style={[styles.rowTextDate, idx > 0 && { marginTop: 6 }]} numberOfLines={1}>
+                        {isCount
+                          ? formatShortDate(m.startDate)
+                          : `${formatShortDate(m.startDate)} ~ ${formatShortDate(m.endDate)}`
+                        }
                       </Text>
                     );
                   })}
                 </View>
 
-                {/* 💡 잔여 현황도 맞춰서 두 줄 표출 */}
                 <View style={styles.colDday}>
-                  {memberships.map((m: any, idx: number) => {
-                    const type = resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount);
-                    const isCount = type === '일일권';
+                  {displayMemberships.map((m: any, idx: number) => {
+                    const isCount = m._type === '일일권';
                     return (
-                      <Text key={`dday-${m.membershipId || m.id || idx}`} style={[styles.rowTextDday, idx > 0 && { marginTop: 6 }]} numberOfLines={1}>
-                        {isCount ? `${m.remainingCount ?? 0}회` : calculateDDay(m.endDate)}
+                      <Text key={`dday-${m._type}-${idx}`} style={[styles.rowTextDday, idx > 0 && { marginTop: 6 }]} numberOfLines={1}>
+                        {isCount
+                          ? `${m.remainingCount ?? 0}회`
+                          : (m._totalRemainingDays !== undefined ? `${m._totalRemainingDays}일` : calculateDDay(m.endDate))
+                        }
                       </Text>
                     );
                   })}
                 </View>
 
                 <View style={[styles.colStatus, styles.center]}>
-                  <View style={[styles.badge, isHolding ? styles.badgeHolding : styles.badgeActive]}>
-                    <Text style={isHolding ? styles.badgeTextHolding : styles.badgeTextActive}>
-                      {isHolding ? '정지' : '이용중'}
-                    </Text>
+                  <View style={[styles.badge, badgeStyle]}>
+                    <Text style={badgeTextStyle}>{badgeText}</Text>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -683,7 +745,7 @@ const ManagerTicket = ({ navigation }: any) => {
         <Text style={styles.fabText}>+ 이용권 등록</Text>
       </TouchableOpacity>
 
-      {/* ─── 투 버튼 확인(Confirm) 모달 (디자인 통일) ─── */}
+      {/* ─── 투 버튼 확인(Confirm) 모달 ─── */}
       <Modal visible={confirmModalVisible} animationType="fade" transparent onRequestClose={() => setConfirmModalVisible(false)}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.deleteModalBox}>
@@ -721,7 +783,7 @@ const ManagerTicket = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ✅ 1. 이용권 관리 바텀시트 모달 (동적 높이 조절, 고무줄 텐션 및 드래그 지원) */}
+      {/* ✅ 1. 이용권 관리 바텀시트 모달 */}
       <Modal visible={isManageVisible} transparent={true} animationType="fade" onRequestClose={() => closeManageModal()}>
         <View style={styles.modalOverlay}>
           <TouchableWithoutFeedback onPress={() => closeManageModal()}>
@@ -741,12 +803,20 @@ const ManagerTicket = ({ navigation }: any) => {
             </View>
 
             {selectedManageItem && (() => {
-              const { name, memberships } = selectedManageItem;
+              const { name, memberships, displayMemberships } = selectedManageItem;
               const displayTypes = memberships.map((m: any) => resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount));
               const uniqueTypes = [...new Set(displayTypes)];
               const manageDisplayType = uniqueTypes.join(' / ');
-              const manageIsHolding = memberships.some((m: any) => String(m.membershipStatus).toUpperCase() === 'HOLDING');
-              const manageItemSubText = `${manageDisplayType} 이용중${manageIsHolding ? ' (정지 포함)' : ''}`;
+              
+              // 💡 관리 팝업 서브텍스트에도 상태(일부정지 포함) 정확하게 표시
+              const activeCount = memberships.filter((m: any) => String(m.membershipStatus).toUpperCase() === 'ACTIVE').length;
+              const holdingCount = memberships.filter((m: any) => String(m.membershipStatus).toUpperCase() === 'HOLDING').length;
+              
+              let statusText = '이용중';
+              if (holdingCount > 0 && activeCount === 0) statusText = '전체 정지중';
+              else if (holdingCount > 0 && activeCount > 0) statusText = '일부 정지중';
+
+              const manageItemSubText = `${manageDisplayType} ${statusText}`;
 
               return (
                 <View style={{ flex: 1 }}>
@@ -755,15 +825,13 @@ const ManagerTicket = ({ navigation }: any) => {
                     <Text style={styles.manageItemSub}>{manageItemSubText}</Text>
                     
                     <View style={styles.manageDetailContainer}>
-                      {memberships.map((m: any, idx: number) => {
-                        const mType = resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount);
-                        const isCountType = mType === '일일권';
-                        const remainText = isCountType 
-                          ? `[일일권] 잔여 ${m.remainingCount ?? 0}회` 
-                          : `[회원권] 잔여 ${calculateDDay(m.endDate)} (${m.startDate || '-'} ~ ${m.endDate || '-'})`;
-
+                      {displayMemberships.map((m: any, idx: number) => {
+                        const isCountType = m._type === '일일권';
+                        const remainText = isCountType
+                          ? `[일일권] 총 잔여 ${m.remainingCount ?? 0}회`
+                          : `[회원권] 총 잔여 ${m._totalRemainingDays}일 (${m.startDate || '-'} ~ ${m.endDate || '-'})`;
                         return (
-                          <Text key={`detail-${m.membershipId || m.id || idx}`} style={styles.manageDetailText}>
+                          <Text key={`merged-detail-${idx}`} style={styles.manageDetailText}>
                             • {remainText}
                           </Text>
                         );
@@ -772,33 +840,50 @@ const ManagerTicket = ({ navigation }: any) => {
                   </View>
 
                   <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-                    {memberships.map((m: any) => {
-                      const mType = resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount);
-                      const mIsHolding = String(m.membershipStatus).toUpperCase() === 'HOLDING';
-                      const mIsCountType = mType === '일일권';
-                      const currentId = m.membershipId || m.id;
+                    {displayMemberships.map((m: any, idx: number) => {
+                      const mType = m._type;
 
                       return (
-                        <View key={currentId} style={styles.manageActionGroup}>
-                          <Text style={styles.manageActionGroupTitle}>{mType} 관리</Text>
+                        <View key={`manage-action-${mType}-${idx}`} style={styles.manageActionGroup}>
+                          <Text style={styles.manageActionGroupTitle}>{mType} 상세 내역</Text>
                           
-                          {!mIsCountType && (
-                            <TouchableOpacity
-                              style={styles.manageActionBtn}
-                              onPress={() => togglePauseStatus(currentId, m.membershipStatus)}
-                            >
-                              <Text style={styles.manageActionBtnText}>
-                                {mIsHolding ? `${mType} 정지 해제` : `${mType} 일시정지`}
-                              </Text>
-                            </TouchableOpacity>
-                          )}
+                          {m._originals.map((orig: any, oIdx: number) => {
+                            const origId = orig.membershipId || orig.id;
+                            const origIsHolding = String(orig.membershipStatus).toUpperCase() === 'HOLDING';
+                            const origIsCountType = mType === '일일권';
+                            
+                            const description = origIsCountType
+                              ? `잔여 ${orig.remainingCount ?? 0}회`
+                              : `${formatShortDate(orig.startDate)} ~ ${formatShortDate(orig.endDate)}`;
 
-                          <TouchableOpacity
-                            style={[styles.manageActionBtn, styles.manageActionBtnDanger]}
-                            onPress={() => confirmDeleteTicket(currentId, mType)}
-                          >
-                            <Text style={styles.manageActionBtnDangerText}>{mType} 삭제</Text>
-                          </TouchableOpacity>
+                            return (
+                              <View key={`orig-${origId}-${oIdx}`} style={styles.originalItemRow}>
+                                <View style={styles.originalItemInfo}>
+                                  <Text style={styles.originalItemTitle}>{description}</Text>
+                                  <Text style={[styles.originalItemStatus, origIsHolding && styles.originalItemStatusHolding]}>
+                                    {origIsHolding ? '정지중' : '이용중'}
+                                  </Text>
+                                </View>
+                                
+                                <View style={styles.originalItemActions}>
+                                  {!origIsCountType && (
+                                    <TouchableOpacity 
+                                      style={styles.actionIconBtn}
+                                      onPress={() => togglePauseStatus(origId, orig.membershipStatus)}
+                                    >
+                                      <Text style={styles.actionIconText}>{origIsHolding ? '재개' : '정지'}</Text>
+                                    </TouchableOpacity>
+                                  )}
+                                  <TouchableOpacity 
+                                    style={styles.actionIconBtnDanger}
+                                    onPress={() => confirmDeleteSpecificTicket(origId, `[${mType}] ${description}`)}
+                                  >
+                                    <Text style={styles.actionIconDangerText}>삭제</Text>
+                                  </TouchableOpacity>
+                                </View>
+                              </View>
+                            );
+                          })}
                         </View>
                       );
                     })}
@@ -814,7 +899,7 @@ const ManagerTicket = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ✅ 2. 이용권 등록 바텀 시트 모달 (선택 전후 동적 높이, 고무줄 텐션 및 드래그 지원) */}
+      {/* ✅ 2. 이용권 등록 바텀 시트 모달 */}
       <Modal visible={isEditModalVisible} transparent={true} animationType="fade" onRequestClose={() => closeEditModal()}>
         <View style={styles.modalOverlay}>
           <TouchableWithoutFeedback onPress={() => closeEditModal()}>
@@ -861,9 +946,9 @@ const ManagerTicket = ({ navigation }: any) => {
                     ) : (
                       groupedSearchResults.map((group: any) => {
                         const isSelected = selectedUser && selectedUser.memberId === group.memberId;
-                        const displayTypes = group.memberships.map((m: any) => resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount));
-                        const uniqueTypes = [...new Set(displayTypes)];
-                        const displayTicket = uniqueTypes.length > 0 ? uniqueTypes.join(' / ') : '없음';
+                        const displayTicket = group.displayMemberships.length > 0
+                          ? group.displayMemberships.map((m: any) => m._type).join(' / ')
+                          : '없음';
 
                         return (
                           <TouchableOpacity
@@ -1017,8 +1102,10 @@ const styles = StyleSheet.create({
   badge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
   badgeActive: { backgroundColor: 'rgba(161, 190, 68, 0.2)' },
   badgeHolding: { backgroundColor: 'rgba(255, 153, 0, 0.2)' },
+  badgePartial: { backgroundColor: 'rgba(77, 166, 255, 0.2)' }, // 파란색 반투명 배경
   badgeTextActive: { color: '#A1BE44', fontSize: 13, fontWeight: 'bold' },
   badgeTextHolding: { color: '#FF9900', fontSize: 13, fontWeight: 'bold' },
+  badgeTextPartial: { color: '#4DA6FF', fontSize: 13, fontWeight: 'bold' }, // 파란색 텍스트
 
   fab: { position: 'absolute', right: 20, backgroundColor: '#A1BE44', paddingHorizontal: 25, paddingVertical: 18, borderRadius: 30, elevation: 5 },
   fabText: { color: '#000', fontSize: 18, fontWeight: 'bold' },
@@ -1082,7 +1169,6 @@ const styles = StyleSheet.create({
   resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
 
-  // 삭제/확인 모달 디자인 통일 
   deleteModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
   deleteModalText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center', lineHeight: 26 },
   deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
@@ -1100,10 +1186,18 @@ const styles = StyleSheet.create({
 
   manageActionGroup: { backgroundColor: '#1E1E1E', borderWidth: 1, borderColor: '#333', borderRadius: 12, padding: 16, marginBottom: 16 },
   manageActionGroupTitle: { color: '#A1BE44', fontSize: 16, fontWeight: 'bold', marginBottom: 16 }, 
-  manageActionBtn: { width: '100%', backgroundColor: '#262626', borderRadius: 12, paddingVertical: 18, alignItems: 'center', marginBottom: 10 },
-  manageActionBtnText: { color: '#ffffff', fontSize: 17, fontWeight: 'bold' },
-  manageActionBtnDanger: { backgroundColor: 'rgba(161, 190, 68, 0.15)', borderWidth: 1, borderColor: '#A1BE44', marginBottom: 0 },
-  manageActionBtnDangerText: { color: '#A1BE44', fontSize: 17, fontWeight: 'bold' },
+  
+  originalItemRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#2C2C2C', padding: 14, borderRadius: 10, marginBottom: 10 },
+  originalItemInfo: { flex: 1 },
+  originalItemTitle: { color: '#ffffff', fontSize: 15, marginBottom: 6, fontWeight: 'bold' },
+  originalItemStatus: { color: '#A1BE44', fontSize: 13, fontWeight: 'bold' },
+  originalItemStatusHolding: { color: '#FF9900' },
+  originalItemActions: { flexDirection: 'row', alignItems: 'center' },
+  actionIconBtn: { paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#3A3A3A', borderRadius: 8, marginLeft: 8 },
+  actionIconBtnDanger: { paddingVertical: 8, paddingHorizontal: 12, backgroundColor: 'rgba(255, 77, 77, 0.1)', borderRadius: 8, marginLeft: 8, borderWidth: 1, borderColor: '#FF4D4D' },
+  actionIconText: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
+  actionIconDangerText: { color: '#FF4D4D', fontSize: 14, fontWeight: 'bold' },
+
   closeFullBtn: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 18, alignItems: 'center' },
   closeFullBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
 });

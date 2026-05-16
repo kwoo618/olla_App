@@ -32,13 +32,14 @@ public class BeginnerRankingService {
 
         List<BeginnerRankingResponse.MasterDto> masterDtos = masterRankings.stream()
                 .map(r -> {
-                    AttemptType type = (r.getScore() % 1 != 0) ? AttemptType.ROUND_TRIP : AttemptType.ONE_WAY;
+                    AttemptType type = r.getAttemptType(); // (동철 수정) 기존 코드에서는 점수에 소수점을 붙여서 왕복인지 편도인지 구분하려고 함. 
+            
                     return BeginnerRankingResponse.MasterDto.builder()
                             .memberId(r.getMember().getId())
                             .name(r.getMember().getName())
-                            .profileImageUrl(r.getMember().getProfileImageUrl()) // 💡 추가
+                            .profileImageUrl(r.getMember().getProfileImageUrl())
                             .score(Math.floor(r.getScore()))
-                            .attemptType(type)
+                            .attemptType(type) // 정상적인 값(ROUND_TRIP 등)을 넣어줌
                             .achievedAt(r.getBaseDate())
                             .build();
                 }).collect(Collectors.toList());
