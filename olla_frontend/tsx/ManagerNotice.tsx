@@ -50,7 +50,9 @@ const ManagerNotice = ({ route, navigation }: any) => {
   const [refreshing, setRefreshing] = useState(false);
   const [notices, setNotices]       = useState<Notice[]>([]);
   const [loading, setLoading]       = useState(true);
-  const [isImageUploading, setIsImageUploading] = useState(false); // 이미지 로딩 
+  const [isImageUploading, setIsImageUploading] = useState(false);
+
+  const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
   // ─── 커스텀 결과 알림 모달 상태 ───
   const [resultModalVisible, setResultModalVisible] = useState(false);
@@ -61,10 +63,41 @@ const ManagerNotice = ({ route, navigation }: any) => {
     setResultModalVisible(true);
   };
 
-  // ─── 상세 보기 모달 상태 ───
+  // ─── 상세 보기 모달 상태 및 드래그 애니메이션 (HomeScreen 방식 적용) ───
   const [isDetailModalVisible, setDetailModalVisible] = useState(false);
   const [detailNotice, setDetailNotice]               = useState<Notice | null>(null);
-  const detailSlideAnim = useRef(new Animated.Value(800)).current;
+  
+  const DETAIL_MODAL_HEIGHT = SCREEN_HEIGHT * 0.45;
+  
+  const detailHeightAnim = useRef(new Animated.Value(0)).current;
+  const currentDetailSnap = useRef(0);
+
+  const detailPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
+      onPanResponderGrant: () => {
+        detailHeightAnim.setOffset(currentDetailSnap.current);
+        detailHeightAnim.setValue(0);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        // 위로 당기는 것은 제한하고, 아래로만 드래그 가능하게 설정 (Math.min 사용)
+        detailHeightAnim.setValue(Math.min(0, -gestureState.dy));
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        detailHeightAnim.flattenOffset();
+        const finalHeight = currentDetailSnap.current - gestureState.dy;
+        const CLOSE_THRESHOLD = currentDetailSnap.current * 0.7; // 70% 미만으로 줄어들면 닫힘
+
+        if (finalHeight < CLOSE_THRESHOLD) {
+          closeDetailModal();
+        } else {
+          // 충분히 내리지 않았으면 원래 높이로 복귀
+          Animated.spring(detailHeightAnim, { toValue: currentDetailSnap.current, useNativeDriver: false }).start();
+        }
+      }
+    })
+  ).current;
 
   // ─── 작성/수정 모달 상태 및 드래그 애니메이션 ───
   const [isWriteModalVisible, setWriteModalVisible] = useState(false);
@@ -79,8 +112,6 @@ const ManagerNotice = ({ route, navigation }: any) => {
   const [selectedImageUri, setSelectedImageUri] = useState<string>('');
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string>('');
 
-  const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-  // 💡 모달 높이를 85% -> 92%로 확장하여 하단 버튼이 짤리지 않게 공간 확보
   const WRITE_MODAL_HEIGHT = SCREEN_HEIGHT * 0.85; 
   
   const writeHeightAnim = useRef(new Animated.Value(0)).current;
@@ -176,13 +207,16 @@ const ManagerNotice = ({ route, navigation }: any) => {
     if (!detail) return;
     setDetailNotice(detail);
     setDetailModalVisible(true);
+    
+    currentDetailSnap.current = DETAIL_MODAL_HEIGHT;
+    detailHeightAnim.setValue(0);
     setTimeout(() => {
-      Animated.timing(detailSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+      Animated.timing(detailHeightAnim, { toValue: DETAIL_MODAL_HEIGHT, duration: 300, useNativeDriver: false }).start();
     }, 50);
   };
 
   const closeDetailModal = (callback?: () => void) => {
-    Animated.timing(detailSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => {
+    Animated.timing(detailHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
       setDetailModalVisible(false);
       setDetailNotice(null);
       if (callback) callback();
@@ -201,7 +235,6 @@ const ManagerNotice = ({ route, navigation }: any) => {
       if (response.assets && response.assets.length > 0) {
         const asset = response.assets[0];
         
-        // 미리보기 먼저 표시
         setSelectedImageUri(asset.uri ?? '');
 
         try {
@@ -222,8 +255,6 @@ const ManagerNotice = ({ route, navigation }: any) => {
               timeout: 30000,
             }
           );
-          // Alert.alert('응답확인', JSON.stringify(uploadRes.data));
-          
 
           const dataObj = uploadRes.data?.data?.data;
           const uploadedUrl = dataObj && typeof dataObj === 'object'
@@ -237,7 +268,6 @@ const ManagerNotice = ({ route, navigation }: any) => {
             throw new Error('URL 반환 없음');
           }
         } catch (e: any) {
-          // 에러 내용을 모달로 바로 표시
           showResultModal('업로드 실패', 
             e.response?.data?.message || e.response?.status?.toString() || e.message || '알 수 없는 오류', 
             'error'
@@ -249,11 +279,6 @@ const ManagerNotice = ({ route, navigation }: any) => {
         }
       }
     });
-  };
-
-  const handleRemoveImage = () => {
-    setSelectedImageUri('');
-    setUploadedImageUrl('');
   };
 
   // ─── 작성/수정 모달 제어 ───
@@ -410,7 +435,6 @@ const ManagerNotice = ({ route, navigation }: any) => {
           <Text style={styles.emptyText}>등록된 공지사항이 없습니다.</Text>
         ) : (
           sortedNotices.map((notice) => (
-            // 카드 전체 터치 시 상세 모달 오픈
             <TouchableOpacity key={notice.id} style={styles.noticeCard} activeOpacity={0.75} onPress={() => openDetailModal(notice)}>
               <View style={styles.noticeContent}>
                 <View style={styles.noticeHeaderRow}>
@@ -428,7 +452,6 @@ const ManagerNotice = ({ route, navigation }: any) => {
               </View>
 
               <View style={styles.noticeActions}>
-                {/* 수정/삭제 버튼 터치 시 이벤트 전파(e.stopPropagation)를 차단하여 상세 모달이 열리지 않게 방지 */}
                 <TouchableOpacity style={styles.actionBtn} onPress={(e) => { e.stopPropagation(); openEditModal(notice); }}>
                   <Image source={require('../assets/fix.png')} style={[styles.actionIcon, { tintColor: '#A1BE44' }]} />
                 </TouchableOpacity>
@@ -465,75 +488,80 @@ const ManagerNotice = ({ route, navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 상세 보기 바텀시트 모달 ─── */}
-      <Modal visible={isDetailModalVisible} animationType="fade" transparent={true}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => closeDetailModal()}>
-          <Animated.View style={[styles.detailBottomSheet, { transform: [{ translateY: detailSlideAnim }] }]}>
-            <TouchableOpacity activeOpacity={1}>
+      {/* ─── 공지 상세 보기 바텀시트 모달 (HomeScreen 코드 방식 완벽 적용) ─── */}
+      <Modal visible={isDetailModalVisible} animationType="fade" transparent={true} onRequestClose={() => closeDetailModal()}>
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={() => closeDetailModal()}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+          
+          <Animated.View style={[styles.detailBottomSheet, { height: detailHeightAnim, overflow: 'hidden' }]}>
+            
+            <View {...detailPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
               <View style={styles.dragHandle} />
               <View style={styles.sheetHeader}>
                 <Text style={styles.sheetTitle} numberOfLines={1}>공지 상세</Text>
-                <TouchableOpacity onPress={() => closeDetailModal()}>
+                <TouchableOpacity onPress={() => closeDetailModal()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                   <Text style={styles.closeIcon}>✕</Text>
                 </TouchableOpacity>
               </View>
               <View style={styles.horizontalDivider} />
+            </View>
 
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-                {detailNotice?.important && (
-                  <View style={styles.detailBadgeRow}>
-                    <View style={styles.noticeBadge}>
-                      <Text style={styles.noticeBadgeText}>중요</Text>
-                    </View>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
+              {detailNotice?.important && (
+                <View style={styles.detailBadgeRow}>
+                  <View style={styles.noticeBadge}>
+                    <Text style={styles.noticeBadgeText}>중요</Text>
                   </View>
-                )}
-
-                <Text style={styles.detailTitle}>{detailNotice?.title}</Text>
-
-                <View style={styles.detailMetaRow}>
-                  <Text style={styles.detailMeta}>{formatDate(detailNotice?.createdAt ?? '')}</Text>
-                  {detailNotice?.authorName ? (
-                    <Text style={styles.detailMeta}> · {detailNotice.authorName}</Text>
-                  ) : null}
                 </View>
+              )}
 
-                <View style={styles.horizontalDivider} />
+              <Text style={styles.detailTitle}>{detailNotice?.title}</Text>
 
-                {!!detailNotice?.imageUrl && (
-                  <Image
-                    source={{ uri: detailNotice.imageUrl }}
-                    style={styles.detailImage}
-                    resizeMode="cover"
-                  />
-                )}
+              <View style={styles.detailMetaRow}>
+                <Text style={styles.detailMeta}>{formatDate(detailNotice?.createdAt ?? '')}</Text>
+                {detailNotice?.authorName ? (
+                  <Text style={styles.detailMeta}> · {detailNotice.authorName}</Text>
+                ) : null}
+              </View>
 
-                <Text style={styles.detailContent}>{detailNotice?.content}</Text>
+              <View style={styles.horizontalDivider} />
 
-                <View style={styles.btnRow}>
-                  <TouchableOpacity
-                    style={styles.cancelBtn}
-                    onPress={() => closeDetailModal(() => {
-                      setTimeout(() => detailNotice && openEditModal(detailNotice), 100);
-                    })}
-                  >
-                    <Text style={styles.cancelBtnText}>수정</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.registerBtn, { backgroundColor: '#FF4D4D' }]}
-                    onPress={() => closeDetailModal(() => {
-                      setTimeout(() => detailNotice && confirmDelete(detailNotice.id), 100);
-                    })}
-                  >
-                    <Text style={styles.registerBtnText}>삭제</Text>
-                  </TouchableOpacity>
-                </View>
-              </ScrollView>
-            </TouchableOpacity>
+              {!!detailNotice?.imageUrl && (
+                <Image
+                  source={{ uri: detailNotice.imageUrl }}
+                  style={styles.detailImage}
+                  resizeMode="cover"
+                />
+              )}
+
+              <Text style={styles.detailContent}>{detailNotice?.content}</Text>
+
+              <View style={styles.btnRow}>
+                <TouchableOpacity
+                  style={styles.cancelBtn}
+                  onPress={() => closeDetailModal(() => {
+                    setTimeout(() => detailNotice && openEditModal(detailNotice), 100);
+                  })}
+                >
+                  <Text style={styles.cancelBtnText}>수정</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.registerBtn, { backgroundColor: '#A1BE44' }]}
+                  onPress={() => closeDetailModal(() => {
+                    setTimeout(() => detailNotice && confirmDelete(detailNotice.id), 100);
+                  })}
+                >
+                  <Text style={styles.registerBtnText}>삭제</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </Animated.View>
-        </TouchableOpacity>
+        </View>
       </Modal>
 
-      {/* ─── 작성 / 수정 바텀 시트 모달 (PanResponder 적용) ─── */}
+      {/* ─── 작성 / 수정 바텀 시트 모달 ─── */}
       <Modal visible={isWriteModalVisible} animationType="fade" transparent={true} onRequestClose={() => closeWriteModal()}>
         <View style={styles.modalOverlay}>
           <TouchableWithoutFeedback onPress={() => closeWriteModal()}>
@@ -555,7 +583,6 @@ const ManagerNotice = ({ route, navigation }: any) => {
                 <View style={styles.horizontalDivider} />
               </View>
 
-              {/* 💡 하단 버튼이 베젤에 잘리지 않도록 paddingBottom을 60으로 늘려 넉넉히 확보 */}
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
                 <Text style={styles.inputLabel}>공지 제목</Text>
                 <TextInput
@@ -582,7 +609,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
                   style={styles.imagePickerWrapper} 
                   activeOpacity={0.7} 
                   onPress={handleSelectImage}
-                  disabled={isImageUploading}  // ← 업로드 중 터치 막기
+                  disabled={isImageUploading}
                 >
                   {selectedImageUri ? (
                     <Image source={{ uri: selectedImageUri }} style={styles.imagePreview} resizeMode="cover" />
@@ -591,7 +618,6 @@ const ManagerNotice = ({ route, navigation }: any) => {
                       <Text style={styles.imagePlaceholderText}>탭하여 이미지 선택</Text>
                     </View>
                   )}
-                  {/* 업로드 중 로딩 오버레이 */}
                   {isImageUploading && (
                     <View style={[styles.imageEditOverlay, { height: '100%', justifyContent: 'center' }]}>
                       <ActivityIndicator size="small" color="#ffffff" />
@@ -689,7 +715,7 @@ const styles = StyleSheet.create({
 
   modalOverlay:      { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
   bottomSheet:       { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, width: '100%' },
-  detailBottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%', maxHeight: '90%' },
+  detailBottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, width: '100%' },
   dragHandle:        { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
   sheetHeader:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, paddingHorizontal: 5 },
   sheetTitle:        { color: '#ffffff', fontSize: 23, fontWeight: 'bold', flex: 1 },
@@ -699,18 +725,14 @@ const styles = StyleSheet.create({
   inputLabel:   { color: '#ffffff', fontSize: 16, fontWeight: '600', marginBottom: 10, marginLeft: 2 },
   textInput:    { backgroundColor: '#000', borderWidth: 1, borderColor: '#333333', borderRadius: 12, color: '#ffffff', padding: 16, fontSize: 17, marginBottom: 20 },
   
-  // 💡 본문 입력칸 높이 160 -> 140으로 최적화하여 버튼 공간 확보
   contentInput: { height: 140, paddingTop: 16 },
 
-  // 💡 이미지 픽커 박스 높이 160 -> 140으로 최적화하여 버튼 공간 확보
   imagePickerWrapper: { width: '100%', height: 140, borderRadius: 12, backgroundColor: '#2C2C2C', overflow: 'hidden', borderWidth: 1, borderColor: '#444444', justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
   imagePreview:       { width: '100%', height: '100%' },
   imagePlaceholder:   { alignItems: 'center' },
   imagePlaceholderText: { color: '#666666', fontSize: 15 },
   imageEditOverlay:   { position: 'absolute', bottom: 0, width: '100%', backgroundColor: 'rgba(0,0,0,0.6)', paddingVertical: 6, alignItems: 'center' },
   imageEditOverlayText: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
-  imageRemoveBtn:     { alignItems: 'flex-end', paddingRight: 5 },
-  imageRemoveBtnText: { color: '#FF4D4D', fontSize: 14, fontWeight: 'bold', textDecorationLine: 'underline' },
 
   checkboxRow:     { flexDirection: 'row', alignItems: 'center', marginBottom: 25, marginTop: 5 },
   checkbox:        { width: 24, height: 24, borderWidth: 2, borderColor: '#666666', borderRadius: 6, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
@@ -724,7 +746,6 @@ const styles = StyleSheet.create({
   registerBtn:     { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 18, borderRadius: 12, alignItems: 'center', marginLeft: 6 },
   registerBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
 
-  // 상세 보기 전용 스타일
   detailBadgeRow: { flexDirection: 'row', marginBottom: 10 },
   detailTitle:    { color: '#ffffff', fontSize: 22, fontWeight: 'bold', marginBottom: 8, lineHeight: 30 },
   detailMetaRow:  { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
