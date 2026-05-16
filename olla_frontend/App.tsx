@@ -1,27 +1,26 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, StatusBar, Modal, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, StatusBar, Modal, Alert, ActivityIndicator } from 'react-native'; // ✅ ActivityIndicator 추가
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import messaging from '@react-native-firebase/messaging'; // FCM 추가 
+import messaging from '@react-native-firebase/messaging';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // ✅ AsyncStorage 추가
 
-// 💡 1. Notification 스크린 타입 추가
 type RootParamList = {
   Login: undefined; Signup: undefined; PersonalInfo: undefined; Loading: undefined;
   Home: undefined; Notice: undefined; Notification: undefined; Recode: undefined; Ranking: undefined;
-  Community: { filter?: 'ALL' | 'MY_WRITTEN' | 'MY_APPLIED' } | undefined; 
+  Community: { filter?: 'ALL' | 'MY_WRITTEN' | 'MY_APPLIED' } | undefined;
   MY: undefined; ManagerDashboard: undefined;
   ManagerUser: undefined; ManagerTicket: undefined; ManagerNotice: undefined; ManagerCommunity: undefined;
 };
 
-// 스크린 임포트
 import LoginScreen from './tsx/LoginScreen';
 import SignupScreen from './tsx/SignupScreen';
 import PersonalScreen from './tsx/PersonalScreen';
 import LoadingScreen from './tsx/LoadingScreen';
 import HomeScreen from './tsx/HomeScreen';
 import NoticeScreen from './tsx/NoticeScreen';
-import NotificationScreen from './tsx/NotificationScreen'; // 💡 2. 스크린 임포트 추가
+import NotificationScreen from './tsx/NotificationScreen';
 import RecodeScreen from './tsx/RecodeScreen';
 import RankingScreen from './tsx/RankingScreen';
 import CommunityScreen from './tsx/CommunityScreen';
@@ -53,9 +52,9 @@ const BottomNavItem = ({ name, label, icon, currentRoute, nav, isAdmin = false }
 
   return (
     <TouchableOpacity style={styles.bottomNavItem} onPress={() => nav.navigate(name)}>
-      <Image 
-        source={icon} 
-        style={[styles.navIcon, { tintColor: isActive ? activeColor : inactiveColor, opacity: isActive ? 1 : 0.6 }]} 
+      <Image
+        source={icon}
+        style={[styles.navIcon, { tintColor: isActive ? activeColor : inactiveColor, opacity: isActive ? 1 : 0.6 }]}
       />
       <Text style={[styles.bottomNavText, isActive && { color: activeColor, fontWeight: 'bold' }]}>{label}</Text>
     </TouchableOpacity>
@@ -63,35 +62,60 @@ const BottomNavItem = ({ name, label, icon, currentRoute, nav, isAdmin = false }
 };
 
 const AppContent = () => {
-  /* useEffect(() => { //임시 주석 처리 FCM 관련 
-
-  // 앱 켜져 있을 때 알림 받기 FCM 
-  const unsubscribe = messaging().onMessage(async remoteMessage => {
-
-    console.log('Foreground Message:', remoteMessage);
-
-    Alert.alert(
-      remoteMessage.notification?.title || '알림',
-      remoteMessage.notification?.body || ''
-    );
-  });
-
-  return unsubscribe;
-
-}, []); */ 
   const navigationRef = useNavigationContainerRef<RootParamList>();
-  const insets = useSafeAreaInsets(); 
+  const insets = useSafeAreaInsets();
   const [routeName, setRouteName] = useState<string>('');
-  
   const [slideDirection, setSlideDirection] = useState<'slide_from_right' | 'slide_from_left'>('slide_from_right');
-  const prevRouteName = useRef<string>('Home'); 
-
+  const prevRouteName = useRef<string>('Home');
   const [isExitModalVisible, setExitModalVisible] = useState(false);
 
-  // --- 데이터 유지 ---
+  // ✅ 자동 로그인을 위한 상태
+  const [initialRoute, setInitialRoute] = useState<keyof RootParamList>('Login');
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
+
+  // ✅ 앱 시작 시 토큰 확인 → 초기 화면 결정
+  useEffect(() => {
+    const checkToken = async () => {
+      try {
+        const token = await AsyncStorage.getItem('userToken');
+        const role = await AsyncStorage.getItem('userRole');
+
+        if (!token) {
+          setInitialRoute('Login');
+          return;
+        }
+
+        // role에 따라 초기 화면 분기
+        if (role === 'ADMIN') {
+          setInitialRoute('Home');
+        } else {
+          setInitialRoute('Home');
+        }
+      } catch (e) {
+        setInitialRoute('Login');
+      } finally {
+        setIsAuthChecking(false);
+      }
+    };
+
+    checkToken();
+  }, []);
+
+  // FCM 포그라운드 알림
+  useEffect(() => {
+    const unsubscribe = messaging().onMessage(async remoteMessage => {
+      console.log('Foreground Message:', remoteMessage);
+      Alert.alert(
+        remoteMessage.notification?.title || '알림',
+        remoteMessage.notification?.body || ''
+      );
+    });
+    return unsubscribe;
+  }, []);
+
   const [profileData, setProfileData] = useState({ name: '권클라이밍', phone: '010-1234-5678', age: '25', height: '175', weight: '70', arm: '180', shoe: '260' });
   const [profileToggles, setProfileToggles] = useState({ showName: true, showPhone: false, showAge: true, showHeight: true, showWeight: true, showArm: true, showShoe: true });
-  
+
   const [difficultyData, setDifficultyData] = useState([
     { id: 1, color: '흰색', hex: '#EAEAEA', type: '왕복', current: 26, total: 26, status: '완료', score: 10 },
     { id: 2, color: '노랑', hex: '#F4D03F', type: '왕복', current: 33, total: 33, status: '완료', score: 20 },
@@ -121,36 +145,44 @@ const AppContent = () => {
 
     if (prevIndex !== -1 && currentIndex !== -1) {
       if (currentIndex > prevIndex) {
-        setSlideDirection('slide_from_right'); 
+        setSlideDirection('slide_from_right');
       } else if (currentIndex < prevIndex) {
-        setSlideDirection('slide_from_left');  
+        setSlideDirection('slide_from_left');
       }
     } else {
-       setSlideDirection('slide_from_right');
+      setSlideDirection('slide_from_right');
     }
 
     setRouteName(currentRoute);
-    prevRouteName.current = currentRoute; 
+    prevRouteName.current = currentRoute;
   };
+
+  // ✅ 토큰 확인 중엔 로딩 스피너 표시
+  if (isAuthChecking) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#1A1A1A', justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: '#A1BE44', fontSize: 28, fontWeight: '900', marginBottom: 20 }}>olla</Text>
+        <ActivityIndicator size="large" color="#A1BE44" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.globalContainer}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-      
-      <NavigationContainer 
-        ref={navigationRef} 
+
+      <NavigationContainer
+        ref={navigationRef}
         onReady={() => {
-          const initRoute = navigationRef.getCurrentRoute()?.name || 'Home';
+          const initRoute = navigationRef.getCurrentRoute()?.name || initialRoute;
           setRouteName(initRoute);
           prevRouteName.current = initRoute;
-        }} 
-        onStateChange={handleStateChange} 
+        }}
+        onStateChange={handleStateChange}
       >
         {shouldShowNav && (
           <View style={[styles.topNav, { paddingTop: Math.max(insets.top, 10) }]}>
             <View style={styles.topNavInner}>
-              
-              {/* 🌟 1. 가운데 타이틀: 공지사항 또는 알림 화면일 때만 나타납니다. */}
               {(routeName === 'Notice' || routeName === 'Notification') && (
                 <Text style={styles.globalCenterTitle}>
                   {routeName === 'Notice' ? '공지사항' : '알림'}
@@ -159,22 +191,20 @@ const AppContent = () => {
 
               {!isAdminMode ? (
                 <>
-                  {/* 🌟 2. 왼쪽 영역: 해당 화면에서는 뒤로가기 버튼, 아니면 로고 */}
                   {routeName === 'Notice' || routeName === 'Notification' ? (
-                    <TouchableOpacity style={styles.backBtn} onPress={() => navigationRef.goBack()} hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
+                    <TouchableOpacity style={styles.backBtn} onPress={() => navigationRef.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                       <Text style={styles.backBtnText}>←</Text>
                     </TouchableOpacity>
                   ) : (
                     <Text style={styles.logoText}>olla</Text>
                   )}
 
-                  {/* 🌟 3. 오른쪽 영역: 알림 버튼 (Notice나 Notification 화면에서는 숨김 처리) */}
                   {routeName !== 'Notice' && routeName !== 'Notification' ? (
-                    <TouchableOpacity onPress={() => navigationRef.navigate('Notification')} hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
+                    <TouchableOpacity onPress={() => navigationRef.navigate('Notification')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                       <Image source={require('./assets/Vector.png')} style={styles.topIcon} />
                     </TouchableOpacity>
                   ) : (
-                    <View style={{ width: 20 }} /> // 좌우 균형을 맞추기 위한 빈 공간
+                    <View style={{ width: 20 }} />
                   )}
                 </>
               ) : (
@@ -189,22 +219,20 @@ const AppContent = () => {
                   </TouchableOpacity>
                 </>
               )}
-            </View> 
+            </View>
           </View>
         )}
 
         <View style={styles.mainContent}>
-          <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false, animation: slideDirection }}>
+          {/* ✅ initialRouteName을 상태값으로 교체 */}
+          <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false, animation: slideDirection }}>
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Signup" component={SignupScreen} />
             <Stack.Screen name="PersonalInfo" component={PersonalScreen} />
             <Stack.Screen name="Loading" component={LoadingScreen} />
             <Stack.Screen name="Home" component={HomeScreen} />
             <Stack.Screen name="Notice" component={NoticeScreen} />
-            
-            {/* 💡 Notification 스크린 스택 추가 */}
             <Stack.Screen name="Notification" component={NotificationScreen} />
-
             <Stack.Screen name="Recode">{(props) => <RecodeScreen {...props} difficultyData={difficultyData} setDifficultyData={setDifficultyData} enduranceData={enduranceData} setEnduranceData={setEnduranceData} consecutiveData={consecutiveData} setConsecutiveData={setConsecutiveData} />}</Stack.Screen>
             <Stack.Screen name="Ranking">{(props) => <RankingScreen {...props} myProfile={profileData} difficultyData={difficultyData} enduranceData={enduranceData} consecutiveData={consecutiveData} />}</Stack.Screen>
             <Stack.Screen name="Community">{(props) => <CommunityScreen {...props} myProfile={profileData} myToggles={profileToggles} />}</Stack.Screen>
@@ -255,7 +283,6 @@ const AppContent = () => {
           </View>
         </View>
       </Modal>
-
     </View>
   );
 };
@@ -272,16 +299,12 @@ const styles = StyleSheet.create({
   globalContainer: { flex: 1, backgroundColor: '#1A1A1A' },
   mainContent: { flex: 1 },
   topNav: { backgroundColor: '#1A1A1A', borderBottomWidth: 0.5, borderBottomColor: '#222' },
-  // 💡 relative 추가
   topNavInner: { height: 50, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, position: 'relative' },
-  
-  // 💡 상단 정중앙에 고정될 타이틀 스타일
   globalCenterTitle: { position: 'absolute', left: 0, right: 0, textAlign: 'center', color: '#ffffff', fontSize: 20, fontWeight: 'bold', zIndex: 1 },
   backBtn: { padding: 5, zIndex: 10, marginLeft: -5 },
   backBtnText: { color: '#ffffff', fontSize: 28 },
-
-  logoText: { fontSize: 24, fontWeight: '900', color: '#A1BE44' }, 
-  topIcon: { width: 20, height: 20, resizeMode: 'contain' }, 
+  logoText: { fontSize: 24, fontWeight: '900', color: '#A1BE44' },
+  topIcon: { width: 20, height: 20, resizeMode: 'contain' },
   adminLogoContainer: { flexDirection: 'column' },
   adminSubText: { color: '#999999', fontSize: 9, fontWeight: 'bold', marginTop: -3 },
   adminExitBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#331111', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },

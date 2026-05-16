@@ -78,10 +78,10 @@ const LoginScreen = ({ navigation }: any) => {
               { deviceToken: fcmToken }, 
               { headers: { Authorization: `Bearer ${token}` } }
             );
-            console.log('FCM 토큰 전송 성공:', fcmToken);
+            // console.log('FCM 토큰 전송 성공:', fcmToken);
           }
         } catch (fcmError) {
-          console.error('FCM 토큰 발급/전송 오류:', fcmError);
+          // console.error('FCM 토큰 발급/전송 오류:', fcmError);
         }
 
         
