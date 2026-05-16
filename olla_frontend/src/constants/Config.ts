@@ -2,4 +2,4 @@
 
 // 💡 여기에 주소를 한 번만 적어줍니다.
 //export const API_BASE_URL = 'https://composure-unsteady-viable.ngrok-free.dev/api/v1'; // ngrok
- export const API_BASE_URL = 'https://10.0.2.2/api/v1'; // 로컬
+ export const API_BASE_URL = 'https://10.0.2.2/api/v1'; // 집 
