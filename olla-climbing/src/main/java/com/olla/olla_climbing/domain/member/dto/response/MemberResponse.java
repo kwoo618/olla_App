@@ -10,7 +10,6 @@ import lombok.Getter;
 @Getter
 @Builder
 public class MemberResponse {
-    // 1. 기본 정보
     private Long id;
     private String loginId;
     private String name;
@@ -21,14 +20,12 @@ public class MemberResponse {
     private String gender;
     private String birthDate;
 
-    // 2. 신체 상세 정보 (프론트엔드 요청: 중첩 객체 제거, 평탄화 적용)
     private Integer age;
     private Double height;
     private Double weight;
     private Double armSpan;
     private Double footSize;
 
-    // 3. 개인정보 공개 여부
     private Boolean isPhonePublic;
     private Boolean isEmailPublic;
     private Boolean isHeightPublic;
@@ -36,7 +33,6 @@ public class MemberResponse {
     private Boolean isArmSpanPublic;
     private Boolean isFootSizePublic;
 
-    // 4. 알림 설정 (💡 에러 해결: 새로 리팩토링한 5가지 스위치 적용)
     private Boolean isGlobalNotificationOn;
     private Boolean isMembershipNotificationOn;
     private Boolean isActivityNotificationOn;
@@ -48,32 +44,31 @@ public class MemberResponse {
         MemberPrivacy privacy = member.getMemberPrivacy();
         NotificationSetting noti = member.getNotificationSetting();
 
+        // 💡 연 나이 계산 (현재 연도 - 출생 연도)
         Integer calculatedYearAge = null;
         if (member.getBirthDate() != null) {
             calculatedYearAge = java.time.LocalDate.now().getYear() - member.getBirthDate().getYear();
         } else if (detail != null) {
-            calculatedYearAge = detail.getAge(); // 생년월일이 없으면 기존 상세정보의 나이 사용
+            calculatedYearAge = detail.getAge();
         }
 
         return MemberResponse.builder()
                 .id(member.getId())
                 .loginId(member.getLoginId())
                 .name(member.getName())
-                .gender(member.getGender())
-                .birthDate(member.getBirthDate() != null ? member.getBirthDate().toString() : null)
                 .email(member.getEmail())
                 .phone(member.getPhone())
                 .profileImageUrl(member.getProfileImageUrl())
+                .gender(member.getGender())
+                .birthDate(member.getBirthDate() != null ? member.getBirthDate().toString() : null)
                 .role(member.getRole() != null ? member.getRole().name() : "USER")
 
-                // Detail 매핑 (Null 안전 보장)
                 .age(calculatedYearAge)
                 .height(detail != null ? detail.getHeight() : null)
                 .weight(detail != null ? detail.getWeight() : null)
                 .armSpan(detail != null ? detail.getArmSpan() : null)
                 .footSize(detail != null ? detail.getFootSize() : null)
 
-                // Privacy 매핑 (Null이면 기본값 false 설정)
                 .isPhonePublic(privacy != null ? privacy.isPhonePublic() : false)
                 .isEmailPublic(privacy != null ? privacy.isEmailPublic() : false)
                 .isHeightPublic(privacy != null ? privacy.isHeightPublic() : false)
@@ -81,7 +76,6 @@ public class MemberResponse {
                 .isArmSpanPublic(privacy != null ? privacy.isArmSpanPublic() : false)
                 .isFootSizePublic(privacy != null ? privacy.isFootSizePublic() : false)
 
-                // Notification 매핑 (Null이면 기본값 true 설정, 💡 에러 원인 해결 구간)
                 .isGlobalNotificationOn(noti != null ? noti.isGlobalNotificationOn() : true)
                 .isMembershipNotificationOn(noti != null ? noti.isMembershipNotificationOn() : true)
                 .isActivityNotificationOn(noti != null ? noti.isActivityNotificationOn() : true)

@@ -12,9 +12,11 @@ import com.olla.olla_climbing.global.common.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/v1/members")
@@ -82,5 +84,19 @@ public class MemberController {
         if (member == null) throw new IllegalArgumentException("로그인 인증 정보가 없습니다.");
         memberService.updateFcmToken(member.getLoginId(), request.getToken());
         return ResponseEntity.ok(ApiResponse.success(200, "FCM 토큰이 갱신되었습니다.", null));
+    }
+
+    @PostMapping(value = "/me/profile-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "프로필 이미지 업로드 (S3)", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<ApiResponse<String>> uploadProfileImage(
+            @AuthenticationPrincipal Member member,
+            @RequestPart("image") MultipartFile image) { // 프론트에서 body: image 로 보냄
+
+        if (member == null) throw new IllegalArgumentException("로그인 인증 정보가 없습니다.");
+
+        String imageUrl = memberService.updateProfileImage(member.getLoginId(), image);
+
+        // 프론트 요청대로 data 안에 profileImageUrl(문자열)을 그대로 내려줍니다.
+        return ResponseEntity.ok(ApiResponse.success(200, "프로필 이미지가 성공적으로 업로드되었습니다.", imageUrl));
     }
 }

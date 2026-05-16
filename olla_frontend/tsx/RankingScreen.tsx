@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, RefreshControl, Alert } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../src/constants/Config';
@@ -224,6 +224,7 @@ const RankingScreen = ({ route }: any) => {
                .catch(() => ({ data: { data: [] } }))
         )
       );
+      // Alert.alert('랭킹응답', JSON.stringify(rankResponses[0].data));
 
       let myBestList: BeginnerRecord[] = [];
       try {

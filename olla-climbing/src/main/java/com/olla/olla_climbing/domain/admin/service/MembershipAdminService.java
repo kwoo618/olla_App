@@ -146,7 +146,6 @@ public class MembershipAdminService {
         }
 
         return memberPage.map(member -> {
-            // 💡 [수정] 1개를 뽑지 않고, DB에서 가져온 전체(List)를 그대로 DTO로 넘깁니다.
             List<Membership> activeMemberships = membershipRepository.findAllByMemberIdAndStatusIn(
                     member.getId(), List.of(MembershipStatus.ACTIVE, MembershipStatus.HOLDING)
             );

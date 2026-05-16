@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:119840646767:android:beded0f184c7517532cf9a",
+        "mobilesdk_app_id": "1:119840646767:android:6ffa7b0542d1c1af32cf9a",
         "android_client_info": {
-          "package_name": "com.olla.app"
+          "package_name": "com.olla_react"
         }
       },
       "oauth_client": [],

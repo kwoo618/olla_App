@@ -59,15 +59,15 @@ const ManagerUser = ({ navigation }: any) => {
   const [isDetailVisible, setDetailVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
 
-  // ─── 🌟 팝업창 개별 드래그 앤 드롭 치수 및 로직 🌟 ───
+  // ─── 팝업창 개별 드래그 앤 드롭 치수 및 로직 ───
   const { height: SCREEN_HEIGHT } = Dimensions.get('window');
   
-  // 💡 모달 크기 설정
+  // 모달 크기 설정
   // 상세 정보 팝업은 내용물(이름, 성별, 연락처, 키/몸무게 + 닫기버튼) 길이에 딱 맞게 46%로 축소하여 공백 제거
   const DETAIL_MODAL_HEIGHT = SCREEN_HEIGHT * 0.55; 
   const ADD_MODAL_HEIGHT = SCREEN_HEIGHT * 0.65;    // 신규 회원 등록 폼 길이에 딱 맞는 65%
 
-  // 1️⃣ 회원 상세 정보 팝업 애니메이션 (고무줄 텐션 및 드래그 지원)
+  // 회원 상세 정보 팝업 애니메이션 (고무줄 텐션 및 드래그 지원)
   const detailHeightAnim = useRef(new Animated.Value(0)).current;
   const currentDetailSnap = useRef(DETAIL_MODAL_HEIGHT);
 
@@ -103,7 +103,7 @@ const ManagerUser = ({ navigation }: any) => {
     })
   ).current;
 
-  // 2️⃣ 회원 등록 팝업 애니메이션 (고무줄 텐션 및 드래그 지원)
+  // 회원 등록 팝업 애니메이션 (고무줄 텐션 및 드래그 지원)
   const addHeightAnim = useRef(new Animated.Value(0)).current;
   const currentAddSnap = useRef(ADD_MODAL_HEIGHT);
 
@@ -268,7 +268,7 @@ const ManagerUser = ({ navigation }: any) => {
       const d = response.data?.data?.data || response.data?.data; 
       if (!d) return;
       
-      // 💡 성별 데이터 파싱 (MALE/FEMALE 또는 남/여 처리)
+      // 성별 데이터 파싱 (MALE/FEMALE 또는 남/여 처리)
       const rawGender = d.detail?.gender || d.gender;
       let displayGender = '-';
       if (rawGender === 'MALE' || rawGender === '남' || rawGender === '남자') displayGender = '남자';
