@@ -62,7 +62,7 @@ const LoginScreen = ({ navigation }: any) => {
         if (role) await AsyncStorage.setItem('userRole', role);
 
         // 로그인 성공 시 기기의 FCM 토큰을 발급받아 서버에 저장 요청 [FCM]
-        /* try {
+        try {
           // 기기 알림 권한 승인 요청 (iOS 필수)
           const authStatus = await messaging().requestPermission();
           const enabled =
@@ -83,7 +83,6 @@ const LoginScreen = ({ navigation }: any) => {
         } catch (fcmError) {
           console.error('FCM 토큰 발급/전송 오류:', fcmError);
         }
-          */ 
 
         
         navigation.replace('Home');

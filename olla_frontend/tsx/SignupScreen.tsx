@@ -501,7 +501,7 @@ const SignupScreen = ({ navigation }: any) => {
           ]}>
             <TextInput
               ref={emailRef}
-              style={styles.inputFlex}
+              style={[styles.inputFlex, (isSendingEmail || isEmailSent || isEmailVerified) && { color: '#999999' }]}
               placeholder="example@email.com"
               placeholderTextColor="#ffffff80"
               keyboardType="email-address"
@@ -512,7 +512,7 @@ const SignupScreen = ({ navigation }: any) => {
               onSubmitEditing={sendEmailVerification}
               value={email}
               onChangeText={validateEmail}
-              editable={!isEmailVerified}
+              editable={!(isSendingEmail || isEmailSent || isEmailVerified)}
             />
             <TouchableOpacity
               style={[styles.checkButton, (isSendingEmail || isEmailVerified) && styles.checkButtonDisabled]}

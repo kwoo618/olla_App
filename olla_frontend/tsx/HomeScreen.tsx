@@ -1,17 +1,13 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
+import {Alert} from 'react-native';
 import axios from 'axios';
 import QRCode from 'react-native-qrcode-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Image,
-  Modal,
-  Animated,
-  RefreshControl
+  View, Text, StyleSheet, TouchableOpacity,
+  ScrollView, Image, Modal, Animated,
+  RefreshControl, Dimensions, PanResponder,
+  TouchableWithoutFeedback
 } from 'react-native';
 import { API_BASE_URL } from '../src/constants/Config';
 
@@ -25,11 +21,25 @@ const reverseColorMap: { [key: string]: string } = {
   "BLUE": "파랑", "RED": "빨강", "PURPLE": "보라", "BLACK": "검정"
 };
 
+// ✅ 오늘 날짜(자정 기준) 반환
+const getTodayDate = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+// ✅ 시작일이 오늘 이전이거나 오늘인 경우에만 활성화된 이용권으로 판단
+const isStarted = (startDate: string): boolean => {
+  if (!startDate) return true; // 시작일 없으면 이미 시작된 것으로 간주
+  const start = new Date(startDate);
+  start.setHours(0, 0, 0, 0);
+  return start <= getTodayDate();
+};
+
 const HomeScreen = ({ navigation }: any) => {
   const scrollViewRef = useRef<ScrollView>(null);
 
   const [activeModal, setActiveModal] = useState<string | null>(null);
-  const slideAnim = useRef(new Animated.Value(500)).current;
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -63,6 +73,7 @@ const HomeScreen = ({ navigation }: any) => {
     important: false,
   });
 
+  // hasFuture 필드 추가: 미래 시작 예정 이용권 여부
   const [membership, setMembership] = useState({
     membershipType: '-',
     remainingDays: 0,
@@ -70,6 +81,8 @@ const HomeScreen = ({ navigation }: any) => {
     startDate: '',
     endDate: '',
     status: '',
+    hasFuture: false,
+    futureStartDate: '',
     isLoading: true
   });
 
@@ -78,6 +91,39 @@ const HomeScreen = ({ navigation }: any) => {
   const today = new Date();
   const [viewDate, setViewDate] = useState(new Date());
   const [selectedFullDate, setSelectedFullDate] = useState<Date | null>(null);
+
+  const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+  
+  const QR_MODAL_HEIGHT = SCREEN_HEIGHT * 0.55;
+  const MEMBERSHIP_MODAL_HEIGHT = SCREEN_HEIGHT * 0.53;
+
+  const modalHeightAnim = useRef(new Animated.Value(0)).current;
+  const currentSnap = useRef(0);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
+      onPanResponderGrant: () => {
+        modalHeightAnim.setOffset(currentSnap.current);
+        modalHeightAnim.setValue(0);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        modalHeightAnim.setValue(Math.min(0, -gestureState.dy));
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        modalHeightAnim.flattenOffset();
+        const finalHeight = currentSnap.current - gestureState.dy;
+        const CLOSE_THRESHOLD = currentSnap.current * 0.7; 
+
+        if (finalHeight < CLOSE_THRESHOLD) {
+          closeModal();
+        } else {
+          Animated.spring(modalHeightAnim, { toValue: currentSnap.current, useNativeDriver: false }).start();
+        }
+      }
+    })
+  ).current;
 
   const fetchQrToken = async () => {
     try {
@@ -103,13 +149,16 @@ const HomeScreen = ({ navigation }: any) => {
       setQrToken(null);
       fetchQrToken();
     }
-    setTimeout(() => {
-      Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
-    }, 50);
+    
+    const targetHeight = type === 'QR' ? QR_MODAL_HEIGHT : MEMBERSHIP_MODAL_HEIGHT;
+    currentSnap.current = targetHeight;
+    
+    modalHeightAnim.setValue(0);
+    Animated.timing(modalHeightAnim, { toValue: targetHeight, duration: 300, useNativeDriver: false }).start();
   };
 
   const closeModal = () => {
-    Animated.timing(slideAnim, { toValue: 500, duration: 250, useNativeDriver: true }).start(() => {
+    Animated.timing(modalHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
       setActiveModal(null);
     });
   };
@@ -130,30 +179,6 @@ const HomeScreen = ({ navigation }: any) => {
       return Number(item.memberId ?? item.id) === myId;
     }
     return item.name === nickname || item.nickname === nickname;
-  };
-
-  const resolveMembershipType = (
-    typeStr: string,
-    startDate: string,
-    endDate: string,
-    remainingCount: number | null
-  ): string => {
-    const upper = typeStr?.toUpperCase() || '';
-    if (upper === 'COUNT' || upper.includes('횟수') || upper.includes('COUNT')) return '일일권';
-    if (upper === 'PERIOD' || upper.includes('기간') || upper.includes('PERIOD') || upper.includes('MONTH')) {
-      if (startDate && endDate) {
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        start.setHours(0, 0, 0, 0);
-        end.setHours(0, 0, 0, 0);
-        const totalDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-        return totalDays <= 1 ? '일일권' : '회원권';
-      }
-      return '회원권';
-    }
-    if (remainingCount !== null && remainingCount !== undefined) return '일일권';
-    if (endDate) return '회원권';
-    return '-';
   };
 
   const fetchMainData = async () => {
@@ -216,29 +241,83 @@ const HomeScreen = ({ navigation }: any) => {
 
       try {
         const memResponse = await axios.get(`${API_BASE_URL}/memberships/me`, config);
-        const data = memResponse.data?.data?.data;
-        if (data) {
-          const displayType = resolveMembershipType(String(data.membershipType || ''), data.startDate || '', data.endDate || '', data.remainingCount ?? null);
-          let remainingDays = 0;
-          if (data.endDate) {
-            const end = new Date(data.endDate);
-            end.setHours(0, 0, 0, 0);
-            const todayStr = new Date();
-            todayStr.setHours(0, 0, 0, 0);
-            const diff = Math.round((end.getTime() - todayStr.getTime()) / (1000 * 60 * 60 * 24));
-            remainingDays = diff >= 0 ? diff : 0;
-          }
+        const dataList = memResponse.data?.data?.data;
+        
+        if (dataList && Array.isArray(dataList) && dataList.length > 0) {
+          // ACTIVE 상태 + 시작일이 오늘 이전인 것만 실제 활성화로 처리
+          const activeList = dataList.filter((m: any) =>
+            m.status === 'ACTIVE' && isStarted(m.startDate)
+          );
+
+          // 미래 시작 예정 이용권 (ACTIVE지만 아직 시작 안 됨)
+          const futureList = dataList.filter((m: any) =>
+            m.status === 'ACTIVE' && !isStarted(m.startDate)
+          );
+          
+          // 회원권(PERIOD)과 일일권(COUNT) 분리
+          const periodList = activeList.filter((m: any) => 
+            String(m.membershipType).toUpperCase() === 'PERIOD'
+          );
+          const countList = activeList.filter((m: any) => 
+            String(m.membershipType).toUpperCase() === 'COUNT'
+          );
+
+          // 회원권 잔여일 합산 (오늘 기준 남은 일수)
+          let totalRemainingDays = 0;
+          let earliestStart = '';
+          let latestEnd = '';
+          
+          periodList.forEach((m: any) => {
+            if (m.endDate) {
+              const end = new Date(m.endDate);
+              end.setHours(0, 0, 0, 0);
+              const todayDate = getTodayDate();
+              const diff = Math.round((end.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
+              totalRemainingDays += diff > 0 ? diff : 0;
+              
+              if (!earliestStart || m.startDate < earliestStart) earliestStart = m.startDate;
+              if (!latestEnd || m.endDate > latestEnd) latestEnd = m.endDate;
+            }
+          });
+
+          // 일일권 잔여 횟수 합산
+          const totalRemainingCount = countList.reduce((sum: number, m: any) => 
+            sum + (m.remainingCount ?? 0), 0
+          );
+
+          const hasPeriod = periodList.length > 0 && totalRemainingDays > 0;
+          const hasCount = countList.length > 0 && totalRemainingCount > 0;
+
+          // 미래 시작 예정 이용권 첫 번째 시작일
+          const hasFuture = futureList.length > 0;
+          const futureStartDate = hasFuture
+            ? (futureList.sort((a: any, b: any) => a.startDate.localeCompare(b.startDate))[0]?.startDate || '')
+            : '';
+
+          let membershipType = '-';
+          if (hasPeriod && hasCount) membershipType = '회원권';
+          else if (hasPeriod) membershipType = '회원권';
+          else if (hasCount) membershipType = '일일권';
+          else if (hasFuture) membershipType = '시작 예정';
+
+          // 상태 텍스트
+          let statusText = '만료';
+          if (hasPeriod || hasCount) statusText = '이용중';
+          else if (hasFuture) statusText = '시작 예정';
+
           setMembership({
-            membershipType: displayType,
-            remainingDays,
-            remainingCount: data.remainingCount ?? 0,
-            startDate: data.startDate || '',
-            endDate: data.endDate || '',
-            status: data.status === 'ACTIVE' ? '이용중' : data.status === 'HOLDING' ? '정지중' : '만료',
+            membershipType,
+            remainingDays: totalRemainingDays,
+            remainingCount: totalRemainingCount,
+            startDate: earliestStart,
+            endDate: latestEnd,
+            status: statusText,
+            hasFuture,
+            futureStartDate,
             isLoading: false
           });
         } else {
-          setMembership(prev => ({ ...prev, isLoading: false }));
+          setMembership(prev => ({ ...prev, hasFuture: false, futureStartDate: '', isLoading: false }));
         }
       } catch (error: any) {
         console.error('회원권 로드 실패:', error.response?.data?.message || error.message);
@@ -404,6 +483,7 @@ const HomeScreen = ({ navigation }: any) => {
   const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
 
   const isCountType = membership.membershipType === '일일권';
+  // 실제 활성화된 이용권 여부 (시작 예정은 hasMembership=false)
   const hasMembership =
     isCountType
       ? membership.remainingCount > 0
@@ -423,8 +503,13 @@ const HomeScreen = ({ navigation }: any) => {
     if (title === '공지사항') {
       navigation.navigate('Notice');
     } else if (title === 'QR') {
+      // 시작 예정이면 QR 입장 불가
       if (!hasMembership) {
-        showResultModal('입장 불가', '현재 활성화된 이용권이 없습니다. 이용권을 먼저 구매해주세요.', 'info');
+        if (membership.hasFuture) {
+          showResultModal('입장 불가', `${membership.futureStartDate}부터 이용 가능합니다`, 'info');
+        } else {
+          showResultModal('입장 불가', '현재 활성화된 이용권이 없습니다. 이용권을 먼저 구매해주세요', 'info');
+        }
         return;
       }
       openModal('QR');
@@ -437,7 +522,7 @@ const HomeScreen = ({ navigation }: any) => {
     }
   };
 
-  // 💡 게이지바 채움 정도 (사용한 기간 퍼센트 계산)
+  // 게이지바: 시작일~종료일 전체 기간 대비 경과 비율
   let fillPercentage = 0;
   if (!isCountType && hasMembership && membership.startDate && membership.endDate) {
     const s = new Date(membership.startDate); s.setHours(0, 0, 0, 0);
@@ -446,6 +531,23 @@ const HomeScreen = ({ navigation }: any) => {
     const usedDays = Math.max(0, totalDays - membership.remainingDays);
     fillPercentage = Math.min((usedDays / totalDays) * 100, 100);
   }
+
+  // 이용권 카드 원형 그래프 텍스트
+  const circleText = (() => {
+    if (membership.isLoading) return '';
+    if (hasMembership) {
+      return isCountType ? `${membership.remainingCount}회` : `D-${membership.remainingDays}`;
+    }
+    if (membership.hasFuture) return '예정';
+    return '없음';
+  })();
+
+  // 이용권 카드 타이틀 텍스트
+  const membershipCardTitle = (() => {
+    if (hasMembership) return membership.membershipType;
+    if (membership.hasFuture) return '시작 예정';
+    return '이용권';
+  })();
 
   return (
     <View style={styles.background}>
@@ -482,20 +584,25 @@ const HomeScreen = ({ navigation }: any) => {
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.UserCardCentered} onPress={() => handlePopupPress('회원권')}>
-            <View style={[styles.circleGraphDummy, !hasMembership && { borderColor: '#444444' }]}>
-              <Text style={[styles.circleGraphText, !hasMembership && { color: '#999999', fontSize: 15 }]}>
-                {membership.isLoading
-                  ? ''
-                  : hasMembership
-                    ? isCountType
-                      ? `${membership.remainingCount}회`
-                      : `D-${membership.remainingDays}`
-                    : '없음'}
+            <View style={[
+              styles.circleGraphDummy,
+              !hasMembership && !membership.hasFuture && { borderColor: '#444444' },
+            ]}>
+              <Text style={[
+                styles.circleGraphText,
+                !hasMembership && { color: '#999999', fontSize: 13 },
+                !hasMembership && membership.hasFuture && { color: '#A1BE44', fontSize: 13 },
+              ]}>
+                {circleText}
               </Text>
             </View>
             <Text style={styles.cardTitleCentered}>
-              {hasMembership ? membership.membershipType : '이용권'}
+              {membershipCardTitle}
             </Text>
+            {/* 시작 예정일 표시 */}
+            {!hasMembership && membership.hasFuture && (
+              <Text style={styles.futureStartDateText}>{membership.futureStartDate}</Text>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -604,7 +711,7 @@ const HomeScreen = ({ navigation }: any) => {
         </View>
       </ScrollView>
 
-      {/* ─── 커스텀 알림 결과 모달 ─── */}
+      {/* 커스텀 알림 결과 모달 */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -619,26 +726,32 @@ const HomeScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 하단 팝업 모달 ─── */}
+      {/* 하단 팝업 모달 */}
       <Modal
         visible={activeModal !== null}
         animationType="fade"
         transparent={true}
         onRequestClose={closeModal}
       >
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeModal}>
-          <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: slideAnim }] }]}>
-            <TouchableOpacity activeOpacity={1} style={{ width: '100%', alignItems: 'center' }}>
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={closeModal}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+
+          <Animated.View style={[styles.bottomSheet, { height: modalHeightAnim }]}>
+            <View {...panResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
               <View style={styles.dragHandle} />
               <View style={styles.sheetHeader}>
                 <Text style={styles.sheetTitle}>
-                  {activeModal === 'QR' ? 'QR 체크인' : (hasMembership ? membership.membershipType : '이용권')}
+                  {activeModal === 'QR' ? 'QR 체크인' : (hasMembership ? membership.membershipType : (membership.hasFuture ? '시작 예정' : '이용권'))}
                 </Text>
-                <TouchableOpacity onPress={closeModal}>
+                <TouchableOpacity onPress={closeModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                   <Text style={styles.closeBtn}>✕</Text>
                 </TouchableOpacity>
               </View>
+            </View>
 
+            <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1, width: '100%' }} contentContainerStyle={{ alignItems: 'center' }}>
               {activeModal === 'QR' ? (
                 <>
                   <View style={{ marginBottom: 20, alignItems: 'center', justifyContent: 'center', height: 200, width: 200 }}>
@@ -660,19 +773,18 @@ const HomeScreen = ({ navigation }: any) => {
                   <View style={styles.memCard}>
                     <View style={styles.memCardHeader}>
                       <Text style={styles.memCardTitle}>
-                        {isCountType ? '잔여 횟수' : '남은 이용 기간'}
+                        {isCountType ? '잔여 횟수' : (membership.hasFuture && !hasMembership ? '시작 예정' : '남은 이용 기간')}
                       </Text>
                     </View>
-                    {!isCountType && (
+                    {!isCountType && hasMembership && (
                       <View style={styles.progressBarBg}>
                         <View style={[
                           styles.progressBarFill,
-                          { width: `${fillPercentage}%` }, // 💡 남은 기간이 적을수록 게이지가 꽉 참
-                          !hasMembership && { backgroundColor: 'transparent' }
+                          { width: `${fillPercentage}%` },
                         ]} />
                       </View>
                     )}
-                    <View style={[styles.memCardDates, !hasMembership && { justifyContent: 'center' }]}>
+                    <View style={[styles.memCardDates, (!hasMembership) && { justifyContent: 'center' }]}>
                       {hasMembership ? (
                         isCountType ? (
                           <Text style={[styles.memDateText, { fontSize: 18, color: '#A1BE44' }]}>
@@ -684,6 +796,11 @@ const HomeScreen = ({ navigation }: any) => {
                             <Text style={styles.memDateText}>{membership.endDate}</Text>
                           </>
                         )
+                      ) : membership.hasFuture ? (
+                        // ✅ 시작 예정일 안내
+                        <Text style={[styles.memDateText, { color: '#A1BE44', fontSize: 16 }]}>
+                          {membership.futureStartDate} 시작 예정
+                        </Text>
                       ) : (
                         <Text style={styles.memDateText}>구매 필요</Text>
                       )}
@@ -696,30 +813,34 @@ const HomeScreen = ({ navigation }: any) => {
                       </Text>
                       <Text style={[
                         styles.memHalfValueGreen,
-                        !hasMembership && { color: '#999999', fontSize: 18 }
+                        !hasMembership && !membership.hasFuture && { color: '#999999', fontSize: 18 },
+                        !hasMembership && membership.hasFuture && { color: '#A1BE44', fontSize: 18 },
                       ]} numberOfLines={1} adjustsFontSizeToFit>
                         {hasMembership
                           ? isCountType
                             ? `${membership.remainingCount}회`
                             : `${membership.remainingDays}일`
-                          : '구매 필요'}
+                          : membership.hasFuture 
+                            ? '시작 예정'
+                            : '구매 필요'}
                       </Text>
                     </View>
                     <View style={styles.memHalfCard}>
                       <Text style={styles.memHalfTitle}>상태</Text>
                       <Text style={[
                         styles.memHalfValueWhite,
-                        !hasMembership && { fontSize: 18, color: '#FF6B6B' }
+                        !hasMembership && !membership.hasFuture && { fontSize: 18, color: '#FF6B6B' },
+                        !hasMembership && membership.hasFuture && { fontSize: 18, color: '#A1BE44' },
                       ]} numberOfLines={1} adjustsFontSizeToFit>
-                        {hasMembership ? displayStatus : '구매 필요'}
+                        {membership.status || (hasMembership ? '이용중' : '구매 필요')}
                       </Text>
                     </View>
                   </View>
                 </View>
               )}
-            </TouchableOpacity>
+            </ScrollView>
           </Animated.View>
-        </TouchableOpacity>
+        </View>
       </Modal>
     </View>
   );
@@ -743,6 +864,8 @@ const styles = StyleSheet.create({
   circleGraphDummy: { width: 50, height: 50, borderRadius: 25, borderWidth: 4, borderColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   circleGraphText: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
   cardTitleCentered: { color: '#ffffff', fontSize: 18, fontWeight: '600' },
+  // 시작 예정일 표시 텍스트 스타일
+  futureStartDateText: { color: '#A1BE44', fontSize: 11, marginTop: 4, textAlign: 'center', paddingVertical: 18 },
   
   unifiedDataFrame: { flexDirection: 'row', backgroundColor: '#2A2A2A', borderRadius: 16, marginBottom: 20, overflow: 'hidden' },
   innerTouchableMicro: { flex: 1, paddingVertical: 18, paddingHorizontal: 2, alignItems: 'center', justifyContent: 'center', minHeight: 90 },
@@ -772,7 +895,7 @@ const styles = StyleSheet.create({
   attendedText: { color: '#A1BE44', fontWeight: 'bold' },
   
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)', justifyContent: 'flex-end' },
-  bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 50, alignItems: 'center' },
+  bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 50, alignItems: 'center', width: '100%', overflow: 'hidden' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
   sheetHeader: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
   sheetTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold', marginLeft: 10 },
