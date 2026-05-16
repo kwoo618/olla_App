@@ -1,10 +1,14 @@
 package com.olla.olla_climbing.domain.admin.service;
 
 import com.olla.olla_climbing.domain.admin.dto.response.AdminDashboardResponse;
+import com.olla.olla_climbing.domain.admin.dto.response.AdminDashboardSummaryResponse;
+import com.olla.olla_climbing.domain.admin.dto.response.NoticeResponse;
 import com.olla.olla_climbing.domain.admin.entity.Membership;
+import com.olla.olla_climbing.domain.admin.entity.Notice;
 import com.olla.olla_climbing.domain.admin.entity.VisitLog;
 import com.olla.olla_climbing.domain.admin.enums.MembershipStatus;
 import com.olla.olla_climbing.domain.admin.repository.MembershipRepository;
+import com.olla.olla_climbing.domain.admin.repository.NoticeRepository;
 import com.olla.olla_climbing.domain.admin.repository.VisitLogRepository;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +28,41 @@ public class AdminDashboardService {
     private final MemberRepository memberRepository;
     private final MembershipRepository membershipRepository;
     private final VisitLogRepository visitLogRepository;
+
+    private final NoticeRepository noticeRepository;
+
+    @Transactional(readOnly = true)
+    public AdminDashboardSummaryResponse getDashboardSummary() {
+        LocalDate today = LocalDate.now();
+        LocalDateTime startOfDay = today.atStartOfDay();
+        LocalDateTime endOfDay = today.atTime(23, 59, 59);
+
+        // 1. 오늘 총 방문자 수
+        long totalVisitsToday = visitLogRepository.findByCreatedAtBetween(startOfDay, endOfDay).size();
+
+        // 2. 3일 이내 만료 예정자 수 (오늘 ~ 3일 뒤)
+        long expiringIn3Days = membershipRepository.findByEndDateBetweenAndStatus(
+                today, today.plusDays(3), MembershipStatus.ACTIVE).size();
+
+        // 3. 이번 주 신규 가입자 수 (월요일 기준)
+        LocalDate startOfWeek = today.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+        long newMembersThisWeek = memberRepository.findByCreatedAtAfter(startOfWeek.atStartOfDay()).size();
+
+        // 4. 최근 공지사항 5개 (동철님이 화면에 뿌려줄 수 있도록 List로 전달)
+        // 만약 NoticeRepository에 findTop5ByOrderByCreatedAtDesc() 가 없다면 만들어주셔야 합니다.
+        List<NoticeResponse> recentNotices = noticeRepository.findAll().stream()
+                .sorted(Comparator.comparing(Notice::getCreatedAt).reversed())
+                .limit(5)
+                .map(NoticeResponse::from)
+                .collect(Collectors.toList());
+
+        return AdminDashboardSummaryResponse.builder()
+                .totalVisitsToday(totalVisitsToday)
+                .expiringIn3Days(expiringIn3Days)
+                .newMembersThisWeek(newMembersThisWeek)
+                .notices(recentNotices)
+                .build();
+    }
 
     @Transactional(readOnly = true)
     public AdminDashboardResponse getDashboardStats() {
