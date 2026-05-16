@@ -4,17 +4,14 @@ import com.olla.olla_climbing.domain.admin.entity.VisitLog;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
 
 public interface VisitLogRepository extends JpaRepository<VisitLog, Long> {
-    // 최근 1건의 방문 기록 조회 (쿨타임용)
+    // 최근 1건의 방문 기록 조회 (이제 쿨타임용으로는 안 쓰지만, 혹시 몰라 유지)
     Optional<VisitLog> findTopByMemberIdOrderByCreatedAtDesc(Long memberId);
 
     // 특정 기간(오늘 하루) 방문 기록 조회 (대시보드용)
@@ -38,4 +35,7 @@ public interface VisitLogRepository extends JpaRepository<VisitLog, Long> {
             @Param("memberId") Long memberId,
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end);
+
+    // 특정 회원이 특정 기간(당일)에 출석한 기록이 '존재하는지' 여부만 빠르게 반환
+    boolean existsByMemberIdAndCreatedAtBetween(Long memberId, LocalDateTime start, LocalDateTime end);
 }

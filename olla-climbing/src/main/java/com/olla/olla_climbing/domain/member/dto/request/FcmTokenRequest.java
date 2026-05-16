@@ -6,5 +6,9 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor
 public class FcmTokenRequest {
-    private String token;
+    private String deviceToken;
+
+    public String getToken() {
+        return this.deviceToken;
+    }
 }

@@ -64,11 +64,13 @@ public class CommentService {
         Comment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new IllegalArgumentException("댓글이 존재하지 않습니다."));
 
-        if (!comment.getMember().getLoginId().equals(loginId)) {
-            throw new IllegalArgumentException("자신의 댓글만 삭제할/ 수 있습니다.");
+        Member currentMember = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
+                .orElseThrow(() -> new IllegalArgumentException("사용자 정보가 없습니다."));
+
+        if (!comment.getMember().getLoginId().equals(loginId) && currentMember.getRole() != com.olla.olla_climbing.domain.member.enums.Role.ADMIN) {
+            throw new IllegalArgumentException("자신의 댓글 또는 관리자만 삭제할 수 있습니다.");
         }
 
-        // 실무 팁: 대댓글이 있는 댓글을 완전히 삭제하면 구조가 깨지므로 markAsDeleted 처리
         comment.markAsDeleted();
     }
 }

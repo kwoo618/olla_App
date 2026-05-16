@@ -52,14 +52,17 @@ public class VisitService {
         Member admin = memberRepository.findByLoginIdAndIsDeletedFalse(adminLoginId)
                 .orElseThrow(() -> new IllegalArgumentException("관리자 정보를 찾을 수 없습니다."));
 
-        // 4. 중복 입장 방지 (1분 이내)
-        VisitLog lastVisit = visitLogRepository.findTopByMemberIdOrderByCreatedAtDesc(member.getId()).orElse(null);
-        if (lastVisit != null && lastVisit.getCreatedAt().plusMinutes(1).isAfter(LocalDateTime.now())) {
-            return VisitScanResponse.builder()
-                    .statusCode("WARNING")
-                    .memberName(member.getName())
-                    .message("방금(1분 이내) 입장 처리된 회원입니다.")
-                    .build();
+        // 💡 4. 중복 입장 방지 (당일 단위로 확장 및 Exception 반환)
+        LocalDateTime startOfToday = LocalDateTime.of(LocalDate.now(), LocalTime.MIN);
+        LocalDateTime endOfToday = LocalDateTime.of(LocalDate.now(), LocalTime.MAX);
+
+        boolean hasVisitedToday = visitLogRepository.existsByMemberIdAndCreatedAtBetween(
+                member.getId(), startOfToday, endOfToday
+        );
+
+        if (hasVisitedToday) {
+            // 프론트엔드가 캐치해서 에러 모달을 띄울 수 있도록 예외(Exception)를 던집니다.
+            throw new IllegalArgumentException("이미 오늘 출석이 완료된 회원입니다.");
         }
 
         // 5. 회원의 유효한 모든 이용권 조회 (우선순위 판단을 위해 List로 조회)
@@ -129,6 +132,7 @@ public class VisitService {
                 .message(message)
                 .build();
     }
+
     @Transactional(readOnly = true)
     public VisitDashboardResponse getTodayDashboard() {
         LocalDateTime startOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MIN);

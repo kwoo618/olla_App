@@ -28,6 +28,33 @@
         }
       }
     },
+    "react-native-camera-kit": {
+      "root": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-camera-kit",
+      "name": "react-native-camera-kit",
+      "platforms": {
+        "ios": {
+          "podspecPath": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-camera-kit\\ReactNativeCameraKit.podspec",
+          "version": "17.0.1",
+          "configurations": [],
+          "scriptPhases": []
+        },
+        "android": {
+          "sourceDir": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-camera-kit\\android",
+          "packageImportPath": "import com.rncamerakit.RNCameraKitPackage;",
+          "packageInstance": "new RNCameraKitPackage()",
+          "buildTypes": [],
+          "libraryName": "NativeCameraKitSpec",
+          "componentDescriptors": [
+            "CKCameraComponentDescriptor"
+          ],
+          "cmakeListsPath": "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-camera-kit/android/build/generated/source/codegen/jni/CMakeLists.txt",
+          "cxxModuleCMakeListsModuleName": null,
+          "cxxModuleCMakeListsPath": null,
+          "cxxModuleHeaderName": null,
+          "isPureCxxDependency": false
+        }
+      }
+    },
     "react-native-safe-area-context": {
       "root": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-safe-area-context",
       "name": "react-native-safe-area-context",

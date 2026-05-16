@@ -1,5 +1,6 @@
 package com.olla.olla_climbing.domain.community.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.olla.olla_climbing.domain.community.entity.Post;
 import lombok.Builder;
 import lombok.Getter;
@@ -12,6 +13,7 @@ public class PostResponse {
     private Long id;
     private Long writerId;
     private String writerName;
+    private String profileImageUrl;
     private String title;
     private String content;
     private boolean isDifferentGym;
@@ -20,17 +22,20 @@ public class PostResponse {
     private int maxMember;
     private int memberCount;
     private LocalDateTime createdAt;
+    private int viewCount;
+    private long likeCount;
+    private boolean isApplied;
+    private boolean isLiked;
 
-    private int viewCount;    // 조회수
-    private long likeCount;   // 좋아요 총 개수
-    private boolean isApplied; // 내가 참여 신청했는지 여부
-    private boolean isLiked;   // 내가 좋아요 눌렀는지 여부
+    @JsonProperty("isClosed")
+    private boolean isClosed;
 
     public static PostResponse of(Post post, boolean isApplied, boolean isLiked, long likeCount) {
         return PostResponse.builder()
                 .id(post.getId())
                 .writerId(post.getMember().getId())
                 .writerName(post.getMember().getName())
+                .profileImageUrl(post.getMember().getProfileImageUrl())
                 .title(post.getTitle())
                 .content(post.getContent())
                 .isDifferentGym(post.isDifferentGym())
@@ -43,6 +48,7 @@ public class PostResponse {
                 .likeCount(likeCount)
                 .isApplied(isApplied)
                 .isLiked(isLiked)
+                .isClosed(post.isClosed())
                 .build();
     }
 }

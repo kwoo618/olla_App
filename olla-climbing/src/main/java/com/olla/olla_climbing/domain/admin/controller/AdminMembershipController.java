@@ -21,55 +21,54 @@ import org.springframework.data.web.PageableDefault;
 @RestController
 @RequestMapping("/api/v1/admin/memberships")
 @RequiredArgsConstructor
-@Tag(name = "Admin Membership API", description = "관리자 전용 이용권 부여/관리 API")
+@Tag(name = "Admin Membership API")
 public class AdminMembershipController {
 
     private final MembershipAdminService membershipAdminService;
 
     @PostMapping("/grant")
-    @Operation(summary = "관리자: 이용권 부여", description = "특정 회원에게 이용권을 수동으로 부여합니다.", security = @SecurityRequirement(name = "bearerAuth"))
+    @Operation(summary = "관리자: 이용권 부여", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<ApiResponse<String>> grantMembership(
             @AuthenticationPrincipal Member admin,
             @Valid @RequestBody MembershipGrantRequest request) {
+        if (admin == null) throw new IllegalArgumentException("인증 정보가 없습니다.");
 
-        if (admin == null) {
-            throw new IllegalArgumentException("인증 정보가 없습니다.");
-        }
-
-        // DTO에서 값을 하나씩 꺼내서 서비스의 파라미터 규격에 맞게 넘겨줍니다.
         membershipAdminService.grantMembership(
                 request.getMemberId(),
                 request.getAddMonths(),
                 request.getAddCount(),
                 request.getStartDate()
         );
-
         return ResponseEntity.ok(ApiResponse.success("이용권이 성공적으로 부여되었습니다."));
     }
 
-    @GetMapping("/members")
-    @Operation(summary = "관리자용 회원 리스트 조회", description = "전체 회원 목록을 페이징 및 정렬하여 조회합니다.")
-    public ResponseEntity<Page<AdminMemberResponse>> getMemberList(
-            @RequestParam(value = "searchName", required = false) String searchName,
-            // 프론트에서 sort=name,desc 또는 sort=membershipType,asc 등으로 보낼 수 있음
-            @PageableDefault(size = 10, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
+    @DeleteMapping("/{id}")
+    @Operation(summary = "이용권 삭제 (관리자)")
+    public ResponseEntity<ApiResponse<String>> deleteMembership(@PathVariable Long id) {
+        membershipAdminService.deleteMembership(id);
+        return ResponseEntity.ok(ApiResponse.success("이용권이 삭제되었습니다."));
+    }
 
+    @GetMapping("/members")
+    @Operation(summary = "관리자용 회원 리스트 조회")
+    public ResponseEntity<ApiResponse<Page<AdminMemberResponse>>> getMemberList(
+            @RequestParam(value = "searchName", required = false) String searchName,
+            @PageableDefault(size = 10, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
         Page<AdminMemberResponse> response = membershipAdminService.getAdminMemberList(searchName, pageable);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @PatchMapping("/{membershipId}/pause")
-    @Operation(summary = "이용권 일시정지", description = "관리자가 회원의 활성화된 이용권을 일시정지합니다.")
-    public ResponseEntity<ApiResponse<String>> pauseMembership(@PathVariable("membershipId") Long membershipId) { // 💡 타입 변경
+    @Operation(summary = "이용권 일시정지")
+    public ResponseEntity<ApiResponse<String>> pauseMembership(@PathVariable("membershipId") Long membershipId) {
         membershipAdminService.pauseMembership(membershipId);
-        return ResponseEntity.ok(ApiResponse.success("이용권이 성공적으로 일시정지 되었습니다.")); // 💡 ApiResponse 적용
+        return ResponseEntity.ok(ApiResponse.success("이용권이 성공적으로 일시정지 되었습니다."));
     }
 
-
     @PatchMapping("/{membershipId}/unpause")
-    @Operation(summary = "이용권 정지 해제", description = "관리자가 일시정지된 이용권을 해제하고 기간을 연장합니다.")
-    public ResponseEntity<ApiResponse<String>> unpauseMembership(@PathVariable("membershipId") Long membershipId) { // 💡 타입 변경
+    @Operation(summary = "이용권 정지 해제")
+    public ResponseEntity<ApiResponse<String>> unpauseMembership(@PathVariable("membershipId") Long membershipId) {
         membershipAdminService.unpauseMembership(membershipId);
-        return ResponseEntity.ok(ApiResponse.success("이용권이 성공적으로 정지 해제되었습니다.")); // 💡 ApiResponse 적용
+        return ResponseEntity.ok(ApiResponse.success("이용권이 성공적으로 정지 해제되었습니다."));
     }
 }

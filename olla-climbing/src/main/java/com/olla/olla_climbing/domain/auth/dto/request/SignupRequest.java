@@ -9,6 +9,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.time.LocalDate;
 
@@ -49,6 +50,7 @@ public class SignupRequest {
     private MemberDetailDto detail; 
     private PrivacyDto privacy;
 
+    @Setter
     @Getter
     @NoArgsConstructor
     public static class MemberDetailDto { // 내부 클래스로 정의
@@ -58,8 +60,10 @@ public class SignupRequest {
         private Double armSpan;
         private Double footSize;
     }
-    
-    @Getter @NoArgsConstructor
+
+    @Setter
+    @Getter
+    @NoArgsConstructor
     public static class PrivacyDto {
         private boolean isPhonePublic;
         private boolean isEmailPublic;

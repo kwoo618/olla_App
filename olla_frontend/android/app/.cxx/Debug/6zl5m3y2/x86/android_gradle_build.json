@@ -1,6 +1,7 @@
 {
   "buildFiles": [
     "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\@react-native-async-storage\\async-storage\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
+    "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-camera-kit\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
     "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-safe-area-context\\android\\src\\main\\jni\\CMakeLists.txt",
     "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-screens\\android\\src\\main\\jni\\CMakeLists.txt",
     "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-svg\\android\\src\\main\\jni\\CMakeLists.txt",
@@ -34,6 +35,11 @@
         "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\427eee61930a909b20cb384104452e26\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\jsi\\libs\\android.x86\\libjsi.so",
         "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\427eee61930a909b20cb384104452e26\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\reactnative\\libs\\android.x86\\libreactnative.so"
       ]
+    },
+    "react_codegen_NativeCameraKitSpec::@56ccb1a98efdd6d45482": {
+      "toolchain": "toolchain",
+      "abi": "x86",
+      "artifactName": "react_codegen_NativeCameraKitSpec"
     },
     "react_codegen_rnasyncstorage::@1596841e19ec5b9eeffe": {
       "toolchain": "toolchain",

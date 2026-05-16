@@ -25,33 +25,33 @@ public class CommentController {
     private final CommentService commentService;
 
     @PostMapping
-    @Operation(summary = "댓글/대댓글 작성", description = "게시글에 댓글을 작성합니다. parentId가 있으면 대댓글이 됩니다.", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<ApiResponse<String>> createComment(
+    @Operation(summary = "댓글/대댓글 작성", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<ApiResponse<Void>> createComment(
             @PathVariable("postId") Long postId,
             @AuthenticationPrincipal Member member,
             @RequestBody CommentRequest request) {
-
+        if (member == null) throw new IllegalArgumentException("인증 정보가 없습니다.");
         commentService.createComment(postId, member.getLoginId(), request);
-        return ResponseEntity.ok(ApiResponse.success("댓글이 등록되었습니다."));
+        return ResponseEntity.ok(ApiResponse.success(201, "댓글이 성공적으로 등록되었습니다.", null));
     }
 
     @GetMapping
-    @Operation(summary = "댓글 목록 조회", description = "해당 게시글의 댓글을 페이징하여 조회합니다.")
+    @Operation(summary = "댓글 목록 조회")
     public ResponseEntity<ApiResponse<Page<CommentResponse>>> getComments(
             @PathVariable("postId") Long postId,
             @PageableDefault(size = 20) Pageable pageable) {
-
-        return ResponseEntity.ok(ApiResponse.success(commentService.getComments(postId, pageable)));
+        Page<CommentResponse> response = commentService.getComments(postId, pageable);
+        return ResponseEntity.ok(ApiResponse.success(200, "댓글 목록 조회 성공", response));
     }
 
     @DeleteMapping("/{commentId}")
-    @Operation(summary = "댓글 삭제", description = "자신이 쓴 댓글을 삭제(Soft Delete)합니다.", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<ApiResponse<String>> deleteComment(
-            @PathVariable("postId") Long postId, // postId는 경로상 포함
+    @Operation(summary = "댓글 삭제", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<ApiResponse<Void>> deleteComment(
+            @PathVariable("postId") Long postId,
             @PathVariable("commentId") Long commentId,
             @AuthenticationPrincipal Member member) {
-
+        if (member == null) throw new IllegalArgumentException("인증 정보가 없습니다.");
         commentService.deleteComment(commentId, member.getLoginId());
-        return ResponseEntity.ok(ApiResponse.success("댓글이 삭제되었습니다."));
+        return ResponseEntity.ok(ApiResponse.success(200, "댓글이 성공적으로 삭제되었습니다.", null));
     }
 }

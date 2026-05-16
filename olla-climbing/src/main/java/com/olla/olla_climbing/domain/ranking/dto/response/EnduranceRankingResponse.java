@@ -8,8 +8,9 @@ import lombok.Getter;
 public class EnduranceRankingResponse {
     private Long memberId;
     private String name;
+    private String profileImageUrl; // 💡 추가
     private Integer ranking;
-    private Double score; // 랭킹 정렬 기준이 된 점수
+    private Double score;
 
     private Integer oneWayCount;
     private Integer additionalBlocks;

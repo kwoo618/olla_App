@@ -5,10 +5,19 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface PostRepository extends JpaRepository<Post, Long> {
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM Post p WHERE p.id = :id")
+    Optional<Post> findByIdWithPessimisticLock(@Param("id") Long id);
 
     // 삭제되지 않은 게시글만 페이징 처리하여 최신순으로 조회
     // findByIsDeletedFalseOrderByCreatedAtDesc 메서드는 Spring Data JPA의 메서드 이름 규칙을 활용하여 자동으로 쿼리를 생성합니다.

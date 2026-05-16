@@ -7,6 +7,7 @@ import lombok.*;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 
 @Entity // 1. JPA에게 "이건 DB 테이블이랑 짝꿍이야"라고 알려줌
 @Getter
@@ -81,10 +82,15 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
     }
 
     // 알림 설정
-    @OneToOne(mappedBy = "member", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToOne(mappedBy = "member", cascade = CascadeType.ALL, orphanRemoval = true)
     private NotificationSetting notificationSetting;
 
     public void setNotificationSetting(NotificationSetting notificationSetting) {
+        this.notificationSetting = notificationSetting;
+    }
+
+
+    public void assignNotificationSetting(NotificationSetting notificationSetting) {
         this.notificationSetting = notificationSetting;
     }
 
@@ -145,22 +151,33 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
     // 탈퇴 처리 메서드
     public void withdraw() {
         this.isDeleted = true;
-        String now = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd"));
 
-        // 1. 아이디 변조 (재가입 허용 및 식별자 유지)
-        if (this.loginId != null) {
+        // 탈퇴 처리 시점의 날짜 생성 (예: 20240513)
+        String now = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+
+        // 1. 아이디 변조: 'del_날짜_아이디_고유ID' (재가입 허용 및 식별 유지)
+        if (this.loginId != null && !this.loginId.startsWith("del_")) {
             this.loginId = "del_" + now + "_" + this.loginId + "_" + this.id;
         }
 
-        // 2. 전화번호 변조 (Unique 제약 조건 우회)
-        this.phone = "del_" + now + "_" + this.phone + "_" + this.id;
+        // 2. 전화번호 변조: Unique 제약 조건 충돌 방지
+        if (this.phone != null && !this.phone.startsWith("del_")) {
+            this.phone = "del_" + now + "_" + this.phone + "_" + this.id;
+        }
 
-        // 3. 개인정보 익명화
-        this.name = "탈퇴회원" + "_" + this.name + "_" + this.id;  //
-        this.email = null;
+        // 3. 이름 익명화: 관리자 페이지 등에서 탈퇴 여부 식별 용도
+        this.name = "탈퇴회원_" + this.id;
+
+        // 4. [핵심] 이메일 변조: NULL 제약 조건 해결 및 중복 가입 방지 우회
+        // 형식: del_날짜_고유ID@deleted.com
+        this.email = "del_" + now + "_" + this.id + "@deleted.com";
+
+        // 💡 팁: 프로필 이미지도 기본값으로 돌려주면 저장 공간을 아낄 수 있습니다.
+        this.profileImageUrl = null;
     }
 
     public void updateFcmToken(String fcmToken) {
         this.fcmToken = fcmToken;
     }
+
 }

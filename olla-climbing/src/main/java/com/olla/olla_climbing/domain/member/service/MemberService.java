@@ -8,6 +8,7 @@ import com.olla.olla_climbing.domain.member.dto.request.NotificationUpdateReques
 import com.olla.olla_climbing.domain.member.dto.response.NotificationResponse;
 import com.olla.olla_climbing.domain.member.dto.response.MemberResponse;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
+import com.olla.olla_climbing.global.infra.s3.S3ImageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -15,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.olla.olla_climbing.domain.member.dto.request.MemberUpdateRequest;
 import com.olla.olla_climbing.domain.member.entity.MemberDetail;
 import com.olla.olla_climbing.domain.member.entity.MemberPrivacy;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 
@@ -25,6 +27,8 @@ public class MemberService {
 
     private final MemberRepository memberRepository;
     private final GoogleSheetsService googleSheetsService;
+    private final S3ImageService s3ImageService;
+
 
     // 회원가입 화면에서 DB 아이디 중복 확인 로직 (동철 수정)
     @Transactional(readOnly = true)
@@ -104,29 +108,6 @@ public class MemberService {
         return MemberResponse.from(member);
     }
 
-
-
-    // 알림 설정 업데이트 비즈니스 로직
-    @Transactional
-    public NotificationResponse updateNotificationSettings(String loginId, NotificationUpdateRequest request) {
-        Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
-        
-        if (member.getNotificationSetting() == null) {
-            member.setNotificationSetting(new NotificationSetting(member));
-        }
-
-        member.getNotificationSetting().update(
-                request.getIsGlobalNotificationOn(),
-                request.getIsMembershipNotificationOn(),
-                request.getIsActivityNotificationOn(),
-                request.getIsCrewNotificationOn(),
-                request.getIsNoticeNotificationOn()
-        );
-
-        return NotificationResponse.from(member.getNotificationSetting());
-    }
-
     @Transactional
     public void updateMemberByAdmin(Long memberId, MemberUpdateRequest request) {
         Member member = memberRepository.findById(memberId)
@@ -154,14 +135,27 @@ public class MemberService {
         return OtherMemberProfileResponse.of(member);
     }
 
+    @Transactional(readOnly = true)
+    public boolean existsByEmail(String email) {
+        return memberRepository.existsByEmail(email); // 이메일 중복 확인용
+    }
+
     @Transactional
     public void withdrawMember(String loginId) {
         Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않거나 이미 탈퇴한 회원입니다."));
 
-        // 엔티티 내부의 withdraw() 호출 (isDeleted = true, loginId/phone 변조 수행)
+        member.withdraw(); // 엔티티 내부의 데이터 변조 로직 실행
+        log.info("회원 탈퇴 완료: loginId={}", loginId);
+    }
+
+
+    @Transactional
+    public void withdrawMemberById(Long memberId) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
         member.withdraw();
-        log.info("회원 탈퇴 완료: {}", member.getId());
+        log.info("관리자에 의한 회원 강제 탈퇴 완료: {}", memberId);
     }
 
     @Transactional
@@ -170,4 +164,68 @@ public class MemberService {
                 .orElseThrow(() -> new IllegalArgumentException("회원 정보가 없습니다."));
         member.updateFcmToken(fcmToken);
     }
+
+    @Transactional
+    public NotificationResponse updateNotificationSettings(String loginId, NotificationUpdateRequest request) {
+        Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
+                .orElseThrow(() -> new IllegalArgumentException("회원 정보가 없습니다."));
+
+        // 🌟 [수정 완료] 프로젝트 내 다른 가이드(MemberDetail 등)와 일치하도록 생성자 패턴으로 에러 해결!
+        if (member.getNotificationSetting() == null) {
+            NotificationSetting newSetting = new NotificationSetting(member);
+            member.assignNotificationSetting(newSetting);
+        }
+
+        // 이제 에러 없이 정상적으로 업데이트 트랜잭션이 작동합니다.
+        member.getNotificationSetting().update(
+                request.getIsGlobalNotificationOn(),
+                request.getIsMembershipNotificationOn(),
+                request.getIsActivityNotificationOn(),
+                request.getIsCrewNotificationOn(),
+                request.getIsNoticeNotificationOn()
+        );
+
+        return NotificationResponse.from(member.getNotificationSetting());
+    }
+
+    @Transactional(readOnly = true)
+    public NotificationResponse getNotificationSettings(String loginId) {
+        Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
+                .orElseThrow(() -> new IllegalArgumentException("회원 정보가 없습니다."));
+
+        // 🌟 [추가] 조회할 때도 데이터가 없으면 기본값이 켜진 상태로 응답하도록 방어 🌟
+        if (member.getNotificationSetting() == null) {
+            return NotificationResponse.builder()
+                    .isGlobalNotificationOn(true)
+                    .isMembershipNotificationOn(true)
+                    .isActivityNotificationOn(true)
+                    .isCrewNotificationOn(true)
+                    .isNoticeNotificationOn(true)
+                    .build();
+        }
+
+        return NotificationResponse.from(member.getNotificationSetting());
+    }
+
+
+    @Transactional(readOnly = true)
+    public boolean existsByPhone(String phone) {
+        return memberRepository.existsByPhone(phone);
+    }
+
+    @Transactional
+    public String updateProfileImage(String loginId, MultipartFile file) {
+        Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
+                .orElseThrow(() -> new IllegalArgumentException("회원 정보가 없습니다."));
+
+        // 1. S3에 이미지 업로드
+        String imageUrl = s3ImageService.uploadImage(file);
+
+        // 2. 회원 엔티티에 URL 업데이트
+        member.updateProfileImage(imageUrl);
+
+        return imageUrl;
+    }
+
+
 }

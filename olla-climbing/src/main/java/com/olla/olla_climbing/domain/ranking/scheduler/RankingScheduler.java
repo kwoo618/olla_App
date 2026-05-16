@@ -43,7 +43,7 @@ public class RankingScheduler {
                     !member.getNotificationSetting().isActivityNotificationOn()) {
                 continue;
             }
-
+            
             // 이름 하드코딩 제거 완료
             notificationService.sendMembershipNotification(
                     member,

@@ -35,6 +35,7 @@ public class SeriesRankingService extends BaseRankingService {
             return SeriesRankingResponse.builder()
                     .memberId(r.getMember().getId())
                     .name(r.getMember().getName())
+                    .profileImageUrl(r.getMember().getProfileImageUrl()) // 💡 추가
                     .ranking(r.getRanking())
                     .totalScore(r.getScore())
                     .sequenceLog(bestRecord != null ? bestRecord.getSequenceLog() : new ArrayList<>())

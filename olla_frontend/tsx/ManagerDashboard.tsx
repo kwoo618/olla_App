@@ -1,56 +1,134 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  Alert,
-  ActivityIndicator,
-  Modal
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  Image, ActivityIndicator, Modal, Platform, PermissionsAndroid, RefreshControl, Animated, Dimensions, PanResponder, TouchableWithoutFeedback, Alert
 } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Camera, CameraView } from 'expo-camera';
+import { Camera } from 'react-native-camera-kit';
+import { API_BASE_URL } from '../src/constants/Config';
 
-const API_BASE_URL = 'http://192.168.0.23:8080/api/v1';
-
-
-const POST_API_URL = `${API_BASE_URL}/posts`;
-const NOTICE_API_URL = `${API_BASE_URL}/admin/notices`;
-const MEMBER_API_URL = `${API_BASE_URL}/admin/memberships/members`;
-const MEMBERSHIP_API_URL = `${API_BASE_URL}/admin/memberships`;
+const POST_API_URL        = `${API_BASE_URL}/posts`;
+const NOTICE_API_URL      = `${API_BASE_URL}/admin/notices`;
+const MEMBER_API_URL      = `${API_BASE_URL}/admin/memberships/members`;
+const MEMBERSHIP_API_URL  = `${API_BASE_URL}/admin/memberships`;
 const VISIT_TODAY_API_URL = `${API_BASE_URL}/admin/visits/today`;
+const QR_SCAN_API_URL     = `${API_BASE_URL}/admin/visits/scan`;
+const PROFILE_API_URL     = `${API_BASE_URL}/members`;
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+const translateGender = (gender: string) => {
+  if (!gender || gender === '-') return '-';
+  const g = String(gender).toUpperCase();
+  if (g === 'MALE' || g === 'M') return '남자';
+  if (g === 'FEMALE' || g === 'F') return '여자';
+  return gender;
+};
+
+const isValidImageUrl = (url: string | null | undefined) => {
+  return url && typeof url === 'string' && url.trim() !== '' && url !== 'null' && url !== 'undefined';
+};
 
 const ManagerDashboard = ({ navigation }: any) => {
+  const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notices, setNotices] = useState<any[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
   const [recentMembers, setRecentMembers] = useState<any[]>([]);
 
+  const [resultModalVisible, setResultModalVisible] = useState(false);
+  const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info', onConfirm: () => {} });
+
+  const showResultModal = (title: string, message: string, type: 'info' | 'success' | 'error' = 'info', onConfirm: () => void = () => {}) => {
+    setResultModalConfig({ title, message, type, onConfirm });
+    setResultModalVisible(true);
+  };
+
+  const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<{ type: 'notice' | 'post', id: number } | null>(null);
+
+  // ✅ 출석한 회원 ID를 로컬에서 추적
+  const [visitedMemberIds, setVisitedMemberIds] = useState<Set<number>>(new Set());
+
   const [metrics, setMetrics] = useState({
     totalMembers: 0,
     activeMemberships: 0,
     todayVisitors: 0,
-    totalPosts: 0
+    totalPosts: 0,
   });
 
   const [isScannerVisible, setScannerVisible] = useState(false);
-  const [scanned, setScanned] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const scannedRef = useRef(false);
+
+  const [isDetailVisible, setDetailVisible] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+
+  const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+  const DETAIL_MODAL_HEIGHT = SCREEN_HEIGHT * 0.78;
+  const detailHeightAnim = useRef(new Animated.Value(0)).current;
+  const currentDetailSnap = useRef(DETAIL_MODAL_HEIGHT);
+
+  const detailPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
+      onPanResponderGrant: () => {
+        detailHeightAnim.setOffset(currentDetailSnap.current);
+        detailHeightAnim.setValue(0);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy < 0) {
+          detailHeightAnim.setValue(-gestureState.dy * 0.1);
+        } else {
+          detailHeightAnim.setValue(-gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        detailHeightAnim.flattenOffset();
+        const finalHeight = currentDetailSnap.current - gestureState.dy;
+        const CLOSE_THRESHOLD = currentDetailSnap.current * 0.75;
+        if (finalHeight < CLOSE_THRESHOLD) {
+          closeDetailModal();
+        } else {
+          Animated.spring(detailHeightAnim, {
+            toValue: currentDetailSnap.current,
+            friction: 7,
+            tension: 40,
+            useNativeDriver: false
+          }).start();
+        }
+      }
+    })
+  ).current;
+
+  useEffect(() => {
+    if (isScannerVisible) {
+      setTimeout(() => setCameraReady(true), 500);
+    } else {
+      setCameraReady(false);
+    }
+  }, [isScannerVisible]);
 
   useEffect(() => {
     checkAdminAndFetchData();
   }, []);
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await checkAdminAndFetchData();
+    setRefreshing(false);
+  }, []);
+
   const checkAdminAndFetchData = async () => {
     try {
-      const role = await AsyncStorage.getItem('userRole');
+      const role  = await AsyncStorage.getItem('userRole');
       const token = await AsyncStorage.getItem('userToken');
 
       if (!token || role !== 'ADMIN') {
-        Alert.alert('권한 오류', '관리자만 접근할 수 있는 페이지입니다.');
-        navigation.goBack();
+        showResultModal('권한 오류', '관리자만 접근할 수 있는 페이지입니다.', 'error', () => navigation.goBack());
         return;
       }
 
@@ -59,10 +137,10 @@ const ManagerDashboard = ({ navigation }: any) => {
         fetchPosts(token),
         fetchMembers(token),
         fetchVisits(token),
-        fetchActiveMemberships(token)
+        fetchActiveMemberships(token),
       ]);
-    } catch (error) {
-      console.error('데이터 로딩 실패:', error);
+    } catch (error: any) {
+      console.error('데이터 로딩 실패:', error.response?.data?.message || error.message);
     } finally {
       setLoading(false);
     }
@@ -72,12 +150,12 @@ const ManagerDashboard = ({ navigation }: any) => {
     try {
       const response = await axios.get(NOTICE_API_URL, {
         headers: { Authorization: `Bearer ${token}` },
-        params: { page: 0, size: 2, sort: 'id,desc' }
+        params: { page: 0, size: 2, sort: 'id,desc' },
       });
-      const noticeList = response.data?.data?.content || response.data?.data || [];
+      const noticeList = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
       setNotices(Array.isArray(noticeList) ? noticeList : []);
-    } catch (error) {
-      console.error('공지사항 로드 실패', error);
+    } catch (error: any) {
+      console.error('공지사항 로드 실패:', error.response?.data?.message || error.message);
     }
   };
 
@@ -92,29 +170,19 @@ const ManagerDashboard = ({ navigation }: any) => {
     try {
       const response = await axios.get(POST_API_URL, {
         headers: { Authorization: `Bearer ${token}` },
-        params: { page: 0, size: 20, sort: 'id,desc' }
+        params: { page: 0, size: 20, sort: 'id,desc' },
       });
-
-      const raw =
-        response.data?.data?.data?.content ||
-        response.data?.data?.content ||
-        response.data?.data ||
-        [];
+      const raw = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
       const list = Array.isArray(raw) ? raw : [];
-      const totalElements =
-        response.data?.data?.data?.totalElements ??
-        response.data?.data?.totalElements ??
-        list.length;
-
+      const totalElements = response.data?.data?.totalElements ?? list.length;
       const mappedList = list.map((item: any) => ({
         ...item,
-        isPast: new Date(item.meetDateTime).getTime() < Date.now()
+        isPast: new Date(item.meetDateTime).getTime() < Date.now(),
       }));
-
       setPosts(sortPosts(mappedList).slice(0, 2));
       setMetrics(prev => ({ ...prev, totalPosts: totalElements }));
     } catch (error: any) {
-      console.error('게시글 로드 실패', error?.response?.data || error.message);
+      console.error('게시글 로드 실패:', error.response?.data?.message || error.message);
     }
   };
 
@@ -122,109 +190,106 @@ const ManagerDashboard = ({ navigation }: any) => {
     try {
       const response = await axios.get(MEMBER_API_URL, {
         headers: { Authorization: `Bearer ${token}` },
-        params: { page: 0, size: 2, sort: 'id,desc' }
+        params: { page: 0, size: 1000, sort: 'id,desc' },
       });
-      const memberList = response.data?.data?.content || response.data?.data || [];
-      const totalElements = response.data?.data?.totalElements ?? memberList.length;
-      setRecentMembers(Array.isArray(memberList) ? memberList : []);
-      setMetrics(prev => ({ ...prev, totalMembers: totalElements }));
-    } catch (error) {
-      console.error('회원 데이터 로드 실패', error);
+      const rawList = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
+      const list = Array.isArray(rawList) ? rawList : [];
+      const validMembers = list.filter((user: any) => {
+        const memberInfo = user.member || user;
+        const isDeleted = user.deleted === true || memberInfo.isDeleted === true || memberInfo.status === 'DELETED';
+        return !isDeleted;
+      });
+      setRecentMembers(validMembers.slice(0, 2));
+      setMetrics(prev => ({ ...prev, totalMembers: validMembers.length }));
+    } catch (error: any) {
+      console.error('회원 데이터 로드 실패:', error.response?.data?.message || error.message);
     }
   };
 
+  // ✅ today API에서 visitLogs로 출석한 회원 추적 + 카운트
   const fetchVisits = async (token: string) => {
     try {
       const response = await axios.get(VISIT_TODAY_API_URL, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
-      const todayCount = response.data?.data?.totalVisitsToday ?? 0;
+      // 가능한 모든 depth 커버
+      const data = response.data?.data?.data ?? response.data?.data ?? response.data;
+      const todayCount = data?.totalVisitsToday ?? 0;
       setMetrics(prev => ({ ...prev, todayVisitors: todayCount }));
-    } catch (error) {
-      console.error('방문자 데이터 로드 실패', error);
+    } catch (error: any) {
+      console.error('금일 방문자 로드 실패:', error.response?.data?.message || error.message);
     }
   };
 
-  // ✅ 활성이용권 — 응답 구조 다양하게 파싱
   const fetchActiveMemberships = async (token: string) => {
     try {
       const response = await axios.get(`${MEMBERSHIP_API_URL}/active`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
-
-      console.log('[active memberships raw]', JSON.stringify(response.data));
-
-      const d = response.data?.data;
+      const d = response.data?.data?.data ?? response.data?.data ?? response.data;
       let activeCount = 0;
-
-      if (typeof d === 'number') {
-        activeCount = d;
-      } else if (typeof d?.totalElements === 'number') {
-        activeCount = d.totalElements;
-      } else if (typeof d?.count === 'number') {
-        activeCount = d.count;
-      } else if (typeof d?.total === 'number') {
-        activeCount = d.total;
-      } else if (Array.isArray(d)) {
-        activeCount = d.length;
-      } else if (Array.isArray(d?.content)) {
-        activeCount = d.totalElements ?? d.content.length;
-      } else if (typeof response.data === 'number') {
-        activeCount = response.data;
-      }
-
+      if (typeof d === 'number') activeCount = d;
+      else if (typeof d?.totalElements === 'number') activeCount = d.totalElements;
+      else if (typeof d?.count === 'number') activeCount = d.count;
+      else if (typeof d?.total === 'number') activeCount = d.total;
+      else if (Array.isArray(d)) activeCount = d.length;
+      else if (Array.isArray(d?.content)) activeCount = d.totalElements ?? d.content.length;
+      if (activeCount === 0 && d === undefined) throw new Error("Need fallback");
       setMetrics(prev => ({ ...prev, activeMemberships: activeCount }));
     } catch (error: any) {
-      console.log('활성 이용권 로드 실패', error?.response?.data);
+      try {
+        const fallbackRes = await axios.get(MEMBER_API_URL, {
+          headers: { Authorization: `Bearer ${token}` },
+          params: { size: 1000 }
+        });
+        const list = fallbackRes.data?.data?.data?.content ?? fallbackRes.data?.data?.data ?? [];
+        let count = 0;
+        list.forEach((user: any) => {
+          const memberInfo = user.member || user;
+          if (user.deleted || memberInfo.isDeleted || memberInfo.status === 'DELETED') return;
+          const isActive = (
+            user.membershipStatus === 'ACTIVE' ||
+            user.status === 'ACTIVE' ||
+            (Array.isArray(user.memberships) && user.memberships.some((m: any) => m.membershipStatus === 'ACTIVE' || m.status === 'ACTIVE')) ||
+            (user.activeMembership && (user.activeMembership.status === 'ACTIVE' || user.activeMembership.membershipStatus === 'ACTIVE'))
+          );
+          if (isActive) count++;
+        });
+        setMetrics(prev => ({ ...prev, activeMemberships: count }));
+      } catch (fallbackError) {
+        console.error('활성이용권 폴백 로드 실패', fallbackError);
+      }
     }
   };
 
   const confirmDelete = (type: 'notice' | 'post', id: number) => {
-    Alert.alert(
-      '삭제 확인',
-      `해당 ${type === 'notice' ? '공지사항' : '게시글'}을 정말 삭제하시겠습니까?`,
-      [
-        { text: '취소', style: 'cancel' },
-        {
-          text: '삭제',
-          style: 'destructive',
-          onPress: () =>
-            type === 'notice' ? executeDeleteNotice(id) : executeDeletePost(id)
-        }
-      ]
-    );
+    setItemToDelete({ type, id });
+    setDeleteModalVisible(true);
   };
 
-  const executeDeleteNotice = async (id: number) => {
+  const executeDelete = async () => {
+    if (!itemToDelete) return;
     try {
       const token = await AsyncStorage.getItem('userToken');
-      await axios.delete(`${NOTICE_API_URL}/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      Alert.alert('알림', '공지사항이 삭제되었습니다.');
-      fetchNotices(token!);
+      if (itemToDelete.type === 'notice') {
+        await axios.delete(`${NOTICE_API_URL}/${itemToDelete.id}`, { headers: { Authorization: `Bearer ${token}` } });
+        showResultModal('성공', '공지사항이 삭제되었습니다.', 'success');
+        fetchNotices(token!);
+      } else {
+        await axios.delete(`${POST_API_URL}/${itemToDelete.id}`, { headers: { Authorization: `Bearer ${token}` } });
+        showResultModal('성공', '게시글이 삭제되었습니다.', 'success');
+        fetchPosts(token!);
+      }
     } catch (error: any) {
-      Alert.alert('오류', error?.response?.data?.message || '공지사항 삭제에 실패했습니다.');
+      const errorMessage = error.response?.data?.message || '삭제에 실패했습니다.';
+      showResultModal('오류', errorMessage, 'error');
     }
+    setDeleteModalVisible(false);
+    setItemToDelete(null);
   };
 
-  const executeDeletePost = async (id: number) => {
-    try {
-      const token = await AsyncStorage.getItem('userToken');
-      if (!token) return;
-      await axios.delete(`${POST_API_URL}/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      Alert.alert('알림', '게시글이 삭제되었습니다.');
-      fetchPosts(token);
-    } catch (error: any) {
-      console.log('Delete Post Error:', error?.response?.data);
-      Alert.alert(
-        '오류',
-        error?.response?.data?.message ||
-          '게시글 삭제에 실패했습니다. 관리자 삭제 권한을 확인해주세요.'
-      );
-    }
+  const handleEditNotice = (noticeId: number) => {
+    navigation.navigate('ManagerNotice', { editNoticeId: noticeId });
   };
 
   const formatDate = (dateString: string) => {
@@ -232,45 +297,189 @@ const ManagerDashboard = ({ navigation }: any) => {
     return dateString.split('T')[0];
   };
 
-  const openScanner = async () => {
+  const openDetailModal = async (memberId: number, fallbackName: string, fallbackPhone: string) => {
     try {
-      if (!Camera?.requestCameraPermissionsAsync) {
-        Alert.alert('모듈 오류', '카메라 모듈을 로드할 수 없습니다. 앱을 완전히 종료 후 다시 실행해주세요.');
+      const token = await AsyncStorage.getItem('userToken');
+      const response = await axios.get(`${PROFILE_API_URL}/${memberId}/profile`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const d = response.data?.data?.data || response.data?.data;
+      if (!d) {
+        showResultModal('프로필 조회 불가', '상세 정보를 불러올 수 없습니다.', 'error');
         return;
       }
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('권한 필요', '기기 설정에서 카메라 접근 권한을 허용해주세요.');
-        return;
-      }
-      setScanned(false);
-      setScannerVisible(true);
-    } catch (error) {
-      Alert.alert('실행 오류', '카메라를 실행할 수 없습니다. (에뮬레이터 환경일 수 있습니다.)');
+      const detail = d.detail || {};
+      setSelectedUser({
+        name: d.name || fallbackName,
+        phone: d.phone || fallbackPhone || '-',
+        profileImageUrl: d.profileImageUrl || d.profileImage,
+        gender: translateGender(detail.gender || d.gender || '-'),
+        age: detail.age || d.age || '-',
+        height: detail.height || d.height || '-',
+        weight: detail.weight || d.weight || '-',
+        arm: detail.armSpan || d.armSpan || '-',
+        shoe: detail.footSize || d.footSize || '-',
+      });
+      setDetailVisible(true);
+      currentDetailSnap.current = DETAIL_MODAL_HEIGHT;
+      detailHeightAnim.setValue(0);
+      Animated.spring(detailHeightAnim, {
+        toValue: DETAIL_MODAL_HEIGHT,
+        friction: 8,
+        tension: 45,
+        useNativeDriver: false
+      }).start();
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || '회원 상세 정보를 불러올 수 없습니다.';
+      showResultModal('프로필 조회 불가', errorMessage, 'error');
     }
   };
 
-  // ✅ QR 스캔 후 실제 출석 API 호출
-  const handleBarCodeScanned = async ({ data }: { type: string; data: string }) => {
-    if (scanned) return;
-    setScanned(true);
+  const closeDetailModal = () => {
+    Animated.timing(detailHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
+      setDetailVisible(false);
+      setSelectedUser(null);
+    });
+  };
+
+  const requestCameraPermission = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.CAMERA,
+          {
+            title: "카메라 권한 필요",
+            message: "QR 코드 스캔을 위해 카메라 권한이 필요합니다.",
+            buttonNeutral: "나중에",
+            buttonNegative: "거절",
+            buttonPositive: "허용"
+          }
+        );
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
+      } catch (err) {
+        console.warn(err);
+        return false;
+      }
+    } else {
+      return true;
+    }
+  };
+
+  const openScanner = async () => {
+    const hasPermission = await requestCameraPermission();
+    if (!hasPermission) {
+      showResultModal('권한 오류', '카메라 접근 권한을 허용해주세요.', 'error');
+      return;
+    }
+    scannedRef.current = false;
+    setIsProcessing(false);
+    setScannerVisible(true);
+  };
+
+  const closeScanner = () => {
+    setScannerVisible(false);
+    setIsProcessing(false);
+    setTimeout(() => {
+      scannedRef.current = false;
+    }, 800);
+  };
+
+  // handleBarCodeScanned: ALREADY/WARNING(오늘이미출석) / SUCCESS / ERROR 분기
+  const handleBarCodeScanned = async (qrData: string) => {
+    if (scannedRef.current || isProcessing) return;
+    scannedRef.current = true;
+    setIsProcessing(true);
 
     try {
       const token = await AsyncStorage.getItem('userToken');
-      await axios.post(
-        `${API_BASE_URL}/visit/qr/scan`,
-        { qrToken: data },  
-        { headers: { Authorization: `Bearer ${token}` } }
+      if (!token) {
+        setIsProcessing(false);
+        closeScanner();
+        setTimeout(() => {
+          showResultModal('오류', '로그인 정보가 없습니다.', 'error');
+        }, 300);
+        return;
+      }
+
+      const response = await axios.post(
+        QR_SCAN_API_URL,
+        { qrToken: qrData, deductionCount: 1 },
+        { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
       );
-      Alert.alert('출석 완료! 🎉', '정상적으로 출석 처리되었습니다.', [
-        { text: '확인', onPress: () => setScannerVisible(false) }
-      ]);
+
+      setIsProcessing(false);
+
+      const result        = response.data?.data ?? {};
+      const statusCode    = result.statusCode || '';
+      const memberName    = result.memberName || '회원';
+      const remainingInfo = result.remainingInfo || '';
+      const message       = result.message || '';
+
+      closeScanner();
+
+      setTimeout(() => {
+        if (
+          statusCode === 'ALREADY' ||
+          message.includes('이미 출석') ||
+          message.includes('오늘 이미')
+        ) {
+          // 오늘 이미 출석한 경우
+          showResultModal(
+            '금일 출석 완료 🙌',
+            `${memberName}님은\n오늘 이미 출석하셨습니다.`,
+            'info'
+          );
+        } else if (statusCode === 'ERROR') {
+          // 출석 실패
+          showResultModal(
+            '출석 실패',
+            message || '출석 처리에 실패했습니다.',
+            'error',
+            () => {
+              // 확인 누르면 다시 스캔
+              setTimeout(() => {
+                scannedRef.current = false;
+                setIsProcessing(false);
+                setScannerVisible(true);
+              }, 300);
+            }
+          );
+        } else {
+          // SUCCESS or WARNING(잔여횟수 경고) - 성공 시 갱신
+          AsyncStorage.getItem('userToken').then(t => {
+            if (t) { fetchVisits(t); fetchMembers(t); }
+          });
+
+          const bodyMessage = [
+            `${memberName}님 환영합니다!`,
+            remainingInfo,
+            message,
+          ].filter(Boolean).join('\n\n');
+
+          showResultModal('출석 완료! 🎉', bodyMessage, 'success');
+        }
+      }, 300);
+
     } catch (error: any) {
-      console.log('QR 출석 실패:', error?.response?.data);
-      // 출석 API가 미구현이거나 엔드포인트가 다를 경우 아래 fallback
-      Alert.alert('출석 완료! 🎉', `스캔된 정보: ${data}`, [
-        { text: '확인', onPress: () => setScannerVisible(false) }
-      ]);
+      const errorMsg = error.response?.data?.message || '출석 처리에 실패했습니다.';
+      setIsProcessing(false);
+      closeScanner();
+
+      setTimeout(() => {
+        showResultModal(
+          '출석 실패',
+          errorMsg,
+          'error',
+          () => {
+            // 확인 누르면 다시 스캔
+            setTimeout(() => {
+              scannedRef.current = false;
+              setIsProcessing(false);
+              setScannerVisible(true);
+            }, 300);
+          }
+        );
+      }, 300);
     }
   };
 
@@ -284,9 +493,13 @@ const ManagerDashboard = ({ navigation }: any) => {
 
   return (
     <View style={styles.background}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-
-        {/* 1. 핵심 지표 4개 */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
+        }
+      >
         <View style={styles.metricsRow}>
           <View style={styles.metricBox}>
             <Text style={styles.metricTitle}>총 회원 수</Text>
@@ -308,47 +521,52 @@ const ManagerDashboard = ({ navigation }: any) => {
           </View>
         </View>
 
-        {/* 2. 최근 가입회원 */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>최근 가입회원</Text>
-            {/* ✅ 전체보기 → ManagerMember 탭으로 이동 */}
-            <TouchableOpacity
-              style={styles.viewAllBtn}
-              activeOpacity={0.7}
-              onPress={() => navigation.navigate('ManagerUser')}
-            >
+            <TouchableOpacity style={styles.viewAllBtn} activeOpacity={0.7} onPress={() => navigation.navigate('ManagerUser')}>
               <Text style={styles.viewAllBtnText}>전체보기</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.divider} />
-
           {recentMembers.length > 0 ? (
             recentMembers.map((memberResponse, index) => {
-              const member = memberResponse.member || memberResponse;
-              const isActive = member.status === 'ACTIVE' || member.role !== 'INACTIVE';
-              const badgeBg = isActive ? 'rgba(161, 190, 68, 0.2)' : 'rgba(142, 142, 142, 0.2)';
-              const badgeColor = isActive ? '#A1BE44' : '#8E8E8E';
-              const label = isActive ? '활동중' : '비활중';
-              const profileImgSource = member.profileImageUrl
-                ? { uri: member.profileImageUrl }
-                : require('./assets/profile.png');
+              const member   = memberResponse.member || memberResponse;
+              const memberId = member.memberId || member.id;
+              // ✅ 로컬 visitedMemberIds로 출석 뱃지 표시
+              const isVisited = visitedMemberIds.has(memberId);
+              const badgeBg    = isVisited ? 'rgba(161,190,68,0.2)' : 'rgba(142,142,142,0.2)';
+              const badgeColor = isVisited ? '#A1BE44' : '#8E8E8E';
+              const label      = isVisited ? '출석함' : '미출석';
+              const userName   = member.name || '이름 없음';
+              const userPhone  = member.phone || '전화번호 없음';
+              const profileUrl = member.profileImageUrl || member.profileImage;
+              const hasValidImage = isValidImageUrl(profileUrl);
 
               return (
-                <View key={member.id || index} style={[styles.rowItem, index > 0 && { marginTop: 15 }]}>
-                  <Image
-                    source={profileImgSource}
-                    style={styles.profileImg}
-                    defaultSource={require('./assets/profile.png')}
-                  />
+                <TouchableOpacity
+                  key={member.id || index}
+                  style={[styles.rowItem, index > 0 && { marginTop: 15 }]}
+                  activeOpacity={0.7}
+                  onPress={() => openDetailModal(memberId, userName, userPhone)}
+                >
+                  {hasValidImage ? (
+                    <Image source={{ uri: profileUrl }} style={styles.profileImg} />
+                  ) : userName === '최강우' ? (
+                    <View style={styles.textProfileImg}>
+                      <Text style={styles.textProfileText}>최</Text>
+                    </View>
+                  ) : (
+                    <Image source={require('../assets/profile.png')} style={styles.profileImg} />
+                  )}
                   <View style={styles.infoCol}>
-                    <Text style={styles.nameText}>{member.name || '이름 없음'}</Text>
-                    <Text style={styles.subText}>{member.phone || '전화번호 없음'}</Text>
+                    <Text style={styles.nameText}>{userName}</Text>
+                    <Text style={styles.subText}>{userPhone}</Text>
                   </View>
                   <View style={[styles.badge, { backgroundColor: badgeBg }]}>
                     <Text style={[styles.badgeText, { color: badgeColor }]}>{label}</Text>
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             })
           ) : (
@@ -356,41 +574,34 @@ const ManagerDashboard = ({ navigation }: any) => {
           )}
         </View>
 
-        {/* 3. 최근 공지사항 */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>최근 공지사항</Text>
-            <TouchableOpacity
-              style={styles.viewAllBtn}
-              activeOpacity={0.7}
-              onPress={() => navigation.navigate('ManagerNotice')}
-            >
+            <TouchableOpacity style={styles.viewAllBtn} activeOpacity={0.7} onPress={() => navigation.navigate('ManagerNotice')}>
               <Text style={styles.viewAllBtnText}>전체보기</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.divider} />
-
           {notices.length > 0 ? (
             notices.map((notice, index) => (
               <View key={notice.id} style={[styles.noticeListItem, index > 0 && { marginTop: 20 }]}>
                 <View style={styles.noticeTextContent}>
-                  {notice.important && (
-                    <View style={[styles.badge, { backgroundColor: 'rgba(255,0,0,0.2)', alignSelf: 'flex-start', marginBottom: 8 }]}>
-                      <Text style={[styles.badgeText, { color: '#FF0000' }]}>중요</Text>
-                    </View>
-                  )}
-                  <Text style={styles.noticeTitle} numberOfLines={1}>{notice.title}</Text>
+                  <View style={styles.noticeHeaderRow}>
+                    {notice.important && (
+                      <View style={styles.noticeBadge}>
+                        <Text style={styles.noticeBadgeText}>중요</Text>
+                      </View>
+                    )}
+                    <Text style={styles.noticeTitle} numberOfLines={1}>{notice.title}</Text>
+                  </View>
                   <Text style={styles.subText}>{formatDate(notice.createdAt)}</Text>
                 </View>
                 <View style={styles.noticeActions}>
-                  <TouchableOpacity
-                    style={styles.actionBtn}
-                    onPress={() => Alert.alert('알림', '수정 페이지로 이동 (개발 예정)')}
-                  >
-                    <Image source={require('./assets/fix.png')} style={[styles.actionIcon, { tintColor: '#A1BE44' }]} />
+                  <TouchableOpacity style={styles.actionBtn} onPress={() => handleEditNotice(notice.id)}>
+                    <Image source={require('../assets/fix.png')} style={[styles.actionIcon, { tintColor: '#A1BE44' }]} />
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionBtn} onPress={() => confirmDelete('notice', notice.id)}>
-                    <Image source={require('./assets/trash.png')} style={[styles.actionIcon, { tintColor: '#FF0000' }]} />
+                  <TouchableOpacity style={[styles.actionBtn, styles.deleteBtn]} onPress={() => confirmDelete('notice', notice.id)}>
+                    <Image source={require('../assets/trash.png')} style={[styles.actionIcon, { tintColor: '#FF0000' }]} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -400,54 +611,35 @@ const ManagerDashboard = ({ navigation }: any) => {
           )}
         </View>
 
-        {/* 4. 최근 커뮤니티 글 */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>최근 커뮤니티 글</Text>
-            <TouchableOpacity
-              style={styles.viewAllBtn}
-              activeOpacity={0.7}
-              onPress={() => navigation.navigate('ManagerCommunity')}
-            >
+            <TouchableOpacity style={styles.viewAllBtn} activeOpacity={0.7} onPress={() => navigation.navigate('ManagerCommunity')}>
               <Text style={styles.viewAllBtnText}>전체보기</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.divider} />
-
           {posts.length > 0 ? (
             posts.map((post, index) => {
-              const isOut = post.differentGym;
-              const isPast = post.isPast;
-              const postType = isOut ? '아웃도어' : '센터';
-              const badgeBgColor = isPast ? '#333333' : isOut ? 'rgba(0,129,15,0.2)' : 'rgba(0,114,185,0.2)';
+              const isOut          = post.differentGym;
+              const isPast         = post.isPast;
+              const postType       = isOut ? '아웃도어' : '센터';
+              const badgeBgColor   = isPast ? '#333333' : isOut ? 'rgba(0,129,15,0.2)' : 'rgba(0,114,185,0.2)';
               const badgeTextColor = isPast ? '#888888' : isOut ? '#2CDE00' : '#009DFF';
-
               return (
-                <View
-                  key={post.id}
-                  style={[styles.noticeListItem, index > 0 && { marginTop: 20 }, isPast && { opacity: 0.6 }]}
-                >
+                <View key={post.id} style={[styles.noticeListItem, index > 0 && { marginTop: 20 }, isPast && { opacity: 0.6 }]}>
                   <View style={styles.noticeTextContent}>
-                    <View style={[styles.badge, { backgroundColor: badgeBgColor, alignSelf: 'flex-start', marginBottom: 8 }]}>
+                    <View style={[styles.badge, { backgroundColor: badgeBgColor, alignSelf: 'flex-start', marginBottom: 8, marginLeft: -10 }]}>
                       <Text style={[styles.badgeText, { color: badgeTextColor }]}>{postType}</Text>
                     </View>
-                    <Text style={[styles.noticeTitle, isPast && { color: '#888888' }]} numberOfLines={1}>
-                      {post.title}
-                    </Text>
-                    <Text style={[styles.subText, { color: isPast ? '#666666' : '#ffffff', fontSize: 12 }]}>
+                    <Text style={[styles.noticeTitle, isPast && { color: '#888888' }]} numberOfLines={1}>{post.title}</Text>
+                    <Text style={[styles.subText, { color: isPast ? '#666666' : '#ffffff', fontSize: 14 }]}>
                       {post.writerName}  {formatDate(post.createdAt)} {isPast ? '(마감됨)' : ''}
                     </Text>
                   </View>
-                  {/* ✅ 삭제 버튼 명확하게 표시 */}
                   <View style={styles.noticeActions}>
-                    <TouchableOpacity
-                      style={[styles.actionBtn, styles.deleteBtn]}
-                      onPress={() => confirmDelete('post', post.id)}
-                    >
-                      <Image
-                        source={require('./assets/trash.png')}
-                        style={[styles.actionIcon, { tintColor: isPast ? '#666666' : '#FF4D4D' }]}
-                      />
+                    <TouchableOpacity style={[styles.actionBtn, styles.deleteBtn]} onPress={() => confirmDelete('post', post.id)}>
+                      <Image source={require('../assets/trash.png')} style={[styles.actionIcon, { tintColor: isPast ? '#666666' : '#FF0000' }]} />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -457,39 +649,134 @@ const ManagerDashboard = ({ navigation }: any) => {
             <Text style={styles.emptyText}>등록된 게시글이 없습니다.</Text>
           )}
         </View>
-
       </ScrollView>
 
-      {/* FAB — QR 스캔 */}
       <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={openScanner}>
-        <Image source={require('./assets/QR.png')} style={styles.fabIcon} />
+        <Image source={require('../assets/Camera.png')} style={styles.fabIcon} />
       </TouchableOpacity>
 
-      {/* QR 스캐너 모달 */}
-      <Modal visible={isScannerVisible} animationType="slide" transparent={true}>
+      <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
+        <View style={styles.resultModalOverlay}>
+          <View style={styles.resultModalBox}>
+            <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>
+              {resultModalConfig.title}
+            </Text>
+            <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
+            <TouchableOpacity style={styles.resultModalBtn} onPress={() => {
+              setResultModalVisible(false);
+              if (typeof resultModalConfig.onConfirm === 'function') {
+                resultModalConfig.onConfirm();
+              }
+            }}>
+              <Text style={styles.resultModalBtnText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={isDeleteModalVisible} animationType="fade" transparent onRequestClose={() => setDeleteModalVisible(false)}>
+        <View style={styles.deleteModalOverlay}>
+          <View style={styles.deleteModalBox}>
+            <Text style={[styles.resultModalTitle, { color: '#A1BE44' }]}>
+              해당 {itemToDelete?.type === 'notice' ? '공지사항' : '게시글'} 삭제
+            </Text>
+            <Text style={styles.resultModalMessage}>정말 삭제하시겠습니까?</Text>
+            <View style={styles.deleteBtnRow}>
+              <TouchableOpacity style={styles.deleteBtnYes} onPress={executeDelete}>
+                <Text style={[styles.deleteBtnYesText, { color: '#000000' }]}>삭제</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.deleteBtnNo} onPress={() => setDeleteModalVisible(false)}>
+                <Text style={styles.deleteBtnNoText}>취소</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={isDetailVisible} transparent animationType="fade" onRequestClose={closeDetailModal}>
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={closeDetailModal}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+          <Animated.View style={[styles.bottomSheet, { height: detailHeightAnim }]}>
+            <View {...detailPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
+              <View style={styles.dragHandle} />
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <Text style={styles.sheetTitle}>회원 상세 정보</Text>
+                <TouchableOpacity onPress={closeDetailModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Text style={{ color: '#999', fontSize: 24 }}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
+              {selectedUser && (
+                <View style={styles.detailContainer}>
+                  <View style={styles.detailProfileWrapper}>
+                    {isValidImageUrl(selectedUser.profileImageUrl) ? (
+                      <Image source={{ uri: selectedUser.profileImageUrl }} style={styles.profileBig} />
+                    ) : selectedUser.name === '최강우' ? (
+                      <View style={[styles.textProfileImg, { width: 80, height: 80, borderRadius: 40 }]}>
+                        <Text style={[styles.textProfileText, { fontSize: 32 }]}>최</Text>
+                      </View>
+                    ) : (
+                      <Image source={require('../assets/profile.png')} style={styles.profileBig} />
+                    )}
+                    <Text style={styles.profileName}>{selectedUser.name}</Text>
+                  </View>
+                  <View style={styles.infoBox}>
+                    <View style={styles.detailRow}><Text style={styles.detailLabel}>이름</Text><Text style={styles.detailValue}>{selectedUser.name}</Text></View>
+                    <View style={styles.detailRow}><Text style={styles.detailLabel}>성별</Text><Text style={styles.detailValue}>{selectedUser.gender}</Text></View>
+                    <View style={styles.detailRow}><Text style={styles.detailLabel}>연락처</Text><Text style={styles.detailValue}>{selectedUser.phone}</Text></View>
+                    <View style={styles.detailRow}><Text style={styles.detailLabel}>나이</Text><Text style={styles.detailValue}>{selectedUser.age}{selectedUser.age !== '-' && '세'}</Text></View>
+                    <View style={styles.detailRow}><Text style={styles.detailLabel}>키</Text><Text style={styles.detailValue}>{selectedUser.height}{selectedUser.height !== '-' && 'cm'}</Text></View>
+                    <View style={styles.detailRow}><Text style={styles.detailLabel}>몸무게</Text><Text style={styles.detailValue}>{selectedUser.weight}{selectedUser.weight !== '-' && 'kg'}</Text></View>
+                    <View style={styles.detailRow}><Text style={styles.detailLabel}>팔길이</Text><Text style={styles.detailValue}>{selectedUser.arm}{selectedUser.arm !== '-' && 'cm'}</Text></View>
+                    <View style={styles.detailRow}><Text style={styles.detailLabel}>암벽화 사이즈</Text><Text style={styles.detailValue}>{selectedUser.shoe}{selectedUser.shoe !== '-' && 'mm'}</Text></View>
+                  </View>
+                </View>
+              )}
+              <TouchableOpacity style={styles.closeFullBtn} onPress={closeDetailModal}>
+                <Text style={styles.closeFullBtnText}>닫기</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </Animated.View>
+        </View>
+      </Modal>
+
+      <Modal visible={isScannerVisible} animationType="slide" transparent={false} onRequestClose={closeScanner}>
         <View style={styles.scannerModalOverlay}>
           <View style={styles.scannerHeader}>
             <Text style={styles.scannerTitle}>QR 코드 스캔</Text>
-            <TouchableOpacity onPress={() => setScannerVisible(false)}>
+            <TouchableOpacity onPress={closeScanner}>
               <Text style={styles.closeIcon}>✕</Text>
             </TouchableOpacity>
           </View>
-
           <View style={styles.scannerContainer}>
-            {isScannerVisible && CameraView && (
-              <CameraView
-                style={StyleSheet.absoluteFill}
-                facing="back"
-                barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-                onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-              />
+            {isScannerVisible && cameraReady ? (
+              <View style={StyleSheet.absoluteFill}>
+                <Camera
+                  style={StyleSheet.absoluteFill}
+                  scanBarcode={true}
+                  onReadCode={(event: any) => handleBarCodeScanned(event.nativeEvent.codeStringValue)}
+                  showFrame={false}
+                />
+                <View style={styles.customFrameOverlay}>
+                  <View style={styles.customSquareGuide} />
+                </View>
+              </View>
+            ) : (
+              <ActivityIndicator size="large" color="#A1BE44" style={{ position: 'absolute' }} />
             )}
-            <View style={styles.targetBox} />
+            {isProcessing && (
+              <View style={styles.processingOverlay}>
+                <ActivityIndicator size="large" color="#A1BE44" />
+                <Text style={styles.processingText}>처리 중...</Text>
+              </View>
+            )}
           </View>
-
           <View style={styles.scannerFooter}>
             <Text style={styles.scannerDesc}>회원의 휴대폰에 있는 QR 코드를</Text>
-            <Text style={styles.scannerDesc}>사각형 안으로 비춰주세요.</Text>
+            <Text style={styles.scannerDesc}>가이드 사각형 안으로 비춰주세요.</Text>
           </View>
         </View>
       </Modal>
@@ -500,48 +787,77 @@ const ManagerDashboard = ({ navigation }: any) => {
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A', paddingHorizontal: 20, paddingTop: 10 },
   scrollContent: { paddingBottom: 80 },
-
-  metricsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-  metricBox: { flex: 1, backgroundColor: '#2C2C2C', borderRadius: 12, paddingVertical: 18, alignItems: 'center', marginHorizontal: 4 },
-  metricTitle: { color: '#999999', fontSize: 11, fontWeight: 'bold', marginBottom: 8 },
-  metricValue: { color: '#ffffff', fontSize: 15, fontWeight: '900' },
-
+  metricsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 25 },
+  metricBox: { flex: 1, backgroundColor: '#2C2C2C', borderRadius: 12, paddingVertical: 20, alignItems: 'center', marginHorizontal: 4 },
+  metricTitle: { color: '#999999', fontSize: 13, fontWeight: 'bold', marginBottom: 8 },
+  metricValue: { color: '#ffffff', fontSize: 19, fontWeight: '900' },
   card: { backgroundColor: '#2C2C2C', borderRadius: 16, padding: 20, marginBottom: 20 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardTitle: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
-  viewAllBtn: { borderWidth: 1, borderColor: '#A1BE44', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
-  viewAllBtnText: { color: '#999999', fontSize: 12, fontWeight: 'bold' },
+  cardTitle: { color: '#ffffff', fontSize: 19, fontWeight: 'bold' },
+  viewAllBtn: { borderWidth: 1, borderColor: '#A1BE44', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
+  viewAllBtnText: { color: '#999999', fontSize: 14, fontWeight: 'bold' },
   divider: { height: 1, backgroundColor: '#444444', marginVertical: 15 },
-  emptyText: { color: '#999', textAlign: 'center', marginVertical: 10 },
-
+  emptyText: { color: '#999', textAlign: 'center', marginVertical: 10, fontSize: 16 },
   rowItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  profileImg: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#444444', marginRight: 15 },
+  profileImg: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#444444', marginRight: 15 },
+  textProfileImg: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#444444', marginRight: 15, justifyContent: 'center', alignItems: 'center' },
+  textProfileText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
   infoCol: { flex: 1 },
-  nameText: { color: '#ffffff', fontSize: 15, fontWeight: 'bold', marginBottom: 4 },
-  subText: { color: '#999999', fontSize: 13 },
-
-  badge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
-  badgeText: { fontSize: 12, fontWeight: 'bold', textAlign: 'center' },
-
+  nameText: { color: '#ffffff', fontSize: 17, fontWeight: 'bold', marginBottom: 4 },
+  subText: { color: '#999999', fontSize: 15 },
+  badge: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
+  badgeText: { fontSize: 14, fontWeight: 'bold', textAlign: 'center' },
   noticeListItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   noticeTextContent: { flex: 1, paddingRight: 10 },
-  noticeTitle: { color: '#ffffff', fontSize: 15, fontWeight: 'bold', marginBottom: 6 },
+  noticeHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  noticeBadge: { backgroundColor: '#A1BE44', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, marginRight: 8 },
+  noticeBadgeText: { color: '#1A1A1A', fontSize: 12, fontWeight: 'bold' },
+  noticeTitle: { color: '#ffffff', fontSize: 17, fontWeight: 'bold', flex: 1 },
   noticeActions: { flexDirection: 'row', alignItems: 'center' },
   actionBtn: { padding: 6, marginLeft: 6 },
-  deleteBtn: { backgroundColor: 'rgba(255,77,77,0.1)', borderRadius: 8 },
-  actionIcon: { width: 20, height: 20, resizeMode: 'contain' },
-
-  fab: { position: 'absolute', bottom: 30, right: 20, width: 60, height: 60, borderRadius: 30, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4.65 },
-  fabIcon: { width: 30, height: 30, tintColor: '#1A1A1A', resizeMode: 'contain' },
-
+  deleteBtn: { borderRadius: 8, padding: 8 },
+  actionIcon: { width: 24, height: 24, resizeMode: 'contain' },
+  fab: { position: 'absolute', bottom: 15, right: 20, width: 70, height: 70, borderRadius: 35, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4.65 },
+  fabIcon: { width: 35, height: 35, tintColor: '#1A1A1A', resizeMode: 'contain' },
   scannerModalOverlay: { flex: 1, backgroundColor: '#1A1A1A' },
   scannerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: 60, backgroundColor: '#1A1A1A' },
-  scannerTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' },
-  closeIcon: { color: '#999999', fontSize: 28 },
+  scannerTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' },
+  closeIcon: { color: '#999999', fontSize: 32 },
   scannerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
-  targetBox: { width: 250, height: 250, borderWidth: 2, borderColor: '#A1BE44', backgroundColor: 'transparent', zIndex: 10 },
+  customFrameOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, justifyContent: 'center', alignItems: 'center' },
+  customSquareGuide: { width: '65%', aspectRatio: 1, borderWidth: 3, borderColor: '#A1BE44', backgroundColor: 'transparent', borderRadius: 16 },
+  processingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', zIndex: 20 },
+  processingText: { color: '#ffffff', fontSize: 18, marginTop: 12, fontWeight: 'bold' },
   scannerFooter: { padding: 40, alignItems: 'center', backgroundColor: '#1A1A1A' },
-  scannerDesc: { color: '#ffffff', fontSize: 16, marginTop: 5 },
+  scannerDesc: { color: '#ffffff', fontSize: 18, marginTop: 5 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 25, paddingTop: 10, overflow: 'hidden', width: '100%' },
+  dragHandle: { width: 40, height: 4, backgroundColor: '#333', borderRadius: 2, alignSelf: 'center', marginTop: 10, marginBottom: 20 },
+  sheetTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+  detailContainer: { width: '100%' },
+  detailProfileWrapper: { alignSelf: 'center', alignItems: 'center', marginBottom: 25 },
+  profileBig: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#444' },
+  profileName: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginTop: 12 },
+  infoBox: { backgroundColor: '#262626', borderRadius: 15, padding: 20, marginBottom: 20 },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: '#333' },
+  detailLabel: { color: '#999', fontSize: 15 },
+  detailValue: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
+  closeFullBtn: { backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 10 },
+  closeFullBtnText: { color: '#000', fontWeight: 'bold', fontSize: 18 },
+  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
+  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
+  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 },
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
+  deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  deleteModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
+  deleteModalText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center', lineHeight: 26 },
+  deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  deleteBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
+  deleteBtnYesText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
+  deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
+  deleteBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
 });
 
 export default ManagerDashboard;

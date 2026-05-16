@@ -2,6 +2,7 @@ package com.olla.olla_climbing.domain.ranking.entity;
 
 import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.ranking.enums.RankType;
+import com.olla.olla_climbing.domain.record.enums.AttemptType;
 import com.olla.olla_climbing.domain.record.enums.Difficulty;
 import com.olla.olla_climbing.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
@@ -46,12 +47,17 @@ public class Ranking extends BaseTimeEntity {
     @Column(nullable = false)
     private Double score;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = true)
+    private AttemptType attemptType;
+
     // true: 왕복 완료 명예의 전당, false: 도전 중인 랭커
     @Column(nullable = false)
     private boolean isMaster;
 
     @Builder
-    public Ranking(Member member, LocalDateTime baseDate, RankType rankType, Difficulty difficulty, Integer ranking, Double score, boolean isMaster) {
+    public Ranking(Member member, LocalDateTime baseDate, RankType rankType, Difficulty difficulty,
+                   Integer ranking, Double score, boolean isMaster, AttemptType attemptType) { // 💡 빌더에 추가
         this.member = member;
         this.baseDate = baseDate;
         this.rankType = rankType;
@@ -59,28 +65,31 @@ public class Ranking extends BaseTimeEntity {
         this.ranking = ranking;
         this.score = score;
         this.isMaster = isMaster;
+        this.attemptType = attemptType;
     }
 
     // 기존 기록 경신 (아직 도전자일 때)
-    public void updateScore(Double newScore) {
+    public void updateScore(Double newScore, AttemptType attemptType) {
         this.score = newScore;
-        this.baseDate = LocalDateTime.now(); // 갱신된 시간으로 업데이트
+        this.attemptType = attemptType;
+        this.baseDate = LocalDateTime.now();
     }
 
     // 마스터로 승급할 때
-    public void updateToMaster(Double finalScore) {
+    public void updateToMaster(Double finalScore, AttemptType attemptType) {
         this.score = finalScore;
+        this.attemptType = attemptType;
         this.isMaster = true;
-        this.ranking = null; // 마스터는 순위가 무의미하므로 null 처리
-        this.baseDate = LocalDateTime.now(); // 달성일
+        this.ranking = null;
+        this.baseDate = LocalDateTime.now();
     }
 
     // 기록 삭제 등으로 인해 마스터에서 강등되거나 점수가 깎일 때 사용
-    public void syncBestRecord(Double bestScore, boolean isMaster) {
+    public void syncBestRecord(Double bestScore, boolean isMaster, AttemptType attemptType) {
         this.score = bestScore;
         this.isMaster = isMaster;
+        this.attemptType = attemptType;
         this.baseDate = LocalDateTime.now();
-        // 마스터가 아니게 되었다면, 다음 순위 재계산 로직에서 순위가 부여
     }
 
     // 순위 업데이트 (마스터가 아닌 도전자일 때)
@@ -88,8 +97,7 @@ public class Ranking extends BaseTimeEntity {
         this.ranking = newRanking;
         this.baseDate = LocalDateTime.now();
     }
-    
-    // (동철 수정) 랭킹 조회시 조회가 안되는 오류 발생하여 수정
+
     // 랭킹 재계산 시 모든 유저의 집계 시각을 하나로 맞추기 위한 메서드
     public void syncBaseDate(LocalDateTime baseDate) {
         this.baseDate = baseDate;
