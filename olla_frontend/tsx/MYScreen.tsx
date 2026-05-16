@@ -10,6 +10,21 @@ import { useIsFocused } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { API_BASE_URL } from '../src/constants/Config';
 
+// ✅ 오늘 날짜(자정 기준) 반환
+const getTodayDate = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+// ✅ 시작일이 오늘 이전이거나 오늘인 경우에만 활성화된 이용권으로 판단
+const isStarted = (startDate: string): boolean => {
+  if (!startDate) return true;
+  const start = new Date(startDate);
+  start.setHours(0, 0, 0, 0);
+  return start <= getTodayDate();
+};
+
 const resolveMembershipType = (typeStr: string, startDate: string, endDate: string, remainingCount: number | null): string => {
   const upper = typeStr?.toUpperCase() || '';
   if (upper === 'COUNT' || upper.includes('횟수')) return '일일권';
@@ -39,7 +54,6 @@ const calcAgeFromBirth = (birthDate: string): string => {
   return String(age);
 };
 
-// ─── 알림 설정 타입 ───
 type NotiState = {
   isGlobalNotificationOn: boolean;
   isMembershipNotificationOn: boolean;
@@ -118,7 +132,6 @@ const MYScreen = ({ navigation }: any) => {
 
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // ─── 💡 멤버십 정보: 회원권/일일권 합산 처리 ───
   const [memInfo, setMemInfo] = useState({
     type: '구매 필요',
     period: '-',
@@ -128,6 +141,7 @@ const MYScreen = ({ navigation }: any) => {
     isCountType: false,
     hasPeriod: false,
     hasCount: false,
+    hasFuture: false, // ✅ 미래 시작 예정 이용권 여부
     startDate: '',
     endDate: '',
   });
@@ -212,11 +226,9 @@ const MYScreen = ({ navigation }: any) => {
         });
       }
 
-      // ─── 💡 HomeScreen과 동일하게 배열로 처리하여 회원권/일일권 합산 ───
       const memRes = await axios.get(`${API_BASE_URL}/memberships/me`, { headers });
       const memData = memRes.data?.data?.data;
 
-      // 배열이면 그대로, 단일 객체이면 배열로 감쌈
       const dataList: any[] = Array.isArray(memData)
         ? memData
         : memData && typeof memData === 'object' && !Array.isArray(memData)
@@ -224,11 +236,18 @@ const MYScreen = ({ navigation }: any) => {
           : [];
 
       if (dataList.length > 0) {
+        // ✅ ACTIVE 상태 + 시작일이 오늘 이전인 것만 실제 활성화로 처리
         const activeList = dataList.filter((m: any) =>
-          String(m.status || m.membershipStatus || '').toUpperCase() === 'ACTIVE'
+          String(m.status || m.membershipStatus || '').toUpperCase() === 'ACTIVE' &&
+          isStarted(m.startDate)
         );
 
-        // 회원권(PERIOD)과 일일권(COUNT) 분리
+        // ✅ 미래 시작 예정 이용권 (ACTIVE지만 아직 시작 안 됨)
+        const futureList = dataList.filter((m: any) =>
+          String(m.status || m.membershipStatus || '').toUpperCase() === 'ACTIVE' &&
+          !isStarted(m.startDate)
+        );
+
         const periodList = activeList.filter((m: any) =>
           String(m.membershipType).toUpperCase() === 'PERIOD'
         );
@@ -236,7 +255,7 @@ const MYScreen = ({ navigation }: any) => {
           String(m.membershipType).toUpperCase() === 'COUNT'
         );
 
-        // 회원권 잔여일 합산
+        // 회원권 잔여일 합산 (오늘 기준 남은 일수)
         let totalRemainingDays = 0;
         let earliestStart = '';
         let latestEnd = '';
@@ -245,8 +264,7 @@ const MYScreen = ({ navigation }: any) => {
           if (m.endDate) {
             const end = new Date(m.endDate);
             end.setHours(0, 0, 0, 0);
-            const todayDate = new Date();
-            todayDate.setHours(0, 0, 0, 0);
+            const todayDate = getTodayDate();
             const diff = Math.round((end.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
             totalRemainingDays += diff > 0 ? diff : 0;
 
@@ -255,15 +273,14 @@ const MYScreen = ({ navigation }: any) => {
           }
         });
 
-        // 일일권 잔여 횟수 합산
         const totalRemainingCount = countList.reduce(
           (sum: number, m: any) => sum + (m.remainingCount ?? 0), 0
         );
 
         const hasPeriod = periodList.length > 0 && totalRemainingDays > 0;
         const hasCount = countList.length > 0 && totalRemainingCount > 0;
+        const hasFuture = futureList.length > 0;
 
-        // 표시 타입 결정 (둘 다 있으면 "회원권 / 일일권" 형태로)
         let displayType = '구매 필요';
         let periodText = '';
         let countText = '';
@@ -277,7 +294,6 @@ const MYScreen = ({ navigation }: any) => {
           countText = `일일권 잔여 ${totalRemainingCount}회`;
         }
 
-        // period 표시용 문자열
         let periodDisplay = '';
         if (hasPeriod && hasCount) {
           periodDisplay = `${periodText}\n${countText}`;
@@ -285,20 +301,29 @@ const MYScreen = ({ navigation }: any) => {
           periodDisplay = `${earliestStart} ~ ${latestEnd}`;
         } else if (hasCount) {
           periodDisplay = `잔여 ${totalRemainingCount}회`;
+        } else if (hasFuture) {
+          // ✅ 현재 활성화된 이용권은 없지만 미래 시작 예정이 있을 때
+          const nextStart = futureList[0]?.startDate || '';
+          periodDisplay = `${nextStart} 시작 예정`;
         } else {
           periodDisplay = '-';
         }
 
+        // ✅ 상태 텍스트: 활성화된 것 없고 미래 예정만 있으면 "시작 예정"
+        let statusText = '비회원';
+        if (hasPeriod || hasCount) statusText = '이용중';
+        else if (hasFuture) statusText = '시작 예정';
+
         setMemInfo({
-          type: displayType,
+          type: displayType !== '구매 필요' ? displayType : (hasFuture ? '시작 예정' : '구매 필요'),
           period: periodDisplay,
-          status: activeList.length > 0 ? '이용중' : '만료',
+          status: statusText,
           remainingDays: totalRemainingDays,
           remainingCount: totalRemainingCount,
-          // isCountType: 둘 다 있으면 false (회원권 우선), 일일권만 있으면 true
           isCountType: !hasPeriod && hasCount,
           hasPeriod,
           hasCount,
+          hasFuture,
           startDate: earliestStart,
           endDate: latestEnd,
         });
@@ -312,6 +337,7 @@ const MYScreen = ({ navigation }: any) => {
           isCountType: false,
           hasPeriod: false,
           hasCount: false,
+          hasFuture: false,
           startDate: '',
           endDate: '',
         });
@@ -585,12 +611,11 @@ const MYScreen = ({ navigation }: any) => {
     );
   };
 
-  // ─── 💡 hasMembership: 회원권 또는 일일권 중 하나라도 있으면 true ───
   const hasMembership = memInfo.hasPeriod || memInfo.hasCount;
 
-  // ─── 💡 멤버십 요약 텍스트: 회원권/일일권 각각 표시 ───
   const memSummaryText = (() => {
-    if (!hasMembership) return '구매 필요';
+    if (!hasMembership && !memInfo.hasFuture) return '구매 필요';
+    if (!hasMembership && memInfo.hasFuture) return '시작 예정';
     const parts: string[] = [];
     if (memInfo.hasPeriod) parts.push(`회원권 (D-${memInfo.remainingDays})`);
     if (memInfo.hasCount) parts.push(`일일권 (${memInfo.remainingCount}회 남음)`);
@@ -637,13 +662,11 @@ const MYScreen = ({ navigation }: any) => {
           </TouchableOpacity>
           {isMembershipExpanded && (
             <View style={styles.memInfoContainer}>
-              {/* 💡 이용권 종류 - 회원권/일일권 통합 표시 */}
               <View style={styles.memInfoRow}>
                 <Text style={styles.memInfoLabel}>이용권</Text>
                 <Text style={styles.memInfoValue}>{memSummaryText}</Text>
               </View>
 
-              {/* 💡 회원권 기간 표시 */}
               {memInfo.hasPeriod && (
                 <View style={styles.memInfoRow}>
                   <Text style={styles.memInfoLabel}>회원권 기간</Text>
@@ -651,7 +674,6 @@ const MYScreen = ({ navigation }: any) => {
                 </View>
               )}
 
-              {/* 💡 일일권 잔여 횟수 표시 */}
               {memInfo.hasCount && (
                 <View style={styles.memInfoRow}>
                   <Text style={styles.memInfoLabel}>일일권 잔여</Text>
@@ -659,10 +681,28 @@ const MYScreen = ({ navigation }: any) => {
                 </View>
               )}
 
+              {/* ✅ 미래 시작 예정 안내 */}
+              {memInfo.hasFuture && !hasMembership && (
+                <View style={styles.memInfoRow}>
+                  <Text style={styles.memInfoLabel}>시작 예정</Text>
+                  <Text style={[styles.memInfoValue, { color: '#A1BE44' }]}>{memInfo.period}</Text>
+                </View>
+              )}
+
               <View style={styles.memInfoRow}>
                 <Text style={styles.memInfoLabel}>상태</Text>
-                <View style={[styles.activeBadge, !hasMembership && { backgroundColor: '#444444' }]}>
-                  <Text style={styles.activeBadgeText}>{memInfo.status}</Text>
+                <View style={[
+                  styles.activeBadge,
+                  !hasMembership && memInfo.hasFuture
+                    ? { backgroundColor: '#3A3A5C' }
+                    : !hasMembership
+                      ? { backgroundColor: '#444444' }
+                      : {}
+                ]}>
+                  <Text style={[
+                    styles.activeBadgeText,
+                    !hasMembership && memInfo.hasFuture ? { color: '#A1BE44' } : {}
+                  ]}>{memInfo.status}</Text>
                 </View>
               </View>
               <TouchableOpacity style={styles.pauseButton} onPress={openPauseModal}>
@@ -738,7 +778,7 @@ const MYScreen = ({ navigation }: any) => {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* ─── 프로필 수정 모달 ─── */}
+      {/* 프로필 수정 모달 */}
       <Modal visible={isProfileModalVisible} transparent animationType="fade" onRequestClose={() => closeProfileModal()}>
         <View style={styles.modalOverlay}>
           <TouchableWithoutFeedback onPress={() => closeProfileModal()}>
@@ -767,7 +807,6 @@ const MYScreen = ({ navigation }: any) => {
                 keyboardShouldPersistTaps="handled"
               >
                 <View style={styles.profileEditContainer}>
-
                   <TouchableOpacity
                     style={styles.profileImageEditWrapper}
                     activeOpacity={0.7}

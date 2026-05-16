@@ -328,12 +328,12 @@ const ManagerTicket = ({ navigation }: any) => {
         if (!latestEnd || (m.endDate && m.endDate > latestEnd)) latestEnd = m.endDate;
       });
 
-      if (latestEnd) {
+      if (latestEnd && earliestStart) {
+        const start = new Date(earliestStart);
         const end = new Date(latestEnd);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        start.setHours(0, 0, 0, 0);
         end.setHours(0, 0, 0, 0);
-        const diff = Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        const diff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
         totalRemainingDays = diff >= 0 ? diff : 0;
       }
 

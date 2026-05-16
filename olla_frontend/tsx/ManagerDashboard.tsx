@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Image, ActivityIndicator, Modal, Platform, PermissionsAndroid, RefreshControl, Animated, Dimensions, PanResponder, TouchableWithoutFeedback
+  Image, ActivityIndicator, Modal, Platform, PermissionsAndroid, RefreshControl, Animated, Dimensions, PanResponder, TouchableWithoutFeedback, Alert
 } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -13,11 +13,10 @@ const NOTICE_API_URL      = `${API_BASE_URL}/admin/notices`;
 const MEMBER_API_URL      = `${API_BASE_URL}/admin/memberships/members`;
 const MEMBERSHIP_API_URL  = `${API_BASE_URL}/admin/memberships`;
 const VISIT_TODAY_API_URL = `${API_BASE_URL}/admin/visits/today`;
-const QR_SCAN_API_URL     = `${API_BASE_URL}/admin/visits/scan`; 
-const PROFILE_API_URL     = `${API_BASE_URL}/members`; 
+const QR_SCAN_API_URL     = `${API_BASE_URL}/admin/visits/scan`;
+const PROFILE_API_URL     = `${API_BASE_URL}/members`;
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const SCANNER_SIZE = SCREEN_WIDTH * 0.8; 
 
 const translateGender = (gender: string) => {
   if (!gender || gender === '-') return '-';
@@ -49,8 +48,8 @@ const ManagerDashboard = ({ navigation }: any) => {
   const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ type: 'notice' | 'post', id: number } | null>(null);
 
-  const [qrErrorVisible, setQrErrorVisible] = useState(false);
-  const [qrErrorMsg, setQrErrorMsg] = useState('');
+  // ✅ 출석한 회원 ID를 로컬에서 추적
+  const [visitedMemberIds, setVisitedMemberIds] = useState<Set<number>>(new Set());
 
   const [metrics, setMetrics] = useState({
     totalMembers: 0,
@@ -64,15 +63,11 @@ const ManagerDashboard = ({ navigation }: any) => {
   const [cameraReady, setCameraReady] = useState(false);
   const scannedRef = useRef(false);
 
-  // ─── 🌟 회원 정보 상세 팝업 상태 및 드래그 애니메이션 로직 🌟 ───
   const [isDetailVisible, setDetailVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
 
   const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-  
-  // 💡 공백을 없애고 닫기 버튼과 컨텐츠 길이에 최적화된 58%로 높이 조절
-  const DETAIL_MODAL_HEIGHT = SCREEN_HEIGHT * 0.78; 
-  
+  const DETAIL_MODAL_HEIGHT = SCREEN_HEIGHT * 0.78;
   const detailHeightAnim = useRef(new Animated.Value(0)).current;
   const currentDetailSnap = useRef(DETAIL_MODAL_HEIGHT);
 
@@ -86,27 +81,23 @@ const ManagerDashboard = ({ navigation }: any) => {
       },
       onPanResponderMove: (_, gestureState) => {
         if (gestureState.dy < 0) {
-          // 💡 위로 당길 때 고무줄 텐션 효과 적용
           detailHeightAnim.setValue(-gestureState.dy * 0.1);
         } else {
-          // 아래로 내릴 땐 그대로 따라감
           detailHeightAnim.setValue(-gestureState.dy);
         }
       },
       onPanResponderRelease: (_, gestureState) => {
         detailHeightAnim.flattenOffset();
         const finalHeight = currentDetailSnap.current - gestureState.dy;
-        const CLOSE_THRESHOLD = currentDetailSnap.current * 0.75; // 25% 이상 내리면 닫힘
-
+        const CLOSE_THRESHOLD = currentDetailSnap.current * 0.75;
         if (finalHeight < CLOSE_THRESHOLD) {
           closeDetailModal();
         } else {
-          // 💡 튕기며 원래 자리로 돌아가는 스프링 효과
-          Animated.spring(detailHeightAnim, { 
-            toValue: currentDetailSnap.current, 
-            friction: 7, 
-            tension: 40, 
-            useNativeDriver: false 
+          Animated.spring(detailHeightAnim, {
+            toValue: currentDetailSnap.current,
+            friction: 7,
+            tension: 40,
+            useNativeDriver: false
           }).start();
         }
       }
@@ -181,16 +172,13 @@ const ManagerDashboard = ({ navigation }: any) => {
         headers: { Authorization: `Bearer ${token}` },
         params: { page: 0, size: 20, sort: 'id,desc' },
       });
-
       const raw = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
       const list = Array.isArray(raw) ? raw : [];
       const totalElements = response.data?.data?.totalElements ?? list.length;
-
       const mappedList = list.map((item: any) => ({
         ...item,
         isPast: new Date(item.meetDateTime).getTime() < Date.now(),
       }));
-
       setPosts(sortPosts(mappedList).slice(0, 2));
       setMetrics(prev => ({ ...prev, totalPosts: totalElements }));
     } catch (error: any) {
@@ -206,49 +194,33 @@ const ManagerDashboard = ({ navigation }: any) => {
       });
       const rawList = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
       const list = Array.isArray(rawList) ? rawList : [];
-      
       const validMembers = list.filter((user: any) => {
         const memberInfo = user.member || user;
         const isDeleted = user.deleted === true || memberInfo.isDeleted === true || memberInfo.status === 'DELETED';
         return !isDeleted;
       });
-
-      const actualTotalElements = validMembers.length;
-      
       setRecentMembers(validMembers.slice(0, 2));
-      setMetrics(prev => ({ ...prev, totalMembers: actualTotalElements }));
+      setMetrics(prev => ({ ...prev, totalMembers: validMembers.length }));
     } catch (error: any) {
       console.error('회원 데이터 로드 실패:', error.response?.data?.message || error.message);
     }
   };
 
+  // ✅ today API에서 visitLogs로 출석한 회원 추적 + 카운트
   const fetchVisits = async (token: string) => {
     try {
-      const response = await axios.get(MEMBER_API_URL, {
+      const response = await axios.get(VISIT_TODAY_API_URL, {
         headers: { Authorization: `Bearer ${token}` },
-        params: { size: 1000 }
       });
-      const list = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
-      
-      const uniqueVisitors = list.filter((item: any) => {
-        const member = item.member || item;
-        return member.visitedToday === true || member.todayVisit === true || member.hasVisited === true;
-      }).length;
-
-      setMetrics(prev => ({ ...prev, todayVisitors: uniqueVisitors }));
+      // 가능한 모든 depth 커버
+      const data = response.data?.data?.data ?? response.data?.data ?? response.data;
+      const todayCount = data?.totalVisitsToday ?? 0;
+      setMetrics(prev => ({ ...prev, todayVisitors: todayCount }));
     } catch (error: any) {
-      console.error('고유 방문자 데이터 로드 실패, 기존 API로 폴백:', error.response?.data?.message || error.message);
-      try {
-        const fallbackRes = await axios.get(VISIT_TODAY_API_URL, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const todayCount = fallbackRes.data?.data?.data?.totalVisitsToday ?? fallbackRes.data?.data?.data ?? 0;
-        setMetrics(prev => ({ ...prev, todayVisitors: todayCount }));
-      } catch (err) {}
+      console.error('금일 방문자 로드 실패:', error.response?.data?.message || error.message);
     }
   };
 
-  // 💡 활성 이용권 데이터 매핑 로직 강화 (중첩 DTO 지원)
   const fetchActiveMemberships = async (token: string) => {
     try {
       const response = await axios.get(`${MEMBERSHIP_API_URL}/active`, {
@@ -262,35 +234,27 @@ const ManagerDashboard = ({ navigation }: any) => {
       else if (typeof d?.total === 'number') activeCount = d.total;
       else if (Array.isArray(d)) activeCount = d.length;
       else if (Array.isArray(d?.content)) activeCount = d.totalElements ?? d.content.length;
-
-      // 만약 메인 API에서 못 불러오면 강제로 폴백을 타게 에러 발생 유도
       if (activeCount === 0 && d === undefined) throw new Error("Need fallback");
-
       setMetrics(prev => ({ ...prev, activeMemberships: activeCount }));
     } catch (error: any) {
       try {
-        // 폴백: 전체 회원을 불러온 후 상태가 ACTIVE인 이용권을 직접 카운트 (중첩구조 모두 확인)
         const fallbackRes = await axios.get(MEMBER_API_URL, {
           headers: { Authorization: `Bearer ${token}` },
           params: { size: 1000 }
         });
         const list = fallbackRes.data?.data?.data?.content ?? fallbackRes.data?.data?.data ?? [];
-        
         let count = 0;
         list.forEach((user: any) => {
           const memberInfo = user.member || user;
           if (user.deleted || memberInfo.isDeleted || memberInfo.status === 'DELETED') return;
-
           const isActive = (
-            user.membershipStatus === 'ACTIVE' || 
+            user.membershipStatus === 'ACTIVE' ||
             user.status === 'ACTIVE' ||
             (Array.isArray(user.memberships) && user.memberships.some((m: any) => m.membershipStatus === 'ACTIVE' || m.status === 'ACTIVE')) ||
             (user.activeMembership && (user.activeMembership.status === 'ACTIVE' || user.activeMembership.membershipStatus === 'ACTIVE'))
           );
-          
           if (isActive) count++;
         });
-
         setMetrics(prev => ({ ...prev, activeMemberships: count }));
       } catch (fallbackError) {
         console.error('활성이용권 폴백 로드 실패', fallbackError);
@@ -333,26 +297,21 @@ const ManagerDashboard = ({ navigation }: any) => {
     return dateString.split('T')[0];
   };
 
-  // ─── 💡 회원 정보 상세 팝업 오픈/클로즈 함수 (스프링 효과 적용) ───
   const openDetailModal = async (memberId: number, fallbackName: string, fallbackPhone: string) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
-      const response = await axios.get(`${PROFILE_API_URL}/${memberId}/profile`, { 
-        headers: { Authorization: `Bearer ${token}` } 
+      const response = await axios.get(`${PROFILE_API_URL}/${memberId}/profile`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
-      
-      const d = response.data?.data?.data || response.data?.data; 
-      
-      if (!d) { 
-        showResultModal('프로필 조회 불가', '상세 정보를 불러올 수 없습니다.', 'error'); 
-        return; 
+      const d = response.data?.data?.data || response.data?.data;
+      if (!d) {
+        showResultModal('프로필 조회 불가', '상세 정보를 불러올 수 없습니다.', 'error');
+        return;
       }
-      
       const detail = d.detail || {};
-      
       setSelectedUser({
         name: d.name || fallbackName,
-        phone: d.phone || fallbackPhone || '-', 
+        phone: d.phone || fallbackPhone || '-',
         profileImageUrl: d.profileImageUrl || d.profileImage,
         gender: translateGender(detail.gender || d.gender || '-'),
         age: detail.age || d.age || '-',
@@ -361,19 +320,15 @@ const ManagerDashboard = ({ navigation }: any) => {
         arm: detail.armSpan || d.armSpan || '-',
         shoe: detail.footSize || d.footSize || '-',
       });
-
       setDetailVisible(true);
       currentDetailSnap.current = DETAIL_MODAL_HEIGHT;
       detailHeightAnim.setValue(0);
-      
-      // 💡 Animated.spring 을 통한 팝업 등장 애니메이션
-      Animated.spring(detailHeightAnim, { 
-        toValue: DETAIL_MODAL_HEIGHT, 
-        friction: 8, 
-        tension: 45, 
-        useNativeDriver: false 
+      Animated.spring(detailHeightAnim, {
+        toValue: DETAIL_MODAL_HEIGHT,
+        friction: 8,
+        tension: 45,
+        useNativeDriver: false
       }).start();
-
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || '회원 상세 정보를 불러올 수 없습니다.';
       showResultModal('프로필 조회 불가', errorMessage, 'error');
@@ -381,9 +336,9 @@ const ManagerDashboard = ({ navigation }: any) => {
   };
 
   const closeDetailModal = () => {
-    Animated.timing(detailHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => { 
-      setDetailVisible(false); 
-      setSelectedUser(null); 
+    Animated.timing(detailHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
+      setDetailVisible(false);
+      setSelectedUser(null);
     });
   };
 
@@ -412,12 +367,10 @@ const ManagerDashboard = ({ navigation }: any) => {
 
   const openScanner = async () => {
     const hasPermission = await requestCameraPermission();
-
     if (!hasPermission) {
       showResultModal('권한 오류', '카메라 접근 권한을 허용해주세요.', 'error');
       return;
     }
-
     scannedRef.current = false;
     setIsProcessing(false);
     setScannerVisible(true);
@@ -425,66 +378,108 @@ const ManagerDashboard = ({ navigation }: any) => {
 
   const closeScanner = () => {
     setScannerVisible(false);
-    scannedRef.current = false;
     setIsProcessing(false);
+    setTimeout(() => {
+      scannedRef.current = false;
+    }, 800);
   };
 
+  // handleBarCodeScanned: ALREADY/WARNING(오늘이미출석) / SUCCESS / ERROR 분기
   const handleBarCodeScanned = async (qrData: string) => {
-    if (scannedRef.current) return;
+    if (scannedRef.current || isProcessing) return;
     scannedRef.current = true;
-    setIsProcessing(true); 
+    setIsProcessing(true);
 
     try {
       const token = await AsyncStorage.getItem('userToken');
       if (!token) {
         setIsProcessing(false);
-        showResultModal('오류', '로그인 정보가 없습니다.', 'error', () => closeScanner());
+        closeScanner();
+        setTimeout(() => {
+          showResultModal('오류', '로그인 정보가 없습니다.', 'error');
+        }, 300);
         return;
       }
 
       const response = await axios.post(
         QR_SCAN_API_URL,
         { qrToken: qrData, deductionCount: 1 },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }
+        { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
       );
 
-      setIsProcessing(false); 
+      setIsProcessing(false);
 
-      const result = response.data?.data?.data ?? response.data?.data?.data ?? {};
+      const result        = response.data?.data ?? {};
+      const statusCode    = result.statusCode || '';
       const memberName    = result.memberName || '회원';
       const remainingInfo = result.remainingInfo || '';
-      const message       = result.message || '정상적으로 출석 처리되었습니다.';
+      const message       = result.message || '';
 
-      closeScanner(); 
+      closeScanner();
 
       setTimeout(() => {
-        showResultModal(
-          '출석 완료! 🎉',
-          `${memberName}님 환영합니다.\n${remainingInfo ? `\n${remainingInfo}` : ''}\n\n${message}`,
-          'success',
-          () => {
-            AsyncStorage.getItem('userToken').then(t => {
-              if (t) {
-                fetchVisits(t); 
-                fetchMembers(t); 
-              }
-            });
-          }
-        );
+        if (
+          statusCode === 'ALREADY' ||
+          message.includes('이미 출석') ||
+          message.includes('오늘 이미')
+        ) {
+          // 오늘 이미 출석한 경우
+          showResultModal(
+            '금일 출석 완료 🙌',
+            `${memberName}님은\n오늘 이미 출석하셨습니다.`,
+            'info'
+          );
+        } else if (statusCode === 'ERROR') {
+          // 출석 실패
+          showResultModal(
+            '출석 실패',
+            message || '출석 처리에 실패했습니다.',
+            'error',
+            () => {
+              // 확인 누르면 다시 스캔
+              setTimeout(() => {
+                scannedRef.current = false;
+                setIsProcessing(false);
+                setScannerVisible(true);
+              }, 300);
+            }
+          );
+        } else {
+          // SUCCESS or WARNING(잔여횟수 경고) - 성공 시 갱신
+          AsyncStorage.getItem('userToken').then(t => {
+            if (t) { fetchVisits(t); fetchMembers(t); }
+          });
+
+          const bodyMessage = [
+            `${memberName}님 환영합니다!`,
+            remainingInfo,
+            message,
+          ].filter(Boolean).join('\n\n');
+
+          showResultModal('출석 완료! 🎉', bodyMessage, 'success');
+        }
       }, 300);
 
     } catch (error: any) {
-      console.error('QR 스캔 실패:', error.response?.data?.message || error.message);
-      const errorMsg = error.response?.data?.message || '출석 처리에 실패했습니다.\n유효한 QR 코드인지 확인해주세요.';
+      const errorMsg = error.response?.data?.message || '출석 처리에 실패했습니다.';
+      setIsProcessing(false);
+      closeScanner();
 
-      setIsProcessing(false); 
-      setQrErrorMsg(errorMsg);
-      setQrErrorVisible(true);
+      setTimeout(() => {
+        showResultModal(
+          '출석 실패',
+          errorMsg,
+          'error',
+          () => {
+            // 확인 누르면 다시 스캔
+            setTimeout(() => {
+              scannedRef.current = false;
+              setIsProcessing(false);
+              setScannerVisible(true);
+            }, 300);
+          }
+        );
+      }, 300);
     }
   };
 
@@ -498,8 +493,8 @@ const ManagerDashboard = ({ navigation }: any) => {
 
   return (
     <View style={styles.background}>
-      <ScrollView 
-        showsVerticalScrollIndicator={false} 
+      <ScrollView
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
@@ -536,22 +531,21 @@ const ManagerDashboard = ({ navigation }: any) => {
           <View style={styles.divider} />
           {recentMembers.length > 0 ? (
             recentMembers.map((memberResponse, index) => {
-              const member     = memberResponse.member || memberResponse;
-              const isVisited  = member.visitedToday === true || member.todayVisit === true || member.hasVisited === true;
+              const member   = memberResponse.member || memberResponse;
+              const memberId = member.memberId || member.id;
+              // ✅ 로컬 visitedMemberIds로 출석 뱃지 표시
+              const isVisited = visitedMemberIds.has(memberId);
               const badgeBg    = isVisited ? 'rgba(161,190,68,0.2)' : 'rgba(142,142,142,0.2)';
               const badgeColor = isVisited ? '#A1BE44' : '#8E8E8E';
               const label      = isVisited ? '출석함' : '미출석';
-
-              const userName = member.name || '이름 없음';
-              const userPhone = member.phone || '전화번호 없음';
-              const memberId = member.memberId || member.id;
-              
+              const userName   = member.name || '이름 없음';
+              const userPhone  = member.phone || '전화번호 없음';
               const profileUrl = member.profileImageUrl || member.profileImage;
               const hasValidImage = isValidImageUrl(profileUrl);
 
               return (
-                <TouchableOpacity 
-                  key={member.id || index} 
+                <TouchableOpacity
+                  key={member.id || index}
                   style={[styles.rowItem, index > 0 && { marginTop: 15 }]}
                   activeOpacity={0.7}
                   onPress={() => openDetailModal(memberId, userName, userPhone)}
@@ -565,7 +559,6 @@ const ManagerDashboard = ({ navigation }: any) => {
                   ) : (
                     <Image source={require('../assets/profile.png')} style={styles.profileImg} />
                   )}
-                  
                   <View style={styles.infoCol}>
                     <Text style={styles.nameText}>{userName}</Text>
                     <Text style={styles.subText}>{userPhone}</Text>
@@ -589,7 +582,6 @@ const ManagerDashboard = ({ navigation }: any) => {
             </TouchableOpacity>
           </View>
           <View style={styles.divider} />
-
           {notices.length > 0 ? (
             notices.map((notice, index) => (
               <View key={notice.id} style={[styles.noticeListItem, index > 0 && { marginTop: 20 }]}>
@@ -657,7 +649,6 @@ const ManagerDashboard = ({ navigation }: any) => {
             <Text style={styles.emptyText}>등록된 게시글이 없습니다.</Text>
           )}
         </View>
-
       </ScrollView>
 
       <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={openScanner}>
@@ -702,24 +693,6 @@ const ManagerDashboard = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      <Modal visible={qrErrorVisible} animationType="fade" transparent onRequestClose={() => setQrErrorVisible(false)}>
-        <View style={styles.deleteModalOverlay}>
-          <View style={styles.deleteModalBox}>
-            <Text style={[styles.resultModalTitle, { color: '#FF4D4D', marginBottom: 15 }]}>출석 실패</Text>
-            <Text style={styles.resultModalMessage}>{qrErrorMsg}</Text>
-            <View style={styles.deleteBtnRow}>
-              <TouchableOpacity style={[styles.deleteBtnYes, { backgroundColor: '#FF4D4D' }]} onPress={() => { setQrErrorVisible(false); scannedRef.current = false; setIsProcessing(false); }}>
-                <Text style={styles.deleteBtnYesText}>다시 스캔</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.deleteBtnNo} onPress={() => { setQrErrorVisible(false); closeScanner(); }}>
-                <Text style={styles.deleteBtnNoText}>닫기</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ─── 💡 회원 정보 상세 팝업 (스프링 효과 + 뷰포트 최적화 적용 완료) ─── */}
       <Modal visible={isDetailVisible} transparent animationType="fade" onRequestClose={closeDetailModal}>
         <View style={styles.modalOverlay}>
           <TouchableWithoutFeedback onPress={closeDetailModal}>
@@ -750,7 +723,6 @@ const ManagerDashboard = ({ navigation }: any) => {
                     )}
                     <Text style={styles.profileName}>{selectedUser.name}</Text>
                   </View>
-                  
                   <View style={styles.infoBox}>
                     <View style={styles.detailRow}><Text style={styles.detailLabel}>이름</Text><Text style={styles.detailValue}>{selectedUser.name}</Text></View>
                     <View style={styles.detailRow}><Text style={styles.detailLabel}>성별</Text><Text style={styles.detailValue}>{selectedUser.gender}</Text></View>
@@ -771,12 +743,7 @@ const ManagerDashboard = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      <Modal
-        visible={isScannerVisible}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={closeScanner}
-      >
+      <Modal visible={isScannerVisible} animationType="slide" transparent={false} onRequestClose={closeScanner}>
         <View style={styles.scannerModalOverlay}>
           <View style={styles.scannerHeader}>
             <Text style={styles.scannerTitle}>QR 코드 스캔</Text>
@@ -784,30 +751,22 @@ const ManagerDashboard = ({ navigation }: any) => {
               <Text style={styles.closeIcon}>✕</Text>
             </TouchableOpacity>
           </View>
-
           <View style={styles.scannerContainer}>
             {isScannerVisible && cameraReady ? (
               <View style={StyleSheet.absoluteFill}>
                 <Camera
                   style={StyleSheet.absoluteFill}
                   scanBarcode={true}
-                  onReadCode={(event: any) =>
-                    handleBarCodeScanned(event.nativeEvent.codeStringValue)
-                  }
-                  showFrame={false} 
+                  onReadCode={(event: any) => handleBarCodeScanned(event.nativeEvent.codeStringValue)}
+                  showFrame={false}
                 />
                 <View style={styles.customFrameOverlay}>
                   <View style={styles.customSquareGuide} />
                 </View>
               </View>
             ) : (
-              <ActivityIndicator
-                size="large"
-                color="#A1BE44"
-                style={{ position: 'absolute' }}
-              />
+              <ActivityIndicator size="large" color="#A1BE44" style={{ position: 'absolute' }} />
             )}
-
             {isProcessing && (
               <View style={styles.processingOverlay}>
                 <ActivityIndicator size="large" color="#A1BE44" />
@@ -815,7 +774,6 @@ const ManagerDashboard = ({ navigation }: any) => {
               </View>
             )}
           </View>
-
           <View style={styles.scannerFooter}>
             <Text style={styles.scannerDesc}>회원의 휴대폰에 있는 QR 코드를</Text>
             <Text style={styles.scannerDesc}>가이드 사각형 안으로 비춰주세요.</Text>
@@ -829,110 +787,77 @@ const ManagerDashboard = ({ navigation }: any) => {
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A', paddingHorizontal: 20, paddingTop: 10 },
   scrollContent: { paddingBottom: 80 },
-
-  metricsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 25 }, 
-  metricBox: { flex: 1, backgroundColor: '#2C2C2C', borderRadius: 12, paddingVertical: 20, alignItems: 'center', marginHorizontal: 4 }, 
-  metricTitle: { color: '#999999', fontSize: 13, fontWeight: 'bold', marginBottom: 8 }, 
-  metricValue: { color: '#ffffff', fontSize: 19, fontWeight: '900' }, 
-
+  metricsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 25 },
+  metricBox: { flex: 1, backgroundColor: '#2C2C2C', borderRadius: 12, paddingVertical: 20, alignItems: 'center', marginHorizontal: 4 },
+  metricTitle: { color: '#999999', fontSize: 13, fontWeight: 'bold', marginBottom: 8 },
+  metricValue: { color: '#ffffff', fontSize: 19, fontWeight: '900' },
   card: { backgroundColor: '#2C2C2C', borderRadius: 16, padding: 20, marginBottom: 20 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardTitle: { color: '#ffffff', fontSize: 19, fontWeight: 'bold' }, 
-  viewAllBtn: { borderWidth: 1, borderColor: '#A1BE44', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 }, 
-  viewAllBtnText: { color: '#999999', fontSize: 14, fontWeight: 'bold' }, 
+  cardTitle: { color: '#ffffff', fontSize: 19, fontWeight: 'bold' },
+  viewAllBtn: { borderWidth: 1, borderColor: '#A1BE44', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
+  viewAllBtnText: { color: '#999999', fontSize: 14, fontWeight: 'bold' },
   divider: { height: 1, backgroundColor: '#444444', marginVertical: 15 },
-  emptyText: { color: '#999', textAlign: 'center', marginVertical: 10, fontSize: 16 }, 
-
+  emptyText: { color: '#999', textAlign: 'center', marginVertical: 10, fontSize: 16 },
   rowItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  profileImg: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#444444', marginRight: 15 }, 
-  textProfileImg: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#444444', marginRight: 15, justifyContent: 'center', alignItems: 'center' }, 
-  textProfileText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
+  profileImg: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#444444', marginRight: 15 },
+  textProfileImg: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#444444', marginRight: 15, justifyContent: 'center', alignItems: 'center' },
+  textProfileText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
   infoCol: { flex: 1 },
-  nameText: { color: '#ffffff', fontSize: 17, fontWeight: 'bold', marginBottom: 4 }, 
-  subText: { color: '#999999', fontSize: 15 }, 
-
-  badge: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 }, 
-  badgeText: { fontSize: 14, fontWeight: 'bold', textAlign: 'center' }, 
-
+  nameText: { color: '#ffffff', fontSize: 17, fontWeight: 'bold', marginBottom: 4 },
+  subText: { color: '#999999', fontSize: 15 },
+  badge: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
+  badgeText: { fontSize: 14, fontWeight: 'bold', textAlign: 'center' },
   noticeListItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   noticeTextContent: { flex: 1, paddingRight: 10 },
-
   noticeHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  noticeBadge: { backgroundColor: '#A1BE44', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, marginRight: 8 }, 
-  noticeBadgeText: { color: '#1A1A1A', fontSize: 12, fontWeight: 'bold' }, 
-  noticeTitle: { color: '#ffffff', fontSize: 17, fontWeight: 'bold', flex: 1 }, 
-
+  noticeBadge: { backgroundColor: '#A1BE44', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, marginRight: 8 },
+  noticeBadgeText: { color: '#1A1A1A', fontSize: 12, fontWeight: 'bold' },
+  noticeTitle: { color: '#ffffff', fontSize: 17, fontWeight: 'bold', flex: 1 },
   noticeActions: { flexDirection: 'row', alignItems: 'center' },
   actionBtn: { padding: 6, marginLeft: 6 },
-  deleteBtn: { borderRadius: 8, padding: 8 }, 
-  actionIcon: { width: 24, height: 24, resizeMode: 'contain' }, 
-
-  fab: { position: 'absolute', bottom: 15, right: 20, width: 70, height: 70, borderRadius: 35, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4.65 }, 
-  fabIcon: { width: 35, height: 35, tintColor: '#1A1A1A', resizeMode: 'contain' }, 
-
+  deleteBtn: { borderRadius: 8, padding: 8 },
+  actionIcon: { width: 24, height: 24, resizeMode: 'contain' },
+  fab: { position: 'absolute', bottom: 15, right: 20, width: 70, height: 70, borderRadius: 35, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4.65 },
+  fabIcon: { width: 35, height: 35, tintColor: '#1A1A1A', resizeMode: 'contain' },
   scannerModalOverlay: { flex: 1, backgroundColor: '#1A1A1A' },
   scannerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: 60, backgroundColor: '#1A1A1A' },
-  scannerTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' }, 
-  closeIcon: { color: '#999999', fontSize: 32 }, 
+  scannerTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' },
+  closeIcon: { color: '#999999', fontSize: 32 },
   scannerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
-  
-  customFrameOverlay: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  customSquareGuide: {
-    width: '65%',
-    aspectRatio: 1, 
-    borderWidth: 3,
-    borderColor: '#A1BE44',
-    backgroundColor: 'transparent',
-    borderRadius: 16,
-  },
-
+  customFrameOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, justifyContent: 'center', alignItems: 'center' },
+  customSquareGuide: { width: '65%', aspectRatio: 1, borderWidth: 3, borderColor: '#A1BE44', backgroundColor: 'transparent', borderRadius: 16 },
   processingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', zIndex: 20 },
-  processingText: { color: '#ffffff', fontSize: 18, marginTop: 12, fontWeight: 'bold' }, 
+  processingText: { color: '#ffffff', fontSize: 18, marginTop: 12, fontWeight: 'bold' },
   scannerFooter: { padding: 40, alignItems: 'center', backgroundColor: '#1A1A1A' },
-  scannerDesc: { color: '#ffffff', fontSize: 18, marginTop: 5 }, 
-
-  // ─── 💡 회원 정보 상세 팝업 및 공통 모달 디자인 통일 ───
+  scannerDesc: { color: '#ffffff', fontSize: 18, marginTop: 5 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 25, paddingTop: 10, overflow: 'hidden', width: '100%' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333', borderRadius: 2, alignSelf: 'center', marginTop: 10, marginBottom: 20 },
   sheetTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
-  
   detailContainer: { width: '100%' },
   detailProfileWrapper: { alignSelf: 'center', alignItems: 'center', marginBottom: 25 },
   profileBig: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#444' },
-  profileName: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginTop: 12 }, 
-  
+  profileName: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginTop: 12 },
   infoBox: { backgroundColor: '#262626', borderRadius: 15, padding: 20, marginBottom: 20 },
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: '#333' },
   detailLabel: { color: '#999', fontSize: 15 },
   detailValue: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
   closeFullBtn: { backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 10 },
   closeFullBtnText: { color: '#000', fontWeight: 'bold', fontSize: 18 },
-
-  // ─── 커스텀 알림 및 삭제 모달 전용 스타일 ───
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, 
-  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, 
-  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, 
-  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, 
-  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
-
+  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
+  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
+  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 },
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
   deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  deleteModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' }, 
-  deleteModalText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center', lineHeight: 26 }, 
+  deleteModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
+  deleteModalText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center', lineHeight: 26 },
   deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
   deleteBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
-  deleteBtnYesText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
+  deleteBtnYesText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
   deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
-  deleteBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
+  deleteBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
 });
 
 export default ManagerDashboard;
