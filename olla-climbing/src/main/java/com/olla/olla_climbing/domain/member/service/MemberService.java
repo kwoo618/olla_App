@@ -29,6 +29,7 @@ public class MemberService {
     private final GoogleSheetsService googleSheetsService;
     private final S3ImageService s3ImageService;
 
+
     // 회원가입 화면에서 DB 아이디 중복 확인 로직 (동철 수정)
     @Transactional(readOnly = true)
     public boolean existsByLoginId(String loginId) {
@@ -169,7 +170,13 @@ public class MemberService {
         Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("회원 정보가 없습니다."));
 
-        // 💡 팩트 체크: NotificationSetting.java의 update는 5개의 인자를 받습니다.
+        // 🌟 [수정 완료] 프로젝트 내 다른 가이드(MemberDetail 등)와 일치하도록 생성자 패턴으로 에러 해결!
+        if (member.getNotificationSetting() == null) {
+            NotificationSetting newSetting = new NotificationSetting(member);
+            member.assignNotificationSetting(newSetting);
+        }
+
+        // 이제 에러 없이 정상적으로 업데이트 트랜잭션이 작동합니다.
         member.getNotificationSetting().update(
                 request.getIsGlobalNotificationOn(),
                 request.getIsMembershipNotificationOn(),
@@ -186,8 +193,20 @@ public class MemberService {
         Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("회원 정보가 없습니다."));
 
+        // 🌟 [추가] 조회할 때도 데이터가 없으면 기본값이 켜진 상태로 응답하도록 방어 🌟
+        if (member.getNotificationSetting() == null) {
+            return NotificationResponse.builder()
+                    .isGlobalNotificationOn(true)
+                    .isMembershipNotificationOn(true)
+                    .isActivityNotificationOn(true)
+                    .isCrewNotificationOn(true)
+                    .isNoticeNotificationOn(true)
+                    .build();
+        }
+
         return NotificationResponse.from(member.getNotificationSetting());
     }
+
 
     @Transactional(readOnly = true)
     public boolean existsByPhone(String phone) {
@@ -207,4 +226,6 @@ public class MemberService {
 
         return imageUrl;
     }
+
+
 }

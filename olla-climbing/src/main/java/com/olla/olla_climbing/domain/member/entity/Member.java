@@ -82,10 +82,15 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
     }
 
     // 알림 설정
-    @OneToOne(mappedBy = "member", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToOne(mappedBy = "member", cascade = CascadeType.ALL, orphanRemoval = true)
     private NotificationSetting notificationSetting;
 
     public void setNotificationSetting(NotificationSetting notificationSetting) {
+        this.notificationSetting = notificationSetting;
+    }
+
+
+    public void assignNotificationSetting(NotificationSetting notificationSetting) {
         this.notificationSetting = notificationSetting;
     }
 
@@ -174,4 +179,5 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
     public void updateFcmToken(String fcmToken) {
         this.fcmToken = fcmToken;
     }
+
 }
