@@ -797,7 +797,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
                       onPress={() => toggleLike(post.id, post.isLiked)}
                       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
-                      <Text style={[{ fontSize: 20, color: '#999', marginRight: 4, marginTop: -2 }, post.isLiked && { color: '#FF4D4D' }]}>
+                      <Text style={[{ fontSize: 20, color: '#999', marginRight: 4, marginTop: -2, marginLeft: -20}, post.isLiked && { color: '#FF4D4D' }]}>
                         {post.isLiked ? '♥' : '♡'}
                       </Text>
                       <Text style={[s.stat, { marginRight: 0 }]}>{post.likeCount}</Text>
@@ -1012,7 +1012,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
                           onPress={() => toggleLike(selectedPost.id, selectedPost.isLiked)}
                           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                         >
-                          <Text style={[{ fontSize: 20, color: '#999', marginRight: 4, marginTop: -2 }, selectedPost.isLiked && { color: '#FF4D4D' }]}>
+                          <Text style={[{ fontSize: 20, color: '#999', marginRight: 4, marginTop: -2, marginLeft: -20 }, selectedPost.isLiked && { color: '#FF4D4D' }]}>
                             {selectedPost.isLiked ? '♥' : '♡'}
                           </Text>
                           <Text style={[s.stat, { marginRight: 0 }]}>{selectedPost.likeCount}</Text>
