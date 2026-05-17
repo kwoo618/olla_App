@@ -632,18 +632,21 @@ const CommunityScreen = ({ route, navigation }: any) => {
   const submitPost = async () => {
     const { category, title, desc, date, time, people, location } = form;
     
-    if (!title.trim() || !desc.trim() || !date.trim() || !time.trim()) { 
-      showCreateAlert('내용을 적어주십시오.'); 
-      return; 
-    }
-    if (category === '아웃도어' && (!location || !location.trim())) {
-      showCreateAlert('아웃도어 장소 정보를 입력해주세요.');
+    let errorMsg = '';
+
+    if (!title?.trim()) errorMsg = '제목을 적어주십시오.';
+    else if (!desc?.trim()) errorMsg = '내용을 적어주십시오.';
+    else if (!date?.trim()) errorMsg = '날짜를 적어주십시오.';
+    else if (!time?.trim()) errorMsg = '시간을 적어주십시오.';
+    else if (category === '아웃도어' && !location?.trim()) errorMsg = '아웃도어 장소 정보를 입력해주세요.';
+    else if (date?.length !== 10 || time?.length !== 5) errorMsg = '날짜(YYYY/MM/DD)와 시간(HH:MM)을 올바르게 입력해주세요.';
+
+    if (errorMsg) {
+      showCreateAlert(errorMsg);
       return;
     }
-    if (date.length !== 10 || time.length !== 5) { 
-      showCreateAlert('날짜(YYYY/MM/DD)와 시간(HH:MM)을 올바르게 입력해주세요.'); 
-      return; 
-    }
+
+// 검증 통과 후 진행할 로직...
     
     const [yr, mo, dy] = date.split('/').map(Number);
     const [hr, mn] = time.split(':').map(Number);
