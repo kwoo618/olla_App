@@ -938,6 +938,9 @@ const CommunityScreen = ({ route, navigation }: any) => {
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', flex: 1, justifyContent: 'flex-end' }} pointerEvents="box-none">
             <Animated.View style={[s.commentSheet, { height: commentHeightAnim }]}>
               
+              {/* iOS 키보드 밀림 현상 방지용 하단 배경 연장 (Skirt) */}
+              <View style={{ position: 'absolute', bottom: -SCREEN_HEIGHT, left: -20, right: -20, height: SCREEN_HEIGHT, backgroundColor: '#1E1E1E' }} />
+
               <View {...commentPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
                 <View style={s.handle} />
                 <View style={s.sheetHeader}>
@@ -1179,6 +1182,9 @@ const CommunityScreen = ({ route, navigation }: any) => {
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', flex: 1, justifyContent: 'flex-end' }} pointerEvents="box-none">
             <Animated.View style={[s.sheet, { height: createHeightAnim, maxHeight: '100%' }]}>
               
+              {/* iOS 키보드 밀림 현상 방지용 하단 배경 연장 (Skirt) */}
+              <View style={{ position: 'absolute', bottom: -SCREEN_HEIGHT, left: -20, right: -20, height: SCREEN_HEIGHT, backgroundColor: '#1E1E1E' }} />
+
               <View {...createPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
                 <View style={s.handle} />
                 <View style={s.sheetHeader}>
@@ -1331,7 +1337,8 @@ const s = StyleSheet.create({
   
   overlay:{flex:1,backgroundColor:'rgba(0,0,0,0.7)',justifyContent:'center',alignItems:'center'},
   modalOverlay:{flex:1,backgroundColor:'rgba(0,0,0,0.7)',justifyContent:'flex-end'},
-  sheet:{backgroundColor:'#1E1E1E',borderTopLeftRadius:24,borderTopRightRadius:24,paddingHorizontal:20,paddingBottom:40,width:'100%', overflow: 'hidden'},
+  // 💡 기존 overflow: 'hidden' 속성 제거 (배경 연장을 자연스럽게 보여주기 위함)
+  sheet:{backgroundColor:'#1E1E1E',borderTopLeftRadius:24,borderTopRightRadius:24,paddingHorizontal:20,paddingBottom:40,width:'100%'},
   handle:{width:40,height:4,backgroundColor:'#333',borderRadius:2,marginTop:12,marginBottom:20,alignSelf:'center'},
   sheetHeader:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginBottom:15},
   sheetTitle:{color:'#fff',fontSize:23,fontWeight:'bold'}, 
@@ -1385,8 +1392,8 @@ const s = StyleSheet.create({
   resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
 
-  // ─── 💡 댓글/게시글 상세 모달 전용 스타일 (드래그 지원) ───
-  commentSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: Platform.OS === 'ios' ? 30 : 20, width: '100%', overflow: 'hidden' },
+  // ─── 💡 기존 overflow: 'hidden' 속성 제거
+  commentSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: Platform.OS === 'ios' ? 30 : 20, width: '100%' },
   postDetailContainer: { paddingBottom: 10, paddingTop: 10 },
   commentSectionTitle: { color: '#A1BE44', fontSize: 16, fontWeight: 'bold', marginBottom: 10 },
   commentItem: { flexDirection: 'row', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#333' },

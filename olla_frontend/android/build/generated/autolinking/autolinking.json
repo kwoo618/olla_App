@@ -28,6 +28,63 @@
         }
       }
     },
+    "@react-native-firebase/app": {
+      "root": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\@react-native-firebase\\app",
+      "name": "@react-native-firebase/app",
+      "platforms": {
+        "ios": {
+          "podspecPath": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\@react-native-firebase\\app\\RNFBApp.podspec",
+          "version": "24.0.0",
+          "configurations": [],
+          "scriptPhases": [
+            {
+              "name": "[RNFB] Core Configuration",
+              "path": "./ios_config.sh",
+              "execution_position": "after_compile",
+              "input_files": [
+                "$(BUILT_PRODUCTS_DIR)/$(INFOPLIST_PATH)"
+              ]
+            }
+          ]
+        },
+        "android": {
+          "sourceDir": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\@react-native-firebase\\app\\android",
+          "packageImportPath": "import io.invertase.firebase.app.ReactNativeFirebaseAppPackage;",
+          "packageInstance": "new ReactNativeFirebaseAppPackage()",
+          "buildTypes": [],
+          "componentDescriptors": [],
+          "cmakeListsPath": "C:/Users/82103/olla_App/olla_frontend/node_modules/@react-native-firebase/app/android/build/generated/source/codegen/jni/CMakeLists.txt",
+          "cxxModuleCMakeListsModuleName": null,
+          "cxxModuleCMakeListsPath": null,
+          "cxxModuleHeaderName": null,
+          "isPureCxxDependency": false
+        }
+      }
+    },
+    "@react-native-firebase/messaging": {
+      "root": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\@react-native-firebase\\messaging",
+      "name": "@react-native-firebase/messaging",
+      "platforms": {
+        "ios": {
+          "podspecPath": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\@react-native-firebase\\messaging\\RNFBMessaging.podspec",
+          "version": "24.0.0",
+          "configurations": [],
+          "scriptPhases": []
+        },
+        "android": {
+          "sourceDir": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\@react-native-firebase\\messaging\\android",
+          "packageImportPath": "import io.invertase.firebase.messaging.ReactNativeFirebaseMessagingPackage;",
+          "packageInstance": "new ReactNativeFirebaseMessagingPackage()",
+          "buildTypes": [],
+          "componentDescriptors": [],
+          "cmakeListsPath": "C:/Users/82103/olla_App/olla_frontend/node_modules/@react-native-firebase/messaging/android/build/generated/source/codegen/jni/CMakeLists.txt",
+          "cxxModuleCMakeListsModuleName": null,
+          "cxxModuleCMakeListsPath": null,
+          "cxxModuleHeaderName": null,
+          "isPureCxxDependency": false
+        }
+      }
+    },
     "react-native-camera-kit": {
       "root": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-camera-kit",
       "name": "react-native-camera-kit",
@@ -48,6 +105,31 @@
             "CKCameraComponentDescriptor"
           ],
           "cmakeListsPath": "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-camera-kit/android/build/generated/source/codegen/jni/CMakeLists.txt",
+          "cxxModuleCMakeListsModuleName": null,
+          "cxxModuleCMakeListsPath": null,
+          "cxxModuleHeaderName": null,
+          "isPureCxxDependency": false
+        }
+      }
+    },
+    "react-native-image-picker": {
+      "root": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-image-picker",
+      "name": "react-native-image-picker",
+      "platforms": {
+        "ios": {
+          "podspecPath": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-image-picker\\react-native-image-picker.podspec",
+          "version": "8.2.1",
+          "configurations": [],
+          "scriptPhases": []
+        },
+        "android": {
+          "sourceDir": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-image-picker\\android",
+          "packageImportPath": "import com.imagepicker.ImagePickerPackage;",
+          "packageInstance": "new ImagePickerPackage()",
+          "buildTypes": [],
+          "libraryName": "RNImagePickerSpec",
+          "componentDescriptors": [],
+          "cmakeListsPath": "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/CMakeLists.txt",
           "cxxModuleCMakeListsModuleName": null,
           "cxxModuleCMakeListsPath": null,
           "cxxModuleHeaderName": null,
@@ -89,7 +171,7 @@
       "platforms": {
         "ios": {
           "podspecPath": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-screens\\RNScreens.podspec",
-          "version": "4.24.0",
+          "version": "4.25.0",
           "configurations": [],
           "scriptPhases": []
         },
@@ -112,7 +194,10 @@
             "RNSScreenContentWrapperComponentDescriptor",
             "RNSModalScreenComponentDescriptor",
             "RNSTabsHostComponentDescriptor",
-            "RNSSafeAreaViewComponentDescriptor"
+            "RNSSafeAreaViewComponentDescriptor",
+            "RNSStackScreenComponentDescriptor",
+            "RNSStackHeaderConfigComponentDescriptor",
+            "RNSStackHeaderSubviewComponentDescriptor"
           ],
           "cmakeListsPath": "C:/Users/82103/olla_App/olla_frontend/node_modules/react-native-screens/android/src/main/jni/CMakeLists.txt",
           "cxxModuleCMakeListsModuleName": null,
@@ -128,7 +213,7 @@
       "platforms": {
         "ios": {
           "podspecPath": "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-svg\\RNSVG.podspec",
-          "version": "15.15.4",
+          "version": "15.15.5",
           "configurations": [],
           "scriptPhases": []
         },

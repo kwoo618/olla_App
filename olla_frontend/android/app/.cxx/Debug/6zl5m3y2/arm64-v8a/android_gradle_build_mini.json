@@ -2,6 +2,7 @@
   "buildFiles": [
     "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\@react-native-async-storage\\async-storage\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
     "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-camera-kit\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
+    "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-image-picker\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
     "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-safe-area-context\\android\\src\\main\\jni\\CMakeLists.txt",
     "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-screens\\android\\src\\main\\jni\\CMakeLists.txt",
     "C:\\Users\\82103\\olla_App\\olla_frontend\\node_modules\\react-native-svg\\android\\src\\main\\jni\\CMakeLists.txt",
@@ -27,13 +28,18 @@
       "abi": "arm64-v8a",
       "output": "C:\\Users\\82103\\olla_App\\olla_frontend\\android\\app\\build\\intermediates\\cxx\\Debug\\6zl5m3y2\\obj\\arm64-v8a\\libreact_codegen_safeareacontext.so",
       "runtimeFiles": [
-        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\3c01aea05d2737e987399f1309ae090e\\workspace\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.arm64-v8a\\libfbjni.so",
-        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\427eee61930a909b20cb384104452e26\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\jsi\\libs\\android.arm64-v8a\\libjsi.so",
-        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\427eee61930a909b20cb384104452e26\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\reactnative\\libs\\android.arm64-v8a\\libreactnative.so"
+        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\320e0b46f31b684057f113001bd4bb00\\workspace\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.arm64-v8a\\libfbjni.so",
+        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\26a1956e473912ec542f319de76955e5\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\jsi\\libs\\android.arm64-v8a\\libjsi.so",
+        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\26a1956e473912ec542f319de76955e5\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\reactnative\\libs\\android.arm64-v8a\\libreactnative.so"
       ]
     },
     "react_codegen_NativeCameraKitSpec::@56ccb1a98efdd6d45482": {
       "artifactName": "react_codegen_NativeCameraKitSpec",
+      "abi": "arm64-v8a",
+      "runtimeFiles": []
+    },
+    "react_codegen_RNImagePickerSpec::@f66ee9a2efecfb28bee4": {
+      "artifactName": "react_codegen_RNImagePickerSpec",
       "abi": "arm64-v8a",
       "runtimeFiles": []
     },
@@ -42,9 +48,9 @@
       "abi": "arm64-v8a",
       "output": "C:\\Users\\82103\\olla_App\\olla_frontend\\android\\app\\build\\intermediates\\cxx\\Debug\\6zl5m3y2\\obj\\arm64-v8a\\libreact_codegen_rnscreens.so",
       "runtimeFiles": [
-        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\427eee61930a909b20cb384104452e26\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\reactnative\\libs\\android.arm64-v8a\\libreactnative.so",
-        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\427eee61930a909b20cb384104452e26\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\jsi\\libs\\android.arm64-v8a\\libjsi.so",
-        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\3c01aea05d2737e987399f1309ae090e\\workspace\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.arm64-v8a\\libfbjni.so"
+        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\26a1956e473912ec542f319de76955e5\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\reactnative\\libs\\android.arm64-v8a\\libreactnative.so",
+        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\26a1956e473912ec542f319de76955e5\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\jsi\\libs\\android.arm64-v8a\\libjsi.so",
+        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\320e0b46f31b684057f113001bd4bb00\\workspace\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.arm64-v8a\\libfbjni.so"
       ]
     },
     "appmodules::@6890427a1f51a3e7e1df": {
@@ -55,9 +61,9 @@
         "C:\\Users\\82103\\olla_App\\olla_frontend\\android\\app\\build\\intermediates\\cxx\\Debug\\6zl5m3y2\\obj\\arm64-v8a\\libreact_codegen_safeareacontext.so",
         "C:\\Users\\82103\\olla_App\\olla_frontend\\android\\app\\build\\intermediates\\cxx\\Debug\\6zl5m3y2\\obj\\arm64-v8a\\libreact_codegen_rnscreens.so",
         "C:\\Users\\82103\\olla_App\\olla_frontend\\android\\app\\build\\intermediates\\cxx\\Debug\\6zl5m3y2\\obj\\arm64-v8a\\libreact_codegen_rnsvg.so",
-        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\3c01aea05d2737e987399f1309ae090e\\workspace\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.arm64-v8a\\libfbjni.so",
-        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\427eee61930a909b20cb384104452e26\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\jsi\\libs\\android.arm64-v8a\\libjsi.so",
-        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\427eee61930a909b20cb384104452e26\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\reactnative\\libs\\android.arm64-v8a\\libreactnative.so"
+        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\320e0b46f31b684057f113001bd4bb00\\workspace\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.arm64-v8a\\libfbjni.so",
+        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\26a1956e473912ec542f319de76955e5\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\jsi\\libs\\android.arm64-v8a\\libjsi.so",
+        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\26a1956e473912ec542f319de76955e5\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\reactnative\\libs\\android.arm64-v8a\\libreactnative.so"
       ]
     },
     "react_codegen_rnsvg::@4f40eb209d0c0b4a3b65": {
@@ -65,9 +71,9 @@
       "abi": "arm64-v8a",
       "output": "C:\\Users\\82103\\olla_App\\olla_frontend\\android\\app\\build\\intermediates\\cxx\\Debug\\6zl5m3y2\\obj\\arm64-v8a\\libreact_codegen_rnsvg.so",
       "runtimeFiles": [
-        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\427eee61930a909b20cb384104452e26\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\reactnative\\libs\\android.arm64-v8a\\libreactnative.so",
-        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\427eee61930a909b20cb384104452e26\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\jsi\\libs\\android.arm64-v8a\\libjsi.so",
-        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\3c01aea05d2737e987399f1309ae090e\\workspace\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.arm64-v8a\\libfbjni.so"
+        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\26a1956e473912ec542f319de76955e5\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\reactnative\\libs\\android.arm64-v8a\\libreactnative.so",
+        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\26a1956e473912ec542f319de76955e5\\workspace\\transformed\\react-android-0.85.0-debug\\prefab\\modules\\jsi\\libs\\android.arm64-v8a\\libjsi.so",
+        "C:\\Users\\82103\\.gradle\\caches\\9.3.1\\transforms\\320e0b46f31b684057f113001bd4bb00\\workspace\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.arm64-v8a\\libfbjni.so"
       ]
     },
     "react_codegen_rnasyncstorage::@1596841e19ec5b9eeffe": {
