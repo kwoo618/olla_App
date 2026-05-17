@@ -112,7 +112,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
   const HALF_SCREEN = SCREEN_HEIGHT * 0.6; 
   const CREATE_SCREEN = SCREEN_HEIGHT * 0.85; 
   const FULL_SCREEN = SCREEN_HEIGHT * 0.95; 
-  const DETAIL_MODAL_HEIGHT = SCREEN_HEIGHT * 0.65; // 프로필 상세 높이 설정 (65%)
+  const DETAIL_MODAL_HEIGHT = SCREEN_HEIGHT * 0.65;
   const THRESHOLD = (HALF_SCREEN + FULL_SCREEN) / 2; 
   const CLOSE_THRESHOLD = HALF_SCREEN * 0.7; 
 
@@ -180,7 +180,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
     })
   ).current;
 
-  // 3️⃣ 회원 정보 상세 팝업 애니메이션 (위로 확장 불가)
+  // 3️⃣ 회원 정보 상세 팝업 애니메이션
   const [isDetailVisible, setDetailVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   
@@ -372,16 +372,42 @@ const CommunityScreen = ({ route, navigation }: any) => {
       return { ...post, isJoined: joining, people: `${joining?Math.min(cur+1,max):Math.max(cur-1,1)}/${max}명` };
     }));
 
+  // ─── 💡 좋아요 기능 로직 추가 (알림창 + iOS 버그 우회 적용) ───
   const toggleLike = async (id: number, liked: boolean) => {
-    updatePost(id, { isLiked: !liked, likeCount: (post: any) => liked ? Math.max(post.likeCount-1,0) : post.likeCount+1 });
+    // 1. UI 즉각 반영
+    updatePost(id, { 
+      isLiked: !liked, 
+      likeCount: (post: any) => liked ? Math.max(post.likeCount - 1, 0) : post.likeCount + 1 
+    });
+
+    if (selectedPost && selectedPost.id === id) {
+      setSelectedPost((prev: any) => ({
+        ...prev,
+        isLiked: !liked,
+        likeCount: Math.max((prev.likeCount || 0) + (liked ? -1 : 1), 0)
+      }));
+    }
+
+    // 2. 누름/취소 알림 띄우기 (iOS 모달 버그 우회용 공통 Modal 사용)
+    showResultModal('알림', !liked ? '해당 게시물에 좋아요를 눌렀습니다.' : '좋아요를 취소했습니다.', 'success');
     
     try {
       const headers = await authHeader();
       await axios.post(`${POSTS}/${id}/like`, {}, { headers });
     } catch (e: any) {
-      updatePost(id, { isLiked: liked, likeCount: (post: any) => liked ? post.likeCount+1 : post.likeCount-1 });
-      const errorMessage = e.response?.data?.message || '요청을 처리할 수 없습니다.';
-      showResultModal('오류', errorMessage, 'error');
+      // 롤백
+      updatePost(id, { 
+        isLiked: liked, 
+        likeCount: (post: any) => liked ? post.likeCount + 1 : Math.max(post.likeCount - 1, 0) 
+      });
+      if (selectedPost && selectedPost.id === id) {
+        setSelectedPost((prev: any) => ({
+          ...prev,
+          isLiked: liked,
+          likeCount: Math.max((prev.likeCount || 0) + (liked ? 1 : -1), 0)
+        }));
+      }
+      showResultModal('오류', e?.response?.data?.message || '요청을 처리할 수 없습니다.', 'error');
     }
   };
 
@@ -521,7 +547,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
     });
   };
 
-  // ─── 💡 댓글 기능 로직 ───
   const fetchComments = async (postId: number) => {
     try {
       const headers = await authHeader();
@@ -596,7 +621,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
     }
   };
 
-  // ─── 💡 모집 글 작성/수정 로직 ───
   const openCreateModal = () => {
     setIsEditMode(false); setEditPostId(null);
     setForm({ category:'센터', title:'', desc:'', date:'', time:'', people:'2', location:'' });
@@ -645,8 +669,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
       showCreateAlert(errorMsg);
       return;
     }
-
-// 검증 통과 후 진행할 로직...
     
     const [yr, mo, dy] = date.split('/').map(Number);
     const [hr, mn] = time.split(':').map(Number);
@@ -761,13 +783,26 @@ const CommunityScreen = ({ route, navigation }: any) => {
                 
                 <View style={{ alignItems: 'flex-end' }}>
                   <View style={s.statsRow}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 4 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10 }}>
                       <Image 
                         source={require('../assets/Eye.png')} 
                         style={{ width: 17, height: 17, tintColor: '#999', marginRight: 4 }} 
                       />
                       <Text style={s.stat}>{post.viewCount}</Text>
                     </View>
+
+                    {/* 🌟 메인 리스트: 터치 영역(hitSlop) 및 크기를 키운 텍스트 좋아요 버튼 🌟 */}
+                    <TouchableOpacity 
+                      style={{ flexDirection: 'row', alignItems: 'center', padding: 5, marginRight: 8 }} 
+                      onPress={() => toggleLike(post.id, post.isLiked)}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Text style={[{ fontSize: 20, color: '#999', marginRight: 4, marginTop: -2 }, post.isLiked && { color: '#FF4D4D' }]}>
+                        {post.isLiked ? '♥' : '♡'}
+                      </Text>
+                      <Text style={[s.stat, { marginRight: 0 }]}>{post.likeCount}</Text>
+                    </TouchableOpacity>
+
                     <Text style={s.dateText}>{post.postDate}</Text>
                   </View>
 
@@ -964,13 +999,28 @@ const CommunityScreen = ({ route, navigation }: any) => {
                       <View style={[s.badge, { backgroundColor: selectedPost.isPast ? '#333' : (selectedPost.type==='아웃도어' ? '#00810F' : '#0072B9') }]}>
                         <Text style={[s.badgeText, { color: selectedPost.isPast ? '#888' : (selectedPost.type==='아웃도어' ? '#2CDE00' : '#009DFF') }]}>{selectedPost.type}</Text>
                       </View>
+                      
                       <View style={s.statsRow}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 4 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10 }}>
                           <Image source={require('../assets/Eye.png')} style={{ width: 17, height: 17, tintColor: '#999', marginRight: 4 }} />
                           <Text style={s.stat}>{selectedPost.viewCount}</Text>
                         </View>
+                        
+                        {/* 🌟 상세창 내부: 터치 영역(hitSlop) 및 크기를 키운 텍스트 좋아요 버튼 🌟 */}
+                        <TouchableOpacity 
+                          style={{ flexDirection: 'row', alignItems: 'center', padding: 5, marginRight: 8 }} 
+                          onPress={() => toggleLike(selectedPost.id, selectedPost.isLiked)}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                          <Text style={[{ fontSize: 20, color: '#999', marginRight: 4, marginTop: -2 }, selectedPost.isLiked && { color: '#FF4D4D' }]}>
+                            {selectedPost.isLiked ? '♥' : '♡'}
+                          </Text>
+                          <Text style={[s.stat, { marginRight: 0 }]}>{selectedPost.likeCount}</Text>
+                        </TouchableOpacity>
+
                         <Text style={s.dateText}>{selectedPost.postDate}</Text>
                       </View>
+
                     </View>
 
                     <Text style={[s.title, selectedPost.isPast && { color: '#888' }]}>{selectedPost.title}</Text>
@@ -1109,6 +1159,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
             </View>
           </Modal>
 
+          {/* 🌟 댓글/상세 모달창 위에 뜨는 좋아요 성공 토글 알림 (iOS 버그 해결) 🌟 */}
           {resultModalVisible && (
             <View style={[StyleSheet.absoluteFill, { zIndex: 999, elevation: 999 }]}>
               <View style={s.resultModalOverlay}>

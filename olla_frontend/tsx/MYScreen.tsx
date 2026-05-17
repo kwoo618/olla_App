@@ -141,7 +141,7 @@ const MYScreen = ({ navigation }: any) => {
     isCountType: false,
     hasPeriod: false,
     hasCount: false,
-    hasFuture: false, // ✅ 미래 시작 예정 이용권 여부
+    hasFuture: false,
     startDate: '',
     endDate: '',
   });
@@ -236,13 +236,11 @@ const MYScreen = ({ navigation }: any) => {
           : [];
 
       if (dataList.length > 0) {
-        // ✅ ACTIVE 상태 + 시작일이 오늘 이전인 것만 실제 활성화로 처리
         const activeList = dataList.filter((m: any) =>
           String(m.status || m.membershipStatus || '').toUpperCase() === 'ACTIVE' &&
           isStarted(m.startDate)
         );
 
-        // ✅ 미래 시작 예정 이용권 (ACTIVE지만 아직 시작 안 됨)
         const futureList = dataList.filter((m: any) =>
           String(m.status || m.membershipStatus || '').toUpperCase() === 'ACTIVE' &&
           !isStarted(m.startDate)
@@ -255,7 +253,6 @@ const MYScreen = ({ navigation }: any) => {
           String(m.membershipType).toUpperCase() === 'COUNT'
         );
 
-        // 회원권 잔여일 합산 (오늘 기준 남은 일수)
         let totalRemainingDays = 0;
         let earliestStart = '';
         let latestEnd = '';
@@ -302,14 +299,12 @@ const MYScreen = ({ navigation }: any) => {
         } else if (hasCount) {
           periodDisplay = `잔여 ${totalRemainingCount}회`;
         } else if (hasFuture) {
-          // ✅ 현재 활성화된 이용권은 없지만 미래 시작 예정이 있을 때
           const nextStart = futureList[0]?.startDate || '';
           periodDisplay = `${nextStart} 시작 예정`;
         } else {
           periodDisplay = '-';
         }
 
-        // ✅ 상태 텍스트: 활성화된 것 없고 미래 예정만 있으면 "시작 예정"
         let statusText = '비회원';
         if (hasPeriod || hasCount) statusText = '이용중';
         else if (hasFuture) statusText = '시작 예정';
@@ -409,6 +404,7 @@ const MYScreen = ({ navigation }: any) => {
         const fileType = asset.type || 'image/jpeg';
         const fileName = asset.fileName || `profile_${Date.now()}.jpg`;
 
+        // UI에 즉각적으로 이미지를 반영합니다.
         setProfileData((prev: any) => ({ ...prev, profileImageUrl: asset.uri }));
 
         try {
@@ -437,7 +433,7 @@ const MYScreen = ({ navigation }: any) => {
 
           if (uploadedUrl && typeof uploadedUrl === 'string') {
             setProfileData((prev: any) => ({ ...prev, profileImageUrl: uploadedUrl }));
-            showResultModal('성공', '프로필 이미지가 변경되었습니다.', 'success');
+            // 🚨 핵심 수정: 여기서 모달을 띄우지 않습니다. (모달 겹침 버그 원인 제거)
           } else {
             throw new Error('URL 반환 없음');
           }
@@ -528,6 +524,8 @@ const MYScreen = ({ navigation }: any) => {
   };
 
   const handleSaveProfile = async () => {
+    if (isImageUploading) return; // 이미지 업로드 중일 때는 저장을 막음
+
     try {
       const userToken = await AsyncStorage.getItem('userToken');
 
@@ -569,14 +567,14 @@ const MYScreen = ({ navigation }: any) => {
         fetchMyInfo();
         setTimeout(() => {
           showResultModal('성공', '정보가 저장되었습니다.', 'success');
-        }, Platform.OS === 'ios' ? 500 : 200);
+        }, 500); 
       });
 
     } catch (e) {
       closeProfileModal(() => {
         setTimeout(() => {
           showResultModal('오류', '저장 실패', 'error');
-        }, Platform.OS === 'ios' ? 500 : 200);
+        }, 500); 
       });
     }
   };
@@ -681,7 +679,6 @@ const MYScreen = ({ navigation }: any) => {
                 </View>
               )}
 
-              {/* ✅ 미래 시작 예정 안내 */}
               {memInfo.hasFuture && !hasMembership && (
                 <View style={styles.memInfoRow}>
                   <Text style={styles.memInfoLabel}>시작 예정</Text>
@@ -900,8 +897,14 @@ const MYScreen = ({ navigation }: any) => {
                   {renderEditField('팔길이', 'arm', 'cm')}
                   {renderEditField('암벽화 사이즈', 'shoe', 'mm')}
 
-                  <TouchableOpacity style={styles.saveProfileButton} onPress={handleSaveProfile}>
-                    <Text style={styles.saveProfileButtonText}>저장하기</Text>
+                  <TouchableOpacity
+                    style={[styles.saveProfileButton, isImageUploading && { backgroundColor: '#555555' }]}
+                    onPress={handleSaveProfile}
+                    disabled={isImageUploading}
+                  >
+                    <Text style={[styles.saveProfileButtonText, isImageUploading && { color: '#999999' }]}>
+                      {isImageUploading ? '이미지 업로드 중...' : '저장하기'}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </ScrollView>
