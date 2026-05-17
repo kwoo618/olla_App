@@ -15,6 +15,8 @@ const MEMBERSHIP_API_URL  = `${API_BASE_URL}/admin/memberships`;
 const VISIT_TODAY_API_URL = `${API_BASE_URL}/admin/visits/today`;
 const QR_SCAN_API_URL     = `${API_BASE_URL}/admin/visits/scan`;
 const PROFILE_API_URL     = `${API_BASE_URL}/members`;
+// 혼잡도 관련 API 임시 URL (실제 백엔드 API 주소로 수정 필요)
+const CONGESTION_API_URL  = `${API_BASE_URL}/admin/visits/congestion`; 
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -48,8 +50,12 @@ const ManagerDashboard = ({ navigation }: any) => {
   const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ type: 'notice' | 'post', id: number } | null>(null);
 
-  // ✅ 출석한 회원 ID를 로컬에서 추적
-  const [visitedMemberIds, setVisitedMemberIds] = useState<Set<number>>(new Set());
+  // 🔥 ID가 아닌 '이름(문자열)'을 저장할 Set으로 변경
+  const [visitedMemberNames, setVisitedMemberNames] = useState<Set<string>>(new Set());
+
+  // ✅ 주간 및 시간대별 혼잡도 상태 추가
+  const [weeklyCongestion, setWeeklyCongestion] = useState<number[]>([]);
+  const [hourlyCongestion, setHourlyCongestion] = useState<any>(null);
 
   const [metrics, setMetrics] = useState({
     totalMembers: 0,
@@ -138,11 +144,30 @@ const ManagerDashboard = ({ navigation }: any) => {
         fetchMembers(token),
         fetchVisits(token),
         fetchActiveMemberships(token),
+        fetchCongestionData(token), 
       ]);
     } catch (error: any) {
       console.error('데이터 로딩 실패:', error.response?.data?.message || error.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchCongestionData = async (token: string) => {
+    try {
+      const response = await axios.get(CONGESTION_API_URL, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = response.data?.data || {};
+      
+      if (data.weeklyCongestion) {
+        setWeeklyCongestion(data.weeklyCongestion);
+      }
+      if (data.hourlyCongestionByDay) {
+        setHourlyCongestion(data.hourlyCongestionByDay);
+      }
+    } catch (error: any) {
+      console.error('혼잡도 데이터 로드 실패:', error.response?.data?.message || error.message);
     }
   };
 
@@ -206,16 +231,28 @@ const ManagerDashboard = ({ navigation }: any) => {
     }
   };
 
-  // ✅ today API에서 visitLogs로 출석한 회원 추적 + 카운트
   const fetchVisits = async (token: string) => {
     try {
       const response = await axios.get(VISIT_TODAY_API_URL, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      // 가능한 모든 depth 커버
       const data = response.data?.data?.data ?? response.data?.data ?? response.data;
+      
       const todayCount = data?.totalVisitsToday ?? 0;
       setMetrics(prev => ({ ...prev, todayVisitors: todayCount }));
+
+      const logs = data?.visitLogs || [];
+      const visitedNames = new Set<string>();
+      
+      logs.forEach((log: any) => {
+        // 🔥 API 응답 구조에 맞게 memberName을 저장
+        if (log.memberName) {
+          visitedNames.add(log.memberName);
+        }
+      });
+      
+      setVisitedMemberNames(visitedNames);
+
     } catch (error: any) {
       console.error('금일 방문자 로드 실패:', error.response?.data?.message || error.message);
     }
@@ -384,7 +421,6 @@ const ManagerDashboard = ({ navigation }: any) => {
     }, 800);
   };
 
-  // handleBarCodeScanned: ALREADY/WARNING(오늘이미출석) / SUCCESS / ERROR 분기
   const handleBarCodeScanned = async (qrData: string) => {
     if (scannedRef.current || isProcessing) return;
     scannedRef.current = true;
@@ -423,20 +459,17 @@ const ManagerDashboard = ({ navigation }: any) => {
           message.includes('이미 출석') ||
           message.includes('오늘 이미')
         ) {
-          // 오늘 이미 출석한 경우
           showResultModal(
-            '금일 출석 완료 🙌',
+            '금일 출석 완료',
             `${memberName}님은\n오늘 이미 출석하셨습니다.`,
             'info'
           );
         } else if (statusCode === 'ERROR') {
-          // 출석 실패
           showResultModal(
             '출석 실패',
             message || '출석 처리에 실패했습니다.',
             'error',
             () => {
-              // 확인 누르면 다시 스캔
               setTimeout(() => {
                 scannedRef.current = false;
                 setIsProcessing(false);
@@ -445,7 +478,6 @@ const ManagerDashboard = ({ navigation }: any) => {
             }
           );
         } else {
-          // SUCCESS or WARNING(잔여횟수 경고) - 성공 시 갱신
           AsyncStorage.getItem('userToken').then(t => {
             if (t) { fetchVisits(t); fetchMembers(t); }
           });
@@ -456,7 +488,7 @@ const ManagerDashboard = ({ navigation }: any) => {
             message,
           ].filter(Boolean).join('\n\n');
 
-          showResultModal('출석 완료! 🎉', bodyMessage, 'success');
+          showResultModal('출석 완료!', bodyMessage, 'success');
         }
       }, 300);
 
@@ -471,7 +503,6 @@ const ManagerDashboard = ({ navigation }: any) => {
           errorMsg,
           'error',
           () => {
-            // 확인 누르면 다시 스캔
             setTimeout(() => {
               scannedRef.current = false;
               setIsProcessing(false);
@@ -533,15 +564,18 @@ const ManagerDashboard = ({ navigation }: any) => {
             recentMembers.map((memberResponse, index) => {
               const member   = memberResponse.member || memberResponse;
               const memberId = member.memberId || member.id;
-              // ✅ 로컬 visitedMemberIds로 출석 뱃지 표시
-              const isVisited = visitedMemberIds.has(memberId);
-              const badgeBg    = isVisited ? 'rgba(161,190,68,0.2)' : 'rgba(142,142,142,0.2)';
-              const badgeColor = isVisited ? '#A1BE44' : '#8E8E8E';
-              const label      = isVisited ? '출석함' : '미출석';
+              
               const userName   = member.name || '이름 없음';
               const userPhone  = member.phone || '전화번호 없음';
               const profileUrl = member.profileImageUrl || member.profileImage;
               const hasValidImage = isValidImageUrl(profileUrl);
+
+              // 🔥 API 응답 구조에 맞게 이름으로 출석 여부 확인
+              const isVisited = visitedMemberNames.has(userName);
+              
+              const badgeBg    = isVisited ? 'rgba(161,190,68,0.2)' : 'rgba(142,142,142,0.2)';
+              const badgeColor = isVisited ? '#A1BE44' : '#8E8E8E';
+              const label      = isVisited ? '출석함' : '미출석';
 
               return (
                 <TouchableOpacity

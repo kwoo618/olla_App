@@ -632,18 +632,21 @@ const CommunityScreen = ({ route, navigation }: any) => {
   const submitPost = async () => {
     const { category, title, desc, date, time, people, location } = form;
     
-    if (!title.trim() || !desc.trim() || !date.trim() || !time.trim()) { 
-      showCreateAlert('내용을 적어주십시오.'); 
-      return; 
-    }
-    if (category === '아웃도어' && (!location || !location.trim())) {
-      showCreateAlert('아웃도어 장소 정보를 입력해주세요.');
+    let errorMsg = '';
+
+    if (!title?.trim()) errorMsg = '제목을 적어주십시오.';
+    else if (!desc?.trim()) errorMsg = '내용을 적어주십시오.';
+    else if (!date?.trim()) errorMsg = '날짜를 적어주십시오.';
+    else if (!time?.trim()) errorMsg = '시간을 적어주십시오.';
+    else if (category === '아웃도어' && !location?.trim()) errorMsg = '아웃도어 장소 정보를 입력해주세요.';
+    else if (date?.length !== 10 || time?.length !== 5) errorMsg = '날짜(YYYY/MM/DD)와 시간(HH:MM)을 올바르게 입력해주세요.';
+
+    if (errorMsg) {
+      showCreateAlert(errorMsg);
       return;
     }
-    if (date.length !== 10 || time.length !== 5) { 
-      showCreateAlert('날짜(YYYY/MM/DD)와 시간(HH:MM)을 올바르게 입력해주세요.'); 
-      return; 
-    }
+
+// 검증 통과 후 진행할 로직...
     
     const [yr, mo, dy] = date.split('/').map(Number);
     const [hr, mn] = time.split(':').map(Number);
@@ -938,6 +941,9 @@ const CommunityScreen = ({ route, navigation }: any) => {
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', flex: 1, justifyContent: 'flex-end' }} pointerEvents="box-none">
             <Animated.View style={[s.commentSheet, { height: commentHeightAnim }]}>
               
+              {/* iOS 키보드 밀림 현상 방지용 하단 배경 연장 (Skirt) */}
+              <View style={{ position: 'absolute', bottom: -SCREEN_HEIGHT, left: -20, right: -20, height: SCREEN_HEIGHT, backgroundColor: '#1E1E1E' }} />
+
               <View {...commentPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
                 <View style={s.handle} />
                 <View style={s.sheetHeader}>
@@ -1179,6 +1185,9 @@ const CommunityScreen = ({ route, navigation }: any) => {
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', flex: 1, justifyContent: 'flex-end' }} pointerEvents="box-none">
             <Animated.View style={[s.sheet, { height: createHeightAnim, maxHeight: '100%' }]}>
               
+              {/* iOS 키보드 밀림 현상 방지용 하단 배경 연장 (Skirt) */}
+              <View style={{ position: 'absolute', bottom: -SCREEN_HEIGHT, left: -20, right: -20, height: SCREEN_HEIGHT, backgroundColor: '#1E1E1E' }} />
+
               <View {...createPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
                 <View style={s.handle} />
                 <View style={s.sheetHeader}>
@@ -1331,7 +1340,8 @@ const s = StyleSheet.create({
   
   overlay:{flex:1,backgroundColor:'rgba(0,0,0,0.7)',justifyContent:'center',alignItems:'center'},
   modalOverlay:{flex:1,backgroundColor:'rgba(0,0,0,0.7)',justifyContent:'flex-end'},
-  sheet:{backgroundColor:'#1E1E1E',borderTopLeftRadius:24,borderTopRightRadius:24,paddingHorizontal:20,paddingBottom:40,width:'100%', overflow: 'hidden'},
+  // 💡 기존 overflow: 'hidden' 속성 제거 (배경 연장을 자연스럽게 보여주기 위함)
+  sheet:{backgroundColor:'#1E1E1E',borderTopLeftRadius:24,borderTopRightRadius:24,paddingHorizontal:20,paddingBottom:40,width:'100%'},
   handle:{width:40,height:4,backgroundColor:'#333',borderRadius:2,marginTop:12,marginBottom:20,alignSelf:'center'},
   sheetHeader:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginBottom:15},
   sheetTitle:{color:'#fff',fontSize:23,fontWeight:'bold'}, 
@@ -1385,8 +1395,8 @@ const s = StyleSheet.create({
   resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
 
-  // ─── 💡 댓글/게시글 상세 모달 전용 스타일 (드래그 지원) ───
-  commentSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: Platform.OS === 'ios' ? 30 : 20, width: '100%', overflow: 'hidden' },
+  // ─── 💡 기존 overflow: 'hidden' 속성 제거
+  commentSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: Platform.OS === 'ios' ? 30 : 20, width: '100%' },
   postDetailContainer: { paddingBottom: 10, paddingTop: 10 },
   commentSectionTitle: { color: '#A1BE44', fontSize: 16, fontWeight: 'bold', marginBottom: 10 },
   commentItem: { flexDirection: 'row', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#333' },

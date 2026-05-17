@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Image, Animated, Easing } from 'react-native';
 
-// 💡 route를 props에 추가하여 이전 화면에서 보낸 데이터를 받을 수 있게 합니다.
+// route를 props에 추가하여 이전 화면에서 보낸 데이터를 받을 수 있게 합니다.
 const LoadingScreen = ({ route, navigation }: any) => {
-  // 💡 이전 화면에서 보낸 type 값을 확인합니다. (기본값은 'signup')
+  // 이전 화면에서 보낸 type 값을 확인합니다. (기본값은 'signup')
   const loadingType = route?.params?.type || 'signup';
   
-  // 💡 type에 따라 보여줄 메시지를 결정합니다.
+  // type에 따라 보여줄 메시지를 결정합니다.
   const descriptionText = loadingType === 'login' 
     ? '로그인 되었습니다.' 
     : '회원가입이 완료되었습니다.';
