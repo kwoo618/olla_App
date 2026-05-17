@@ -243,31 +243,6 @@ const ManagerCommunity = ({ route, navigation }: any) => {
       { ...post, ...Object.fromEntries(Object.entries(changes).map(([k,v]) => [k, typeof v==='function' ? v(post) : v])) }
     ));
 
-  const toggleLike = async (id: number, liked: boolean) => {
-    updatePostState(id, {
-      isLiked: !liked,
-      likeCount: (post: any) => liked ? Math.max(post.likeCount - 1, 0) : post.likeCount + 1
-    });
-
-    if (liked) {
-      showResultModal('좋아요 취소', '좋아요가 취소되었습니다.', 'info');
-    } else {
-      showResultModal('좋아요', '게시글에 좋아요를 눌렀습니다.', 'success');
-    }
-
-    try {
-      const headers = await authHeader();
-      await axios.post(`${POSTS}/${id}/like`, {}, { headers });
-    } catch (e: any) {
-      updatePostState(id, {
-        isLiked: liked,
-        likeCount: (post: any) => liked ? post.likeCount + 1 : Math.max(post.likeCount - 1, 0)
-      });
-      const errorMessage = e.response?.data?.message || '좋아요 요청을 처리할 수 없습니다.';
-      showResultModal('오류', errorMessage, 'error');
-    }
-  };
-
   const confirmDelete = (id: number) => { 
     setDeleteTarget(id); 
   };
@@ -496,14 +471,6 @@ const ManagerCommunity = ({ route, navigation }: any) => {
                   <Image source={getProfileImage(post.profileImageUrl)} style={[styles.profileImg, isPast && { opacity: 0.5 }]} />
                   <Text style={[styles.authorText, isPast && { color: '#666666' }]}>{post.author}</Text>
                 </TouchableOpacity>
-
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <TouchableOpacity style={{ marginRight: 20 }} onPress={() => toggleLike(post.id, post.isLiked)}>
-                    <Text style={[styles.statBottomText, post.isLiked && {color:'#FF4D4D'}, { marginRight: 0 }]}>
-                      {post.isLiked ? '♥' : '♡'} {post.likeCount}
-                    </Text>
-                  </TouchableOpacity>
-
                   <TouchableOpacity style={{ marginRight: 10 }} onPress={() => openPostDetail(post)}>
                     <Image source={require('../assets/ChatText.png')} style={{ width: 22, height: 22, tintColor: '#ffffff' }} />
                   </TouchableOpacity>
@@ -511,7 +478,6 @@ const ManagerCommunity = ({ route, navigation }: any) => {
                   <TouchableOpacity style={styles.trashBtn} onPress={() => confirmDelete(post.id)}>
                     <Image source={require('../assets/trash.png')} style={[styles.trashIcon, isPast && { tintColor: '#666666' }]} />
                   </TouchableOpacity>
-                </View>
               </View>
             </TouchableOpacity>
           );
