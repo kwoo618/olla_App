@@ -5,6 +5,7 @@ node_modules/
 .gradle
 build/
 local.properties
+google-services.json
 *.keystore
 *.bundle
 *.apk

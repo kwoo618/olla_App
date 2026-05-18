@@ -1,5 +1,8 @@
 pluginManagement { includeBuild("../node_modules/@react-native/gradle-plugin") }
-plugins { id("com.facebook.react.settings") }
+plugins { 
+    id("com.facebook.react.settings") 
+    id("org.gradle.toolchains.foojay-resolver-convention") version "0.8.0" // ✨ 이 줄이 에러를 고쳐줄 마법의 코드입니다!
+}
 extensions.configure(com.facebook.react.ReactSettingsExtension){ ex -> ex.autolinkLibrariesFromCommand() }
 rootProject.name = 'olla_react'
 include ':app'
