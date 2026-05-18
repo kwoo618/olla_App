@@ -488,7 +488,7 @@ const ManagerDashboard = ({ navigation }: any) => {
             message,
           ].filter(Boolean).join('\n\n');
 
-          showResultModal('출석 완료!', bodyMessage, 'success');
+          showResultModal('출석 완료!', bodyMessage);
         }
       }, 300);
 
