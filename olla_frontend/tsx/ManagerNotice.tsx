@@ -67,7 +67,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
   const [isDetailModalVisible, setDetailModalVisible] = useState(false);
   const [detailNotice, setDetailNotice]               = useState<Notice | null>(null);
   
-  const DETAIL_MODAL_HEIGHT = SCREEN_HEIGHT * 0.45;
+  const DETAIL_MODAL_HEIGHT = SCREEN_HEIGHT * 0.62;
   
   const detailHeightAnim = useRef(new Animated.Value(0)).current;
   const currentDetailSnap = useRef(0);

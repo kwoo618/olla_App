@@ -50,8 +50,8 @@ const ManagerDashboard = ({ navigation }: any) => {
   const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ type: 'notice' | 'post', id: number } | null>(null);
 
-  // 출석한 회원 ID를 로컬에서 추적
-  const [visitedMemberIds, setVisitedMemberIds] = useState<Set<number>>(new Set());
+  // 🔥 ID가 아닌 '이름(문자열)'을 저장할 Set으로 변경
+  const [visitedMemberNames, setVisitedMemberNames] = useState<Set<string>>(new Set());
 
   // ✅ 주간 및 시간대별 혼잡도 상태 추가
   const [weeklyCongestion, setWeeklyCongestion] = useState<number[]>([]);
@@ -144,7 +144,7 @@ const ManagerDashboard = ({ navigation }: any) => {
         fetchMembers(token),
         fetchVisits(token),
         fetchActiveMemberships(token),
-        fetchCongestionData(token), // ✅ 혼잡도 데이터 Fetch 추가
+        fetchCongestionData(token), 
       ]);
     } catch (error: any) {
       console.error('데이터 로딩 실패:', error.response?.data?.message || error.message);
@@ -153,7 +153,6 @@ const ManagerDashboard = ({ navigation }: any) => {
     }
   };
 
-  // ✅ 혼잡도 데이터 불러오기 함수 추가
   const fetchCongestionData = async (token: string) => {
     try {
       const response = await axios.get(CONGESTION_API_URL, {
@@ -161,11 +160,9 @@ const ManagerDashboard = ({ navigation }: any) => {
       });
       const data = response.data?.data || {};
       
-      // 주간 혼잡도 배열 저장
       if (data.weeklyCongestion) {
         setWeeklyCongestion(data.weeklyCongestion);
       }
-      // 시간대별 혼잡도 Map 저장
       if (data.hourlyCongestionByDay) {
         setHourlyCongestion(data.hourlyCongestionByDay);
       }
@@ -245,16 +242,16 @@ const ManagerDashboard = ({ navigation }: any) => {
       setMetrics(prev => ({ ...prev, todayVisitors: todayCount }));
 
       const logs = data?.visitLogs || [];
-      const visitedIds = new Set<number>();
+      const visitedNames = new Set<string>();
       
       logs.forEach((log: any) => {
-        const memberId = log.memberId || log.member?.id || log.member?.memberId || log.id;
-        if (memberId) {
-          visitedIds.add(memberId);
+        // 🔥 API 응답 구조에 맞게 memberName을 저장
+        if (log.memberName) {
+          visitedNames.add(log.memberName);
         }
       });
       
-      setVisitedMemberIds(visitedIds);
+      setVisitedMemberNames(visitedNames);
 
     } catch (error: any) {
       console.error('금일 방문자 로드 실패:', error.response?.data?.message || error.message);
@@ -463,7 +460,7 @@ const ManagerDashboard = ({ navigation }: any) => {
           message.includes('오늘 이미')
         ) {
           showResultModal(
-            '금일 출석 완료 🙌',
+            '금일 출석 완료',
             `${memberName}님은\n오늘 이미 출석하셨습니다.`,
             'info'
           );
@@ -491,7 +488,7 @@ const ManagerDashboard = ({ navigation }: any) => {
             message,
           ].filter(Boolean).join('\n\n');
 
-          showResultModal('출석 완료! 🎉', bodyMessage, 'success');
+          showResultModal('출석 완료!', bodyMessage);
         }
       }, 300);
 
@@ -555,65 +552,6 @@ const ManagerDashboard = ({ navigation }: any) => {
           </View>
         </View>
 
-        {/* =========================================================================
-            [프론트엔드 주석 처리된 혼잡도 UI 및 라이브러리 가이드 영역]
-            
-            추후 UI 디자인이 완료되면 아래 주석을 해제하여 사용하세요.
-            사용 라이브러리 예시: npm install react-native-chart-kit
-
-            import { BarChart, LineChart } from "react-native-chart-kit";
-        ========================================================================= */}
-        {/*
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>주간 혼잡도 (월~일)</Text>
-          </View>
-          <View style={styles.divider} />
-          {weeklyCongestion.length > 0 ? (
-            <BarChart
-              data={{
-                labels: ["월", "화", "수", "목", "금", "토", "일"],
-                datasets: [{ data: weeklyCongestion }] // 백엔드에서 받은 배열: [15, 30, 20, 45, 80, 95, 60]
-              }}
-              width={SCREEN_WIDTH - 80}
-              height={220}
-              yAxisLabel=""
-              yAxisSuffix="명"
-              chartConfig={{
-                backgroundColor: "#2C2C2C",
-                backgroundGradientFrom: "#2C2C2C",
-                backgroundGradientTo: "#2C2C2C",
-                color: (opacity = 1) => `rgba(161, 190, 68, ${opacity})`,
-                labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-                barPercentage: 0.5,
-              }}
-              style={{ marginVertical: 8, borderRadius: 16 }}
-            />
-          ) : (
-             <Text style={styles.emptyText}>혼잡도 데이터가 없습니다.</Text>
-          )}
-        </View>
-
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>시간대별 혼잡도 (09시~23시)</Text>
-          </View>
-          <View style={styles.divider} />
-          {hourlyCongestion ? (
-            <View>
-              <Text style={{ color: '#999', fontSize: 13, marginBottom: 10 }}>
-                * 백엔드 데이터: hourlyCongestionByDay
-                * 구현 방법: X축 시간(09~23시), Y축 요일(월~일)의 히트맵 또는
-                각 요일별 데이터를 LineChart로 7개의 선을 그립니다.
-              </Text>
-              // 예: 다중 선 그래프(LineChart) 구현 로직 작성 공간
-            </View>
-          ) : (
-            <Text style={styles.emptyText}>혼잡도 데이터가 없습니다.</Text>
-          )}
-        </View>
-        */}
-
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>최근 가입회원</Text>
@@ -626,15 +564,18 @@ const ManagerDashboard = ({ navigation }: any) => {
             recentMembers.map((memberResponse, index) => {
               const member   = memberResponse.member || memberResponse;
               const memberId = member.memberId || member.id;
-              // 로컬 visitedMemberIds로 출석 뱃지 표시
-              const isVisited = visitedMemberIds.has(memberId);
-              const badgeBg    = isVisited ? 'rgba(161,190,68,0.2)' : 'rgba(142,142,142,0.2)';
-              const badgeColor = isVisited ? '#A1BE44' : '#8E8E8E';
-              const label      = isVisited ? '출석함' : '미출석';
+              
               const userName   = member.name || '이름 없음';
               const userPhone  = member.phone || '전화번호 없음';
               const profileUrl = member.profileImageUrl || member.profileImage;
               const hasValidImage = isValidImageUrl(profileUrl);
+
+              // 🔥 API 응답 구조에 맞게 이름으로 출석 여부 확인
+              const isVisited = visitedMemberNames.has(userName);
+              
+              const badgeBg    = isVisited ? 'rgba(161,190,68,0.2)' : 'rgba(142,142,142,0.2)';
+              const badgeColor = isVisited ? '#A1BE44' : '#8E8E8E';
+              const label      = isVisited ? '출석함' : '미출석';
 
               return (
                 <TouchableOpacity
