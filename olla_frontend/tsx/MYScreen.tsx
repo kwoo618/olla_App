@@ -10,14 +10,14 @@ import { useIsFocused } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { API_BASE_URL } from '../src/constants/Config';
 
-// ✅ 오늘 날짜(자정 기준) 반환
+// 오늘 날짜(자정 기준) 반환
 const getTodayDate = () => {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   return d;
 };
 
-// ✅ 시작일이 오늘 이전이거나 오늘인 경우에만 활성화된 이용권으로 판단
+// 시작일이 오늘 이전이거나 오늘인 경우에만 활성화된 이용권으로 판단
 const isStarted = (startDate: string): boolean => {
   if (!startDate) return true;
   const start = new Date(startDate);
@@ -416,7 +416,7 @@ const MYScreen = ({ navigation }: any) => {
             uri: Platform.OS === 'ios' ? asset.uri?.replace('file://', '') : asset.uri,
             type: fileType,
             name: fileName,
-          } as any);
+          } as any)
 
           const uploadRes = await axios.post(
             `${API_BASE_URL}/members/me/profile-image`,
