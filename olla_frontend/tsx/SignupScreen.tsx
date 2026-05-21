@@ -77,11 +77,12 @@ const SignupScreen = ({ navigation }: any) => {
 
   const validatePassword = (pw: string) => {
     setPassword(pw);
-    const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/;
+    // 영문, 숫자, 특수문자 무조건 1개 이상 포함 및 공백 없는 6자리 이상
+    const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9\s])\S{6,}$/;
     if (!pw) {
       setPasswordError('비밀번호를 입력해주세요.');
     } else if (!passwordRegex.test(pw)) {
-      setPasswordError('영문+숫자 포함 6자 이상이어야 합니다.');
+      setPasswordError('영문, 숫자, 특수문자 포함 6자 이상이어야 합니다.');
     } else {
       setPasswordError('');
     }
@@ -391,7 +392,7 @@ const SignupScreen = ({ navigation }: any) => {
           <TextInput
             ref={passwordRef}
             style={[styles.input, focusedField === 'password' && styles.focusedInput, passwordError ? styles.inputError : null]}
-            placeholder="영문+숫자 포함 6자 이상"
+            placeholder="영문, 숫자, 특수문자 포함 6자 이상"
             placeholderTextColor="#ffffff80"
             secureTextEntry
             autoCapitalize="none"
