@@ -567,6 +567,11 @@ const SignupScreen = ({ navigation }: any) => {
               </View>
               {emailCodeError !== '' && <Text style={styles.errorText}>{emailCodeError}</Text>}
               {emailCodeSuccess !== '' && focusedField === 'emailCode' && <Text style={styles.successText}>{emailCodeSuccess}</Text>}
+              <TouchableOpacity
+                onPress={() => showResultModal('안내', '스팸함을 확인해 보십시오.\n\n인증 메일이 스팸 또는 프로모션 탭으로\n분류되었을 수 있습니다.', 'info')}
+              >
+                <Text style={styles.spamGuideText}>이메일이 안 왔나요?</Text>
+              </TouchableOpacity>
             </>
           )}
 
@@ -646,6 +651,9 @@ const styles = StyleSheet.create({
   resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, 
   resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, 
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
+
+  // ─── 추가된 스타일 ───
+  spamGuideText: { color: '#888888', fontSize: 14, alignSelf: 'flex-start', marginLeft: 5, marginTop: 6, marginBottom: 4, textDecorationLine: 'underline' },
 });
 
 export default SignupScreen;

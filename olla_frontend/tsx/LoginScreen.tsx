@@ -42,10 +42,10 @@ const LoginScreen = ({ navigation }: any) => {
   const [findIdName, setFindIdName] = useState('');
   const [findIdPhone, setFindIdPhone] = useState('');
 
+  // 비밀번호 찾기: 아이디 + 이메일 방식
   const [findPwModalVisible, setFindPwModalVisible] = useState(false);
-  const [findPwName, setFindPwName] = useState('');
-  const [findPwPhone, setFindPwPhone] = useState('');
   const [findPwLoginId, setFindPwLoginId] = useState('');
+  const [findPwEmail, setFindPwEmail] = useState('');
 
   // ✅ 전화번호 자동 하이픈 변환 함수
   const formatPhone = (text: string, setPhoneFunc: (val: string) => void) => {
@@ -88,23 +88,23 @@ const LoginScreen = ({ navigation }: any) => {
     }
   };
 
+  // 비밀번호 찾기: 아이디 + 이메일로 임시 비번 발송
   const handleFindPassword = async () => {
-    if (!findPwName || !findPwPhone || !findPwLoginId) {
-      showResultModal('알림', '이름, 전화번호, 아이디를 모두 입력해주세요.', 'info');
+    if (!findPwLoginId || !findPwEmail) {
+      showResultModal('알림', '아이디와 이메일을 모두 입력해주세요.', 'info');
       return;
     }
     try {
       await axios.post(`${API_BASE_URL}/auth/find-password`, null, {
-        params: { name: findPwName, phone: findPwPhone, loginId: findPwLoginId }
+        params: { loginId: findPwLoginId, email: findPwEmail }
       });
       
       setFindPwModalVisible(false);
 
       setTimeout(() => {
         showResultModal('비밀번호 발송', '임시 비밀번호가 등록된 이메일로 발송되었습니다.', 'success');
-        setFindPwName('');
-        setFindPwPhone('');
         setFindPwLoginId('');
+        setFindPwEmail('');
       }, Platform.OS === 'ios' ? 400 : 150);
 
     } catch (error: any) {
@@ -276,9 +276,8 @@ const LoginScreen = ({ navigation }: any) => {
                 </TouchableOpacity>
                 <Text style={styles.accountFindDivider}>|</Text>
                 <TouchableOpacity onPress={() => {
-                  setFindPwName('');
-                  setFindPwPhone('');
                   setFindPwLoginId('');
+                  setFindPwEmail('');
                   setFindPwModalVisible(true);
                 }}>
                   <Text style={styles.accountFindText}>비밀번호 찾기</Text>
@@ -342,7 +341,7 @@ const LoginScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 비밀번호 찾기 모달 */}
+      {/* 비밀번호 찾기 모달 - 아이디 + 이메일 방식 */}
       <Modal visible={findPwModalVisible} animationType="slide" transparent>
         <View style={styles.inputModalOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', alignItems: 'center' }}>
@@ -355,27 +354,20 @@ const LoginScreen = ({ navigation }: any) => {
               </View>
               <TextInput
                 style={styles.inputField}
-                placeholder="이름을 입력하세요"
-                placeholderTextColor="#999"
-                value={findPwName}
-                onChangeText={setFindPwName}
-              />
-              <TextInput
-                style={styles.inputField}
-                placeholder="010-0000-0000"
-                placeholderTextColor="#999"
-                keyboardType="phone-pad"
-                maxLength={13}
-                value={findPwPhone}
-                onChangeText={(text) => formatPhone(text, setFindPwPhone)}
-              />
-              <TextInput
-                style={styles.inputField}
                 placeholder="아이디를 입력하세요"
                 placeholderTextColor="#999"
                 value={findPwLoginId}
                 onChangeText={setFindPwLoginId}
                 autoCapitalize="none"
+              />
+              <TextInput
+                style={styles.inputField}
+                placeholder="가입한 이메일을 입력하세요"
+                placeholderTextColor="#999"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={findPwEmail}
+                onChangeText={setFindPwEmail}
               />
               <TouchableOpacity style={styles.submitBtn} onPress={handleFindPassword}>
                 <Text style={styles.submitBtnText}>임시 비밀번호 발송</Text>

@@ -76,6 +76,11 @@ const MYScreen = ({ navigation }: any) => {
   const [loading, setLoading] = useState(true);
   const [isImageUploading, setIsImageUploading] = useState(false);
 
+  // 로컬에서 선택한 이미지 asset 임시 보관 (저장하기 전까지 서버에 업로드 안 함)
+  const pendingImageAsset = useRef<any>(null);
+  // 모달 열기 전 원본 이미지 url 보관 (저장 안 하고 닫으면 이걸로 복원)
+  const originalImageUrl = useRef<string>('');
+
   const [isProfileModalVisible, setProfileModalVisible] = useState(false);
   const [isMembershipExpanded, setIsMembershipExpanded] = useState(false);
   const [isPauseModalVisible, setPauseModalVisible] = useState(false);
@@ -404,57 +409,24 @@ const MYScreen = ({ navigation }: any) => {
     }
   };
 
+  // ✅ 이미지 선택만 하고 로컬 uri만 미리보기로 반영 (서버 업로드 X)
   const handleSelectImage = () => {
-    launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, async (response) => {
+    launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, (response) => {
       if (response.didCancel || response.errorCode) return;
       if (response.assets && response.assets.length > 0) {
         const asset = response.assets[0];
-        const fileType = asset.type || 'image/jpeg';
-        const fileName = asset.fileName || `profile_${Date.now()}.jpg`;
-
+        // 선택한 asset 임시 보관
+        pendingImageAsset.current = asset;
+        // 미리보기만 로컬 uri로 표시
         setProfileData((prev: any) => ({ ...prev, profileImageUrl: asset.uri }));
-
-        try {
-          setIsImageUploading(true);
-          const userToken = await AsyncStorage.getItem('userToken');
-
-          const formData = new FormData();
-          formData.append('image', {
-            uri: Platform.OS === 'ios' ? asset.uri?.replace('file://', '') : asset.uri,
-            type: fileType,
-            name: fileName,
-          } as any)
-
-          const uploadRes = await axios.post(
-            `${API_BASE_URL}/members/me/profile-image`,
-            formData,
-            {
-              headers: { Authorization: `Bearer ${userToken}` },
-              timeout: 30000,
-            }
-          );
-
-          const uploadedUrl = uploadRes.data?.data?.data ||
-            uploadRes.data?.data ||
-            uploadRes.data?.profileImageUrl;
-
-          if (uploadedUrl && typeof uploadedUrl === 'string') {
-            setProfileData((prev: any) => ({ ...prev, profileImageUrl: uploadedUrl }));
-          } else {
-            throw new Error('URL 반환 없음');
-          }
-        } catch (e: any) {
-          console.error('이미지 업로드 에러:', e.response?.data || e.message);
-          fetchMyInfo();
-          showResultModal('오류', '이미지 업로드에 실패했습니다.', 'error');
-        } finally {
-          setIsImageUploading(false);
-        }
       }
     });
   };
 
   const openProfileModal = () => {
+    // 모달 열 때 pending 이미지 초기화 + 원본 url 백업
+    pendingImageAsset.current = null;
+    originalImageUrl.current = profileData.profileImageUrl;
     setProfileModalVisible(true);
     currentProfileSnap.current = FULL_SCREEN;
     profileHeightAnim.setValue(0);
@@ -462,6 +434,11 @@ const MYScreen = ({ navigation }: any) => {
   };
 
   const closeProfileModal = (onClosed?: () => void) => {
+    // 저장 안 하고 닫으면 pending 이미지 초기화 + 원본 url로 복원
+    if (pendingImageAsset.current) {
+      pendingImageAsset.current = null;
+      setProfileData((prev: any) => ({ ...prev, profileImageUrl: originalImageUrl.current }));
+    }
     Animated.timing(profileHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
       setProfileModalVisible(false);
       if (onClosed) {
@@ -570,11 +547,47 @@ const MYScreen = ({ navigation }: any) => {
     }
   };
 
+  // ✅ 저장하기 버튼 클릭 시 pendingImageAsset이 있으면 그때 업로드, 없으면 기존 url 유지
   const handleSaveProfile = async () => {
-    if (isImageUploading) return; 
-
+    setIsImageUploading(true);
     try {
       const userToken = await AsyncStorage.getItem('userToken');
+      let finalImageUrl = profileData.profileImageUrl;
+
+      // pending 이미지가 있으면 저장하기 버튼 클릭 시 업로드
+      if (pendingImageAsset.current) {
+        const asset = pendingImageAsset.current;
+        const fileType = asset.type || 'image/jpeg';
+        const fileName = asset.fileName || `profile_${Date.now()}.jpg`;
+
+        const formData = new FormData();
+        formData.append('image', {
+          uri: Platform.OS === 'ios' ? asset.uri?.replace('file://', '') : asset.uri,
+          type: fileType,
+          name: fileName,
+        } as any);
+
+        const uploadRes = await axios.post(
+          `${API_BASE_URL}/members/me/profile-image`,
+          formData,
+          {
+            headers: { Authorization: `Bearer ${userToken}` },
+            timeout: 30000,
+          }
+        );
+
+        const uploadedUrl = uploadRes.data?.data?.data ||
+          uploadRes.data?.data ||
+          uploadRes.data?.profileImageUrl;
+
+        if (uploadedUrl && typeof uploadedUrl === 'string') {
+          finalImageUrl = uploadedUrl;
+        } else {
+          throw new Error('이미지 URL 반환 없음');
+        }
+
+        pendingImageAsset.current = null;
+      }
 
       const requestBody = {
         name: profileData.name,
@@ -610,19 +623,25 @@ const MYScreen = ({ navigation }: any) => {
         headers: { Authorization: `Bearer ${userToken}` },
       });
 
+      setProfileData((prev: any) => ({ ...prev, profileImageUrl: finalImageUrl }));
+
       closeProfileModal(() => {
         fetchMyInfo();
         setTimeout(() => {
           showResultModal('성공', '정보가 저장되었습니다.', 'success');
-        }, 500); 
+        }, 500);
       });
 
-    } catch (e) {
+    } catch (e: any) {
+      console.error('저장 실패:', e.response?.data || e.message);
+      pendingImageAsset.current = null;
       closeProfileModal(() => {
         setTimeout(() => {
           showResultModal('오류', '저장 실패', 'error');
-        }, 500); 
+        }, 500);
       });
+    } finally {
+      setIsImageUploading(false);
     }
   };
 
@@ -966,7 +985,7 @@ const MYScreen = ({ navigation }: any) => {
                     disabled={isImageUploading}
                   >
                     <Text style={[styles.saveProfileButtonText, isImageUploading && { color: '#999999' }]}>
-                      {isImageUploading ? '이미지 업로드 중...' : '저장하기'}
+                      {isImageUploading ? '저장 중...' : '저장하기'}
                     </Text>
                   </TouchableOpacity>
                 </View>
