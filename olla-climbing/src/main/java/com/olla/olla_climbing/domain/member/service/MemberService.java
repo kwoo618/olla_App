@@ -227,5 +227,19 @@ public class MemberService {
         return imageUrl;
     }
 
+    @Transactional(readOnly = true)
+    public boolean isPhoneAvailableForSignup(String phone) {
+        return memberRepository.findByPhone(phone)
+                .map(member -> {
+                    // 비밀번호가 없거나 빈 문자열인 경우 = 오프라인 회원이므로 가입(연동) 가능 -> 사용 가능한 번호(false 반환)
+                    if (!org.springframework.util.StringUtils.hasText(member.getPassword())) {
+                        log.info("O2O 연동 가능한 오프라인 회원 전화번호 확인됨: {}", phone);
+                        return false; // 중복되지 않음 (가입 가능)
+                    }
+                    // 비밀번호가 이미 있다면 정식 가입된 온라인 회원이므로 중복 차단 -> true 반환
+                    return true;
+                })
+                .orElse(false); // DB에 아예 없는 번호면 당연히 가입 가능 -> 중복되지 않음(false)
+    }
 
 }

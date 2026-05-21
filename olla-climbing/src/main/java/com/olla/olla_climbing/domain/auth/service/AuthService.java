@@ -95,37 +95,51 @@ public class AuthService {
             throw new IllegalArgumentException("이메일 인증이 완료되지 않았습니다.");
         }
 
-        if(memberRepository.findByLoginId(request.getLoginId()).isPresent()){
-            throw new IllegalArgumentException("이미 존재하는 아이디입니다.");
-        }
-
-        if (memberRepository.existsByEmail(request.getEmail())) {
-            throw new IllegalArgumentException("이미 가입된 이메일입니다.");
-        }
-
         String encodedPassword = passwordEncoder.encode(request.getPassword());
 
+        // 2. 전화번호를 통해 기존 회원(오프라인 가입자 포함) 데이터가 있는지 먼저 조회합니다.
         Optional<Member> existingMemberOpt = memberRepository.findByPhone(request.getPhone());
         Member targetMember;
         boolean isBrandNewMember = false;
 
+        // 3. 기존 회원이 존재하는 경우, 해당 회원을 온라인 앱 계정으로 승급(업데이트) 처리합니다.
         if (existingMemberOpt.isPresent()) {
             targetMember = existingMemberOpt.get();
-            if (targetMember.getLoginId() != null) {
+
+            // 🌟 [버그 수정]: 가상 ID가 채워진 오프라인 회원 우회를 위해 '비밀번호' 존재 유무로 가입 여부를 판단합니다.
+            if (org.springframework.util.StringUtils.hasText(targetMember.getPassword())) {
                 throw new IllegalArgumentException("이미 가입된 전화번호입니다.");
             }
+
+            // 아이디 중복 체크 (자신이 가진 임시 ID가 아닐 때만 중복 예외 처리)
+            if (!request.getLoginId().equals(targetMember.getLoginId()) &&
+                    memberRepository.findByLoginId(request.getLoginId()).isPresent()) {
+                throw new IllegalArgumentException("이미 존재하는 아이디입니다.");
+            }
+
+            // 오프라인 유령 계정을 정식 온라인 앱 계정으로 승급(매핑)
             targetMember.upgradeToOnlineMember(
                     request.getLoginId(), encodedPassword, request.getEmail(),
                     request.getGender(), request.getBirthDate()
             );
         } else {
+            // 완전히 처음 방문한 신규 회원인 경우
+            if (memberRepository.findByLoginId(request.getLoginId()).isPresent()) {
+                throw new IllegalArgumentException("이미 존재하는 아이디입니다.");
+            }
+            if (memberRepository.existsByEmail(request.getEmail())) {
+                throw new IllegalArgumentException("이미 가입된 이메일입니다.");
+            }
+
             targetMember = request.toEntity(encodedPassword);
             isBrandNewMember = true;
         }
 
+        // 신체 스펙 및 개인정보 동의 데이터 설정
         initializeMemberDetails(targetMember, request);
         Member savedMember = memberRepository.save(targetMember);
 
+        // 신규 회원인 경우에만 구글 시트 신규 라인 배치
         if (isBrandNewMember) {
             googleSheetsService.syncNewMember(savedMember);
             googleSheetsService.syncUnregisteredMember(savedMember);
@@ -172,11 +186,11 @@ public class AuthService {
     }
 
     @Transactional
-    public void sendTempPassword(String name, String phone, String loginId) {
+    public void sendTempPassword(String loginId, String email) {
         Member member = memberRepository.findByLoginId(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
 
-        if (!member.getName().equals(name) || !member.getPhone().equals(phone)) {
+        if (!member.getEmail().equals(email) || member.getEmail() == null) {
             throw new IllegalArgumentException("입력하신 정보가 일치하지 않습니다.");
         }
 
