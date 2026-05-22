@@ -94,7 +94,6 @@ public class MembershipAdminService {
         }
         String cleanPhone = request.getPhone().replaceAll("-", "");
         String dummyEmail = "offline_" + cleanPhone + "@ollagaja.com";
-        String tempPassword = passwordEncoder.encode(cleanPhone);
 
         Member offlineMember = Member.builder()
                 .name(request.getName())
@@ -102,7 +101,7 @@ public class MembershipAdminService {
                 .birthDate(request.getBirthDate())
                 .phone(request.getPhone())
                 .email(dummyEmail)
-                .password(tempPassword)
+                .password(null)
                 .role(Role.USER)
                 .build();
 
