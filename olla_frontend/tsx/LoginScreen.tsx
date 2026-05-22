@@ -307,7 +307,7 @@ const LoginScreen = ({ navigation }: any) => {
       </Modal>
 
       {/* 아이디 찾기 모달 */}
-      <Modal visible={findIdModalVisible} animationType="slide" transparent>
+      <Modal visible={findIdModalVisible} animationType="fade" transparent>
         <View style={styles.inputModalOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', alignItems: 'center' }}>
             <View style={styles.inputModalBox}>
@@ -342,7 +342,7 @@ const LoginScreen = ({ navigation }: any) => {
       </Modal>
 
       {/* 비밀번호 찾기 모달 - 아이디 + 이메일 방식 */}
-      <Modal visible={findPwModalVisible} animationType="slide" transparent>
+      <Modal visible={findPwModalVisible} animationType="fade" transparent>
         <View style={styles.inputModalOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', alignItems: 'center' }}>
             <View style={styles.inputModalBox}>
