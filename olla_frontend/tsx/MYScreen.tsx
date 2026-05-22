@@ -76,6 +76,11 @@ const MYScreen = ({ navigation }: any) => {
   const [loading, setLoading] = useState(true);
   const [isImageUploading, setIsImageUploading] = useState(false);
 
+  // 로컬에서 선택한 이미지 asset 임시 보관 (저장하기 전까지 서버에 업로드 안 함)
+  const pendingImageAsset = useRef<any>(null);
+  // 모달 열기 전 원본 이미지 url 보관 (저장 안 하고 닫으면 이걸로 복원)
+  const originalImageUrl = useRef<string>('');
+
   const [isProfileModalVisible, setProfileModalVisible] = useState(false);
   const [isMembershipExpanded, setIsMembershipExpanded] = useState(false);
   const [isPauseModalVisible, setPauseModalVisible] = useState(false);
@@ -83,6 +88,14 @@ const MYScreen = ({ navigation }: any) => {
   const [isLogoutModalVisible, setLogoutModalVisible] = useState(false);
   const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
   const [isAdminModalVisible, setAdminModalVisible] = useState(false);
+
+  // 비밀번호 변경 State
+  const [isChangePwModalVisible, setChangePwModalVisible] = useState(false);
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState('');
+  const [pwError, setPwError] = useState('');
+  const [isChangingPw, setIsChangingPw] = useState(false);
 
   const [resultModalVisible, setResultModalVisible] = useState(false);
   const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info' });
@@ -396,59 +409,24 @@ const MYScreen = ({ navigation }: any) => {
     }
   };
 
+  // ✅ 이미지 선택만 하고 로컬 uri만 미리보기로 반영 (서버 업로드 X)
   const handleSelectImage = () => {
-    launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, async (response) => {
+    launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, (response) => {
       if (response.didCancel || response.errorCode) return;
       if (response.assets && response.assets.length > 0) {
         const asset = response.assets[0];
-        const fileType = asset.type || 'image/jpeg';
-        const fileName = asset.fileName || `profile_${Date.now()}.jpg`;
-
-        // UI에 즉각적으로 이미지를 반영합니다.
+        // 선택한 asset 임시 보관
+        pendingImageAsset.current = asset;
+        // 미리보기만 로컬 uri로 표시
         setProfileData((prev: any) => ({ ...prev, profileImageUrl: asset.uri }));
-
-        try {
-          setIsImageUploading(true);
-          const userToken = await AsyncStorage.getItem('userToken');
-
-          const formData = new FormData();
-          formData.append('image', {
-            uri: Platform.OS === 'ios' ? asset.uri?.replace('file://', '') : asset.uri,
-            type: fileType,
-            name: fileName,
-          } as any)
-
-          const uploadRes = await axios.post(
-            `${API_BASE_URL}/members/me/profile-image`,
-            formData,
-            {
-              headers: { Authorization: `Bearer ${userToken}` },
-              timeout: 30000,
-            }
-          );
-
-          const uploadedUrl = uploadRes.data?.data?.data ||
-            uploadRes.data?.data ||
-            uploadRes.data?.profileImageUrl;
-
-          if (uploadedUrl && typeof uploadedUrl === 'string') {
-            setProfileData((prev: any) => ({ ...prev, profileImageUrl: uploadedUrl }));
-            // 🚨 핵심 수정: 여기서 모달을 띄우지 않습니다. (모달 겹침 버그 원인 제거)
-          } else {
-            throw new Error('URL 반환 없음');
-          }
-        } catch (e: any) {
-          console.error('이미지 업로드 에러:', e.response?.data || e.message);
-          fetchMyInfo();
-          showResultModal('오류', '이미지 업로드에 실패했습니다.', 'error');
-        } finally {
-          setIsImageUploading(false);
-        }
       }
     });
   };
 
   const openProfileModal = () => {
+    // 모달 열 때 pending 이미지 초기화 + 원본 url 백업
+    pendingImageAsset.current = null;
+    originalImageUrl.current = profileData.profileImageUrl;
     setProfileModalVisible(true);
     currentProfileSnap.current = FULL_SCREEN;
     profileHeightAnim.setValue(0);
@@ -456,6 +434,11 @@ const MYScreen = ({ navigation }: any) => {
   };
 
   const closeProfileModal = (onClosed?: () => void) => {
+    // 저장 안 하고 닫으면 pending 이미지 초기화 + 원본 url로 복원
+    if (pendingImageAsset.current) {
+      pendingImageAsset.current = null;
+      setProfileData((prev: any) => ({ ...prev, profileImageUrl: originalImageUrl.current }));
+    }
     Animated.timing(profileHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
       setProfileModalVisible(false);
       if (onClosed) {
@@ -523,11 +506,88 @@ const MYScreen = ({ navigation }: any) => {
     }
   };
 
-  const handleSaveProfile = async () => {
-    if (isImageUploading) return; // 이미지 업로드 중일 때는 저장을 막음
+  // 비밀번호 변경 기능 실행
+  const handleChangePassword = async () => {
+    if (!oldPassword || !newPassword || !newPasswordConfirm) {
+      setPwError('모든 항목을 입력해주세요.');
+      return;
+    }
+    // 영문, 숫자, 특수문자 무조건 1개 이상 포함, 6자 이상
+    const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9\s])\S{6,}$/;
+    if (!passwordRegex.test(newPassword)) {
+      setPwError('새 비밀번호는 영문, 숫자, 특수문자를 포함해 6자 이상이어야 합니다.');
+      return;
+    }
+    if (newPassword !== newPasswordConfirm) {
+      setPwError('새 비밀번호가 일치하지 않습니다.');
+      return;
+    }
 
+    setIsChangingPw(true);
     try {
       const userToken = await AsyncStorage.getItem('userToken');
+      await axios.patch(`${API_BASE_URL}/auth/password`, 
+        { oldPassword, newPassword }, 
+        { headers: { Authorization: `Bearer ${userToken}` } }
+      );
+      
+      setChangePwModalVisible(false);
+      setOldPassword('');
+      setNewPassword('');
+      setNewPasswordConfirm('');
+      setPwError('');
+      
+      setTimeout(() => {
+        showResultModal('성공', '비밀번호가 성공적으로 변경되었습니다.', 'success');
+      }, Platform.OS === 'ios' ? 400 : 100);
+    } catch (error: any) {
+      setPwError(error.response?.data?.message || '비밀번호 변경에 실패했습니다.');
+    } finally {
+      setIsChangingPw(false);
+    }
+  };
+
+  // ✅ 저장하기 버튼 클릭 시 pendingImageAsset이 있으면 그때 업로드, 없으면 기존 url 유지
+  const handleSaveProfile = async () => {
+    setIsImageUploading(true);
+    try {
+      const userToken = await AsyncStorage.getItem('userToken');
+      let finalImageUrl = profileData.profileImageUrl;
+
+      // pending 이미지가 있으면 저장하기 버튼 클릭 시 업로드
+      if (pendingImageAsset.current) {
+        const asset = pendingImageAsset.current;
+        const fileType = asset.type || 'image/jpeg';
+        const fileName = asset.fileName || `profile_${Date.now()}.jpg`;
+
+        const formData = new FormData();
+        formData.append('image', {
+          uri: Platform.OS === 'ios' ? asset.uri?.replace('file://', '') : asset.uri,
+          type: fileType,
+          name: fileName,
+        } as any);
+
+        const uploadRes = await axios.post(
+          `${API_BASE_URL}/members/me/profile-image`,
+          formData,
+          {
+            headers: { Authorization: `Bearer ${userToken}` },
+            timeout: 30000,
+          }
+        );
+
+        const uploadedUrl = uploadRes.data?.data?.data ||
+          uploadRes.data?.data ||
+          uploadRes.data?.profileImageUrl;
+
+        if (uploadedUrl && typeof uploadedUrl === 'string') {
+          finalImageUrl = uploadedUrl;
+        } else {
+          throw new Error('이미지 URL 반환 없음');
+        }
+
+        pendingImageAsset.current = null;
+      }
 
       const requestBody = {
         name: profileData.name,
@@ -563,19 +623,25 @@ const MYScreen = ({ navigation }: any) => {
         headers: { Authorization: `Bearer ${userToken}` },
       });
 
+      setProfileData((prev: any) => ({ ...prev, profileImageUrl: finalImageUrl }));
+
       closeProfileModal(() => {
         fetchMyInfo();
         setTimeout(() => {
           showResultModal('성공', '정보가 저장되었습니다.', 'success');
-        }, 500); 
+        }, 500);
       });
 
-    } catch (e) {
+    } catch (e: any) {
+      console.error('저장 실패:', e.response?.data || e.message);
+      pendingImageAsset.current = null;
       closeProfileModal(() => {
         setTimeout(() => {
           showResultModal('오류', '저장 실패', 'error');
-        }, 500); 
+        }, 500);
       });
+    } finally {
+      setIsImageUploading(false);
     }
   };
 
@@ -766,10 +832,26 @@ const MYScreen = ({ navigation }: any) => {
           </TouchableOpacity>
         )}
 
+        {/* ===== 비밀번호 변경 버튼 추가 ===== */}
+        <TouchableOpacity 
+          style={styles.changePwCard} 
+          activeOpacity={0.8} 
+          onPress={() => {
+            setOldPassword('');
+            setNewPassword('');
+            setNewPasswordConfirm('');
+            setPwError('');
+            setChangePwModalVisible(true);
+          }}
+        >
+          <Text style={styles.changePwText}>비밀번호 변경</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.logoutCard} activeOpacity={0.8} onPress={() => setLogoutModalVisible(true)}>
           <Image source={require('../assets/EXIT.png')} style={styles.logoutIcon} />
           <Text style={styles.logoutText}>로그아웃</Text>
         </TouchableOpacity>
+        
         <TouchableOpacity style={styles.deleteAccountBtn} onPress={() => setDeleteModalVisible(true)}>
           <Text style={styles.deleteAccountText}>회원탈퇴</Text>
         </TouchableOpacity>
@@ -903,12 +985,66 @@ const MYScreen = ({ navigation }: any) => {
                     disabled={isImageUploading}
                   >
                     <Text style={[styles.saveProfileButtonText, isImageUploading && { color: '#999999' }]}>
-                      {isImageUploading ? '이미지 업로드 중...' : '저장하기'}
+                      {isImageUploading ? '저장 중...' : '저장하기'}
                     </Text>
                   </TouchableOpacity>
                 </View>
               </ScrollView>
             </Animated.View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* 비밀번호 변경 모달 */}
+      <Modal visible={isChangePwModalVisible} transparent animationType="fade" onRequestClose={() => setChangePwModalVisible(false)}>
+        <View style={styles.centerModalOverlay}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', alignItems: 'center' }}>
+            <View style={styles.inputModalBox}>
+              <View style={styles.inputModalHeader}>
+                <Text style={styles.inputModalTitle}>비밀번호 변경</Text>
+                <TouchableOpacity onPress={() => setChangePwModalVisible(false)}>
+                  <Text style={styles.closeBtn}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TextInput
+                style={styles.inputField}
+                placeholder="현재 비밀번호"
+                placeholderTextColor="#999"
+                secureTextEntry
+                value={oldPassword}
+                onChangeText={setOldPassword}
+                autoCapitalize="none"
+              />
+              <TextInput
+                style={styles.inputField}
+                placeholder="새 비밀번호 (영문, 숫자, 특수문자 6자 이상)"
+                placeholderTextColor="#999"
+                secureTextEntry
+                value={newPassword}
+                onChangeText={setNewPassword}
+                autoCapitalize="none"
+              />
+              <TextInput
+                style={styles.inputField}
+                placeholder="새 비밀번호 확인"
+                placeholderTextColor="#999"
+                secureTextEntry
+                value={newPasswordConfirm}
+                onChangeText={setNewPasswordConfirm}
+                autoCapitalize="none"
+              />
+
+              {pwError !== '' && <Text style={styles.errorText}>{pwError}</Text>}
+
+              <TouchableOpacity style={styles.submitBtn} onPress={handleChangePassword} disabled={isChangingPw}>
+                {isChangingPw ? (
+                  <ActivityIndicator color="#000" />
+                ) : (
+                  <Text style={styles.submitBtnText}>변경하기</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </KeyboardAvoidingView>
         </View>
       </Modal>
@@ -1065,14 +1201,22 @@ const styles = StyleSheet.create({
   settingTextContainer: { flex: 1, paddingRight: 10 },
   settingTitle: { color: '#ffffff', fontSize: 17, fontWeight: 'bold', marginBottom: 4 },
   settingSub: { color: '#999999', fontSize: 14, lineHeight: 20 },
+  
   adminCard: { flexDirection: 'row', backgroundColor: '#212121', borderRadius: 16, paddingVertical: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 15, borderWidth: 1, borderColor: '#A1BE44' },
   adminIcon: { width: 24, height: 24, tintColor: '#A1BE44', marginRight: 8, resizeMode: 'contain' },
   adminText: { color: '#A1BE44', fontSize: 18, fontWeight: 'bold' },
+
+  // 비밀번호 변경 버튼 스타일
+  changePwCard: { flexDirection: 'row', backgroundColor: '#212121', borderRadius: 16, paddingVertical: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 15 },
+  changePwText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
+
   logoutCard: { flexDirection: 'row', backgroundColor: '#212121', borderRadius: 16, paddingVertical: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 15 },
   logoutIcon: { width: 24, height: 24, tintColor: '#FF4D4D', marginRight: 8, resizeMode: 'contain' },
   logoutText: { color: '#FF4D4D', fontSize: 18, fontWeight: 'bold' },
+  
   deleteAccountBtn: { alignItems: 'center', paddingVertical: 10, marginBottom: 20 },
   deleteAccountText: { color: '#666666', fontSize: 16, textDecorationLine: 'underline' },
+  
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%', overflow: 'hidden' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
@@ -1126,6 +1270,15 @@ const styles = StyleSheet.create({
   phoneIcon: { width: 80, height: 80, resizeMode: 'contain', marginBottom: 15 },
   contactNumber: { color: '#A1BE44', fontSize: 32, fontWeight: '900', marginBottom: 8 },
   contactTime: { color: '#999999', fontSize: 14, textAlign: 'center' },
+
+  // 입력 모달 (비밀번호 변경용)
+  inputModalBox: { width: 320, backgroundColor: '#2A2A2A', borderRadius: 16, padding: 20 },
+  inputModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  inputModalTitle: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
+  inputField: { backgroundColor: '#1A1A1A', color: '#FFF', borderRadius: 8, padding: 15, marginBottom: 12, fontSize: 16, borderWidth: 1, borderColor: '#444' },
+  submitBtn: { backgroundColor: '#A1BE44', borderRadius: 8, paddingVertical: 15, alignItems: 'center', marginTop: 10 },
+  submitBtnText: { color: '#000', fontSize: 18, fontWeight: 'bold' },
+  errorText: { color: '#FF4D4D', fontSize: 14, marginBottom: 10, textAlign: 'center' }
 });
 
 export default MYScreen;

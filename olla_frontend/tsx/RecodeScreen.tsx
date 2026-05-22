@@ -794,7 +794,7 @@ const RecodeScreen = ({
               <Image source={require('../assets/ArrowUpRight.png')} style={styles.summaryIconVertical1} />
               <View style={styles.summaryTextColumn}>
                 <Text style={styles.summaryLabelVertical}>초보벽</Text>
-                <Text style={styles.summarySubLabelVertical}>난이도별 등반 기록 (터치하여 기록하기)</Text>
+                <Text style={styles.summarySubLabelVertical}>난이도별 등반 기록</Text>
               </View>
             </View>
             <Text style={styles.chevronIcon}>＞</Text>
@@ -805,7 +805,7 @@ const RecodeScreen = ({
               <Image source={require('../assets/Timer.png')} style={styles.summaryIconVertical2} />
               <View style={styles.summaryTextColumn}>
                 <Text style={styles.summaryLabelVertical}>지구력</Text>
-                <Text style={styles.summarySubLabelVertical}>바퀴 수와 시간 기록 (터치하여 기록하기)</Text>
+                <Text style={styles.summarySubLabelVertical}>바퀴 수와 시간 기록</Text>
               </View>
             </View>
             <Text style={styles.chevronIcon}>＞</Text>
@@ -816,7 +816,7 @@ const RecodeScreen = ({
               <Image source={require('../assets/ArrowsClockwise.png')} style={styles.summaryIconVertical3} />
               <View style={styles.summaryTextColumn}>
                 <Text style={styles.summaryLabelVertical}>초보벽 완등 연속</Text>
-                <Text style={styles.summarySubLabelVertical}>연속 완등 기록 (터치하여 기록하기)</Text>
+                <Text style={styles.summarySubLabelVertical}>연속 완등 기록</Text>
               </View>
             </View>
             <Text style={styles.chevronIcon}>＞</Text>
