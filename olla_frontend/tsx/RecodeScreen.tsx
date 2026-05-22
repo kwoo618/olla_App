@@ -1244,7 +1244,7 @@ const RecodeScreen = ({
                     </TouchableOpacity>
                   ))}
                   {selectedConsecutiveList.length === 0 && (
-                    <Text style={styles.consecutiveEmptyText}>아래에서 난이도를 순서대로 탭해주세요</Text>
+                    <Text style={styles.consecutiveEmptyText}>아래에서 난이도를 순서대로 탭해주세요.{"\n"}입력창의 난이도를 터치시 삭제됩니다.</Text>
                   )}
                 </View>
 

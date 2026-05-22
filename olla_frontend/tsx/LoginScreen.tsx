@@ -11,11 +11,13 @@ import {
   Modal, 
   KeyboardAvoidingView, 
   Platform, 
-  ScrollView,
   Keyboard
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../src/constants/Config';
+
+// ✅ 새로 설치한 라이브러리 Import
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 
 const LoginScreen = ({ navigation }: any) => {
   const [loginId, setLoginId] = useState('');
@@ -24,8 +26,7 @@ const LoginScreen = ({ navigation }: any) => {
   // 💡 포커스 상태 (연두색 테두리 효과용)
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
-  // 스크롤뷰 및 비밀번호 입력창 참조
-  const scrollViewRef = useRef<ScrollView>(null);
+  // 비밀번호 입력창 참조 (스크롤뷰 참조는 라이브러리가 자동 처리하므로 제거)
   const passwordRef = useRef<TextInput>(null);
 
   // ─── 커스텀 알림 결과 모달 상태 ───
@@ -88,7 +89,6 @@ const LoginScreen = ({ navigation }: any) => {
     }
   };
 
-  // 비밀번호 찾기: 아이디 + 이메일로 임시 비번 발송
   const handleFindPassword = async () => {
     if (!findPwLoginId || !findPwEmail) {
       showResultModal('알림', '아이디와 이메일을 모두 입력해주세요.', 'info');
@@ -116,7 +116,6 @@ const LoginScreen = ({ navigation }: any) => {
       }, Platform.OS === 'ios' ? 400 : 150);
     }
   };
-  // ===================================
 
   const handleLogin = async () => {
     if (!loginId || !password) {
@@ -130,9 +129,6 @@ const LoginScreen = ({ navigation }: any) => {
         password: password,
       });
 
-      console.log('=== 로그인 응답 전체 ===');
-      console.log(JSON.stringify(response.data, null, 2));
-
       const token = response.data?.data?.data?.accessToken;
       const refreshToken = response.data?.data?.data?.refreshToken;
       const role = response.data?.data?.data?.role;
@@ -142,7 +138,6 @@ const LoginScreen = ({ navigation }: any) => {
         if (refreshToken) await AsyncStorage.setItem('refreshToken', refreshToken);
         if (role) await AsyncStorage.setItem('userRole', role);
 
-        // 로그인 성공 시 기기의 FCM 토큰을 발급받아 서버에 저장 요청 [FCM]
         try {
           const authStatus = await messaging().requestPermission();
           const enabled =
@@ -155,7 +150,6 @@ const LoginScreen = ({ navigation }: any) => {
               { deviceToken: fcmToken }, 
               { headers: { Authorization: `Bearer ${token}` } }
             );
-            console.log('FCM 토큰 전송 성공:', fcmToken);
           }
         } catch (fcmError) {
           console.error('FCM 토큰 발급/전송 오류:', fcmError);
@@ -174,36 +168,31 @@ const LoginScreen = ({ navigation }: any) => {
   const goToPassword = () => {
     passwordRef.current?.focus();
     setFocusedField('password');
-    setTimeout(() => {
-      scrollViewRef.current?.scrollTo({ y: 220, animated: true });
-    }, 100);
   };
 
   const handleBlur = () => {
     setFocusedField(null);
-    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
   };
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.flex1} 
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
-    >
-      <TouchableOpacity 
-        style={styles.flex1} 
-        activeOpacity={1} 
-        onPress={() => {
-          Keyboard.dismiss();
-          handleBlur();
-        }}
+    <>
+      {/* ✅ 두 겹의 껍데기를 하나로 통합한 KeyboardAwareScrollView */}
+      <KeyboardAwareScrollView 
+        style={styles.flex1}
+        contentContainerStyle={styles.scrollContent}
+        enableOnAndroid={true} // 안드로이드 호환성 핵심
+        extraScrollHeight={20} // 키보드와 입력창 사이의 여백
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        bounces={false}
       >
-        <ScrollView 
-          ref={scrollViewRef}
-          style={styles.flex1}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          bounces={false} 
+        <TouchableOpacity 
+          style={styles.flex1} 
+          activeOpacity={1} 
+          onPress={() => {
+            Keyboard.dismiss();
+            handleBlur();
+          }}
         >
           <View style={styles.innerContainer}>
             <Image 
@@ -225,12 +214,7 @@ const LoginScreen = ({ navigation }: any) => {
                 returnKeyType="next" 
                 blurOnSubmit={false}
                 onSubmitEditing={goToPassword}
-                onFocus={() => {
-                  setFocusedField('loginId');
-                  setTimeout(() => {
-                    scrollViewRef.current?.scrollTo({ y: 120, animated: true });
-                  }, 100);
-                }}
+                onFocus={() => setFocusedField('loginId')}
                 onBlur={handleBlur}
               />
             
@@ -245,12 +229,7 @@ const LoginScreen = ({ navigation }: any) => {
                 onChangeText={setPassword}
                 returnKeyType="done"
                 onSubmitEditing={handleLogin}
-                onFocus={() => {
-                  setFocusedField('password');
-                  setTimeout(() => {
-                    scrollViewRef.current?.scrollTo({ y: 220, animated: true });
-                  }, 100);
-                }}
+                onFocus={() => setFocusedField('password')}
                 onBlur={handleBlur}
               />
 
@@ -265,7 +244,6 @@ const LoginScreen = ({ navigation }: any) => {
                 </TouchableOpacity>
               </View>
 
-              {/* ===== 아이디 / 비밀번호 찾기 행 ===== */}
               <View style={styles.accountFindRow}>
                 <TouchableOpacity onPress={() => {
                   setFindIdName('');
@@ -286,10 +264,9 @@ const LoginScreen = ({ navigation }: any) => {
 
             </View>
           </View>
-          
           <View style={{ height: 50 }} />
-        </ScrollView>
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </KeyboardAwareScrollView>
 
       {/* ─── 커스텀 알림 결과 모달 ─── */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
@@ -307,9 +284,10 @@ const LoginScreen = ({ navigation }: any) => {
       </Modal>
 
       {/* 아이디 찾기 모달 */}
-      <Modal visible={findIdModalVisible} animationType="slide" transparent>
+      <Modal visible={findIdModalVisible} animationType="fade" transparent>
         <View style={styles.inputModalOverlay}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', alignItems: 'center' }}>
+          {/* ✅ 모달 내부의 KeyboardAvoidingView 안드로이드 대비책 추가 */}
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%', alignItems: 'center' }}>
             <View style={styles.inputModalBox}>
               <View style={styles.inputModalHeader}>
                 <Text style={styles.inputModalTitle}>아이디 찾기</Text>
@@ -342,9 +320,10 @@ const LoginScreen = ({ navigation }: any) => {
       </Modal>
 
       {/* 비밀번호 찾기 모달 - 아이디 + 이메일 방식 */}
-      <Modal visible={findPwModalVisible} animationType="slide" transparent>
+      <Modal visible={findPwModalVisible} animationType="fade" transparent>
         <View style={styles.inputModalOverlay}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', alignItems: 'center' }}>
+          {/* ✅ 모달 내부의 KeyboardAvoidingView 안드로이드 대비책 추가 */}
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%', alignItems: 'center' }}>
             <View style={styles.inputModalBox}>
               <View style={styles.inputModalHeader}>
                 <Text style={styles.inputModalTitle}>비밀번호 찾기</Text>
@@ -377,7 +356,7 @@ const LoginScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-    </KeyboardAvoidingView>
+    </>
   );
 };
 
@@ -398,7 +377,7 @@ const styles = StyleSheet.create({
     padding: 24,
     borderRadius: 25, 
     alignItems: 'center',
-    marginTop: 20 
+    marginTop: 50 
   },
   logo: { width: 120, height: 120, resizeMode: 'contain', marginBottom: 10 },
   title: { fontSize: 36, fontWeight: 'bold', marginBottom: 25, color: '#ffffff' },

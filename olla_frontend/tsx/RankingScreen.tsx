@@ -1,5 +1,8 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, RefreshControl, Alert } from 'react-native';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { 
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, RefreshControl, Alert, 
+  Modal, Animated, PanResponder, TouchableWithoutFeedback, Dimensions 
+} from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../src/constants/Config';
@@ -10,6 +13,7 @@ const RANKING_ENDURANCE_URL     = `${API_BASE_URL}/rankings/endurance/distance`;
 const RANKING_SERIES_URL        = `${API_BASE_URL}/rankings/series`;
 const MY_PROFILE_URL            = `${API_BASE_URL}/members/me`;
 const MY_BEGINNER_BEST_URL      = `${API_BASE_URL}/records/beginner/best`;
+const PROFILE_API_URL           = `${API_BASE_URL}/members`; // 다른 회원 프로필 조회용
 
 // ─────────────────────────── Axios 인터셉터 ───────────────────────────
 axios.interceptors.request.use(
@@ -148,6 +152,14 @@ const formatTime = (seconds: number): string => {
   return `${m}:${s}`;
 };
 
+const translateGender = (gender: string) => {
+  if (!gender || gender === '-') return '-';
+  const g = String(gender).toUpperCase();
+  if (g === 'MALE' || g === 'M') return '남자';
+  if (g === 'FEMALE' || g === 'F') return '여자';
+  return gender;
+};
+
 // ─────────────────────────── 프로필 이미지 컴포넌트 ───────────────────────────
 const ProfileImage = ({ uri, style }: { uri?: string | null; style: any }) => {
   if (uri) {
@@ -179,6 +191,89 @@ const RankingScreen = ({ route }: any) => {
   const [myNickname,        setMyNickname]        = useState<string>('알 수 없음');
   const [myMemberId,        setMyMemberId]        = useState<number | null>(null);
   const [myProfileImageUrl, setMyProfileImageUrl] = useState<string | null>(null);
+
+  // ─── 🌟 프로필 상세 팝업용 State & Animation 🌟 ───
+  const [isDetailVisible, setDetailVisible] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+
+  const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+  const DETAIL_MODAL_HEIGHT = SCREEN_HEIGHT * 0.70;
+  const detailHeightAnim = useRef(new Animated.Value(0)).current;
+  const currentDetailSnap = useRef(DETAIL_MODAL_HEIGHT);
+
+  const detailPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
+      onPanResponderGrant: () => {
+        detailHeightAnim.setOffset(currentDetailSnap.current);
+        detailHeightAnim.setValue(0);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        detailHeightAnim.setValue(Math.min(0, -gestureState.dy));
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        detailHeightAnim.flattenOffset();
+        const finalHeight = currentDetailSnap.current - gestureState.dy;
+
+        if (finalHeight < currentDetailSnap.current * 0.7) {
+          closeDetailModal();
+        } else {
+          Animated.spring(detailHeightAnim, { toValue: currentDetailSnap.current, useNativeDriver: false }).start();
+        }
+      }
+    })
+  ).current;
+
+  // ─── 프로필 팝업 열기/닫기 함수 ───
+  const openDetailModal = async (memberId: number, fallbackName: string) => {
+    try {
+      const response = await axios.get(`${PROFILE_API_URL}/${memberId}/profile`);
+      const d = response.data?.data?.data || response.data?.data;
+      
+      if (!d) { 
+        Alert.alert('프로필 조회 불가', '정보를 불러올 수 없습니다.'); 
+        return; 
+      }
+      
+      const detail = d.detail || {};
+      
+      setSelectedUser({
+        name: d.name || fallbackName,
+        profileImageUrl: d.profileImageUrl || d.profileImage || null,
+        gender: translateGender(detail.gender || d.gender || '-'),
+        age: detail.age || d.age || '-',
+        height: detail.height || d.height || '-',
+        weight: detail.weight || d.weight || '-',
+        arm: detail.armSpan || d.armSpan || '-',
+        shoe: detail.footSize || d.footSize || '-',
+      });
+
+      setDetailVisible(true);
+      currentDetailSnap.current = DETAIL_MODAL_HEIGHT;
+      detailHeightAnim.setValue(0);
+      Animated.timing(detailHeightAnim, { toValue: DETAIL_MODAL_HEIGHT, duration: 300, useNativeDriver: false }).start();
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || '정보를 불러올 수 없습니다.';
+      Alert.alert('프로필 조회 오류', errorMessage);
+    }
+  };
+
+  const closeDetailModal = () => {
+    Animated.timing(detailHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => { 
+      setDetailVisible(false); 
+      setSelectedUser(null); 
+    });
+  };
+
+  const renderDetailRow = (label: string, value: string, unit: string = '') => {
+    return (
+      <View style={styles.detailRow}>
+        <Text style={styles.detailLabel}>{label}</Text>
+        <Text style={styles.detailValue}>{value}{value !== '-' ? unit : ''}</Text>
+      </View>
+    );
+  };
 
   useEffect(() => {
     if (route?.params?.targetTab) setMainTab(route.params.targetTab);
@@ -224,7 +319,6 @@ const RankingScreen = ({ route }: any) => {
                .catch(() => ({ data: { data: [] } }))
         )
       );
-      // Alert.alert('랭킹응답', JSON.stringify(rankResponses[0].data));
 
       let myBestList: BeginnerRecord[] = [];
       try {
@@ -554,11 +648,19 @@ const RankingScreen = ({ route }: any) => {
                   <Text style={[styles.rankNumberText, { color: getRankColor(item.rank) }]}>{item.rank}</Text>
                 </View>
 
-                {/* 프로필 + 이름 */}
-                <View style={styles.rankCenter}>
+                {/* 프로필 + 이름 (본인 제외 클릭 가능) */}
+                <TouchableOpacity 
+                  style={styles.rankCenter}
+                  activeOpacity={item.isMe ? 1 : 0.7}
+                  onPress={() => {
+                    if (!item.isMe && item.memberId) {
+                      openDetailModal(item.memberId, item.name);
+                    }
+                  }}
+                >
                   <ProfileImage uri={item.profileImageUrl} style={styles.rankProfileImg} />
                   <Text style={styles.rankNameText}>{item.name}</Text>
-                </View>
+                </TouchableOpacity>
 
                 {/* 우측 정보 */}
                 <View style={styles.rankRight}>
@@ -609,11 +711,57 @@ const RankingScreen = ({ route }: any) => {
         </View>
 
       </ScrollView>
+
+      {/* 🌟 회원 정보 상세 팝업 (본인 제외 유저 클릭 시) 🌟 */}
+      <Modal visible={isDetailVisible} transparent={true} animationType="fade" onRequestClose={closeDetailModal}>
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={closeDetailModal}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+          <Animated.View style={[styles.bottomSheet, { height: detailHeightAnim, overflow: 'hidden' }]}>
+            
+            <View {...detailPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
+              <View style={styles.dragHandle} />
+              <View style={styles.sheetHeader}>
+                <Text style={styles.sheetTitle}>회원 상세 정보</Text>
+                <TouchableOpacity onPress={closeDetailModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Text style={styles.closeBtn}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.horizontalDivider} />
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
+              {selectedUser && (
+                <View style={styles.detailContainer}>
+                  <View style={styles.detailProfileWrapper}>
+                    <ProfileImage uri={selectedUser.profileImageUrl} style={styles.profileBig} />
+                    <Text style={styles.profileName}>{selectedUser.name}</Text>
+                  </View>
+                  <View style={styles.detailInfoBox}>
+                    {renderDetailRow('이름', selectedUser.name)}
+                    {renderDetailRow('성별', selectedUser.gender)}
+                    {renderDetailRow('나이', selectedUser.age, '세')}
+                    {renderDetailRow('키', selectedUser.height, 'cm')}
+                    {renderDetailRow('몸무게', selectedUser.weight, 'kg')}
+                    {renderDetailRow('팔길이', selectedUser.arm, 'cm')}
+                    {renderDetailRow('암벽화 사이즈', selectedUser.shoe, 'mm')}
+                  </View>
+                  <TouchableOpacity style={styles.closeFullBtn} onPress={closeDetailModal}>
+                    <Text style={styles.closeFullBtnText}>닫기</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </ScrollView>
+          </Animated.View>
+        </View>
+      </Modal>
+
     </View>
   );
 };
 
-// ─────────────────────────── 스타일 (글씨 크기 확대) ───────────────────────────
+// ─────────────────────────── 스타일 ───────────────────────────
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A', paddingHorizontal: 20, paddingTop: 10 },
 
@@ -670,6 +818,25 @@ const styles = StyleSheet.create({
   consecutiveColorsRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', maxWidth: 90, marginBottom: 5 },
   miniColorCircle: { width: 16, height: 16, borderRadius: 8, margin: 2, borderWidth: 0.5, borderColor: '#555555' },
   consecutiveScoreText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
+
+  // ─── 회원 상세 팝업용 스타일 ───
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
+  bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%' },
+  dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
+  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+  sheetTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' }, 
+  closeBtn: { color: '#999999', fontSize: 28, paddingHorizontal: 10 }, 
+  horizontalDivider: { height: 1, backgroundColor: '#333333', width: '100%', marginBottom: 20 },
+  detailContainer: { width: '100%' },
+  detailProfileWrapper: { alignSelf: 'center', marginBottom: 25, alignItems: 'center' },
+  profileBig: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#444' },
+  profileName: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginTop: 12 },
+  detailInfoBox: { backgroundColor: '#262626', borderRadius: 16, padding: 20, marginBottom: 20 },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: '#333333' }, 
+  detailLabel: { color: '#999999', fontSize: 17, fontWeight: 'bold' }, 
+  detailValue: { color: '#ffffff', fontSize: 17, fontWeight: 'bold' }, 
+  closeFullBtn: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 18, alignItems: 'center' }, 
+  closeFullBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
 });
 
 export default RankingScreen;

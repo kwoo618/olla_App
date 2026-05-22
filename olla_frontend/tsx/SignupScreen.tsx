@@ -6,14 +6,15 @@ import {
   StyleSheet, 
   TextInput, 
   TouchableOpacity, 
-  ScrollView,
-  KeyboardAvoidingView,
   Platform,
   Modal,
   ActivityIndicator,
   Keyboard
 } from 'react-native';
 import { API_BASE_URL } from '../src/constants/Config';
+
+// ✅ 새로 설치한 라이브러리 Import
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 
 const SignupScreen = ({ navigation }: any) => {
   const [id, setId] = useState('');
@@ -332,13 +333,15 @@ const SignupScreen = ({ navigation }: any) => {
   // ─── 렌더링 ─────────────────────────────────────────────
 
   return (
-    <KeyboardAvoidingView 
-      style={{ flex: 1, backgroundColor: '#1A1A1A' }} 
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView 
+    <>
+      {/* ✅ 두 겹의 껍데기를 하나로 통합한 KeyboardAwareScrollView */}
+      <KeyboardAwareScrollView 
+        style={{ flex: 1, backgroundColor: '#1A1A1A' }}
         contentContainerStyle={styles.background} 
-        keyboardShouldPersistTaps="handled" // 빈 공간 터치시 키보드 자동 해제
+        enableOnAndroid={true} // 안드로이드 릴리즈 버그 픽스
+        extraScrollHeight={30} // 키보드와 입력창 사이의 여유 공간
+        keyboardShouldPersistTaps="handled" // 빈 공간 터치시 키보드 해제
+        showsVerticalScrollIndicator={false}
         bounces={false}
       >
         <View style={styles.container}>
@@ -587,7 +590,7 @@ const SignupScreen = ({ navigation }: any) => {
             )}
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {/* 커스텀 알림 결과 모달 */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
@@ -609,12 +612,12 @@ const SignupScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-    </KeyboardAvoidingView>
+    </>
   );
 };
 
 const styles = StyleSheet.create({
-  background: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1A1A1A', paddingVertical: 50, paddingHorizontal: 20 },
+  background: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 50, paddingHorizontal: 20 },
   container: { width: '100%', backgroundColor: '#212121', padding: 24, borderRadius: 25, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 10 }, 
   title: { fontSize: 36, fontWeight: 'bold', marginBottom: 25, color: '#ffffff', textAlign: 'center' }, 
   middleText: { color: '#ffffff', fontSize: 16, alignSelf: 'flex-start', marginBottom: 8, marginLeft: 5, marginTop: 10 }, 
