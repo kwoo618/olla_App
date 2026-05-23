@@ -1,0 +1,10 @@
+# 실서비스 운영 환경 설정
+
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate # 구조 검증만 수행 (데이터 안전 확보)
+    properties:
+      hibernate:
+        format_sql: false # 운영 성능 최적화
+    show-sql: false # 운영 성능 최적화
