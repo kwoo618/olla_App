@@ -3,15 +3,20 @@ package com.olla.olla_climbing.global.infra.sms;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-@RestController
-@RequestMapping("/api/v1/test/sms")
-@RequiredArgsConstructor
-@Tag(name = "Test API", description = "개발 환경 테스트용 API")
+// TODO: [출시 대비 리팩토링] SMS 인증 도입 전까지 엔드포인트 차단
+// @Profile("local")
+// @RestController
+// @RequestMapping("/api/v1/test/sms")
+// @RequiredArgsConstructor
+// @Tag(name = "Test API", description = "개발 환경 테스트용 API")
 public class SmsTestController {
 
+    // 내부 로직 전체 주석 처리
+    /*
     private final SmsService smsService;
 
     @PostMapping
@@ -19,10 +24,8 @@ public class SmsTestController {
     public ResponseEntity<String> sendTestSms(
             @RequestParam("to") String to,
             @RequestParam("content") String content) {
-
-        // 발송 로직 호출
         smsService.sendSms(to, content);
-
         return ResponseEntity.ok("테스트 문자 발송 요청이 완료되었습니다.");
     }
+    */
 }
