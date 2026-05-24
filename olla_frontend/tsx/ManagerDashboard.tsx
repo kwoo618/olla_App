@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, ActivityIndicator, Modal, Platform, PermissionsAndroid,
-  RefreshControl, Animated, Dimensions, PanResponder, TouchableWithoutFeedback,
+  RefreshControl, Animated, Dimensions, PanResponder, TouchableWithoutFeedback, TextInput,
 } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -20,11 +20,8 @@ const DASHBOARD_API_URL   = `${API_BASE_URL}/admin/dashboard`;
 const HOURLY_API_URL      = `${API_BASE_URL}/admin/dashboard/hourly`;
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-// 그래프 카드 내부 여백 제외한 실제 너비
-const CARD_INNER_W = SCREEN_WIDTH - 40 - 40; // paddingHorizontal(20*2) + card padding(20*2)
-const HALF_W = (CARD_INNER_W / 2) - 6;       // 두 그래프 나란히, 간격 12
+const CARD_INNER_W = SCREEN_WIDTH - 40; // 좌우 padding 20
 
-// 백엔드 dayOfWeek: 1=월 ~ 7=일
 const DAY_LABELS: Record<number, string> = {
   1: '월', 2: '화', 3: '수', 4: '목', 5: '금', 6: '토', 7: '일',
 };
@@ -50,12 +47,26 @@ const isValidImageUrl = (url: string | null | undefined) => {
   return url && typeof url === 'string' && url.trim() !== '' && url !== 'null' && url !== 'undefined';
 };
 
+// 🌟 더미 데이터 (만료 임박 회원)
+const DUMMY_EXPIRING_MEMBERS = [
+  { id: 'd1', name: '김오름', phone: '010-1234-5678', endDate: '2026-05-26', dDay: 2 },
+  { id: 'd2', name: '이바위', phone: '010-9876-5432', endDate: '2026-05-28', dDay: 4 },
+  { id: 'd3', name: '박홀드', phone: '010-5555-4444', endDate: '2026-06-02', dDay: 9 },
+  { id: 'd4', name: '최초크', phone: '010-1111-2222', endDate: '2026-06-05', dDay: 12 },
+];
+
 const ManagerDashboard = ({ navigation }: any) => {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notices, setNotices] = useState<any[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
   const [recentMembers, setRecentMembers] = useState<any[]>([]);
+  const [currentTime, setCurrentTime] = useState<string>('');
+
+  // 시간 포맷 헬퍼 (오전/오후 시:분:초)
+  const getFormattedTime = () => {
+    const now = new Date();
+    return now.toLocaleString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
 
   const [resultModalVisible, setResultModalVisible] = useState(false);
   const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info', onConfirm: () => {} });
@@ -70,18 +81,15 @@ const ManagerDashboard = ({ navigation }: any) => {
   const [visitedMemberNames, setVisitedMemberNames] = useState<Set<string>>(new Set());
 
   // 백엔드 응답값 상태
-  // weeklyCongestionRate: index 0=월(dayOfWeek1) ~ 6=일(dayOfWeek7), % 값
   const [weeklyCongestionRate, setWeeklyCongestionRate] = useState<number[]>([]);
-  // hourlyCongestionByDay 캐시: { [dayOfWeek]: number[15] } (09~23시)
   const [hourlyCongestionByDay, setHourlyCongestionByDay] = useState<Record<number, number[]>>({});
-  // 현재 선택 요일의 시간대 데이터
   const [hourlyData, setHourlyData] = useState<number[]>([]);
 
   const [dashboardStats, setDashboardStats] = useState<{
     newMembersToday: number;
     lastUpdated: string;
-    expiringMembers: { name: string; phone: string; endDate: string; dDay: number }[];
-    selectedDay: number;   // 1=월~7=일
+    expiringMembers: any[];
+    selectedDay: number;
     dataMode: 'realtime' | 'cumulative';
     dayDropdownOpen: boolean;
   }>({
@@ -107,6 +115,9 @@ const ManagerDashboard = ({ navigation }: any) => {
 
   const [isDetailVisible, setDetailVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
+  
+  // 체크리스트 상태 관리 (ID 기반)
+  const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
 
   const { height: SCREEN_HEIGHT } = Dimensions.get('window');
   const DETAIL_MODAL_HEIGHT = SCREEN_HEIGHT * 0.78;
@@ -171,7 +182,6 @@ const ManagerDashboard = ({ navigation }: any) => {
     }
   };
 
-  // GET /admin/dashboard → AdminDashboardResponse
   const fetchDashboardStats = async (token: string) => {
     try {
       const response = await axios.get(DASHBOARD_API_URL, {
@@ -179,37 +189,43 @@ const ManagerDashboard = ({ navigation }: any) => {
       });
       const data = response.data?.data ?? {};
 
-      const expiringMembers = (data.expiringMembers ?? []).map((m: any) => ({
+      // 백엔드 데이터와 더미 데이터를 결합 (없으면 더미 데이터만 표시)
+      let realExpiring = (data.expiringMembers ?? []).map((m: any, idx: number) => ({
+        id: `real_${idx}`,
         name: m.name,
         phone: m.phone,
         endDate: m.endDate,
         dDay: m.dDay ?? m.dday ?? 0,
       }));
+      
+      const combinedExpiring = realExpiring.length > 0 ? realExpiring : DUMMY_EXPIRING_MEMBERS;
 
       setDashboardStats(prev => ({
         ...prev,
         newMembersToday: data.newMembersToday ?? 0,
         lastUpdated: data.lastUpdated ?? '',
-        expiringMembers,
+        expiringMembers: combinedExpiring,
       }));
 
-      // weeklyCongestionRate(%) 우선 사용
       if (Array.isArray(data.weeklyCongestionRate) && data.weeklyCongestionRate.length > 0) {
         setWeeklyCongestionRate(data.weeklyCongestionRate);
       } else if (Array.isArray(data.weeklyCongestion) && data.weeklyCongestion.length > 0) {
         const max = Math.max(...data.weeklyCongestion, 1);
         setWeeklyCongestionRate(data.weeklyCongestion.map((v: number) => Math.round((v / max) * 100)));
+      } else {
+        // 데이터 없을 시 더미 그래프 데이터
+        setWeeklyCongestionRate([30, 45, 40, 50, 70, 100, 85]);
       }
 
-      // hourlyCongestionByDay 키 숫자로 정규화
       if (data.hourlyCongestionByDay) {
         const normalized: Record<number, number[]> = {};
         Object.entries(data.hourlyCongestionByDay).forEach(([k, v]) => {
           normalized[Number(k)] = v as number[];
         });
         setHourlyCongestionByDay(normalized);
-        // 기본 선택 요일(토=6) 데이터 세팅
-        setHourlyData(normalized[6] ?? normalized[Number(Object.keys(normalized)[0])] ?? []);
+        setHourlyData(normalized[6] ?? [10, 15, 20, 25, 40, 60, 80, 100, 90, 70, 50, 30, 20, 10, 5]);
+      } else {
+        setHourlyData([10, 15, 20, 25, 40, 60, 80, 100, 90, 70, 50, 30, 20, 10, 5]);
       }
 
       if (data.totalMembers)     setMetrics(prev => ({ ...prev, totalMembers: data.totalMembers }));
@@ -219,10 +235,8 @@ const ManagerDashboard = ({ navigation }: any) => {
     }
   };
 
-  // GET /admin/dashboard/hourly?dayOfWeek={1~7}
   const fetchHourlyByDay = async (dayOfWeek: number) => {
     try {
-      // 캐시 있으면 바로 사용
       if (hourlyCongestionByDay[dayOfWeek]) {
         setHourlyData(hourlyCongestionByDay[dayOfWeek]);
         return;
@@ -235,7 +249,7 @@ const ManagerDashboard = ({ navigation }: any) => {
       });
       const list: number[] = response.data?.data ?? [];
       setHourlyCongestionByDay(prev => ({ ...prev, [dayOfWeek]: list }));
-      setHourlyData(list);
+      setHourlyData(list.length > 0 ? list : [10, 15, 20, 25, 40, 60, 80, 100, 90, 70, 50, 30, 20, 10, 5]);
     } catch (error: any) {
       console.error('시간대별 혼잡도 로드 실패:', error.response?.data?.message || error.message);
     }
@@ -505,49 +519,43 @@ const ManagerDashboard = ({ navigation }: any) => {
     }
   };
 
-  // ─── 좌측: 요일별 혼잡도 막대차트 ───
-  // weeklyCongestionRate: index 0=월 ~ 6=일, % 값
+  const toggleCheck = (id: string) => {
+    const newSet = new Set(checkedItems);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setCheckedItems(newSet);
+  };
+
+  // ─── 수직형 바 그래프 (요일별 혼잡도) ───
   const renderWeeklyBar = () => {
-    if (!weeklyCongestionRate || weeklyCongestionRate.length === 0) {
-      return (
-        <View style={[styles.halfChartBox, { justifyContent: 'center', alignItems: 'center' }]}>
-          <Text style={styles.chartTitle}>요일별 전체 혼잡도 (%)</Text>
-          <Text style={{ color: '#666', marginTop: 30 }}>데이터 없음</Text>
-        </View>
-      );
-    }
-    const CHART_H = 110;
+    const CHART_H = 150;
+    const barWidth = Math.floor((CARD_INNER_W - 40) / 7);
+
     return (
-      <View style={styles.halfChartBox}>
-        <Text style={styles.chartTitle}>요일별 전체 혼잡도 (%)</Text>
-        <Text style={styles.chartAxisLabel}>↑ value</Text>
-        {/* Y축 100 표시 */}
-        <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: CHART_H + 24, marginTop: 4 }}>
+      <View style={styles.chartContainer}>
+        <Text style={styles.chartTitle}>📊 요일별 전체 혼잡도 (%)</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: CHART_H + 24, marginTop: 15 }}>
           {/* Y축 */}
-          <View style={{ width: 20, height: CHART_H, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 3 }}>
+          <View style={{ width: 30, height: CHART_H, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 8 }}>
             <Text style={styles.yAxisText}>100</Text>
             <Text style={styles.yAxisText}>50</Text>
             <Text style={styles.yAxisText}>0</Text>
           </View>
           {/* 바 영역 */}
           <View style={{ flex: 1, height: CHART_H + 24 }}>
-            {/* 가이드라인 */}
             {[0, 0.5, 1].map((r, i) => (
               <View key={i} style={{
-                position: 'absolute',
-                top: CHART_H * (1 - r),
-                left: 0, right: 0, height: 1,
-                backgroundColor: '#383838',
+                position: 'absolute', top: CHART_H * (1 - r),
+                left: 0, right: 0, height: 1, backgroundColor: '#383838',
               }} />
             ))}
-            <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: CHART_H, paddingHorizontal: 2 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: CHART_H, paddingHorizontal: 5 }}>
               {weeklyCongestionRate.map((val, idx) => {
                 const dayOfWeek = idx + 1;
                 const barH = Math.max((val / 100) * CHART_H, 4);
                 const isSelected = dashboardStats.selectedDay === dayOfWeek;
-                const isWeekend  = idx >= 5;
-                // 선택된 요일은 밝게, 주말은 연한 파랑, 평일은 파랑
-                const barColor = isSelected ? '#A1BE44' : isWeekend ? '#7EB3E8' : '#4A90D9';
+                const barColor = isSelected ? '#A1BE44' : '#444444';
+                
                 return (
                   <TouchableOpacity
                     key={idx}
@@ -556,13 +564,12 @@ const ManagerDashboard = ({ navigation }: any) => {
                     onPress={() => handleDaySelect(dayOfWeek)}
                   >
                     <Text style={[styles.barValText, isSelected && { color: '#A1BE44' }]}>{val}%</Text>
-                    <View style={[styles.bar, { height: barH, backgroundColor: barColor }]} />
+                    <View style={[styles.bar, { height: barH, backgroundColor: barColor, width: barWidth - 10, borderRadius: 6 }]} />
                   </TouchableOpacity>
                 );
               })}
             </View>
-            {/* X축 요일 라벨 */}
-            <View style={{ flexDirection: 'row', paddingHorizontal: 2, marginTop: 4 }}>
+            <View style={{ flexDirection: 'row', paddingHorizontal: 5, marginTop: 8 }}>
               {weeklyCongestionRate.map((_, idx) => {
                 const dayOfWeek = idx + 1;
                 const isSelected = dashboardStats.selectedDay === dayOfWeek;
@@ -579,25 +586,15 @@ const ManagerDashboard = ({ navigation }: any) => {
     );
   };
 
-  // ─── 우측: 선택 요일 시간대별 라인차트 ───
-  // hourlyData: 09~23시 15개 배열
+  // ─── 수직형 선 그래프 (시간대별 분포) ───
   const renderHourlyLine = () => {
     const dayLabel = DAY_LABELS[dashboardStats.selectedDay] ?? '';
-    const CHART_H = 110;
-
-    if (!hourlyData || hourlyData.length === 0) {
-      return (
-        <View style={[styles.halfChartBox, { justifyContent: 'center', alignItems: 'center' }]}>
-          <Text style={styles.chartTitle}>{dayLabel}요일 시간대별 상세 분포</Text>
-          <Text style={{ color: '#666', marginTop: 30 }}>데이터 없음</Text>
-        </View>
-      );
-    }
-
+    const CHART_H = 150;
     const maxVal = Math.max(...hourlyData, 1);
-    // HALF_W - Y축 너비(20) - 좌우패딩
-    const lineW  = HALF_W - 20 - 4;
-    const stepX  = hourlyData.length > 1 ? lineW / (hourlyData.length - 1) : lineW;
+    
+    // 그래프 라인 영역 너비
+    const lineW = CARD_INNER_W - 30; // Y축 너비 30 제외
+    const stepX = hourlyData.length > 1 ? lineW / (hourlyData.length - 1) : lineW;
 
     const points = hourlyData.map((v, i) => ({
       x: i * stepX,
@@ -605,28 +602,23 @@ const ManagerDashboard = ({ navigation }: any) => {
     }));
 
     return (
-      <View style={styles.halfChartBox}>
-        <Text style={styles.chartTitle}>{dayLabel}요일 시간대별 상세 분포</Text>
-        <Text style={styles.chartAxisLabel}>↑ density</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: CHART_H + 24, marginTop: 4 }}>
+      <View style={styles.chartContainer}>
+        <Text style={styles.chartTitle}>📈 {dayLabel}요일 시간대별 상세 분포</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: CHART_H + 24, marginTop: 15 }}>
           {/* Y축 */}
-          <View style={{ width: 20, height: CHART_H, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 3 }}>
-            <Text style={styles.yAxisText}>100</Text>
-            <Text style={styles.yAxisText}>50</Text>
+          <View style={{ width: 30, height: CHART_H, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 8 }}>
+            <Text style={styles.yAxisText}>Max</Text>
+            <Text style={styles.yAxisText}>Mid</Text>
             <Text style={styles.yAxisText}>0</Text>
           </View>
           {/* 차트 영역 */}
           <View style={{ width: lineW, height: CHART_H + 24 }}>
-            {/* 가이드라인 */}
             {[0, 0.5, 1].map((r, i) => (
               <View key={i} style={{
-                position: 'absolute',
-                top: CHART_H * (1 - r),
-                left: 0, right: 0, height: 1,
-                backgroundColor: '#383838',
+                position: 'absolute', top: CHART_H * (1 - r),
+                left: 0, right: 0, height: 1, backgroundColor: '#383838',
               }} />
             ))}
-            {/* 선 세그먼트 */}
             <View style={{ position: 'relative', height: CHART_H }}>
               {points.slice(0, -1).map((p, i) => {
                 const next = points[i + 1];
@@ -637,25 +629,21 @@ const ManagerDashboard = ({ navigation }: any) => {
                 return (
                   <View key={i} style={{
                     position: 'absolute', left: p.x, top: p.y,
-                    width: len, height: 2,
-                    backgroundColor: '#4A90D9',
+                    width: len, height: 2, backgroundColor: '#A1BE44',
                     transform: [{ rotate: `${angle}deg` }],
                     transformOrigin: '0 0',
                   }} />
                 );
               })}
-              {/* 점 */}
               {points.map((p, i) => (
                 <View key={i} style={{
-                  position: 'absolute',
-                  left: p.x - 3, top: p.y - 3,
-                  width: 6, height: 6, borderRadius: 3,
-                  backgroundColor: '#A1BE44',
+                  position: 'absolute', left: p.x - 4, top: p.y - 4,
+                  width: 8, height: 8, borderRadius: 4, backgroundColor: '#A1BE44',
+                  borderWidth: 2, borderColor: '#2C2C2C'
                 }} />
               ))}
             </View>
-            {/* X축 라벨: 3시간 간격 */}
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
               {hourlyData.map((_, i) => {
                 const hour = i + 9;
                 return i % 3 === 0 ? (
@@ -669,51 +657,63 @@ const ManagerDashboard = ({ navigation }: any) => {
     );
   };
 
-  // ─── 만료 임박 회원 리스트 ───
+  // ─── 만료 임박 회원 체크리스트 ───
   const renderExpiringMembers = () => {
     const list = dashboardStats.expiringMembers;
     if (!list || list.length === 0) return null;
     return (
       <View style={styles.card}>
-        <Text style={styles.expiringTitle}>🔔 만료 임박 회원 리스트 (2주 이내)</Text>
+        <Text style={styles.expiringTitle}>🔔 만료 임박 회원 체크리스트 (2주 이내)</Text>
         <View style={styles.divider} />
         <View style={styles.expiringHeader}>
+          <Text style={[styles.expiringCol, { width: 40, textAlign: 'center' }]}>확인</Text>
           <Text style={[styles.expiringCol, { flex: 1.2 }]}>이름</Text>
           <Text style={[styles.expiringCol, { flex: 2 }]}>연락처</Text>
-          <Text style={[styles.expiringCol, { flex: 1.8 }]}>만료일</Text>
-          <Text style={[styles.expiringCol, { flex: 0.8, textAlign: 'center' }]}>상태</Text>
+          <Text style={[styles.expiringCol, { flex: 1.5 }]}>만료일</Text>
+          <Text style={[styles.expiringCol, { width: 50, textAlign: 'center' }]}>상태</Text>
         </View>
         {list.map((m, idx) => {
           const dDay = m.dDay;
-          const ddayColor = dDay <= 3 ? '#FF4D4D' : dDay <= 7 ? '#FF9800' : '#A1BE44';
-          const maskedPhone = m.phone
-            ? m.phone.replace(/(\d{3})-?(\d{4})-?(\d{4})/, '$1-****-$3') : '-';
+          const isChecked = checkedItems.has(m.id);
+          const ddayColor = isChecked ? '#666666' : dDay <= 3 ? '#FF4D4D' : dDay <= 7 ? '#FF9800' : '#A1BE44';
+          const maskedPhone = m.phone ? m.phone.replace(/(\d{3})-?(\d{4})-?(\d{4})/, '$1-****-$3') : '-';
+          
           return (
-            <View key={idx} style={[styles.expiringRow, idx % 2 === 1 && { backgroundColor: '#262626' }]}>
-              <Text style={[styles.expiringValue, { flex: 1.2 }]}>{m.name}</Text>
-              <Text style={[styles.expiringValue, { flex: 2 }]}>{maskedPhone}</Text>
-              <Text style={[styles.expiringValue, { flex: 1.8 }]}>{m.endDate}</Text>
-              <View style={{ flex: 0.8, alignItems: 'center' }}>
-                <View style={[styles.ddayBadge, { backgroundColor: `${ddayColor}33` }]}>
+            <TouchableOpacity 
+              key={m.id} 
+              activeOpacity={0.8}
+              onPress={() => toggleCheck(m.id)}
+              style={[styles.expiringRow, idx % 2 === 1 && { backgroundColor: '#222222' }]}
+            >
+              {/* 체크박스 */}
+              <View style={{ width: 40, alignItems: 'center', justifyContent: 'center' }}>
+                <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
+                  {isChecked && <Text style={{ color: '#1A1A1A', fontSize: 14, fontWeight: 'bold' }}>✓</Text>}
+                </View>
+              </View>
+              <Text style={[styles.expiringValue, { flex: 1.2 }, isChecked && styles.textStrikethrough]}>{m.name}</Text>
+              <Text style={[styles.expiringValue, { flex: 2 }, isChecked && styles.textStrikethrough]}>{maskedPhone}</Text>
+              <Text style={[styles.expiringValue, { flex: 1.5, fontSize: 12 }, isChecked && styles.textStrikethrough]}>{m.endDate}</Text>
+              <View style={{ width: 50, alignItems: 'center', justifyContent: 'center' }}>
+                <View style={[styles.ddayBadge, { backgroundColor: isChecked ? '#333' : `${ddayColor}33` }]}>
                   <Text style={[styles.ddayText, { color: ddayColor }]}>D-{dDay}</Text>
                 </View>
               </View>
-            </View>
+            </TouchableOpacity>
           );
         })}
       </View>
     );
   };
 
-  // ─── 하단 컨트롤 바: 요일 드롭다운 + 데이터 모드 + 새로고침 ───
+  // ─── 하단 컨트롤 바 (필요 시) ───
   const renderBottomControls = () => {
     const selectedLabel = DAY_SELECT_OPTIONS.find(o => o.value === dashboardStats.selectedDay)?.label ?? '토요일';
     return (
       <View style={styles.controlCard}>
-        {/* 요일 드롭다운 */}
         <View style={styles.controlRow}>
           <Text style={styles.controlLabel}>상세 조회 요일</Text>
-          <View style={{ flex: 1, marginLeft: 10, position: 'relative' }}>
+          <View style={{ flex: 1, marginLeft: 10, position: 'relative', zIndex: 100 }}>
             <TouchableOpacity
               style={styles.dropdownBtn}
               activeOpacity={0.8}
@@ -738,22 +738,7 @@ const ManagerDashboard = ({ navigation }: any) => {
               </View>
             )}
           </View>
-          {/* 데이터 모드 토글 */}
-          <Text style={[styles.controlLabel, { marginLeft: 12 }]}>데이터 모드</Text>
-          <TouchableOpacity
-            style={[styles.modeBtn, dashboardStats.dataMode === 'realtime' && styles.modeBtnActive]}
-            onPress={() => setDashboardStats(prev => ({ ...prev, dataMode: 'realtime' }))}
-          >
-            <Text style={[styles.modeBtnText, dashboardStats.dataMode === 'realtime' && styles.modeBtnTextActive]}>실시간</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.modeBtn, dashboardStats.dataMode === 'cumulative' && styles.modeBtnActive]}
-            onPress={() => setDashboardStats(prev => ({ ...prev, dataMode: 'cumulative' }))}
-          >
-            <Text style={[styles.modeBtnText, dashboardStats.dataMode === 'cumulative' && styles.modeBtnTextActive]}>누적 통계</Text>
-          </TouchableOpacity>
         </View>
-        {/* 새로고침 버튼 */}
         <TouchableOpacity
           style={styles.refreshBtn}
           activeOpacity={0.8}
@@ -776,6 +761,10 @@ const ManagerDashboard = ({ navigation }: any) => {
     );
   }
 
+  const lastUpdatedDisplay = dashboardStats.lastUpdated 
+    ? dashboardStats.lastUpdated 
+    : `${new Date().getHours().toString().padStart(2, '0')}:${new Date().getMinutes().toString().padStart(2, '0')}`;
+
   return (
     <View style={styles.background}>
       <ScrollView
@@ -783,47 +772,52 @@ const ManagerDashboard = ({ navigation }: any) => {
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />}
       >
-        {/* ── 상단 헤더: 타이틀 + 메트릭 4개 ── */}
+        {/* 1. 상단 헤더: 타이틀 + 메트릭 4개 */}
         <View style={styles.headerCard}>
-          <Text style={styles.dashboardTitle}>클라이밍 센터 대시보드</Text>
-          <View style={styles.headerMetrics}>
-            <View style={styles.headerMetricItem}>
-              <Text style={styles.headerMetricLabel}>총 회원수</Text>
-              <Text style={styles.headerMetricValue}>{metrics.totalMembers}명</Text>
+          <View style={styles.headerLeft}>
+            <Text style={styles.dashboardTitleBig}>관리자{"\n"}대시보드</Text>
+          </View>
+          <View style={styles.headerRight}>
+            <View style={styles.metricGridRow}>
+              <View style={styles.metricGridBox}>
+                <Text style={styles.headerMetricLabel}>총 회원수</Text>
+                <Text style={styles.headerMetricValue}>{metrics.totalMembers}명</Text>
+              </View>
+              <View style={styles.metricGridBox}>
+                <Text style={styles.headerMetricLabel}>금일 신규</Text>
+                <Text style={[styles.headerMetricValue, { color: '#A1BE44' }]}>{dashboardStats.newMembersToday}명</Text>
+              </View>
             </View>
-            <View style={styles.headerMetricItem}>
-              <Text style={styles.headerMetricLabel}>금일 신규</Text>
-              <Text style={styles.headerMetricValue}>{dashboardStats.newMembersToday}명</Text>
-            </View>
-            <View style={styles.headerMetricItem}>
-              <Text style={styles.headerMetricLabel}>활성 이용권</Text>
-              <Text style={[styles.headerMetricValue, metrics.activeMemberships === 0 && { color: '#666' }]}>
-                {metrics.activeMemberships}개
-              </Text>
-            </View>
-            <View style={styles.headerMetricItem}>
-              <Text style={styles.headerMetricLabel}>업데이트</Text>
-              <Text style={[styles.headerMetricValue, { fontSize: 13 }]}>
-                {dashboardStats.lastUpdated || `오전 ${new Date().getHours()}:${String(new Date().getMinutes()).padStart(2,'0')}`}
-              </Text>
+            <View style={styles.metricGridRow}>
+              <View style={styles.metricGridBox}>
+                <Text style={styles.headerMetricLabel}>활성 이용권</Text>
+                <Text style={[styles.headerMetricValue, metrics.activeMemberships === 0 && { color: '#666' }]}>
+                  {metrics.activeMemberships}개
+                </Text>
+              </View>
+              <View style={styles.metricGridBox}>
+                <Text style={styles.headerMetricLabel}>업데이트</Text>
+                <Text style={[styles.headerMetricValue, { fontSize: 13, color: '#999999' }]}>
+                  {lastUpdatedDisplay}
+                </Text>
+              </View>
             </View>
           </View>
         </View>
 
-        {/* ── 그래프 카드: 좌우 나란히 배치 ── */}
-        <View style={styles.graphCard}>
+        {/* 2. 그래프 영역 */}
+        <View style={styles.graphsWrapper}>
           {renderWeeklyBar()}
-          <View style={styles.graphDivider} />
           {renderHourlyLine()}
         </View>
 
-        {/* ── 만료 임박 회원 리스트 ── */}
-        {renderExpiringMembers()}
-
-        {/* ── 하단 컨트롤 (요일 선택 + 모드 + 새로고침) ── */}
+        {/* 🌟 3. 상세 조회 컨트롤 (그래프 바로 아래로 이동) */}
         {renderBottomControls()}
 
-        {/* ── 최근 가입회원 ── */}
+        {/* 4. 만료 임박 회원 체크리스트 */}
+        {renderExpiringMembers()}
+
+        {/* 5. 최근 가입회원 */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>최근 가입회원</Text>
@@ -873,7 +867,7 @@ const ManagerDashboard = ({ navigation }: any) => {
           )}
         </View>
 
-        {/* ── 최근 공지사항 ── */}
+        {/* 6. 최근 공지사항 */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>최근 공지사항</Text>
@@ -909,45 +903,6 @@ const ManagerDashboard = ({ navigation }: any) => {
           )}
         </View>
 
-        {/* ── 최근 커뮤니티 글 ── */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>최근 커뮤니티 글</Text>
-            <TouchableOpacity style={styles.viewAllBtn} activeOpacity={0.7} onPress={() => navigation.navigate('ManagerCommunity')}>
-              <Text style={styles.viewAllBtnText}>전체보기</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.divider} />
-          {posts.length > 0 ? (
-            posts.map((post, index) => {
-              const isOut          = post.differentGym;
-              const isPast         = post.isPast;
-              const postType       = isOut ? '아웃도어' : '센터';
-              const badgeBgColor   = isPast ? '#333333' : isOut ? 'rgba(0,129,15,0.2)' : 'rgba(0,114,185,0.2)';
-              const badgeTextColor = isPast ? '#888888' : isOut ? '#2CDE00' : '#009DFF';
-              return (
-                <View key={post.id} style={[styles.noticeListItem, index > 0 && { marginTop: 20 }, isPast && { opacity: 0.6 }]}>
-                  <View style={styles.noticeTextContent}>
-                    <View style={[styles.badge, { backgroundColor: badgeBgColor, alignSelf: 'flex-start', marginBottom: 8, marginLeft: -10 }]}>
-                      <Text style={[styles.badgeText, { color: badgeTextColor }]}>{postType}</Text>
-                    </View>
-                    <Text style={[styles.noticeTitle, isPast && { color: '#888888' }]} numberOfLines={1}>{post.title}</Text>
-                    <Text style={[styles.subText, { color: isPast ? '#666666' : '#ffffff', fontSize: 14 }]}>
-                      {post.writerName}  {formatDate(post.createdAt)} {isPast ? '(마감됨)' : ''}
-                    </Text>
-                  </View>
-                  <View style={styles.noticeActions}>
-                    <TouchableOpacity style={[styles.actionBtn, styles.deleteBtn]} onPress={() => confirmDelete('post', post.id)}>
-                      <Image source={require('../assets/trash.png')} style={[styles.actionIcon, { tintColor: isPast ? '#666666' : '#FF0000' }]} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              );
-            })
-          ) : (
-            <Text style={styles.emptyText}>등록된 게시글이 없습니다.</Text>
-          )}
-        </View>
       </ScrollView>
 
       {/* FAB */}
@@ -1090,70 +1045,70 @@ const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A', paddingHorizontal: 20, paddingTop: 10 },
   scrollContent: { paddingBottom: 80 },
 
-  // ── 상단 헤더 카드 ──
+  // ── 1. 상단 헤더 카드 (좌우 분할) ──
   headerCard: {
     backgroundColor: '#2C2C2C', borderRadius: 16,
-    paddingHorizontal: 16, paddingVertical: 14, marginBottom: 16,
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 20, paddingVertical: 20, marginBottom: 16,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'
   },
-  dashboardTitle: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', flexShrink: 1 },
-  headerMetrics: { flexDirection: 'row', alignItems: 'center' },
-  headerMetricItem: { alignItems: 'center', marginLeft: 14 },
-  headerMetricLabel: { color: '#999999', fontSize: 10, marginBottom: 3 },
-  headerMetricValue: { color: '#ffffff', fontSize: 15, fontWeight: '900' },
+  headerLeft: {
+    flex: 1, borderRightWidth: 1, borderRightColor: '#444',
+    paddingRight: 10, justifyContent: 'center'
+  },
+  dashboardTitleBig: { color: '#ffffff', fontSize: 24, fontWeight: 'bold', lineHeight: 32 },
+  headerRight: { flex: 2, paddingLeft: 15 },
+  metricGridRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  metricGridBox: { flex: 1, alignItems: 'flex-start', marginLeft: 5 },
+  headerMetricLabel: { color: '#999999', fontSize: 11, marginBottom: 4 },
+  headerMetricValue: { color: '#ffffff', fontSize: 16, fontWeight: '900' },
 
-  // ── 그래프 카드 (좌우 나란히) ──
-  graphCard: {
+  // ── 2. 수직형 차트 래퍼 ──
+  graphsWrapper: { marginBottom: 16 },
+  chartContainer: {
     backgroundColor: '#2C2C2C', borderRadius: 16,
-    paddingHorizontal: 12, paddingVertical: 16,
-    marginBottom: 16,
-    flexDirection: 'row',
+    paddingHorizontal: 20, paddingVertical: 20, marginBottom: 16
   },
-  halfChartBox: { flex: 1, minHeight: 180 },
-  graphDivider: { width: 1, backgroundColor: '#444444', marginHorizontal: 8 },
-  chartTitle: { color: '#ffffff', fontSize: 11, fontWeight: 'bold', marginBottom: 2 },
+  chartTitle: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 5 },
   chartAxisLabel: { color: '#888888', fontSize: 9, marginBottom: 2 },
-  yAxisText: { color: '#888888', fontSize: 8 },
-  xAxisText: { color: '#888888', fontSize: 8 },
-  bar: { width: '70%', borderRadius: 4, marginBottom: 0 },
-  barValText: { color: '#cccccc', fontSize: 9, fontWeight: 'bold', marginBottom: 2 },
-  barDayLabel: { color: '#999999', fontSize: 9, textAlign: 'center' },
+  yAxisText: { color: '#888888', fontSize: 10 },
+  xAxisText: { color: '#888888', fontSize: 10 },
+  bar: { width: '100%', borderRadius: 4, marginBottom: 0 },
+  barValText: { color: '#cccccc', fontSize: 10, fontWeight: 'bold', marginBottom: 4 },
+  barDayLabel: { color: '#999999', fontSize: 11, textAlign: 'center' },
+
+  // ── 3. 체크리스트 형태 만료 임박 회원 ──
+  expiringTitle: { color: '#F5C842', fontSize: 17, fontWeight: 'bold' },
+  expiringHeader: { flexDirection: 'row', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#444' },
+  expiringCol: { color: '#999999', fontSize: 13, fontWeight: 'bold' },
+  expiringRow: { flexDirection: 'row', paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
+  expiringValue: { color: '#ffffff', fontSize: 14 },
+  textStrikethrough: { textDecorationLine: 'line-through', color: '#666666' },
+  ddayBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+  ddayText: { fontSize: 12, fontWeight: 'bold' },
+  checkbox: { width: 22, height: 22, borderWidth: 2, borderColor: '#666', borderRadius: 4, alignItems: 'center', justifyContent: 'center' },
+  checkboxChecked: { backgroundColor: '#A1BE44', borderColor: '#A1BE44' },
 
   // ── 하단 컨트롤 카드 ──
-  controlCard: {
-    backgroundColor: '#2C2C2C', borderRadius: 16,
-    padding: 14, marginBottom: 16,
-  },
-  controlRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 },
-  controlLabel: { color: '#999999', fontSize: 12, fontWeight: 'bold' },
+  controlCard: { backgroundColor: '#2C2C2C', borderRadius: 16, padding: 20, marginBottom: 16 },
+  controlRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginBottom: 15 },
+  controlLabel: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
   dropdownBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: '#3A3A3A', borderRadius: 8,
-    paddingHorizontal: 10, paddingVertical: 7,
+    paddingHorizontal: 12, paddingVertical: 10,
   },
-  dropdownBtnText: { color: '#ffffff', fontSize: 13 },
+  dropdownBtnText: { color: '#ffffff', fontSize: 14 },
   dropdownArrow: { color: '#999999', fontSize: 10, marginLeft: 6 },
   dropdownList: {
-    position: 'absolute', top: 36, left: 0, right: 0, zIndex: 99,
+    position: 'absolute', top: 45, left: 0, right: 0, zIndex: 99,
     backgroundColor: '#2C2C2C', borderRadius: 8,
     borderWidth: 1, borderColor: '#444',
-    elevation: 8, shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 6,
   },
-  dropdownItem: { paddingHorizontal: 12, paddingVertical: 10 },
+  dropdownItem: { paddingHorizontal: 12, paddingVertical: 12 },
   dropdownItemActive: { backgroundColor: '#3A3A3A' },
-  dropdownItemText: { color: '#cccccc', fontSize: 13 },
-  modeBtn: {
-    marginLeft: 8, paddingHorizontal: 12, paddingVertical: 7,
-    borderRadius: 8, backgroundColor: '#3A3A3A',
-  },
-  modeBtnActive: { backgroundColor: '#4A90D9' },
-  modeBtnText: { color: '#999999', fontSize: 12, fontWeight: 'bold' },
-  modeBtnTextActive: { color: '#ffffff' },
-  refreshBtn: {
-    backgroundColor: '#3A3A3A', borderRadius: 10,
-    paddingVertical: 12, alignItems: 'center',
-  },
-  refreshBtnText: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
+  dropdownItemText: { color: '#cccccc', fontSize: 14 },
+  refreshBtn: { backgroundColor: '#3A3A3A', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  refreshBtnText: { color: '#A1BE44', fontSize: 16, fontWeight: 'bold' },
 
   // ── 공통 카드 ──
   card: { backgroundColor: '#2C2C2C', borderRadius: 16, padding: 20, marginBottom: 20 },
@@ -1186,15 +1141,6 @@ const styles = StyleSheet.create({
   actionBtn: { padding: 6, marginLeft: 6 },
   deleteBtn: { borderRadius: 8, padding: 8 },
   actionIcon: { width: 24, height: 24, resizeMode: 'contain' },
-
-  // 만료 임박
-  expiringTitle: { color: '#F5C842', fontSize: 17, fontWeight: 'bold' },
-  expiringHeader: { flexDirection: 'row', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#444' },
-  expiringCol: { color: '#999999', fontSize: 13, fontWeight: 'bold' },
-  expiringRow: { flexDirection: 'row', paddingVertical: 10, borderRadius: 8, paddingHorizontal: 4 },
-  expiringValue: { color: '#ffffff', fontSize: 13 },
-  ddayBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 },
-  ddayText: { fontSize: 12, fontWeight: 'bold' },
 
   // FAB
   fab: { position: 'absolute', bottom: 15, right: 20, width: 70, height: 70, borderRadius: 35, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4.65 },
