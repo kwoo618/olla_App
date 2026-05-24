@@ -377,7 +377,7 @@ const styles = StyleSheet.create({
     padding: 24,
     borderRadius: 25, 
     alignItems: 'center',
-    marginTop: 50 
+    marginTop: 20 
   },
   logo: { width: 120, height: 120, resizeMode: 'contain', marginBottom: 10 },
   title: { fontSize: 36, fontWeight: 'bold', marginBottom: 25, color: '#ffffff' },

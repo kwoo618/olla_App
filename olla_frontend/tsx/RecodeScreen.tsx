@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, 
-  Modal, Animated, RefreshControl, Dimensions, PanResponder, TouchableWithoutFeedback 
+  Modal, Animated, RefreshControl, Dimensions, PanResponder, TouchableWithoutFeedback, TextInput 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
@@ -66,6 +66,7 @@ interface BeginnerRecord {
   score?: number;
   recordDate: string;
   success: boolean;
+  isSuccess?: boolean;
 }
 
 interface EnduranceRecord {
@@ -117,12 +118,17 @@ const RecodeScreen = ({
   const [refreshing, setRefreshing] = useState(false);
   const [showTimerFinishConfirm, setShowTimerFinishConfirm] = useState(false); // 타이머 확인 모달 
   
+  // 초보벽 전체 히스토리 관리 상태
+  const [beginnerHistoryData, setBeginnerHistoryData] = useState<any[]>([]);
+
   const loadAllData = async () => {
     setEnduranceData([]);
     setConsecutiveData([]);
+    setBeginnerHistoryData([]); // 초기화
     await Promise.all([
       checkMembership(),
       fetchBestRecords(),
+      fetchBeginnerHistoryRecords(), 
       fetchEnduranceRecords(),
       fetchSeriesRecords()
     ]);
@@ -153,43 +159,34 @@ const RecodeScreen = ({
     setRefreshing(false);
   }, []);
 
-  // 🚀 수정된 멤버십 체크 로직: 배열(리스트) 형태 대응 및 안전한 예외 처리
   const checkMembership = async () => {
     try {
       const res = await axios.get(MEMBERSHIP_URL);
-      // 데이터 래핑 방식이 다를 수 있으므로 안전하게 가져오기
       const rawData = res.data?.data?.data ?? res.data?.data; 
       
       if (rawData) {
-        // 객체로 오든 배열로 오든 무조건 배열로 만들어서 순회
         const memberships = Array.isArray(rawData) ? rawData : [rawData];
         let isValid = false;
 
         for (const m of memberships) {
           if (!m) continue;
-
-          // 만약 백엔드에서 정지/삭제된 이용권도 같이 내려준다면 무시
           const status = String(m.membershipStatus || '').toUpperCase();
           if (status === 'DELETED') continue;
-          // if (status === 'HOLDING') continue; // 정지 상태일 때 기록을 막고 싶다면 주석 해제
-
           const typeStr = String(m.membershipType ?? '').toUpperCase();
           
-          // 1. 일일권(횟수권) 체크
           if (typeStr.includes('COUNT') || typeStr.includes('횟수')) {
             if ((m.remainingCount ?? 0) > 0) {
               isValid = true;
-              break; // 유효한 이용권 하나라도 찾으면 즉시 루프 종료
+              break; 
             }
           } 
-          // 2. 회원권(기간권) 체크
           else if (typeStr.includes('PERIOD') || typeStr.includes('기간') || m.endDate) {
             if (m.endDate) {
               const end = new Date(m.endDate);
               end.setHours(23, 59, 59, 999);
               if (end.getTime() >= Date.now()) {
                 isValid = true;
-                break; // 유효기간 내에 있으면 즉시 루프 종료
+                break; 
               }
             }
           }
@@ -213,7 +210,7 @@ const RecodeScreen = ({
     action();
   };
 
-  // ── 초보벽 최고기록 조회 (🚀 백엔드 점수 신뢰 로직) ──
+  // ── 초보벽 최고기록 조회 ──
   const fetchBestRecords = async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/records/beginner/best`);
@@ -230,7 +227,8 @@ const RecodeScreen = ({
           let highestScore = -1;
 
           recordsForColor.forEach(r => {
-            const holdCount = r.success ? maxHold : (r.maxHoldNo ?? 0);
+            const isSuccess = r.success !== undefined ? r.success : r.isSuccess;
+            const holdCount = isSuccess ? maxHold : (r.maxHoldNo ?? 0);
             const score = r.score ?? holdCount; 
 
             if (score > highestScore) {
@@ -242,14 +240,15 @@ const RecodeScreen = ({
           if (bestRecord) {
             const b         = bestRecord as BeginnerRecord;
             const isRT      = String(b.attemptType ?? '').toUpperCase() === 'ROUND_TRIP';
+            const isSuccess = b.success !== undefined ? b.success : b.isSuccess;
             const rawHold   = b.maxHoldNo !== undefined ? b.maxHoldNo : b.score;
-            const holdCount = b.success ? maxHold : (rawHold ?? 0);
+            const holdCount = isSuccess ? maxHold : (rawHold ?? 0);
             return {
               ...item,
               id:      b.id,
               type:    isRT ? '왕복' : '편도',
               current: holdCount,
-              status:  b.success ? '완료' : '진행중',
+              status:  isSuccess ? '완료' : '진행중',
             };
           }
           return { ...item, type: null, current: 0, status: '미기록' };
@@ -257,6 +256,42 @@ const RecodeScreen = ({
       );
     } catch (error: any) {
       console.error('최고 기록 로드 실패:', error.response?.data?.message || error.message);
+    }
+  };
+
+  // ── 초보벽 시간순(전체) 최근 기록 조회 로직 ──
+  const fetchBeginnerHistoryRecords = async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/records/beginner/history`);
+      const raw = res.data?.data?.data ?? [];
+      const list: BeginnerRecord[] = Array.isArray(raw) ? raw : Array.isArray(raw?.list) ? raw.list : [];
+
+      // 가장 최근 기록이 위로 가도록 id(또는 recordDate) 기준으로 내림차순 정렬
+      const sortedList = list.sort((a, b) => b.id - a.id);
+
+      const mapped = sortedList.map((item) => {
+        const krColor = ENUM_TO_KR[item.difficulty] ?? '흰색';
+        // Props로 받은 difficultyData에서 hex 색상을 가져옴
+        const foundDiff = difficultyData?.find((d: any) => d.color === krColor);
+        const maxHold = MAX_HOLDS[krColor] ?? 0;
+        const isRT = String(item.attemptType ?? '').toUpperCase() === 'ROUND_TRIP';
+        const isSuccess = item.success !== undefined ? item.success : item.isSuccess;
+        const holdCount = isSuccess ? maxHold : (item.maxHoldNo ?? item.score ?? 0);
+
+        return {
+          id: item.id,
+          color: krColor,
+          hex: foundDiff?.hex ?? '#999999',
+          type: isRT ? '왕복' : '편도',
+          current: holdCount,
+          max: maxHold,
+          status: isSuccess ? '완등' : '실패',
+        };
+      });
+
+      setBeginnerHistoryData(mapped);
+    } catch (error: any) {
+      console.error('초보벽 최근 기록 로드 실패:', error.response?.data?.message || error.message);
     }
   };
 
@@ -323,9 +358,19 @@ const RecodeScreen = ({
     if (!itemToDelete) return;
     try {
       const id = Number(itemToDelete.id);
-      if      (itemToDelete.type === 'difficulty')  { await axios.delete(`${API_BASE_URL}/records/beginner/${id}`);       await fetchBestRecords();       }
-      else if (itemToDelete.type === 'endurance')   { await axios.delete(`${ENDURANCE_BASE_URL}/${id}`); await fetchEnduranceRecords();  }
-      else if (itemToDelete.type === 'consecutive') { await axios.delete(`${SERIES_BASE_URL}/${id}`);    await fetchSeriesRecords();     }
+      if      (itemToDelete.type === 'difficulty')  { 
+        await axios.delete(`${API_BASE_URL}/records/beginner/${id}`);       
+        await fetchBestRecords();       
+        await fetchBeginnerHistoryRecords(); // 초보벽 삭제 시 최근 기록도 함께 새로고침
+      }
+      else if (itemToDelete.type === 'endurance')   { 
+        await axios.delete(`${ENDURANCE_BASE_URL}/${id}`); 
+        await fetchEnduranceRecords();  
+      }
+      else if (itemToDelete.type === 'consecutive') { 
+        await axios.delete(`${SERIES_BASE_URL}/${id}`);    
+        await fetchSeriesRecords();     
+      }
       
       setDeleteModalVisible(false);
       setItemToDelete(null);
@@ -347,7 +392,7 @@ const RecodeScreen = ({
 
   const cancelDelete = () => { setDeleteModalVisible(false); setItemToDelete(null); };
 
-  // ─────────────────────────── 🌟 팝업창 드래그 애니메이션 상태 설정 ───────────────────────────
+  // ─────────────────────────── 팝업창 드래그 애니메이션 상태 설정 ───────────────────────────
   const { height: SCREEN_HEIGHT } = Dimensions.get('window');
   
   const BEGINNER_MODAL_HEIGHT = SCREEN_HEIGHT * 0.70;       
@@ -495,6 +540,7 @@ const RecodeScreen = ({
     try {
       await axios.post(`${API_BASE_URL}/records/beginner`, payload);
       await fetchBestRecords();
+      await fetchBeginnerHistoryRecords(); // 새로운 기록 저장 시 전체 최근 기록도 업데이트
       closeRecordModal();
       
       setTimeout(() => {
@@ -524,8 +570,6 @@ const RecodeScreen = ({
   const [timerSeconds,  setTimerSeconds]  = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
-  const [isFinishModalVisible, setFinishModalVisible] = useState(false);
-
   const openEnduranceModal = () => {
     requireMembership(() => {
       setEnduranceModalVisible(true);
@@ -673,15 +717,10 @@ const RecodeScreen = ({
     setShowTimerFinishConfirm(true);
   };
 
-  const cancelStopTimer = () => {
-    setFinishModalVisible(false);
-  };
-
   const stopTimerAndSave = () => {
-    setShowTimerFinishConfirm(false); // 확인 모달 먼저 닫기
+    setShowTimerFinishConfirm(false); 
     setIsTimerActive(false);
     
-    // 모달이 완전히 사라진 후(약 0.5초) 나머지 로직 수행
     if (timerRef.current) clearInterval(timerRef.current);
     setTimerRunning(false);
     let elapsed = timerMode === 'stopwatch' ? timerSeconds : initialTimerValue - timerSeconds;
@@ -850,6 +889,58 @@ const RecodeScreen = ({
                   </Text>
                 </View>
               ))}
+            </View>
+          )}
+        </View>
+
+        {/* 🌟 초보벽 최근 기록 (시간순) 아코디언 */}
+        <View style={styles.simpleAccordionWrapper}>
+          <TouchableOpacity style={styles.simpleAccordionHeader} onPress={() => toggleSection('beginnerHistory')} activeOpacity={0.8}>
+            <Text style={styles.simpleAccordionTitle}>초보벽 최근 기록</Text>
+            <Text style={styles.chevronIcon}>{expandedSection === 'beginnerHistory' ? '∨' : '＞'}</Text>
+          </TouchableOpacity>
+          {expandedSection === 'beginnerHistory' && (
+            <View style={styles.outerContainer}>
+              {beginnerHistoryData.length === 0 ? (
+                <View style={styles.recordItemCard}>
+                  <Text style={styles.emptyText}>최근 등록된 초보벽 기록이 없습니다.</Text>
+                </View>
+              ) : (
+                beginnerHistoryData.map((item: any, index: number) => (
+                  <View key={item.id} style={styles.rowCardWithTrash}>
+                    {/* 순번 표시 추가 */}
+                    <Text style={styles.recordIdLarge}>{index + 1}</Text>
+                    
+                    <View style={styles.enduranceCol}>
+                      {/* 글씨를 가운데 정렬하고, 배지도 중앙 아래로 위치 조정 */}
+                      <Text style={[styles.colorNameText, { color: item.hex, textAlign: 'center', marginBottom: 4 }]}>{item.color}</Text>
+                      <View style={[
+                        item.type === '왕복' ? styles.typeBadgeRoundTrip : styles.typeBadgeOneWay,
+                        { alignSelf: 'center' } 
+                      ]}>
+                        <Text style={item.type === '왕복' ? styles.typeTextRoundTrip : styles.typeTextOneWay}>
+                          {item.type}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.verticalDivider} />
+                    <View style={styles.enduranceCol}>
+                      <Text style={[styles.enduranceBottomText, { marginBottom: 4 }]}>진행 홀드</Text>
+                      <Text style={[styles.enduranceTopText, { marginBottom: 0 }]}>{item.current} / {item.max}번</Text>
+                    </View>
+                    <View style={styles.verticalDivider} />
+                    <View style={styles.enduranceCol}>
+                      <Text style={[styles.enduranceBottomText, { marginBottom: 4 }]}>결과</Text>
+                      <Text style={[styles.enduranceTopText, { marginBottom: 0 }, item.status === '완등' ? styles.statusSuccess : styles.statusIng]}>
+                        {item.status}
+                      </Text>
+                    </View>
+                    <TouchableOpacity style={styles.trashButton} onPress={() => confirmDelete('difficulty', item.id)}>
+                      <Image source={require('../assets/trash.png')} style={styles.trashIcon} />
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
             </View>
           )}
         </View>
@@ -1123,13 +1214,16 @@ const RecodeScreen = ({
                 zIndex: 999
               }}>
                 <View style={styles.deleteModalBox}>
-                  <Text style={styles.deleteModalText}>종료하시겠습니까?</Text>
+                  {/* 타이머 종료 시 현재 시간을 띄워줌 */}
+                  <Text style={styles.deleteModalText}>
+                    {formatTime(timerMode === 'stopwatch' ? timerSeconds : initialTimerValue - timerSeconds)} 기록으로 저장됩니다
+                  </Text>
                   <View style={styles.deleteBtnRow}>
                     <TouchableOpacity style={styles.deleteBtnYes} onPress={stopTimerAndSave}>
-                      <Text style={styles.deleteBtnYesText}>예</Text>
+                      <Text style={styles.deleteBtnYesText}>저장</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.deleteBtnNo} onPress={() => setShowTimerFinishConfirm(false)}>
-                      <Text style={styles.deleteBtnNoText}>아니오</Text>
+                      <Text style={styles.deleteBtnNoText}>취소</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -1193,15 +1287,32 @@ const RecodeScreen = ({
                     </Text>
                   </View>
 
-                  <Text style={styles.sectionTitle}>시간 기록 (타이머 기능 제공)</Text>
+                  <Text style={styles.sectionTitle}>시간 기록 (수동 기입 가능 / 타이머 연동)</Text>
                   <View style={styles.timerInputRow}>
                     <TouchableOpacity onPress={openTimerModal} style={styles.timerPlayBtn}>
                       <Text style={styles.timerPlayIcon}>▶</Text>
                     </TouchableOpacity>
                     <View style={styles.timerDisplayWrapper}>
-                      <Text style={styles.timerDisplayText}>{enduranceMin || '00'}</Text>
+                      {/* 수동 기입 가능하도록 TextInput으로 교체 */}
+                      <TextInput
+                        style={[styles.timerDisplayText, { padding: 0 }]}
+                        value={enduranceMin}
+                        onChangeText={setEnduranceMin}
+                        keyboardType="number-pad"
+                        maxLength={3}
+                        placeholder="00"
+                        placeholderTextColor="#555"
+                      />
                       <Text style={styles.timerLabel}>분</Text>
-                      <Text style={styles.timerDisplayText}>{enduranceSec || '00'}</Text>
+                      <TextInput
+                        style={[styles.timerDisplayText, { padding: 0 }]}
+                        value={enduranceSec}
+                        onChangeText={setEnduranceSec}
+                        keyboardType="number-pad"
+                        maxLength={2}
+                        placeholder="00"
+                        placeholderTextColor="#555"
+                      />
                       <Text style={styles.timerLabel}>초</Text>
                     </View>
                   </View>
@@ -1321,23 +1432,6 @@ const RecodeScreen = ({
                 <Text style={styles.deleteBtnYesText}>예</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.deleteBtnNo} onPress={cancelDelete}>
-                <Text style={styles.deleteBtnNoText}>아니오</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ─── 타이머 종료 확인 모달 ─── */}
-      <Modal visible={isFinishModalVisible} animationType="fade" transparent onRequestClose={cancelStopTimer}>
-        <View style={styles.deleteModalOverlay}>
-          <View style={styles.deleteModalBox}>
-            <Text style={styles.deleteModalText}>종료하시겠습니까?</Text>
-            <View style={styles.deleteBtnRow}>
-              <TouchableOpacity style={styles.deleteBtnYes} onPress={stopTimerAndSave}>
-                <Text style={styles.deleteBtnYesText}>예</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.deleteBtnNo} onPress={cancelStopTimer}>
                 <Text style={styles.deleteBtnNoText}>아니오</Text>
               </TouchableOpacity>
             </View>
@@ -1480,7 +1574,7 @@ const styles = StyleSheet.create({
 
   deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   deleteModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
-  deleteModalText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25 }, 
+  deleteModalText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center' }, 
   deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
   deleteBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
   deleteBtnYesText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
