@@ -798,6 +798,7 @@ const MYScreen = ({ navigation }: any) => {
             <Image source={require('../assets/Vector.png')} style={styles.cardHeaderIcon} />
             <Text style={styles.cardHeaderTitle}>알림설정</Text>
           </View>
+          
           <View style={styles.settingRow}>
             <View style={styles.settingTextContainer}>
               <Text style={styles.settingTitle}>푸시 알림</Text>
@@ -810,7 +811,24 @@ const MYScreen = ({ navigation }: any) => {
               value={notiState.isGlobalNotificationOn}
             />
           </View>
+          
           <View style={styles.divider} />
+          
+          <View style={styles.settingRow}>
+            <View style={styles.settingTextContainer}>
+              <Text style={styles.settingTitle}>이용권 알림</Text>
+              <Text style={styles.settingSub}>이용권 만료 및 안내 알림</Text>
+            </View>
+            <Switch
+              trackColor={{ false: '#333333', true: '#A1BE44' }}
+              thumbColor={'#ffffff'}
+              onValueChange={() => handleNotiToggle('isMembershipNotificationOn')}
+              value={notiState.isMembershipNotificationOn}
+            />
+          </View>
+
+          <View style={styles.divider} />
+
           <View style={styles.settingRow}>
             <View style={styles.settingTextContainer}>
               <Text style={styles.settingTitle}>활동 알림</Text>
@@ -821,6 +839,36 @@ const MYScreen = ({ navigation }: any) => {
               thumbColor={'#ffffff'}
               onValueChange={() => handleNotiToggle('isActivityNotificationOn')}
               value={notiState.isActivityNotificationOn}
+            />
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.settingRow}>
+            <View style={styles.settingTextContainer}>
+              <Text style={styles.settingTitle}>모임/크루 알림</Text>
+              <Text style={styles.settingSub}>참여 및 리마인드 알림</Text>
+            </View>
+            <Switch
+              trackColor={{ false: '#333333', true: '#A1BE44' }}
+              thumbColor={'#ffffff'}
+              onValueChange={() => handleNotiToggle('isCrewNotificationOn')}
+              value={notiState.isCrewNotificationOn}
+            />
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.settingRow}>
+            <View style={styles.settingTextContainer}>
+              <Text style={styles.settingTitle}>공지사항 알림</Text>
+              <Text style={styles.settingSub}>공지 및 이벤트 알림</Text>
+            </View>
+            <Switch
+              trackColor={{ false: '#333333', true: '#A1BE44' }}
+              thumbColor={'#ffffff'}
+              onValueChange={() => handleNotiToggle('isNoticeNotificationOn')}
+              value={notiState.isNoticeNotificationOn}
             />
           </View>
         </View>

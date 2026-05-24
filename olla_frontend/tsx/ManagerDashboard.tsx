@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, ActivityIndicator, Modal, Platform, PermissionsAndroid,
   RefreshControl, Animated, Dimensions, PanResponder, TouchableWithoutFeedback,
+  TextInput, KeyboardAvoidingView // 💡 알림 전송 모달용 추가
 } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -18,6 +19,8 @@ const QR_SCAN_API_URL     = `${API_BASE_URL}/admin/visits/scan`;
 const PROFILE_API_URL     = `${API_BASE_URL}/members`;
 const DASHBOARD_API_URL   = `${API_BASE_URL}/admin/dashboard`;
 const HOURLY_API_URL      = `${API_BASE_URL}/admin/dashboard/hourly`;
+// 💡 관리자 알림 발송 API 추가
+const ALERT_SEND_API_URL  = `${API_BASE_URL}/admin/alerts/send`;
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // 그래프 카드 내부 여백 제외한 실제 너비
@@ -68,6 +71,11 @@ const ManagerDashboard = ({ navigation }: any) => {
   const [itemToDelete, setItemToDelete] = useState<{ type: 'notice' | 'post', id: number } | null>(null);
 
   const [visitedMemberNames, setVisitedMemberNames] = useState<Set<string>>(new Set());
+
+  // 💡 관리자 개별 알림 발송용 State 추가
+  const [isSendAlertModalVisible, setSendAlertModalVisible] = useState(false);
+  const [alertTitle, setAlertTitle] = useState('');
+  const [alertContent, setAlertContent] = useState('');
 
   // 백엔드 응답값 상태
   // weeklyCongestionRate: index 0=월(dayOfWeek1) ~ 6=일(dayOfWeek7), % 값
@@ -406,6 +414,7 @@ const ManagerDashboard = ({ navigation }: any) => {
       if (!d) { showResultModal('프로필 조회 불가', '상세 정보를 불러올 수 없습니다.', 'error'); return; }
       const detail = d.detail || {};
       setSelectedUser({
+        memberId: memberId, // 💡 알림 발송용 ID 저장
         name: d.name || fallbackName,
         phone: d.phone || fallbackPhone || '-',
         profileImageUrl: d.profileImageUrl || d.profileImage,
@@ -430,6 +439,38 @@ const ManagerDashboard = ({ navigation }: any) => {
       setDetailVisible(false);
       setSelectedUser(null);
     });
+  };
+
+  // 💡 관리자 개별 알림 발송 함수 추가
+  const handleSendAlert = async () => {
+    if (!alertTitle.trim() || !alertContent.trim()) {
+      showResultModal('알림', '제목과 내용을 모두 입력해주세요.', 'info');
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      await axios.post(ALERT_SEND_API_URL, {
+        memberId: selectedUser?.memberId,
+        title: alertTitle,
+        content: alertContent
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setSendAlertModalVisible(false);
+      setIsProcessing(false);
+      setTimeout(() => {
+        showResultModal('발송 성공', `${selectedUser?.name}님에게 알림을 발송했습니다.`, 'success');
+        setAlertTitle('');
+        setAlertContent('');
+      }, Platform.OS === 'ios' ? 400 : 150);
+    } catch (error: any) {
+      setIsProcessing(false);
+      setSendAlertModalVisible(false);
+      setTimeout(() => {
+        showResultModal('발송 실패', error.response?.data?.message || '알림 발송에 실패했습니다.', 'error');
+      }, Platform.OS === 'ios' ? 400 : 150);
+    }
   };
 
   const requestCameraPermission = async () => {
@@ -1036,6 +1077,19 @@ const ManagerDashboard = ({ navigation }: any) => {
                   </View>
                 </View>
               )}
+              {/* 💡 알림 보내기 버튼 추가 */}
+              <TouchableOpacity 
+                style={[styles.closeFullBtn, { backgroundColor: '#4A90D9', marginBottom: 10 }]} 
+                onPress={() => {
+                  Animated.timing(detailHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
+                    setDetailVisible(false);
+                    setTimeout(() => setSendAlertModalVisible(true), 300);
+                  });
+                }}
+              >
+                <Text style={[styles.closeFullBtnText, { color: '#fff' }]}>알림 보내기</Text>
+              </TouchableOpacity>
+
               <TouchableOpacity style={styles.closeFullBtn} onPress={closeDetailModal}>
                 <Text style={styles.closeFullBtnText}>닫기</Text>
               </TouchableOpacity>
@@ -1082,6 +1136,44 @@ const ManagerDashboard = ({ navigation }: any) => {
           </View>
         </View>
       </Modal>
+
+      {/* 💡 알림 보내기 모달 추가 */}
+      <Modal visible={isSendAlertModalVisible} animationType="fade" transparent onRequestClose={() => setSendAlertModalVisible(false)}>
+        <View style={styles.alertModalOverlay}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%', alignItems: 'center' }}>
+            <View style={styles.alertModalBox}>
+              <View style={styles.alertModalHeader}>
+                <Text style={styles.alertModalTitle}>{selectedUser?.name}님에게 알림 보내기</Text>
+                <TouchableOpacity onPress={() => setSendAlertModalVisible(false)}>
+                  <Text style={styles.alertCloseBtn}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              
+              <TextInput
+                style={styles.alertInputField}
+                placeholder="알림 제목을 입력하세요"
+                placeholderTextColor="#999"
+                value={alertTitle}
+                onChangeText={setAlertTitle}
+              />
+              
+              <TextInput
+                style={[styles.alertInputField, { height: 100, textAlignVertical: 'top' }]}
+                placeholder="알림 내용을 입력하세요"
+                placeholderTextColor="#999"
+                value={alertContent}
+                onChangeText={setAlertContent}
+                multiline
+              />
+
+              <TouchableOpacity style={styles.alertSubmitBtn} onPress={handleSendAlert} disabled={isProcessing}>
+                {isProcessing ? <ActivityIndicator color="#000" /> : <Text style={styles.alertSubmitBtnText}>발송하기</Text>}
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
     </View>
   );
 };
@@ -1243,6 +1335,16 @@ const styles = StyleSheet.create({
   deleteBtnYesText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
   deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
   deleteBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
+
+  // 💡 알림 모달용 추가 스타일
+  alertModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)', justifyContent: 'center', alignItems: 'center' },
+  alertModalBox: { width: 320, backgroundColor: '#2A2A2A', borderRadius: 16, padding: 20 },
+  alertModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  alertModalTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
+  alertInputField: { backgroundColor: '#1A1A1A', color: '#FFF', borderRadius: 8, padding: 15, marginBottom: 12, fontSize: 16, borderWidth: 1, borderColor: '#444' },
+  alertSubmitBtn: { backgroundColor: '#A1BE44', borderRadius: 8, paddingVertical: 15, alignItems: 'center', marginTop: 10 },
+  alertSubmitBtnText: { color: '#000', fontSize: 18, fontWeight: 'bold' },
+  alertCloseBtn: { color: '#999999', fontSize: 24, paddingHorizontal: 5 },
 });
 
 export default ManagerDashboard;
