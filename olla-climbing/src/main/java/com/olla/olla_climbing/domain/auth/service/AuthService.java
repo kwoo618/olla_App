@@ -217,6 +217,7 @@ public class AuthService {
 
         String accessToken = jwtTokenProvider.createAccessToken(member.getLoginId(), member.getRole().name());
         String refreshToken = jwtTokenProvider.createRefreshToken(member.getLoginId());
+        member.updateRefreshToken(refreshToken);
 
         refreshTokenRepository.findByLoginId(member.getLoginId())
                 .ifPresentOrElse(

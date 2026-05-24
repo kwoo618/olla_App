@@ -16,6 +16,9 @@ import java.time.LocalDateTime;
 @Table(name = "post")
 public class Post extends BaseTimeEntity {
 
+    @Version
+    private Long version;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

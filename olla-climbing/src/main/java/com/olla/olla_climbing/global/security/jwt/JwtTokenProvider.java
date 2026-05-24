@@ -5,6 +5,7 @@ import io.jsonwebtoken.*;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -15,7 +16,6 @@ import java.util.Date;
 
 @Slf4j      // 로그를 남기기 위한 어노테이션
 @Service
-@Component
 public class JwtTokenProvider {
 
     @Value("${jwt.secret}")     // application.yml에 설정된 비밀 키 값을 주입

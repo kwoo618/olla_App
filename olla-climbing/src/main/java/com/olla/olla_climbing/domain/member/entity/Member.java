@@ -1,5 +1,6 @@
 package com.olla.olla_climbing.domain.member.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.olla.olla_climbing.domain.member.enums.Role;
 import com.olla.olla_climbing.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
@@ -14,6 +15,9 @@ import java.time.format.DateTimeFormatter;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)  // 파라미터가 없는 기본 생성자(public Member() {}), 아무나 못 쓰게 protected
 @Table(name = "member") // 2. DB 테이블 이름을 명시적으로 'member'로 지정
 public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 자동 관리
+
+    @Version
+    private Long version;
 
     @Id // 4. Primary Key (주민등록번호 같은 식별자)
     @GeneratedValue(strategy = GenerationType.IDENTITY) // 5. Auto Increment (1, 2, 3... 번호 자동 증가)
@@ -56,6 +60,8 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
     @Column(name = "profile_image_url", length = 1000)
     private String profileImageUrl;
 
+    private String currentRefreshToken;
+
     // 프로필 이미지 수정 메서드 (더티 체킹용)
     public void updateProfileImage(String profileImageUrl) {
         this.profileImageUrl = profileImageUrl;
@@ -67,10 +73,12 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
     // cascade = CascadeType.ALL: Member가 저장될 때 Detail, Privacy도 같이 저장됨
     // 양방향 매핑 이유? Member에서 Detail과 Privacy를 바로 참조할 수 있게 해서 편리하게 접근하려고, 예) member.getMemberDetail().getHeight() 이런 식으로
     @OneToOne(mappedBy = "member", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @JsonIgnore
     private MemberDetail memberDetail;
 
     // @Setter 대신 setMemberPrivacy() 메서드를 만들어서, MemberPrivacy를 세팅할 때, MemberPrivacy에도 "네 주인은 나야"라고 명시적으로 알려주는 것이 좋음 (연관관계 편의 메서드)
     @OneToOne(mappedBy = "member", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @JsonIgnore
     private MemberPrivacy memberPrivacy;
 
     public void setMemberDetail(MemberDetail memberDetail) {
@@ -180,4 +188,7 @@ public class Member extends BaseTimeEntity { // 3. 상속: 생성일/수정일 �
         this.fcmToken = fcmToken;
     }
 
+    public void updateRefreshToken(String refreshToken) {
+        this.currentRefreshToken = refreshToken;
+    }
 }

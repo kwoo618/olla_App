@@ -76,6 +76,7 @@ public class MembershipAdminService {
 
         membershipRepository.save(newMembership);
 
+
         log.info("이용권 연장 부여 성공 : 회원={}, 시작일={}, 기간={}개월",
                 member.getName(), effectiveStartDate, safeMonths);
     }
