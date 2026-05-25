@@ -55,6 +55,18 @@ const isValidImageUrl = (url: string | null | undefined) => {
   return url && typeof url === 'string' && url.trim() !== '' && url !== 'null' && url !== 'undefined';
 };
 
+// 새로 추가된 시간 포맷팅 함수 (년/월/일 시:분:초)
+const getFormattedCurrentTime = () => {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const hh = String(now.getHours()).padStart(2, '0');
+  const min = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  return `${yyyy}/${mm}/${dd} ${hh}:${min}:${ss}`;
+};
+
 const ManagerDashboard = ({ navigation }: any) => {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -220,7 +232,7 @@ const ManagerDashboard = ({ navigation }: any) => {
       setDashboardStats(prev => ({
         ...prev,
         newMembersToday: data.newMembersToday ?? prev.newMembersToday,
-        lastUpdated: data.lastUpdated ?? prev.lastUpdated,
+        lastUpdated: getFormattedCurrentTime(), // 수정: 새로고침 한 당시의 시각을 저장
         expiringMembers: realExpiring.length > 0 ? realExpiring : prev.expiringMembers,
       }));
 
@@ -907,9 +919,10 @@ const ManagerDashboard = ({ navigation }: any) => {
     );
   }
 
+  // 수정: 저장된 시간이 없을 경우를 대비한 fallback 역시 같은 형식으로 맞춤
   const lastUpdatedDisplay = dashboardStats.lastUpdated
     ? dashboardStats.lastUpdated
-    : `${new Date().getHours().toString().padStart(2, '0')}:${new Date().getMinutes().toString().padStart(2, '0')}`;
+    : getFormattedCurrentTime();
 
   return (
     <View style={styles.background}>

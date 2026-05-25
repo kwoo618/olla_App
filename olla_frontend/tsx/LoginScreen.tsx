@@ -23,11 +23,12 @@ const LoginScreen = ({ navigation }: any) => {
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
 
-  // 💡 포커스 상태 (연두색 테두리 효과용)
+  // 💡 포커스 상태 (연두색 테두리 효과 및 스크롤 제어용)
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
-  // 비밀번호 입력창 참조 (스크롤뷰 참조는 라이브러리가 자동 처리하므로 제거)
+  // 컴포넌트 참조 Ref
   const passwordRef = useRef<TextInput>(null);
+  const scrollRef = useRef<KeyboardAwareScrollView>(null); // 스크롤뷰 제어용 Ref 추가
 
   // ─── 커스텀 알림 결과 모달 상태 ───
   const [resultModalVisible, setResultModalVisible] = useState(false);
@@ -170,24 +171,30 @@ const LoginScreen = ({ navigation }: any) => {
     setFocusedField('password');
   };
 
+  const handleFocus = (field: string) => {
+    setFocusedField(field);
+  };
+
   const handleBlur = () => {
     setFocusedField(null);
   };
 
   return (
     <>
-      {/* ✅ 두 겹의 껍데기를 하나로 통합한 KeyboardAwareScrollView */}
       <KeyboardAwareScrollView 
+        ref={scrollRef}
         style={styles.flex1}
         contentContainerStyle={styles.scrollContent}
-        enableOnAndroid={true} // 안드로이드 호환성 핵심
-        extraScrollHeight={20} // 키보드와 입력창 사이의 여백
+        enableOnAndroid={true} 
+        extraScrollHeight={120} // ✅ 입력창이 포커스될 때 화면 중간까지 스크롤을 올려주는 여백
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         bounces={false}
+        scrollEnabled={focusedField !== null} // ✅ 입력 중(포커스 상태)일 때만 스크롤 생성
+        resetScrollToCoords={{ x: 0, y: 0 }} // ✅ 입력이 끝나고 키보드가 내려가면 원래 상태(정중앙)로 자동 복귀
       >
         <TouchableOpacity 
-          style={styles.flex1} 
+          style={styles.touchableWrapper} 
           activeOpacity={1} 
           onPress={() => {
             Keyboard.dismiss();
@@ -214,7 +221,7 @@ const LoginScreen = ({ navigation }: any) => {
                 returnKeyType="next" 
                 blurOnSubmit={false}
                 onSubmitEditing={goToPassword}
-                onFocus={() => setFocusedField('loginId')}
+                onFocus={() => handleFocus('loginId')}
                 onBlur={handleBlur}
               />
             
@@ -229,7 +236,7 @@ const LoginScreen = ({ navigation }: any) => {
                 onChangeText={setPassword}
                 returnKeyType="done"
                 onSubmitEditing={handleLogin}
-                onFocus={() => setFocusedField('password')}
+                onFocus={() => handleFocus('password')}
                 onBlur={handleBlur}
               />
 
@@ -286,7 +293,6 @@ const LoginScreen = ({ navigation }: any) => {
       {/* 아이디 찾기 모달 */}
       <Modal visible={findIdModalVisible} animationType="fade" transparent>
         <View style={styles.inputModalOverlay}>
-          {/* ✅ 모달 내부의 KeyboardAvoidingView 안드로이드 대비책 추가 */}
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%', alignItems: 'center' }}>
             <View style={styles.inputModalBox}>
               <View style={styles.inputModalHeader}>
@@ -322,7 +328,6 @@ const LoginScreen = ({ navigation }: any) => {
       {/* 비밀번호 찾기 모달 - 아이디 + 이메일 방식 */}
       <Modal visible={findPwModalVisible} animationType="fade" transparent>
         <View style={styles.inputModalOverlay}>
-          {/* ✅ 모달 내부의 KeyboardAvoidingView 안드로이드 대비책 추가 */}
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%', alignItems: 'center' }}>
             <View style={styles.inputModalBox}>
               <View style={styles.inputModalHeader}>
@@ -364,12 +369,18 @@ const styles = StyleSheet.create({
   flex1: { flex: 1, backgroundColor: '#1A1A1A' },
   scrollContent: { 
     flexGrow: 1, 
-    justifyContent: 'center', 
+    justifyContent: 'center', // 세로 중앙 정렬 유지
     paddingVertical: 20 
   },
+  touchableWrapper: { 
+    width: '100%', 
+    alignItems: 'center' 
+    // flex: 1은 KeyboardAwareScrollView와 충돌을 일으킬 수 있어 제거했습니다.
+  }, 
   innerContainer: { 
     alignItems: 'center', 
     paddingHorizontal: 20,
+    width: '100%'
   },
   container: { 
     width: '100%', 
