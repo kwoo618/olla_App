@@ -78,10 +78,16 @@ const ManagerTicket = ({ navigation }: any) => {
   const [isEditModalVisible, setEditModalVisible] = useState(false);
   const [modalSearch, setModalSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<any>(null);
+  
   const [isStartCalendarVisible, setStartCalendarVisible] = useState(false);
   const [editStart, setEditStart] = useState('');
+  
+  // ✅ 종료일 관련 상태 추가
+  const [isEndCalendarVisible, setEndCalendarVisible] = useState(false);
+  const [editEnd, setEditEnd] = useState('');
+
   const [editType, setEditType] = useState<'PERIOD' | 'COUNT'>('PERIOD');
-  const [addValue, setAddValue] = useState('');
+  const [addValue, setAddValue] = useState(''); // COUNT 일 때만 사용하도록 유지
 
   const [isManageVisible, setManageVisible] = useState(false);
   const [selectedManageItem, setSelectedManageItem] = useState<any>(null);
@@ -210,6 +216,7 @@ const ManagerTicket = ({ navigation }: any) => {
       setModalSearch('');
       setAddValue('');
       setEditStart('');
+      setEditEnd(''); // 닫을 때 종료일도 초기화
       
       targetEditBaseSnap.current = GRANT_START_HEIGHT;
       currentEditSnap.current = GRANT_START_HEIGHT;
@@ -246,10 +253,12 @@ const ManagerTicket = ({ navigation }: any) => {
           const mm = String(nextDay.getMonth() + 1).padStart(2, '0');
           const dd = String(nextDay.getDate()).padStart(2, '0');
           setEditStart(`${yyyy}-${mm}-${dd}`);
+          setEditEnd(''); // 기존 정보 로드 시 종료일은 리셋
           return;
         }
       }
       setEditStart(''); 
+      setEditEnd('');
     }
   }, [selectedUser, editType]);
 
@@ -328,7 +337,6 @@ const ManagerTicket = ({ navigation }: any) => {
         if (!latestEnd || (m.endDate && m.endDate > latestEnd)) latestEnd = m.endDate;
       });
 
-      // 💡 여기서 잔여일 계산 시, 현재 날짜(today)를 기준으로 하도록 로직 수정
       if (latestEnd && earliestStart) {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -488,6 +496,7 @@ const ManagerTicket = ({ navigation }: any) => {
     setSelectedUser(group);
     setEditType('PERIOD');
     setAddValue('');
+    setEditEnd(''); // 회원 선택 시 종료일도 초기화
     
     targetEditBaseSnap.current = GRANT_EXPANDED_HEIGHT;
     currentEditSnap.current = GRANT_EXPANDED_HEIGHT;
@@ -497,24 +506,27 @@ const ManagerTicket = ({ navigation }: any) => {
   const handleGrantTicket = async () => {
     if (!selectedUser) return;
 
+    const startDateStr = editStart || getToday();
+    
+    // ✅ 회원권과 일일권 각각의 유효성 검증
     if (editType === 'PERIOD') {
-      if (!addValue || addValue.trim() === '') {
-        showResultModal('알림', '개월 수를 입력해주십시오.', 'info');
+      if (!editEnd || editEnd.length !== 10) {
+        showResultModal('알림', '종료일을 정확하게 입력해주십시오.', 'info');
         return;
       }
-      if (isNaN(Number(addValue)) || Number(addValue) <= 0) {
-        showResultModal('알림', '유효한 개월 수를 입력해주십시오.', 'error');
+      
+      const startD = new Date(startDateStr);
+      startD.setHours(0, 0, 0, 0);
+      const endD = new Date(editEnd);
+      endD.setHours(0, 0, 0, 0);
+      
+      if (endD.getTime() < startD.getTime()) {
+        showResultModal('등록 불가', '종료일이 시작일보다 과거일 수 없습니다.', 'error');
         return;
       }
-      // ✅ 종료일이 오늘보다 과거인지 검증
-      const startDateStr = editStart || getToday();
-      const calcEnd = new Date(startDateStr);
-      calcEnd.setMonth(calcEnd.getMonth() + Number(addValue));
-      calcEnd.setHours(0, 0, 0, 0);
-      const todayCheck = new Date();
-      todayCheck.setHours(0, 0, 0, 0);
-      if (calcEnd.getTime() < todayCheck.getTime()) {
-        showResultModal('등록 불가', '종료일이 오늘보다 과거입니다.\n시작일 또는 개월 수를 다시 확인해주세요.', 'error');
+    } else {
+      if (addValue && (isNaN(Number(addValue)) || Number(addValue) < 0)) {
+        showResultModal('알림', '유효한 횟수를 입력해주십시오.', 'error');
         return;
       }
     }
@@ -522,11 +534,11 @@ const ManagerTicket = ({ navigation }: any) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
       const memberId = selectedUser.memberId || selectedUser.id;
-      const startDate = editStart || getToday();
 
+      // ✅ 종료일을 지정하도록 Payload 수정
       const requestBody = editType === 'PERIOD'
-        ? { memberId, addMonths: Number(addValue), addCount: 0, startDate }
-        : { memberId, addMonths: 0, addCount: addValue && !isNaN(Number(addValue)) && Number(addValue) > 0 ? Number(addValue) : 1, startDate };
+        ? { memberId, startDate: startDateStr, endDate: editEnd }
+        : { memberId, addCount: addValue && !isNaN(Number(addValue)) && Number(addValue) > 0 ? Number(addValue) : 1, startDate: startDateStr };
 
       await axios.post(MEMBERSHIP_GRANT_API, requestBody, {
         headers: { Authorization: `Bearer ${token}` }
@@ -991,7 +1003,7 @@ const ManagerTicket = ({ navigation }: any) => {
                     <View style={styles.typeToggleRow}>
                       <TouchableOpacity
                         style={[styles.typeBtn, editType === 'PERIOD' && styles.typeBtnActive]}
-                        onPress={() => { setEditType('PERIOD'); setAddValue(''); }}
+                        onPress={() => { setEditType('PERIOD'); setAddValue(''); setEditEnd(''); }}
                       >
                         <Text style={[styles.typeBtnText, editType === 'PERIOD' && styles.typeBtnTextActive]}>회원권</Text>
                       </TouchableOpacity>
@@ -1004,6 +1016,7 @@ const ManagerTicket = ({ navigation }: any) => {
                     </View>
 
                     <View style={styles.horizontalDateRow}>
+                      {/* 시작일 Block */}
                       <View style={styles.dateBlock}>
                         <Text style={styles.inputLabel}>시작일</Text>
                         <View style={styles.dateInputBox}>
@@ -1035,19 +1048,44 @@ const ManagerTicket = ({ navigation }: any) => {
 
                       <View style={styles.dateSpacer} />
 
-                      <View style={styles.dateBlock}>
-                        <Text style={styles.inputLabel}>
-                          {editType === 'PERIOD' ? '개월 수' : '횟수 (비우면 1회)'}
-                        </Text>
-                        <TextInput
-                          style={styles.amountInput}
-                          placeholder={editType === 'PERIOD' ? '개월 수 입력' : '기본 1회'}
-                          placeholderTextColor="#666"
-                          keyboardType="numeric"
-                          value={addValue}
-                          onChangeText={setAddValue}
-                        />
-                      </View>
+                      {/* ✅ 회원권(종료일 달력) or 일일권(횟수) Block */}
+                      {editType === 'PERIOD' ? (
+                        <View style={styles.dateBlock}>
+                          <Text style={styles.inputLabel}>종료일</Text>
+                          <View style={styles.dateInputBox}>
+                            <TextInput
+                              style={styles.dateTextInput}
+                              placeholder="YYYY-MM-DD"
+                              placeholderTextColor="#666"
+                              value={editEnd}
+                              onChangeText={(text) => {
+                                const numeric = text.replace(/[^0-9]/g, '');
+                                let formatted = numeric;
+                                if (numeric.length > 4 && numeric.length <= 6) formatted = `${numeric.slice(0, 4)}-${numeric.slice(4)}`;
+                                else if (numeric.length > 6) formatted = `${numeric.slice(0, 4)}-${numeric.slice(4, 6)}-${numeric.slice(6, 8)}`;
+                                setEditEnd(formatted);
+                              }}
+                              keyboardType="numeric"
+                              maxLength={10}
+                            />
+                            <TouchableOpacity onPress={() => setEndCalendarVisible(true)} style={styles.calendarIconBtn}>
+                              <Image source={require('../assets/DATE.png')} style={styles.dateIcon} />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      ) : (
+                        <View style={styles.dateBlock}>
+                          <Text style={styles.inputLabel}>횟수 (비우면 1회)</Text>
+                          <TextInput
+                            style={styles.amountInput}
+                            placeholder="기본 1회"
+                            placeholderTextColor="#666"
+                            keyboardType="numeric"
+                            value={addValue}
+                            onChangeText={setAddValue}
+                          />
+                        </View>
+                      )}
                     </View>
 
                     <TouchableOpacity style={styles.submitBtn} onPress={handleGrantTicket}>
@@ -1061,7 +1099,7 @@ const ManagerTicket = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 달력 팝업 모달 */}
+      {/* ✅ 시작일 달력 팝업 모달 */}
       <Modal visible={isStartCalendarVisible} animationType="fade" transparent={true}>
         <View style={styles.calendarOverlay}>
           <View style={styles.calendarBox}>
@@ -1083,6 +1121,31 @@ const ManagerTicket = ({ navigation }: any) => {
           </View>
         </View>
       </Modal>
+
+      {/* ✅ 종료일 달력 팝업 모달 */}
+      <Modal visible={isEndCalendarVisible} animationType="fade" transparent={true}>
+        <View style={styles.calendarOverlay}>
+          <View style={styles.calendarBox}>
+            <Text style={styles.calendarTitle}>종료일 선택</Text>
+            <Calendar
+              current={editEnd || editStart || getToday()}
+              minDate={editStart || getToday()} // 시작일 이전 날짜 비활성화
+              onDayPress={(day: any) => {
+                setEditEnd(day.dateString);
+                setEndCalendarVisible(false);
+              }}
+              theme={calendarTheme}
+              markedDates={{
+                [editEnd]: { selected: true, selectedColor: '#A1BE44' }
+              }}
+            />
+            <TouchableOpacity style={styles.calendarCloseBtn} onPress={() => setEndCalendarVisible(false)}>
+              <Text style={styles.calendarCloseText}>닫기</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 };

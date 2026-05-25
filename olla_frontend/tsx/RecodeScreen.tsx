@@ -564,8 +564,6 @@ const RecodeScreen = ({
   const [enduranceSec,     setEnduranceSec]     = useState('');
   
   const [isTimerActive,    setIsTimerActive]    = useState(false);
-  const [timerMode, setTimerMode] = useState<'stopwatch' | 'timer'>('stopwatch');
-  const [initialTimerValue, setInitialTimerValue] = useState(600); 
   const [timerRunning,  setTimerRunning]  = useState(false);
   const [timerSeconds,  setTimerSeconds]  = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -680,28 +678,16 @@ const RecodeScreen = ({
     }
   };
 
+  // ─── 스톱워치 기능 ───
   const toggleTimer = () => {
     if (timerRunning) {
       setTimerRunning(false);
       if (timerRef.current) clearInterval(timerRef.current);
     } else {
-      if (timerMode === 'timer' && timerSeconds <= 0) return; 
-      
       setTimerRunning(true);
       if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = setInterval(() => {
-        setTimerSeconds(prev => {
-          if (timerMode === 'stopwatch') {
-            return prev + 1; 
-          } else {
-            if (prev <= 1) { 
-              if (timerRef.current) clearInterval(timerRef.current);
-              setTimerRunning(false);
-              return 0;
-            }
-            return prev - 1;
-          }
-        });
+        setTimerSeconds(prev => prev + 1);
       }, 1000);
     }
   };
@@ -709,10 +695,7 @@ const RecodeScreen = ({
   const confirmStopTimer = () => {
     if (timerRunning) {
       setTimerRunning(false);
-
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
+      if (timerRef.current) clearInterval(timerRef.current);
     }
     setShowTimerFinishConfirm(true);
   };
@@ -723,14 +706,14 @@ const RecodeScreen = ({
     
     if (timerRef.current) clearInterval(timerRef.current);
     setTimerRunning(false);
-    let elapsed = timerMode === 'stopwatch' ? timerSeconds : initialTimerValue - timerSeconds;
+
+    let elapsed = timerSeconds; 
     const [m, s] = formatTime(elapsed).split(':');
     setEnduranceMin(m);
     setEnduranceSec(s);
   };
 
   const openTimerModal = () => { 
-    setTimerMode('stopwatch');
     setTimerSeconds(0); 
     setTimerRunning(false); 
     setIsTimerActive(true); 
@@ -1125,7 +1108,7 @@ const RecodeScreen = ({
         </View>
       </Modal>
 
-      {/* ─── 지구력 스톱워치 / 타이머 모달 ─── */}
+      {/* ─── 지구력 스톱워치 / 모달 ─── */}
       <Modal visible={isEnduranceModalVisible} animationType="fade" transparent onRequestClose={closeEnduranceModal}>
         {isTimerActive ? (
           <SafeAreaView style={styles.timerModalBackground}>
@@ -1136,63 +1119,8 @@ const RecodeScreen = ({
               </TouchableOpacity>
             </View>
 
-            <View style={styles.timerModeContainer}>
-              <TouchableOpacity 
-                style={[styles.timerModeBtn, timerMode === 'stopwatch' && styles.timerModeBtnActive]}
-                onPress={() => { 
-                  if (!timerRunning) { 
-                    setTimerMode('stopwatch'); 
-                    setTimerSeconds(0); 
-                  } 
-                }}
-                activeOpacity={timerRunning ? 1 : 0.7}
-              >
-                <Text style={[styles.timerModeBtnText, timerMode === 'stopwatch' && styles.timerModeBtnTextActive]}>
-                  스톱워치
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.timerModeBtn, timerMode === 'timer' && styles.timerModeBtnActive]}
-                onPress={() => { 
-                  if (!timerRunning) { 
-                    setTimerMode('timer'); 
-                    setTimerSeconds(600); 
-                    setInitialTimerValue(600); 
-                  } 
-                }}
-                activeOpacity={timerRunning ? 1 : 0.7}
-              >
-                <Text style={[styles.timerModeBtnText, timerMode === 'timer' && styles.timerModeBtnTextActive]}>
-                  타이머
-                </Text>
-              </TouchableOpacity>
-            </View>
-
             <View style={styles.timerCenterArea}>
               <Text style={styles.hugeTimerText}>{formatTime(timerSeconds)}</Text>
-              
-              {timerMode === 'timer' && !timerRunning && (
-                <View style={styles.timerAdjustRow}>
-                  <TouchableOpacity 
-                    onPress={() => {
-                      setTimerSeconds(prev => Math.max(600, prev - 600)); 
-                      setInitialTimerValue(prev => Math.max(600, prev - 600));
-                    }} 
-                    style={styles.adjustBtn}
-                  >
-                    <Text style={styles.adjustBtnText}>- 10분</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    onPress={() => {
-                      setTimerSeconds(prev => prev + 600);
-                      setInitialTimerValue(prev => prev + 600);
-                    }} 
-                    style={styles.adjustBtn}
-                  >
-                    <Text style={styles.adjustBtnText}>+ 10분</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
             </View>
 
             <View style={styles.timerControlRow}>
@@ -1214,9 +1142,8 @@ const RecodeScreen = ({
                 zIndex: 999
               }}>
                 <View style={styles.deleteModalBox}>
-                  {/* 타이머 종료 시 현재 시간을 띄워줌 */}
                   <Text style={styles.deleteModalText}>
-                    {formatTime(timerMode === 'stopwatch' ? timerSeconds : initialTimerValue - timerSeconds)} 기록으로 저장됩니다
+                    {formatTime(timerSeconds)} 기록으로 저장됩니다
                   </Text>
                   <View style={styles.deleteBtnRow}>
                     <TouchableOpacity style={styles.deleteBtnYes} onPress={stopTimerAndSave}>
@@ -1539,16 +1466,6 @@ const styles = StyleSheet.create({
   timerHeaderTitle: { color: '#A1BE44', fontSize: 24, fontWeight: 'bold' }, 
   timerCenterArea: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   hugeTimerText: { color: '#ffffff', fontSize: 86, fontWeight: '900' }, 
-  
-  timerModeContainer: { flexDirection: 'row', backgroundColor: '#333333', borderRadius: 12, padding: 4, marginHorizontal: 20, marginTop: 20 },
-  timerModeBtn: { flex: 1, paddingVertical: 14, alignItems: 'center', borderRadius: 8 },
-  timerModeBtnActive: { backgroundColor: '#555555' },
-  timerModeBtnText: { color: '#999999', fontSize: 18, fontWeight: 'bold' },
-  timerModeBtnTextActive: { color: '#ffffff' },
-
-  timerAdjustRow: { flexDirection: 'row', marginTop: 40, justifyContent: 'center', alignItems: 'center' },
-  adjustBtn: { backgroundColor: '#333333', paddingVertical: 14, paddingHorizontal: 20, borderRadius: 12, marginHorizontal: 10 },
-  adjustBtnText: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' },
 
   timerControlRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 50 },
   timerCircleBtn: { width: 110, height: 110, borderRadius: 55, justifyContent: 'center', alignItems: 'center' }, 
