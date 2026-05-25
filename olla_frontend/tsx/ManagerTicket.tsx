@@ -328,12 +328,20 @@ const ManagerTicket = ({ navigation }: any) => {
         if (!latestEnd || (m.endDate && m.endDate > latestEnd)) latestEnd = m.endDate;
       });
 
+      // 💡 여기서 잔여일 계산 시, 현재 날짜(today)를 기준으로 하도록 로직 수정
       if (latestEnd && earliestStart) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
         const start = new Date(earliestStart);
-        const end = new Date(latestEnd);
         start.setHours(0, 0, 0, 0);
+        
+        const end = new Date(latestEnd);
         end.setHours(0, 0, 0, 0);
-        const diff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+        
+        const effectiveStart = today.getTime() > start.getTime() ? today : start;
+        const diff = Math.ceil((end.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24));
+        
         totalRemainingDays = diff >= 0 ? diff : 0;
       }
 
@@ -496,6 +504,17 @@ const ManagerTicket = ({ navigation }: any) => {
       }
       if (isNaN(Number(addValue)) || Number(addValue) <= 0) {
         showResultModal('알림', '유효한 개월 수를 입력해주십시오.', 'error');
+        return;
+      }
+      // ✅ 종료일이 오늘보다 과거인지 검증
+      const startDateStr = editStart || getToday();
+      const calcEnd = new Date(startDateStr);
+      calcEnd.setMonth(calcEnd.getMonth() + Number(addValue));
+      calcEnd.setHours(0, 0, 0, 0);
+      const todayCheck = new Date();
+      todayCheck.setHours(0, 0, 0, 0);
+      if (calcEnd.getTime() < todayCheck.getTime()) {
+        showResultModal('등록 불가', '종료일이 오늘보다 과거입니다.\n시작일 또는 개월 수를 다시 확인해주세요.', 'error');
         return;
       }
     }
@@ -676,7 +695,6 @@ const ManagerTicket = ({ navigation }: any) => {
             
             const subText = displayMemberships.map((m: any) => m._type).join(' / ');
             
-            // 💡 전체 상태(ACTIVE/HOLDING) 개수를 파악하여 뱃지 로직 개선
             const activeCount = memberships.filter((m: any) => String(m.membershipStatus).toUpperCase() === 'ACTIVE').length;
             const holdingCount = memberships.filter((m: any) => String(m.membershipStatus).toUpperCase() === 'HOLDING').length;
 
@@ -690,7 +708,7 @@ const ManagerTicket = ({ navigation }: any) => {
               badgeTextStyle = styles.badgeTextHolding;
             } else if (holdingCount > 0 && activeCount > 0) {
               badgeText = '일부 정지';
-              badgeStyle = styles.badgePartial; // 새로 추가된 파란색 뱃지 스타일
+              badgeStyle = styles.badgePartial;
               badgeTextStyle = styles.badgeTextPartial;
             }
 
@@ -808,7 +826,6 @@ const ManagerTicket = ({ navigation }: any) => {
               const uniqueTypes = [...new Set(displayTypes)];
               const manageDisplayType = uniqueTypes.join(' / ');
               
-              // 💡 관리 팝업 서브텍스트에도 상태(일부정지 포함) 정확하게 표시
               const activeCount = memberships.filter((m: any) => String(m.membershipStatus).toUpperCase() === 'ACTIVE').length;
               const holdingCount = memberships.filter((m: any) => String(m.membershipStatus).toUpperCase() === 'HOLDING').length;
               
@@ -1102,10 +1119,10 @@ const styles = StyleSheet.create({
   badge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
   badgeActive: { backgroundColor: 'rgba(161, 190, 68, 0.2)' },
   badgeHolding: { backgroundColor: 'rgba(255, 153, 0, 0.2)' },
-  badgePartial: { backgroundColor: 'rgba(77, 166, 255, 0.2)' }, // 파란색 반투명 배경
+  badgePartial: { backgroundColor: 'rgba(77, 166, 255, 0.2)' },
   badgeTextActive: { color: '#A1BE44', fontSize: 13, fontWeight: 'bold' },
   badgeTextHolding: { color: '#FF9900', fontSize: 13, fontWeight: 'bold' },
-  badgeTextPartial: { color: '#4DA6FF', fontSize: 13, fontWeight: 'bold' }, // 파란색 텍스트
+  badgeTextPartial: { color: '#4DA6FF', fontSize: 13, fontWeight: 'bold' },
 
   fab: { position: 'absolute', right: 20, backgroundColor: '#A1BE44', paddingHorizontal: 25, paddingVertical: 18, borderRadius: 30, elevation: 5 },
   fabText: { color: '#000', fontSize: 18, fontWeight: 'bold' },

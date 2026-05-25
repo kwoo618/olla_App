@@ -19,13 +19,13 @@ const PROFILE_API_URL     = `${API_BASE_URL}/members`;
 const DASHBOARD_API_URL         = `${API_BASE_URL}/admin/dashboard`;
 const DASHBOARD_SUMMARY_API_URL = `${API_BASE_URL}/admin/dashboard/summary`;
 const HOURLY_API_URL      = `${API_BASE_URL}/admin/dashboard/hourly`;
-const ALERT_SEND_API_URL  = `${API_BASE_URL}/admin/alerts/send`;
+const ALERT_SEND_API_URL  = `${API_BASE_URL}/admin/alerts/send`; 
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_INNER_W = SCREEN_WIDTH - 40;
 
 const DAY_LABELS: Record<number, string> = {
-  1: '월', 2: '화', 3: '수', 4: '목', 5: '금', 6: '토', 7: '일',
+  1: '월', 2: '화', 3: '수', 4: '목', 5: '금', 6: '토',
 };
 const DAY_SELECT_OPTIONS = [
   { label: '월요일', value: 1 },
@@ -34,8 +34,14 @@ const DAY_SELECT_OPTIONS = [
   { label: '목요일', value: 4 },
   { label: '금요일', value: 5 },
   { label: '토요일', value: 6 },
-  { label: '일요일', value: 7 },
 ];
+
+const getHourRange = (dayOfWeek: number): number[] => {
+  if (dayOfWeek === 6) {
+    return Array.from({ length: 7 }, (_, i) => i + 13);
+  }
+  return Array.from({ length: 10 }, (_, i) => i + 13);
+};
 
 const translateGender = (gender: string) => {
   if (!gender || gender === '-') return '-';
@@ -49,25 +55,12 @@ const isValidImageUrl = (url: string | null | undefined) => {
   return url && typeof url === 'string' && url.trim() !== '' && url !== 'null' && url !== 'undefined';
 };
 
-const DUMMY_EXPIRING_MEMBERS = [
-  { id: 'd1', name: '김오름', phone: '010-1234-5678', endDate: '2026-05-26', dDay: 2 },
-  { id: 'd2', name: '이바위', phone: '010-9876-5432', endDate: '2026-05-28', dDay: 4 },
-  { id: 'd3', name: '박홀드', phone: '010-5555-4444', endDate: '2026-06-02', dDay: 9 },
-  { id: 'd4', name: '최초크', phone: '010-1111-2222', endDate: '2026-06-05', dDay: 12 },
-];
-
 const ManagerDashboard = ({ navigation }: any) => {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notices, setNotices] = useState<any[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
   const [recentMembers, setRecentMembers] = useState<any[]>([]);
-  const [currentTime, setCurrentTime] = useState<string>('');
-
-  const getFormattedTime = () => {
-    const now = new Date();
-    return now.toLocaleString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
-  }
 
   const [resultModalVisible, setResultModalVisible] = useState(false);
   const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info', onConfirm: () => {} });
@@ -129,8 +122,6 @@ const ManagerDashboard = ({ navigation }: any) => {
 
   const [isDetailVisible, setDetailVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
-
-  const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
 
   const { height: SCREEN_HEIGHT } = Dimensions.get('window');
   const DETAIL_MODAL_HEIGHT = SCREEN_HEIGHT * 0.78;
@@ -196,41 +187,27 @@ const ManagerDashboard = ({ navigation }: any) => {
     }
   };
 
-  // ✅ 수정: expiringMembers 파싱 로직 보강 + 새로고침 시 기존 값 유지
   const fetchDashboardStats = async (token: string) => {
     try {
       const response = await axios.get(DASHBOARD_API_URL, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      // ✅ 3중 래퍼 파싱: response.data.data.data 우선, 여러 경로 fallback
-      const raw = response.data;
       const data =
-        raw?.data?.data ??
-        raw?.data ??
-        raw ??
+        response.data?.data?.data ??
+        response.data?.data ??
+        response.data ??
         {};
 
-      console.log('[Dashboard Stats] raw keys:', Object.keys(raw ?? {}));
-      console.log('[Dashboard Stats] data:', JSON.stringify(data));
-
-      // ✅ expiringMembers 파싱: 여러 경로 시도
       const rawExpiring: any[] =
         Array.isArray(data.expiringMembers) ? data.expiringMembers :
-        Array.isArray(raw?.data?.data?.expiringMembers) ? raw.data.data.expiringMembers :
-        Array.isArray(raw?.data?.expiringMembers) ? raw.data.expiringMembers :
+        Array.isArray(response.data?.data?.data?.expiringMembers) ? response.data.data.data.expiringMembers :
+        Array.isArray(response.data?.data?.expiringMembers) ? response.data.data.expiringMembers :
         [];
 
-      console.log('[Dashboard Stats] rawExpiring length:', rawExpiring.length);
-      console.log('[Dashboard Stats] rawExpiring sample:', JSON.stringify(rawExpiring.slice(0, 2)));
-
       const realExpiring = rawExpiring.map((m: any, idx: number) => {
-        // ✅ 백엔드 ExpiringMemberDto 필드: name, phone, endDate, dDay (소문자 long)
-        // Java @Getter + @Builder → JSON 직렬화 시 필드명 그대로 → "dDay" (카멜케이스)
-        // 하지만 Jackson 기본설정에 따라 "dday"로 올 수도 있으므로 양쪽 모두 확인
         const dDayRaw = m.dDay ?? m.dday ?? m.d_day ?? m.DDday ?? null;
         const dDayNum = dDayRaw !== null && dDayRaw !== undefined ? Number(dDayRaw) : 0;
-        console.log(`[Expiring] ${m.name}: dDay raw=${JSON.stringify(dDayRaw)}, parsed=${dDayNum}`);
         return {
           id: `real_${m.name ?? ''}_${idx}`,
           name: m.name ?? '-',
@@ -240,43 +217,42 @@ const ManagerDashboard = ({ navigation }: any) => {
         };
       });
 
-      // ✅ 수정: 실제 데이터가 있으면 실제 데이터만 사용, 없을 때만 dummy
-      // 기존에는 realExpiring.length > 0 일 때 realExpiring 사용했는데
-      // dDay가 0으로 파싱되면 모두 0이 되는 문제 → 파싱 보강으로 해결
-      const combinedExpiring = realExpiring.length > 0 ? realExpiring : DUMMY_EXPIRING_MEMBERS;
-
       setDashboardStats(prev => ({
         ...prev,
         newMembersToday: data.newMembersToday ?? prev.newMembersToday,
         lastUpdated: data.lastUpdated ?? prev.lastUpdated,
-        // ✅ 수정: 새로고침 시 빈 배열로 덮어쓰지 않도록 기존 값 유지
-        expiringMembers: combinedExpiring.length > 0 ? combinedExpiring : prev.expiringMembers,
+        expiringMembers: realExpiring.length > 0 ? realExpiring : prev.expiringMembers,
       }));
 
       if (Array.isArray(data.weeklyCongestion) && data.weeklyCongestion.length > 0) {
         const rawCounts: number[] = (data.weeklyCongestion as unknown[]).map(Number);
-        const maxCount = Math.max(...rawCounts, 1);
-        const rates = rawCounts.map((v: number) => Math.round((v / maxCount) * 100));
+        const weekdayCounts = rawCounts.slice(0, 6);
+        const maxCount = Math.max(...weekdayCounts, 1);
+        const rates = weekdayCounts.map((v: number) => Math.round((v / maxCount) * 100));
         setWeeklyCongestionRate(rates);
       } else {
-        setWeeklyCongestionRate(prev => prev.length > 0 ? prev : [30, 45, 40, 50, 70, 100, 85]);
+        setWeeklyCongestionRate(prev => prev.length > 0 ? prev : [30, 45, 40, 50, 70, 100]);
       }
 
       if (data.hourlyCongestionByDay && typeof data.hourlyCongestionByDay === 'object') {
         const normalized: Record<number, number[]> = {};
         (Object.entries(data.hourlyCongestionByDay) as [string, unknown][]).forEach(([k, v]) => {
-          normalized[Number(k)] = Array.isArray(v) ? (v as unknown[]).map(Number) : [];
+          const dayNum = Number(k);
+          if (dayNum !== 7) {
+            normalized[dayNum] = Array.isArray(v) ? (v as unknown[]).map(Number) : [];
+          }
         });
         setHourlyCongestionByDay(normalized);
         const defaultDay = dashboardStats.selectedDay;
         const defaultHourly = normalized[defaultDay];
+        const fallback = defaultDay === 6
+          ? [10, 20, 35, 60, 80, 55, 30]
+          : [10, 20, 30, 50, 70, 90, 100, 80, 60, 40];
         setHourlyData(
-          defaultHourly && defaultHourly.length > 0
-            ? defaultHourly
-            : [10, 15, 20, 25, 40, 60, 80, 100, 90, 70, 50, 30, 20, 10, 5]
+          defaultHourly && defaultHourly.length > 0 ? defaultHourly : fallback
         );
       } else {
-        setHourlyData(prev => prev.length > 0 ? prev : [10, 15, 20, 25, 40, 60, 80, 100, 90, 70, 50, 30, 20, 10, 5]);
+        setHourlyData(prev => prev.length > 0 ? prev : [10, 20, 30, 50, 70, 90, 100, 80, 60, 40]);
       }
 
       if (data.totalMembers != null) {
@@ -295,9 +271,11 @@ const ManagerDashboard = ({ navigation }: any) => {
       const response = await axios.get(DASHBOARD_SUMMARY_API_URL, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const raw = response.data;
-      const data = raw?.data?.data ?? raw?.data ?? raw ?? {};
-      console.log('[Dashboard Summary] data:', JSON.stringify(data));
+      const data =
+        response.data?.data?.data ??
+        response.data?.data ??
+        response.data ??
+        {};
 
       setDashboardSummary({
         totalVisitsToday: Number(data.totalVisitsToday ?? 0),
@@ -316,6 +294,8 @@ const ManagerDashboard = ({ navigation }: any) => {
   };
 
   const fetchHourlyByDay = async (dayOfWeek: number) => {
+    if (dayOfWeek === 7) return;
+
     try {
       if (hourlyCongestionByDay[dayOfWeek] && hourlyCongestionByDay[dayOfWeek].length > 0) {
         setHourlyData(hourlyCongestionByDay[dayOfWeek]);
@@ -327,13 +307,24 @@ const ManagerDashboard = ({ navigation }: any) => {
         headers: { Authorization: `Bearer ${token}` },
         params: { dayOfWeek },
       });
-      const rawList: number[] = (response.data?.data?.data ?? []).map(Number);
+      const rawList: number[] = (
+        response.data?.data?.data ??
+        response.data?.data ??
+        response.data ??
+        []
+      ).map ? (
+        response.data?.data?.data ??
+        response.data?.data ??
+        response.data ??
+        []
+      ).map(Number) : [];
+
       setHourlyCongestionByDay(prev => ({ ...prev, [dayOfWeek]: rawList }));
-      setHourlyData(
-        rawList.length > 0
-          ? rawList
-          : [10, 15, 20, 25, 40, 60, 80, 100, 90, 70, 50, 30, 20, 10, 5]
-      );
+
+      const fallback = dayOfWeek === 6
+        ? [10, 20, 35, 60, 80, 55, 30]
+        : [10, 20, 30, 50, 70, 90, 100, 80, 60, 40];
+      setHourlyData(rawList.length > 0 ? rawList : fallback);
     } catch (error: any) {
       console.error('시간대별 혼잡도 로드 실패:', error.response?.data?.message || error.message);
     }
@@ -350,7 +341,11 @@ const ManagerDashboard = ({ navigation }: any) => {
         headers: { Authorization: `Bearer ${token}` },
         params: { page: 0, size: 2, sort: 'id,desc' },
       });
-      const noticeList = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
+      const noticeList =
+        response.data?.data?.data?.content ??
+        response.data?.data?.content ??
+        response.data?.content ??
+        [];
       setNotices(Array.isArray(noticeList) ? noticeList : []);
     } catch (error: any) {
       console.error('공지사항 로드 실패:', error.response?.data?.message || error.message);
@@ -370,9 +365,17 @@ const ManagerDashboard = ({ navigation }: any) => {
         headers: { Authorization: `Bearer ${token}` },
         params: { page: 0, size: 20, sort: 'id,desc' },
       });
-      const raw = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
+      const raw =
+        response.data?.data?.data?.content ??
+        response.data?.data?.content ??
+        response.data?.content ??
+        [];
       const list = Array.isArray(raw) ? raw : [];
-      const totalElements = response.data?.data?.data?.totalElements ?? response.data?.data?.totalElements ?? list.length;
+      const totalElements =
+        response.data?.data?.data?.totalElements ??
+        response.data?.data?.totalElements ??
+        response.data?.totalElements ??
+        list.length;
       const mappedList = list.map((item: any) => ({
         ...item,
         isPast: new Date(item.meetDateTime).getTime() < Date.now(),
@@ -390,7 +393,11 @@ const ManagerDashboard = ({ navigation }: any) => {
         headers: { Authorization: `Bearer ${token}` },
         params: { page: 0, size: 1000, sort: 'id,desc' },
       });
-      const rawList = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
+      const rawList =
+        response.data?.data?.data?.content ??
+        response.data?.data?.content ??
+        response.data?.content ??
+        [];
       const list = Array.isArray(rawList) ? rawList : [];
       const validMembers = list.filter((user: any) => {
         const memberInfo = user.member || user;
@@ -408,7 +415,11 @@ const ManagerDashboard = ({ navigation }: any) => {
       const response = await axios.get(VISIT_TODAY_API_URL, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = response.data?.data?.data ?? response.data?.data ?? response.data;
+      const data =
+        response.data?.data?.data ??
+        response.data?.data ??
+        response.data ??
+        {};
       const todayCount = data?.totalVisitsToday ?? 0;
       setMetrics(prev => ({ ...prev, todayVisitors: todayCount }));
       const logs: any[] = data?.visitLogs ?? [];
@@ -425,7 +436,10 @@ const ManagerDashboard = ({ navigation }: any) => {
       const response = await axios.get(`${MEMBERSHIP_API_URL}/active`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const d = response.data?.data?.data ?? response.data?.data ?? response.data;
+      const d =
+        response.data?.data?.data ??
+        response.data?.data ??
+        response.data;
       let activeCount = 0;
       if (typeof d === 'number') activeCount = d;
       else if (typeof d?.totalElements === 'number') activeCount = d.totalElements;
@@ -441,7 +455,11 @@ const ManagerDashboard = ({ navigation }: any) => {
           headers: { Authorization: `Bearer ${token}` },
           params: { size: 1000 },
         });
-        const list = fallbackRes.data?.data?.data?.content ?? fallbackRes.data?.data?.data ?? [];
+        const list =
+          fallbackRes.data?.data?.data?.content ??
+          fallbackRes.data?.data?.content ??
+          fallbackRes.data?.content ??
+          [];
         let count = 0;
         list.forEach((user: any) => {
           const memberInfo = user.member || user;
@@ -494,14 +512,16 @@ const ManagerDashboard = ({ navigation }: any) => {
     return dateString.split('T')[0];
   };
 
-  // ✅ 수정: openDetailModal은 selectedUser를 독립적으로 세팅 → 새로고침과 무관
   const openDetailModal = async (memberId: number, fallbackName: string, fallbackPhone: string) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
       const response = await axios.get(`${PROFILE_API_URL}/${memberId}/profile`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const d = response.data?.data?.data || response.data?.data;
+      const d =
+        response.data?.data?.data ??
+        response.data?.data ??
+        response.data;
       if (!d) { showResultModal('프로필 조회 불가', '상세 정보를 불러올 수 없습니다.', 'error'); return; }
       const detail = d.detail || {};
       setSelectedUser({
@@ -613,7 +633,11 @@ const ManagerDashboard = ({ navigation }: any) => {
         { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
       );
       setIsProcessing(false);
-      const result        = response.data?.data?.data ?? response.data?.data ?? {};
+      const result =
+        response.data?.data?.data ??
+        response.data?.data ??
+        response.data ??
+        {};
       const statusCode    = result.statusCode || '';
       const memberName    = result.memberName || '회원';
       const remainingInfo = result.remainingInfo || '';
@@ -642,17 +666,9 @@ const ManagerDashboard = ({ navigation }: any) => {
     }
   };
 
-  const toggleCheck = (id: string) => {
-    const newSet = new Set(checkedItems);
-    if (newSet.has(id)) newSet.delete(id);
-    else newSet.add(id);
-    setCheckedItems(newSet);
-  };
-
-  // ─── 수직형 바 그래프 (요일별 혼잡도) ───
   const renderWeeklyBar = () => {
     const CHART_H = 150;
-    const barWidth = Math.floor((CARD_INNER_W - 40) / 7);
+    const barWidth = Math.floor((CARD_INNER_W - 40) / 6);
 
     return (
       <View style={styles.chartContainer}>
@@ -706,14 +722,17 @@ const ManagerDashboard = ({ navigation }: any) => {
     );
   };
 
-  // ─── 수직형 선 그래프 (시간대별 분포) ───
   const renderHourlyLine = () => {
-    const dayLabel = DAY_LABELS[dashboardStats.selectedDay] ?? '';
+    const selectedDay = dashboardStats.selectedDay;
+    const dayLabel = DAY_LABELS[selectedDay] ?? '';
+    const hourRange = getHourRange(selectedDay);
+
     const CHART_H = 150;
-    const maxVal = Math.max(...hourlyData, 1);
-    const count = hourlyData.length;
+    const displayData = hourlyData.slice(0, hourRange.length);
+    const maxVal = Math.max(...displayData, 1);
+    const count = displayData.length;
     const lineW = CARD_INNER_W - 30;
-    const points = hourlyData.map((val, i) => ({
+    const points = displayData.map((val, i) => ({
       x: count > 1 ? (i / (count - 1)) * lineW : 0,
       y: CHART_H - (val / maxVal) * CHART_H,
     }));
@@ -721,6 +740,9 @@ const ManagerDashboard = ({ navigation }: any) => {
     return (
       <View style={styles.chartContainer}>
         <Text style={styles.chartTitle}>{dayLabel}요일 시간대별 상세 분포</Text>
+        <Text style={styles.chartSubTitle}>
+          운영시간: {selectedDay === 6 ? '13:00 ~ 19:00' : '13:00 ~ 22:00'}
+        </Text>
         <View style={{ flexDirection: 'row', height: CHART_H + 32, marginTop: 15 }}>
           <View style={{ width: 30, height: CHART_H, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 6 }}>
             <Text style={styles.yAxisText}>Max</Text>
@@ -773,9 +795,9 @@ const ManagerDashboard = ({ navigation }: any) => {
               ))}
             </View>
             <View style={{ position: 'absolute', top: CHART_H + 8, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between' }}>
-              {hourlyData.map((_, i) => {
-                const hour = i + 9;
-                return i % 3 === 0 ? (
+              {hourRange.map((hour, i) => {
+                const showLabel = selectedDay === 6 ? true : i % 2 === 0;
+                return showLabel ? (
                   <Text key={i} style={styles.xAxisText}>{hour}시</Text>
                 ) : null;
               })}
@@ -786,57 +808,49 @@ const ManagerDashboard = ({ navigation }: any) => {
     );
   };
 
-  // ─── 만료 임박 회원 체크리스트 ───
-  // ✅ 수정: expiringMembers가 비어있을 때 dummy 사용, 항상 렌더링 시도
   const renderExpiringMembers = () => {
-    const list = dashboardStats.expiringMembers.length > 0
-      ? dashboardStats.expiringMembers
-      : DUMMY_EXPIRING_MEMBERS;
+    const list = dashboardStats.expiringMembers;
 
     return (
       <View style={styles.card}>
-        <Text style={styles.expiringTitle}>만료 임박 회원 체크리스트 (2주 이내)</Text>
+        <Text style={styles.expiringTitle}>만료 임박 회원 (1주 이내)</Text>
         <View style={styles.divider} />
-        <View style={styles.expiringHeader}>
-          <Text style={[styles.expiringCol, { width: 40, textAlign: 'center' }]}>확인</Text>
-          <Text style={[styles.expiringCol, { flex: 1.2 }]}>이름</Text>
-          <Text style={[styles.expiringCol, { flex: 2 }]}>연락처</Text>
-          <Text style={[styles.expiringCol, { flex: 1.5 }]}>만료일</Text>
-          <Text style={[styles.expiringCol, { width: 50, textAlign: 'center' }]}>상태</Text>
-        </View>
-        {list.map((m, idx) => {
-          const dDay = m.dDay;
-          const isChecked = checkedItems.has(m.id);
-          const ddayColor = isChecked ? '#666666' : dDay <= 3 ? '#FF4D4D' : dDay <= 7 ? '#FF9800' : '#A1BE44';
-          const maskedPhone = m.phone ? m.phone.replace(/(\d{3})-?(\d{4})-?(\d{4})/, '$1-****-$3') : '-';
-          return (
-            <TouchableOpacity
-              key={m.id}
-              activeOpacity={0.8}
-              onPress={() => toggleCheck(m.id)}
-              style={[styles.expiringRow, idx % 2 === 1 && { backgroundColor: '#222222' }]}
-            >
-              <View style={{ width: 40, alignItems: 'center', justifyContent: 'center' }}>
-                <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
-                  {isChecked && <Text style={{ color: '#1A1A1A', fontSize: 14, fontWeight: 'bold' }}>✓</Text>}
+        {list.length === 0 ? (
+          <Text style={styles.emptyText}>만료 임박 회원이 없습니다.</Text>
+        ) : (
+          <>
+            <View style={styles.expiringHeader}>
+              <Text style={[styles.expiringCol, { flex: 1.2 }]}>이름</Text>
+              <Text style={[styles.expiringCol, { flex: 2 }]}>연락처</Text>
+              <Text style={[styles.expiringCol, { flex: 1.5 }]}>만료일</Text>
+              <Text style={[styles.expiringCol, { width: 50, textAlign: 'center' }]}>상태</Text>
+            </View>
+            {list.map((m, idx) => {
+              const dDay = m.dDay;
+              const ddayColor = dDay <= 3 ? '#FF4D4D' : dDay <= 7 ? '#FF9800' : '#A1BE44';
+              const maskedPhone = m.phone ? m.phone.replace(/(\d{3})-?(\d{4})-?(\d{4})/, '$1-****-$3') : '-';
+              return (
+                <View
+                  key={m.id}
+                  style={[styles.expiringRow, idx % 2 === 1 && { backgroundColor: '#222222' }]}
+                >
+                  <Text style={[styles.expiringValue, { flex: 1.2 }]}>{m.name}</Text>
+                  <Text style={[styles.expiringValue, { flex: 2 }]}>{maskedPhone}</Text>
+                  <Text style={[styles.expiringValue, { flex: 1.5, fontSize: 12 }]}>{m.endDate}</Text>
+                  <View style={{ width: 50, alignItems: 'center', justifyContent: 'center' }}>
+                    <View style={[styles.ddayBadge, { backgroundColor: `${ddayColor}33` }]}>
+                      <Text style={[styles.ddayText, { color: ddayColor }]}>D-{dDay}</Text>
+                    </View>
+                  </View>
                 </View>
-              </View>
-              <Text style={[styles.expiringValue, { flex: 1.2 }, isChecked && styles.textStrikethrough]}>{m.name}</Text>
-              <Text style={[styles.expiringValue, { flex: 2 }, isChecked && styles.textStrikethrough]}>{maskedPhone}</Text>
-              <Text style={[styles.expiringValue, { flex: 1.5, fontSize: 12 }, isChecked && styles.textStrikethrough]}>{m.endDate}</Text>
-              <View style={{ width: 50, alignItems: 'center', justifyContent: 'center' }}>
-                <View style={[styles.ddayBadge, { backgroundColor: isChecked ? '#333' : `${ddayColor}33` }]}>
-                  <Text style={[styles.ddayText, { color: ddayColor }]}>D-{dDay}</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
+              );
+            })}
+          </>
+        )}
       </View>
     );
   };
 
-  // ─── 하단 컨트롤 바 ───
   const renderBottomControls = () => {
     const selectedLabel = DAY_SELECT_OPTIONS.find(o => o.value === dashboardStats.selectedDay)?.label ?? '토요일';
     return (
@@ -904,7 +918,6 @@ const ManagerDashboard = ({ navigation }: any) => {
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />}
       >
-        {/* 1. 상단 헤더: 타이틀 + 메트릭 4개 */}
         <View style={styles.headerCard}>
           <View style={styles.headerLeft}>
             <Text style={styles.dashboardTitleBig}>관리자{"\n"}대시보드</Text>
@@ -937,7 +950,6 @@ const ManagerDashboard = ({ navigation }: any) => {
           </View>
         </View>
 
-        {/* 1-1. summary 메트릭 카드 */}
         <View style={styles.summaryRow}>
           <View style={styles.summaryBox}>
             <Text style={styles.summaryLabel}>오늘 방문자</Text>
@@ -953,19 +965,15 @@ const ManagerDashboard = ({ navigation }: any) => {
           </View>
         </View>
 
-        {/* 2. 그래프 영역 */}
         <View style={styles.graphsWrapper}>
           {renderWeeklyBar()}
           {renderHourlyLine()}
         </View>
 
-        {/* 3. 상세 조회 컨트롤 */}
         {renderBottomControls()}
 
-        {/* 4. 만료 임박 회원 체크리스트 */}
         {renderExpiringMembers()}
 
-        {/* 5. 최근 가입회원 */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>최근 가입회원</Text>
@@ -1015,7 +1023,6 @@ const ManagerDashboard = ({ navigation }: any) => {
           )}
         </View>
 
-        {/* 6. 최근 공지사항 */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>최근 공지사항</Text>
@@ -1053,12 +1060,10 @@ const ManagerDashboard = ({ navigation }: any) => {
 
       </ScrollView>
 
-      {/* FAB */}
       <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={openScanner}>
         <Image source={require('../assets/Camera.png')} style={styles.fabIcon} />
       </TouchableOpacity>
 
-      {/* 결과 모달 */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -1076,7 +1081,6 @@ const ManagerDashboard = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 삭제 모달 */}
       <Modal visible={isDeleteModalVisible} animationType="fade" transparent onRequestClose={() => setDeleteModalVisible(false)}>
         <View style={styles.deleteModalOverlay}>
           <View style={styles.deleteModalBox}>
@@ -1096,7 +1100,6 @@ const ManagerDashboard = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 회원 상세 바텀시트 */}
       <Modal visible={isDetailVisible} transparent animationType="fade" onRequestClose={closeDetailModal}>
         <View style={styles.modalOverlay}>
           <TouchableWithoutFeedback onPress={closeDetailModal}>
@@ -1158,7 +1161,6 @@ const ManagerDashboard = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* QR 스캐너 모달 */}
       <Modal visible={isScannerVisible} animationType="slide" transparent={false} onRequestClose={closeScanner}>
         <View style={styles.scannerModalOverlay}>
           <View style={styles.scannerHeader}>
@@ -1197,7 +1199,6 @@ const ManagerDashboard = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 알림 보내기 모달 */}
       <Modal visible={isSendAlertModalVisible} animationType="fade" transparent onRequestClose={() => setSendAlertModalVisible(false)}>
         <View style={styles.alertModalOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%', alignItems: 'center' }}>
@@ -1271,7 +1272,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#2C2C2C', borderRadius: 16,
     paddingHorizontal: 20, paddingVertical: 20, marginBottom: 16
   },
-  chartTitle: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 5 },
+  chartTitle: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 2 },
+  chartSubTitle: { color: '#A1BE44', fontSize: 12, marginBottom: 5 },
   chartAxisLabel: { color: '#888888', fontSize: 9, marginBottom: 2 },
   yAxisText: { color: '#888888', fontSize: 10 },
   xAxisText: { color: '#888888', fontSize: 10 },
@@ -1284,11 +1286,8 @@ const styles = StyleSheet.create({
   expiringCol: { color: '#999999', fontSize: 13, fontWeight: 'bold' },
   expiringRow: { flexDirection: 'row', paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
   expiringValue: { color: '#ffffff', fontSize: 14 },
-  textStrikethrough: { textDecorationLine: 'line-through', color: '#666666' },
   ddayBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
   ddayText: { fontSize: 12, fontWeight: 'bold' },
-  checkbox: { width: 22, height: 22, borderWidth: 2, borderColor: '#666', borderRadius: 4, alignItems: 'center', justifyContent: 'center' },
-  checkboxChecked: { backgroundColor: '#A1BE44', borderColor: '#A1BE44' },
 
   controlCard: { backgroundColor: '#2C2C2C', borderRadius: 16, padding: 20, marginBottom: 16 },
   controlRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginBottom: 15 },
