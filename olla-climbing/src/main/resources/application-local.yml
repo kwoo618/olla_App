@@ -1,0 +1,10 @@
+# 개발용 설정
+
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: update # 로컬에서는 테이블 자동 수정 허용
+    properties:
+      hibernate:
+        format_sql: true
+    show-sql: true

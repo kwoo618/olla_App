@@ -19,7 +19,6 @@ import java.io.IOException;
 import java.util.List;
 
 @Slf4j      // 로그를 남기기 위한 어노테이션
-@Component
 @RequiredArgsConstructor    // final로 선언된 필드를 매개변수로 받는 생성자를 자동 생성
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 

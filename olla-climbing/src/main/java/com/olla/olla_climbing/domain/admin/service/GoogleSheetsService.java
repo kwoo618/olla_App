@@ -13,18 +13,9 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.Collections;
 import java.util.List;
 
-/*
- * 🚨 [팀원 필독: 구글 시트 연동 비활성화 상태] 🚨
- * 현재 서버 에러(Google Credentials Missing)를 방지하기 위해 실제 API 호출 코드는 주석 처리(안전 잠금)되어 있습니다.
- * 구글 클라우드 세팅이 완료되고 실제 연동 테스트를 진행할 때만 주석을 해제하세요.
- *
- * [주석 해제 방법]
- * 총 5개의 메서드(appendRow, updateVisitData, updateMembershipPauseDate, unpauseMembershipData, findRowIndexByMemberId) 내부에 있는
- * '/* ----- 구글 시트 활성화 시 이 줄 삭제 -----' 부터
- * '----- 구글 시트 활성화 시 이 줄 삭제 ----- * /' 까지의 범위를 지워주시면 즉시 시트로 데이터가 전송됩니다.
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -45,7 +36,7 @@ public class GoogleSheetsService {
     private void appendRow(String sheetName, List<Object> rowData) {
         log.info("[구글 시트 전송 대기] 시트명: {}, 데이터: {}", sheetName, rowData);
 
-        /* ----- 구글 시트 활성화 시 이 줄 삭제 -----
+
         try {
             int emptyRowIdx = findFirstEmptyRow(sheetName);
             String range = sheetName + "!A" + emptyRowIdx;
@@ -60,7 +51,6 @@ public class GoogleSheetsService {
             log.error("Google Sheets 행 추가 중 치명적 오류 발생: {}", e.getMessage(), e);
             throw new RuntimeException("구글 시트 연동 실패", e);
         }
-        ----- 구글 시트 활성화 시 이 줄 삭제 ----- */
     }
 
     // =========================================================================
@@ -97,15 +87,15 @@ public class GoogleSheetsService {
 
     @Async
     public void syncNewMembership(Member member, Membership membership) {
-        String typeStr = "PERIOD".equals(membership.getMembershipTypeName()) ? "기간권" : "횟수권";
-        String amountStr = "PERIOD".equals(membership.getMembershipTypeName())
-                ? membership.getDurationMonth() + "개월"
-                : membership.getRemainingCount() + "회";
+        boolean isPeriod = membership.getDurationMonth() != null;
+        String typeDesc = isPeriod ? "기간권" : "횟수권";
+        String serviceAmount = isPeriod ? membership.getDurationMonth() + "개월" : membership.getRemainingCount() + "회";
+        String startDateStr = membership.getStartDate().format(DateTimeFormatter.ofPattern("yyyy. MM. dd"));
 
-        /* ----- 구글 시트 활성화 시 이 줄 삭제 -----
         try {
             int rowIndex = findRowIndexByMemberId("이용권 관리", member.getId());
             if (rowIndex != -1) {
+                // 💡 2. 이제 변수 사용 가능!
                 String range = "이용권 관리!E" + rowIndex + ":G" + rowIndex;
                 List<Object> updateData = List.of(typeDesc, serviceAmount, startDateStr);
                 ValueRange body = new ValueRange().setValues(List.of(updateData));
@@ -121,7 +111,6 @@ public class GoogleSheetsService {
         } catch (Exception e) {
             log.error("시트 이용권 발급/업데이트 에러: ", e);
         }
-        ----- 구글 시트 활성화 시 이 줄 삭제 ----- */
     }
 
     // =========================================================================
@@ -129,7 +118,7 @@ public class GoogleSheetsService {
     // =========================================================================
     @Async
     public void updateVisitData(Long memberId, String visitDateStr, Integer accumulatedVisits) {
-        /* ----- 구글 시트 활성화 시 이 줄 삭제 -----
+
         try {
             int rowIndex = findRowIndexByMemberId("이용권 관리", memberId);
             if (rowIndex != -1) {
@@ -141,12 +130,10 @@ public class GoogleSheetsService {
         } catch (Exception e) {
             log.error("시트 방문 데이터 업데이트 에러: ", e);
         }
-        ----- 구글 시트 활성화 시 이 줄 삭제 ----- */
     }
 
     @Async
     public void updateMembershipPauseDate(Long memberId, String pauseDateStr) {
-        /* ----- 구글 시트 활성화 시 이 줄 삭제 -----
         try {
             int rowIndex = findRowIndexByMemberId("이용권 관리", memberId);
             if (rowIndex != -1) {
@@ -158,12 +145,10 @@ public class GoogleSheetsService {
         } catch (Exception e) {
             log.error("시트 정지일 업데이트 에러: ", e);
         }
-        ----- 구글 시트 활성화 시 이 줄 삭제 ----- */
     }
 
     @Async
     public void unpauseMembershipData(Long memberId, String newEndDateStr) {
-        /* ----- 구글 시트 활성화 시 이 줄 삭제 -----
         try {
             int rowIndex = findRowIndexByMemberId("이용권 관리", memberId);
             if (rowIndex != -1) {
@@ -175,7 +160,6 @@ public class GoogleSheetsService {
         } catch (Exception e) {
             log.error("시트 정지 해제 업데이트 에러: ", e);
         }
-        ----- 구글 시트 활성화 시 이 줄 삭제 ----- */
     }
 
     // =========================================================================

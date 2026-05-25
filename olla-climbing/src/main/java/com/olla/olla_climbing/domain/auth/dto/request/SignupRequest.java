@@ -55,7 +55,6 @@ public class SignupRequest {
     @Getter
     @NoArgsConstructor
     public static class MemberDetailDto { // 내부 클래스로 정의
-        private Integer age;
         private Double height;
         private Double weight;
         private Double armSpan;

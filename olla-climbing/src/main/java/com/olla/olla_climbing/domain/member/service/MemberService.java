@@ -120,7 +120,6 @@ public class MemberService {
 
         log.info("관리자가 회원 정보 수정 완료: {}", member.getId());
 
-        // googleSheetsService.updateMemberRow(member);
     }
 
     @Transactional(readOnly = true)

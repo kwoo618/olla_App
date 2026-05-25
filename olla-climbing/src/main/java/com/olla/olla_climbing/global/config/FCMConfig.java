@@ -17,7 +17,7 @@ public class FCMConfig {
     @PostConstruct
     public void init() {
         try {
-            // resources/firebase 폴더 안에 키 파일을 넣어야 합니다.
+            // resources/firebase 폴더 안에 키 파일(json)이 반드시 있어야 합니다.
             InputStream serviceAccount = new ClassPathResource("/firebase/firebase-service-account.json").getInputStream();
 
             FirebaseOptions options = FirebaseOptions.builder()
@@ -26,10 +26,10 @@ public class FCMConfig {
 
             if (FirebaseApp.getApps().isEmpty()) {
                 FirebaseApp.initializeApp(options);
-                log.info("FCM(Firebase Cloud Messaging) 초기화 성공!");
+                log.info("🚀 FCM(Firebase Cloud Messaging) 초기화 성공!푸시 활성화됨.");
             }
         } catch (Exception e) {
-            log.error("FCM 초기화 실패 (키 파일이 없거나 잘못되었습니다): {}", e.getMessage());
+            log.error("🚨 FCM 초기화 실패 (키 파일이 없거나 경로가 잘못되었습니다): {}", e.getMessage());
         }
     }
 }
