@@ -198,7 +198,7 @@ const NotificationScreen = ({ navigation }: any) => {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
         }
-        ListHeaderComponent={renderMembershipSection()}
+        ListHeaderComponent={renderMembershipSection}
         ListEmptyComponent={
           <Text style={styles.emptyText}>새로운 알림이 없습니다.</Text>
         }
