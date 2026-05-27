@@ -10,9 +10,12 @@ import net.nurigo.sdk.message.service.DefaultMessageService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+// TODO: [출시 대비 리팩토링] 사용하지 않는 외부 API 통신 빈 등록 해제
 @Slf4j
-@Service
+// @Service
 public class SmsService {
+
+    /* 기존 코드 전체 주석 처리
 
     @Value("${coolsms.api-key}")
     private String apiKey;
@@ -49,4 +52,5 @@ public class SmsService {
             throw new RuntimeException("문자 발송 중 오류가 발생했습니다.", e);
         }
     }
+    */
 }

@@ -6,14 +6,15 @@ import {
   StyleSheet, 
   TextInput, 
   TouchableOpacity, 
-  ScrollView,
-  KeyboardAvoidingView,
   Platform,
   Modal,
   ActivityIndicator,
   Keyboard
 } from 'react-native';
 import { API_BASE_URL } from '../src/constants/Config';
+
+// ✅ 새로 설치한 라이브러리 Import
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 
 const SignupScreen = ({ navigation }: any) => {
   const [id, setId] = useState('');
@@ -77,11 +78,12 @@ const SignupScreen = ({ navigation }: any) => {
 
   const validatePassword = (pw: string) => {
     setPassword(pw);
-    const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/;
+    // 영문, 숫자, 특수문자 무조건 1개 이상 포함 및 공백 없는 6자리 이상
+    const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9\s])\S{6,}$/;
     if (!pw) {
       setPasswordError('비밀번호를 입력해주세요.');
     } else if (!passwordRegex.test(pw)) {
-      setPasswordError('영문+숫자 포함 6자 이상이어야 합니다.');
+      setPasswordError('영문, 숫자, 특수문자 포함 6자 이상이어야 합니다.');
     } else {
       setPasswordError('');
     }
@@ -331,13 +333,15 @@ const SignupScreen = ({ navigation }: any) => {
   // ─── 렌더링 ─────────────────────────────────────────────
 
   return (
-    <KeyboardAvoidingView 
-      style={{ flex: 1, backgroundColor: '#1A1A1A' }} 
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView 
+    <>
+      {/* ✅ 두 겹의 껍데기를 하나로 통합한 KeyboardAwareScrollView */}
+      <KeyboardAwareScrollView 
+        style={{ flex: 1, backgroundColor: '#1A1A1A' }}
         contentContainerStyle={styles.background} 
-        keyboardShouldPersistTaps="handled" // 빈 공간 터치시 키보드 자동 해제
+        enableOnAndroid={true} // 안드로이드 릴리즈 버그 픽스
+        extraScrollHeight={30} // 키보드와 입력창 사이의 여유 공간
+        keyboardShouldPersistTaps="handled" // 빈 공간 터치시 키보드 해제
+        showsVerticalScrollIndicator={false}
         bounces={false}
       >
         <View style={styles.container}>
@@ -391,7 +395,7 @@ const SignupScreen = ({ navigation }: any) => {
           <TextInput
             ref={passwordRef}
             style={[styles.input, focusedField === 'password' && styles.focusedInput, passwordError ? styles.inputError : null]}
-            placeholder="영문+숫자 포함 6자 이상"
+            placeholder="영문, 숫자, 특수문자 포함 6자 이상"
             placeholderTextColor="#ffffff80"
             secureTextEntry
             autoCapitalize="none"
@@ -566,6 +570,11 @@ const SignupScreen = ({ navigation }: any) => {
               </View>
               {emailCodeError !== '' && <Text style={styles.errorText}>{emailCodeError}</Text>}
               {emailCodeSuccess !== '' && focusedField === 'emailCode' && <Text style={styles.successText}>{emailCodeSuccess}</Text>}
+              <TouchableOpacity
+                onPress={() => showResultModal('안내', '스팸함을 확인해 보십시오.\n\n인증 메일이 스팸 또는 프로모션 탭으로\n분류되었을 수 있습니다.', 'info')}
+              >
+                <Text style={styles.spamGuideText}>이메일이 안 왔나요?</Text>
+              </TouchableOpacity>
             </>
           )}
 
@@ -581,7 +590,7 @@ const SignupScreen = ({ navigation }: any) => {
             )}
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {/* 커스텀 알림 결과 모달 */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
@@ -603,12 +612,12 @@ const SignupScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-    </KeyboardAvoidingView>
+    </>
   );
 };
 
 const styles = StyleSheet.create({
-  background: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1A1A1A', paddingVertical: 50, paddingHorizontal: 20 },
+  background: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 50, paddingHorizontal: 20 },
   container: { width: '100%', backgroundColor: '#212121', padding: 24, borderRadius: 25, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 10 }, 
   title: { fontSize: 36, fontWeight: 'bold', marginBottom: 25, color: '#ffffff', textAlign: 'center' }, 
   middleText: { color: '#ffffff', fontSize: 16, alignSelf: 'flex-start', marginBottom: 8, marginLeft: 5, marginTop: 10 }, 
@@ -645,6 +654,9 @@ const styles = StyleSheet.create({
   resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, 
   resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, 
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
+
+  // ─── 추가된 스타일 ───
+  spamGuideText: { color: '#888888', fontSize: 14, alignSelf: 'flex-start', marginLeft: 5, marginTop: 6, marginBottom: 4, textDecorationLine: 'underline' },
 });
 
 export default SignupScreen;

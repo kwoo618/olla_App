@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Image, ActivityIndicator, Modal, Platform, PermissionsAndroid, RefreshControl, Animated, Dimensions, PanResponder, TouchableWithoutFeedback, Alert
+  Image, ActivityIndicator, Modal, Platform, PermissionsAndroid,
+  RefreshControl, Animated, Dimensions, PanResponder, TouchableWithoutFeedback, TextInput, KeyboardAvoidingView
 } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -15,10 +16,32 @@ const MEMBERSHIP_API_URL  = `${API_BASE_URL}/admin/memberships`;
 const VISIT_TODAY_API_URL = `${API_BASE_URL}/admin/visits/today`;
 const QR_SCAN_API_URL     = `${API_BASE_URL}/admin/visits/scan`;
 const PROFILE_API_URL     = `${API_BASE_URL}/members`;
-// 혼잡도 관련 API 임시 URL (실제 백엔드 API 주소로 수정 필요)
-const CONGESTION_API_URL  = `${API_BASE_URL}/admin/visits/congestion`; 
+const DASHBOARD_API_URL         = `${API_BASE_URL}/admin/dashboard`;
+const DASHBOARD_SUMMARY_API_URL = `${API_BASE_URL}/admin/dashboard/summary`;
+const HOURLY_API_URL      = `${API_BASE_URL}/admin/dashboard/hourly`;
+const ALERT_SEND_API_URL  = `${API_BASE_URL}/admin/alerts/send`; 
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const CARD_INNER_W = SCREEN_WIDTH - 40;
+
+const DAY_LABELS: Record<number, string> = {
+  1: '월', 2: '화', 3: '수', 4: '목', 5: '금', 6: '토',
+};
+const DAY_SELECT_OPTIONS = [
+  { label: '월요일', value: 1 },
+  { label: '화요일', value: 2 },
+  { label: '수요일', value: 3 },
+  { label: '목요일', value: 4 },
+  { label: '금요일', value: 5 },
+  { label: '토요일', value: 6 },
+];
+
+const getHourRange = (dayOfWeek: number): number[] => {
+  if (dayOfWeek === 6) {
+    return Array.from({ length: 7 }, (_, i) => i + 13);
+  }
+  return Array.from({ length: 10 }, (_, i) => i + 13);
+};
 
 const translateGender = (gender: string) => {
   if (!gender || gender === '-') return '-';
@@ -32,6 +55,18 @@ const isValidImageUrl = (url: string | null | undefined) => {
   return url && typeof url === 'string' && url.trim() !== '' && url !== 'null' && url !== 'undefined';
 };
 
+// 새로 추가된 시간 포맷팅 함수 (년/월/일 시:분:초)
+const getFormattedCurrentTime = () => {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const hh = String(now.getHours()).padStart(2, '0');
+  const min = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  return `${yyyy}/${mm}/${dd} ${hh}:${min}:${ss}`;
+};
+
 const ManagerDashboard = ({ navigation }: any) => {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -41,7 +76,6 @@ const ManagerDashboard = ({ navigation }: any) => {
 
   const [resultModalVisible, setResultModalVisible] = useState(false);
   const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info', onConfirm: () => {} });
-
   const showResultModal = (title: string, message: string, type: 'info' | 'success' | 'error' = 'info', onConfirm: () => void = () => {}) => {
     setResultModalConfig({ title, message, type, onConfirm });
     setResultModalVisible(true);
@@ -50,12 +84,41 @@ const ManagerDashboard = ({ navigation }: any) => {
   const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ type: 'notice' | 'post', id: number } | null>(null);
 
-  // 🔥 ID가 아닌 '이름(문자열)'을 저장할 Set으로 변경
   const [visitedMemberNames, setVisitedMemberNames] = useState<Set<string>>(new Set());
 
-  // ✅ 주간 및 시간대별 혼잡도 상태 추가
-  const [weeklyCongestion, setWeeklyCongestion] = useState<number[]>([]);
-  const [hourlyCongestion, setHourlyCongestion] = useState<any>(null);
+  const [isSendAlertModalVisible, setSendAlertModalVisible] = useState(false);
+  const [alertTitle, setAlertTitle] = useState('');
+  const [alertContent, setAlertContent] = useState('');
+
+  const [weeklyCongestionRate, setWeeklyCongestionRate] = useState<number[]>([]);
+  const [hourlyCongestionByDay, setHourlyCongestionByDay] = useState<Record<number, number[]>>({});
+  const [hourlyData, setHourlyData] = useState<number[]>([]);
+
+  const [dashboardStats, setDashboardStats] = useState<{
+    newMembersToday: number;
+    lastUpdated: string;
+    expiringMembers: any[];
+    selectedDay: number;
+    dataMode: 'realtime' | 'cumulative';
+    dayDropdownOpen: boolean;
+  }>({
+    newMembersToday: 0,
+    lastUpdated: '',
+    expiringMembers: [],
+    selectedDay: 6,
+    dataMode: 'realtime',
+    dayDropdownOpen: false,
+  });
+
+  const [dashboardSummary, setDashboardSummary] = useState<{
+    totalVisitsToday: number;
+    expiringIn3Days: number;
+    newMembersThisWeek: number;
+  }>({
+    totalVisitsToday: 0,
+    expiringIn3Days: 0,
+    newMembersThisWeek: 0,
+  });
 
   const [metrics, setMetrics] = useState({
     totalMembers: 0,
@@ -80,47 +143,31 @@ const ManagerDashboard = ({ navigation }: any) => {
   const detailPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dy) > 5,
       onPanResponderGrant: () => {
         detailHeightAnim.setOffset(currentDetailSnap.current);
         detailHeightAnim.setValue(0);
       },
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy < 0) {
-          detailHeightAnim.setValue(-gestureState.dy * 0.1);
-        } else {
-          detailHeightAnim.setValue(-gestureState.dy);
-        }
+      onPanResponderMove: (_, gs) => {
+        detailHeightAnim.setValue(gs.dy < 0 ? -gs.dy * 0.1 : -gs.dy);
       },
-      onPanResponderRelease: (_, gestureState) => {
+      onPanResponderRelease: (_, gs) => {
         detailHeightAnim.flattenOffset();
-        const finalHeight = currentDetailSnap.current - gestureState.dy;
-        const CLOSE_THRESHOLD = currentDetailSnap.current * 0.75;
-        if (finalHeight < CLOSE_THRESHOLD) {
+        if (currentDetailSnap.current - gs.dy < currentDetailSnap.current * 0.75) {
           closeDetailModal();
         } else {
-          Animated.spring(detailHeightAnim, {
-            toValue: currentDetailSnap.current,
-            friction: 7,
-            tension: 40,
-            useNativeDriver: false
-          }).start();
+          Animated.spring(detailHeightAnim, { toValue: currentDetailSnap.current, friction: 7, tension: 40, useNativeDriver: false }).start();
         }
-      }
+      },
     })
   ).current;
 
   useEffect(() => {
-    if (isScannerVisible) {
-      setTimeout(() => setCameraReady(true), 500);
-    } else {
-      setCameraReady(false);
-    }
+    if (isScannerVisible) { setTimeout(() => setCameraReady(true), 500); }
+    else { setCameraReady(false); }
   }, [isScannerVisible]);
 
-  useEffect(() => {
-    checkAdminAndFetchData();
-  }, []);
+  useEffect(() => { checkAdminAndFetchData(); }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -132,19 +179,18 @@ const ManagerDashboard = ({ navigation }: any) => {
     try {
       const role  = await AsyncStorage.getItem('userRole');
       const token = await AsyncStorage.getItem('userToken');
-
       if (!token || role !== 'ADMIN') {
         showResultModal('권한 오류', '관리자만 접근할 수 있는 페이지입니다.', 'error', () => navigation.goBack());
         return;
       }
-
       await Promise.all([
         fetchNotices(token),
         fetchPosts(token),
         fetchMembers(token),
         fetchVisits(token),
         fetchActiveMemberships(token),
-        fetchCongestionData(token), 
+        fetchDashboardStats(token),
+        fetchDashboardSummary(token),
       ]);
     } catch (error: any) {
       console.error('데이터 로딩 실패:', error.response?.data?.message || error.message);
@@ -153,22 +199,152 @@ const ManagerDashboard = ({ navigation }: any) => {
     }
   };
 
-  const fetchCongestionData = async (token: string) => {
+  const fetchDashboardStats = async (token: string) => {
     try {
-      const response = await axios.get(CONGESTION_API_URL, {
+      const response = await axios.get(DASHBOARD_API_URL, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = response.data?.data || {};
-      
-      if (data.weeklyCongestion) {
-        setWeeklyCongestion(data.weeklyCongestion);
+
+      const data =
+        response.data?.data?.data ??
+        response.data?.data ??
+        response.data ??
+        {};
+
+      const rawExpiring: any[] =
+        Array.isArray(data.expiringMembers) ? data.expiringMembers :
+        Array.isArray(response.data?.data?.data?.expiringMembers) ? response.data.data.data.expiringMembers :
+        Array.isArray(response.data?.data?.expiringMembers) ? response.data.data.expiringMembers :
+        [];
+
+      const realExpiring = rawExpiring.map((m: any, idx: number) => {
+        const dDayRaw = m.dDay ?? m.dday ?? m.d_day ?? m.DDday ?? null;
+        const dDayNum = dDayRaw !== null && dDayRaw !== undefined ? Number(dDayRaw) : 0;
+        return {
+          id: `real_${m.name ?? ''}_${idx}`,
+          name: m.name ?? '-',
+          phone: m.phone ?? '-',
+          endDate: m.endDate ?? m.end_date ?? '-',
+          dDay: dDayNum,
+        };
+      });
+
+      setDashboardStats(prev => ({
+        ...prev,
+        newMembersToday: data.newMembersToday ?? prev.newMembersToday,
+        lastUpdated: getFormattedCurrentTime(), // 수정: 새로고침 한 당시의 시각을 저장
+        expiringMembers: realExpiring.length > 0 ? realExpiring : prev.expiringMembers,
+      }));
+
+      if (Array.isArray(data.weeklyCongestion) && data.weeklyCongestion.length > 0) {
+        const rawCounts: number[] = (data.weeklyCongestion as unknown[]).map(Number);
+        const weekdayCounts = rawCounts.slice(0, 6);
+        const maxCount = Math.max(...weekdayCounts, 1);
+        const rates = weekdayCounts.map((v: number) => Math.round((v / maxCount) * 100));
+        setWeeklyCongestionRate(rates);
+      } else {
+        setWeeklyCongestionRate(prev => prev.length > 0 ? prev : [30, 45, 40, 50, 70, 100]);
       }
-      if (data.hourlyCongestionByDay) {
-        setHourlyCongestion(data.hourlyCongestionByDay);
+
+      if (data.hourlyCongestionByDay && typeof data.hourlyCongestionByDay === 'object') {
+        const normalized: Record<number, number[]> = {};
+        (Object.entries(data.hourlyCongestionByDay) as [string, unknown][]).forEach(([k, v]) => {
+          const dayNum = Number(k);
+          if (dayNum !== 7) {
+            normalized[dayNum] = Array.isArray(v) ? (v as unknown[]).map(Number) : [];
+          }
+        });
+        setHourlyCongestionByDay(normalized);
+        const defaultDay = dashboardStats.selectedDay;
+        const defaultHourly = normalized[defaultDay];
+        const fallback = defaultDay === 6
+          ? [10, 20, 35, 60, 80, 55, 30]
+          : [10, 20, 30, 50, 70, 90, 100, 80, 60, 40];
+        setHourlyData(
+          defaultHourly && defaultHourly.length > 0 ? defaultHourly : fallback
+        );
+      } else {
+        setHourlyData(prev => prev.length > 0 ? prev : [10, 20, 30, 50, 70, 90, 100, 80, 60, 40]);
+      }
+
+      if (data.totalMembers != null) {
+        setMetrics(prev => ({ ...prev, totalMembers: Number(data.totalMembers) }));
+      }
+      if (data.activeMemberships != null) {
+        setMetrics(prev => ({ ...prev, activeMemberships: Number(data.activeMemberships) }));
       }
     } catch (error: any) {
-      console.error('혼잡도 데이터 로드 실패:', error.response?.data?.message || error.message);
+      console.error('대시보드 통계 로드 실패:', error.response?.data?.message || error.message);
     }
+  };
+
+  const fetchDashboardSummary = async (token: string) => {
+    try {
+      const response = await axios.get(DASHBOARD_SUMMARY_API_URL, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data =
+        response.data?.data?.data ??
+        response.data?.data ??
+        response.data ??
+        {};
+
+      setDashboardSummary({
+        totalVisitsToday: Number(data.totalVisitsToday ?? 0),
+        expiringIn3Days: Number(data.expiringIn3Days ?? 0),
+        newMembersThisWeek: Number(data.newMembersThisWeek ?? 0),
+      });
+
+      if (Array.isArray(data.notices) && data.notices.length > 0) {
+        setNotices(prev => prev.length > 0 ? prev : data.notices.slice(0, 2));
+      }
+
+      setMetrics(prev => ({ ...prev, todayVisitors: Number(data.totalVisitsToday ?? prev.todayVisitors) }));
+    } catch (error: any) {
+      console.error('대시보드 요약 로드 실패:', error.response?.data?.message || error.message);
+    }
+  };
+
+  const fetchHourlyByDay = async (dayOfWeek: number) => {
+    if (dayOfWeek === 7) return;
+
+    try {
+      if (hourlyCongestionByDay[dayOfWeek] && hourlyCongestionByDay[dayOfWeek].length > 0) {
+        setHourlyData(hourlyCongestionByDay[dayOfWeek]);
+        return;
+      }
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) return;
+      const response = await axios.get(HOURLY_API_URL, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { dayOfWeek },
+      });
+      const rawList: number[] = (
+        response.data?.data?.data ??
+        response.data?.data ??
+        response.data ??
+        []
+      ).map ? (
+        response.data?.data?.data ??
+        response.data?.data ??
+        response.data ??
+        []
+      ).map(Number) : [];
+
+      setHourlyCongestionByDay(prev => ({ ...prev, [dayOfWeek]: rawList }));
+
+      const fallback = dayOfWeek === 6
+        ? [10, 20, 35, 60, 80, 55, 30]
+        : [10, 20, 30, 50, 70, 90, 100, 80, 60, 40];
+      setHourlyData(rawList.length > 0 ? rawList : fallback);
+    } catch (error: any) {
+      console.error('시간대별 혼잡도 로드 실패:', error.response?.data?.message || error.message);
+    }
+  };
+
+  const handleDaySelect = (dayOfWeek: number) => {
+    setDashboardStats(prev => ({ ...prev, selectedDay: dayOfWeek, dayDropdownOpen: false }));
+    fetchHourlyByDay(dayOfWeek);
   };
 
   const fetchNotices = async (token: string) => {
@@ -177,7 +353,11 @@ const ManagerDashboard = ({ navigation }: any) => {
         headers: { Authorization: `Bearer ${token}` },
         params: { page: 0, size: 2, sort: 'id,desc' },
       });
-      const noticeList = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
+      const noticeList =
+        response.data?.data?.data?.content ??
+        response.data?.data?.content ??
+        response.data?.content ??
+        [];
       setNotices(Array.isArray(noticeList) ? noticeList : []);
     } catch (error: any) {
       console.error('공지사항 로드 실패:', error.response?.data?.message || error.message);
@@ -197,9 +377,17 @@ const ManagerDashboard = ({ navigation }: any) => {
         headers: { Authorization: `Bearer ${token}` },
         params: { page: 0, size: 20, sort: 'id,desc' },
       });
-      const raw = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
+      const raw =
+        response.data?.data?.data?.content ??
+        response.data?.data?.content ??
+        response.data?.content ??
+        [];
       const list = Array.isArray(raw) ? raw : [];
-      const totalElements = response.data?.data?.totalElements ?? list.length;
+      const totalElements =
+        response.data?.data?.data?.totalElements ??
+        response.data?.data?.totalElements ??
+        response.data?.totalElements ??
+        list.length;
       const mappedList = list.map((item: any) => ({
         ...item,
         isPast: new Date(item.meetDateTime).getTime() < Date.now(),
@@ -217,12 +405,15 @@ const ManagerDashboard = ({ navigation }: any) => {
         headers: { Authorization: `Bearer ${token}` },
         params: { page: 0, size: 1000, sort: 'id,desc' },
       });
-      const rawList = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
+      const rawList =
+        response.data?.data?.data?.content ??
+        response.data?.data?.content ??
+        response.data?.content ??
+        [];
       const list = Array.isArray(rawList) ? rawList : [];
       const validMembers = list.filter((user: any) => {
         const memberInfo = user.member || user;
-        const isDeleted = user.deleted === true || memberInfo.isDeleted === true || memberInfo.status === 'DELETED';
-        return !isDeleted;
+        return !(user.deleted === true || memberInfo.isDeleted === true || memberInfo.status === 'DELETED');
       });
       setRecentMembers(validMembers.slice(0, 2));
       setMetrics(prev => ({ ...prev, totalMembers: validMembers.length }));
@@ -236,23 +427,17 @@ const ManagerDashboard = ({ navigation }: any) => {
       const response = await axios.get(VISIT_TODAY_API_URL, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = response.data?.data?.data ?? response.data?.data ?? response.data;
-      
+      const data =
+        response.data?.data?.data ??
+        response.data?.data ??
+        response.data ??
+        {};
       const todayCount = data?.totalVisitsToday ?? 0;
       setMetrics(prev => ({ ...prev, todayVisitors: todayCount }));
-
-      const logs = data?.visitLogs || [];
+      const logs: any[] = data?.visitLogs ?? [];
       const visitedNames = new Set<string>();
-      
-      logs.forEach((log: any) => {
-        // 🔥 API 응답 구조에 맞게 memberName을 저장
-        if (log.memberName) {
-          visitedNames.add(log.memberName);
-        }
-      });
-      
+      logs.forEach((log: any) => { if (log.memberName) visitedNames.add(log.memberName); });
       setVisitedMemberNames(visitedNames);
-
     } catch (error: any) {
       console.error('금일 방문자 로드 실패:', error.response?.data?.message || error.message);
     }
@@ -263,7 +448,10 @@ const ManagerDashboard = ({ navigation }: any) => {
       const response = await axios.get(`${MEMBERSHIP_API_URL}/active`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const d = response.data?.data?.data ?? response.data?.data ?? response.data;
+      const d =
+        response.data?.data?.data ??
+        response.data?.data ??
+        response.data;
       let activeCount = 0;
       if (typeof d === 'number') activeCount = d;
       else if (typeof d?.totalElements === 'number') activeCount = d.totalElements;
@@ -271,22 +459,25 @@ const ManagerDashboard = ({ navigation }: any) => {
       else if (typeof d?.total === 'number') activeCount = d.total;
       else if (Array.isArray(d)) activeCount = d.length;
       else if (Array.isArray(d?.content)) activeCount = d.totalElements ?? d.content.length;
-      if (activeCount === 0 && d === undefined) throw new Error("Need fallback");
+      if (activeCount === 0 && d === undefined) throw new Error('Need fallback');
       setMetrics(prev => ({ ...prev, activeMemberships: activeCount }));
-    } catch (error: any) {
+    } catch {
       try {
         const fallbackRes = await axios.get(MEMBER_API_URL, {
           headers: { Authorization: `Bearer ${token}` },
-          params: { size: 1000 }
+          params: { size: 1000 },
         });
-        const list = fallbackRes.data?.data?.data?.content ?? fallbackRes.data?.data?.data ?? [];
+        const list =
+          fallbackRes.data?.data?.data?.content ??
+          fallbackRes.data?.data?.content ??
+          fallbackRes.data?.content ??
+          [];
         let count = 0;
         list.forEach((user: any) => {
           const memberInfo = user.member || user;
           if (user.deleted || memberInfo.isDeleted || memberInfo.status === 'DELETED') return;
           const isActive = (
-            user.membershipStatus === 'ACTIVE' ||
-            user.status === 'ACTIVE' ||
+            user.membershipStatus === 'ACTIVE' || user.status === 'ACTIVE' ||
             (Array.isArray(user.memberships) && user.memberships.some((m: any) => m.membershipStatus === 'ACTIVE' || m.status === 'ACTIVE')) ||
             (user.activeMembership && (user.activeMembership.status === 'ACTIVE' || user.activeMembership.membershipStatus === 'ACTIVE'))
           );
@@ -318,8 +509,7 @@ const ManagerDashboard = ({ navigation }: any) => {
         fetchPosts(token!);
       }
     } catch (error: any) {
-      const errorMessage = error.response?.data?.message || '삭제에 실패했습니다.';
-      showResultModal('오류', errorMessage, 'error');
+      showResultModal('오류', error.response?.data?.message || '삭제에 실패했습니다.', 'error');
     }
     setDeleteModalVisible(false);
     setItemToDelete(null);
@@ -338,15 +528,16 @@ const ManagerDashboard = ({ navigation }: any) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
       const response = await axios.get(`${PROFILE_API_URL}/${memberId}/profile`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
-      const d = response.data?.data?.data || response.data?.data;
-      if (!d) {
-        showResultModal('프로필 조회 불가', '상세 정보를 불러올 수 없습니다.', 'error');
-        return;
-      }
+      const d =
+        response.data?.data?.data ??
+        response.data?.data ??
+        response.data;
+      if (!d) { showResultModal('프로필 조회 불가', '상세 정보를 불러올 수 없습니다.', 'error'); return; }
       const detail = d.detail || {};
       setSelectedUser({
+        memberId: memberId,
         name: d.name || fallbackName,
         phone: d.phone || fallbackPhone || '-',
         profileImageUrl: d.profileImageUrl || d.profileImage,
@@ -360,15 +551,9 @@ const ManagerDashboard = ({ navigation }: any) => {
       setDetailVisible(true);
       currentDetailSnap.current = DETAIL_MODAL_HEIGHT;
       detailHeightAnim.setValue(0);
-      Animated.spring(detailHeightAnim, {
-        toValue: DETAIL_MODAL_HEIGHT,
-        friction: 8,
-        tension: 45,
-        useNativeDriver: false
-      }).start();
+      Animated.spring(detailHeightAnim, { toValue: DETAIL_MODAL_HEIGHT, friction: 8, tension: 45, useNativeDriver: false }).start();
     } catch (error: any) {
-      const errorMessage = error.response?.data?.message || '회원 상세 정보를 불러올 수 없습니다.';
-      showResultModal('프로필 조회 불가', errorMessage, 'error');
+      showResultModal('프로필 조회 불가', error.response?.data?.message || '회원 상세 정보를 불러올 수 없습니다.', 'error');
     }
   };
 
@@ -379,35 +564,59 @@ const ManagerDashboard = ({ navigation }: any) => {
     });
   };
 
+  const handleSendAlert = async () => {
+    if (!alertTitle.trim() || !alertContent.trim()) {
+      showResultModal('알림', '제목과 내용을 모두 입력해주세요.', 'info');
+      return;
+    }
+    if (!selectedUser?.memberId) {
+      showResultModal('오류', '회원 정보를 찾을 수 없습니다.', 'error');
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      await axios.post(
+        ALERT_SEND_API_URL,
+        {
+          memberId: selectedUser.memberId,
+          title: alertTitle,
+          content: alertContent,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setSendAlertModalVisible(false);
+      setIsProcessing(false);
+      setTimeout(() => {
+        showResultModal('발송 성공', `${selectedUser?.name}님에게 알림을 발송했습니다.`, 'success');
+        setAlertTitle('');
+        setAlertContent('');
+      }, Platform.OS === 'ios' ? 400 : 150);
+    } catch (error: any) {
+      setIsProcessing(false);
+      setSendAlertModalVisible(false);
+      setTimeout(() => {
+        showResultModal('발송 실패', error.response?.data?.message || '알림 발송에 실패했습니다.', 'error');
+      }, Platform.OS === 'ios' ? 400 : 150);
+    }
+  };
+
   const requestCameraPermission = async () => {
     if (Platform.OS === 'android') {
       try {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.CAMERA,
-          {
-            title: "카메라 권한 필요",
-            message: "QR 코드 스캔을 위해 카메라 권한이 필요합니다.",
-            buttonNeutral: "나중에",
-            buttonNegative: "거절",
-            buttonPositive: "허용"
-          }
-        );
+        const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA, {
+          title: '카메라 권한 필요', message: 'QR 코드 스캔을 위해 카메라 권한이 필요합니다.',
+          buttonNeutral: '나중에', buttonNegative: '거절', buttonPositive: '허용',
+        });
         return granted === PermissionsAndroid.RESULTS.GRANTED;
-      } catch (err) {
-        console.warn(err);
-        return false;
-      }
-    } else {
-      return true;
+      } catch { return false; }
     }
+    return true;
   };
 
   const openScanner = async () => {
     const hasPermission = await requestCameraPermission();
-    if (!hasPermission) {
-      showResultModal('권한 오류', '카메라 접근 권한을 허용해주세요.', 'error');
-      return;
-    }
+    if (!hasPermission) { showResultModal('권한 오류', '카메라 접근 권한을 허용해주세요.', 'error'); return; }
     scannedRef.current = false;
     setIsProcessing(false);
     setScannerVisible(true);
@@ -416,102 +625,290 @@ const ManagerDashboard = ({ navigation }: any) => {
   const closeScanner = () => {
     setScannerVisible(false);
     setIsProcessing(false);
-    setTimeout(() => {
-      scannedRef.current = false;
-    }, 800);
+    setTimeout(() => { scannedRef.current = false; }, 800);
   };
 
   const handleBarCodeScanned = async (qrData: string) => {
     if (scannedRef.current || isProcessing) return;
     scannedRef.current = true;
     setIsProcessing(true);
-
     try {
       const token = await AsyncStorage.getItem('userToken');
       if (!token) {
-        setIsProcessing(false);
-        closeScanner();
-        setTimeout(() => {
-          showResultModal('오류', '로그인 정보가 없습니다.', 'error');
-        }, 300);
+        setIsProcessing(false); closeScanner();
+        setTimeout(() => showResultModal('오류', '로그인 정보가 없습니다.', 'error'), 300);
         return;
       }
-
       const response = await axios.post(
         QR_SCAN_API_URL,
         { qrToken: qrData, deductionCount: 1 },
         { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
       );
-
       setIsProcessing(false);
-
-      const result        = response.data?.data ?? {};
+      const result =
+        response.data?.data?.data ??
+        response.data?.data ??
+        response.data ??
+        {};
       const statusCode    = result.statusCode || '';
       const memberName    = result.memberName || '회원';
       const remainingInfo = result.remainingInfo || '';
       const message       = result.message || '';
-
       closeScanner();
-
       setTimeout(() => {
-        if (
-          statusCode === 'ALREADY' ||
-          message.includes('이미 출석') ||
-          message.includes('오늘 이미')
-        ) {
-          showResultModal(
-            '금일 출석 완료',
-            `${memberName}님은\n오늘 이미 출석하셨습니다.`,
-            'info'
-          );
+        if (statusCode === 'ALREADY' || message.includes('이미 출석') || message.includes('오늘 이미')) {
+          showResultModal('금일 출석 완료', `${memberName}님은\n오늘 이미 출석하셨습니다.`, 'info');
         } else if (statusCode === 'ERROR') {
-          showResultModal(
-            '출석 실패',
-            message || '출석 처리에 실패했습니다.',
-            'error',
-            () => {
-              setTimeout(() => {
-                scannedRef.current = false;
-                setIsProcessing(false);
-                setScannerVisible(true);
-              }, 300);
-            }
-          );
-        } else {
-          AsyncStorage.getItem('userToken').then(t => {
-            if (t) { fetchVisits(t); fetchMembers(t); }
+          showResultModal('출석 실패', message || '출석 처리에 실패했습니다.', 'error', () => {
+            setTimeout(() => { scannedRef.current = false; setIsProcessing(false); setScannerVisible(true); }, 300);
           });
-
-          const bodyMessage = [
-            `${memberName}님 환영합니다!`,
-            remainingInfo,
-            message,
-          ].filter(Boolean).join('\n\n');
-
-          showResultModal('출석 완료!', bodyMessage, 'success');
+        } else {
+          AsyncStorage.getItem('userToken').then(t => { if (t) { fetchVisits(t); fetchMembers(t); } });
+          showResultModal('출석 완료!', [`${memberName}님 환영합니다!`, remainingInfo, message].filter(Boolean).join('\n\n'));
         }
       }, 300);
-
     } catch (error: any) {
       const errorMsg = error.response?.data?.message || '출석 처리에 실패했습니다.';
-      setIsProcessing(false);
-      closeScanner();
-
+      setIsProcessing(false); closeScanner();
       setTimeout(() => {
-        showResultModal(
-          '출석 실패',
-          errorMsg,
-          'error',
-          () => {
-            setTimeout(() => {
-              scannedRef.current = false;
-              setIsProcessing(false);
-              setScannerVisible(true);
-            }, 300);
-          }
-        );
+        showResultModal('출석 실패', errorMsg, 'error', () => {
+          setTimeout(() => { scannedRef.current = false; setIsProcessing(false); setScannerVisible(true); }, 300);
+        });
       }, 300);
     }
+  };
+
+  const renderWeeklyBar = () => {
+    const CHART_H = 150;
+    const barWidth = Math.floor((CARD_INNER_W - 40) / 6);
+
+    return (
+      <View style={styles.chartContainer}>
+        <Text style={styles.chartTitle}>요일별 전체 혼잡도</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: CHART_H + 24, marginTop: 15 }}>
+          <View style={{ width: 30, height: CHART_H, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 8 }}>
+            <Text style={styles.yAxisText}>100</Text>
+            <Text style={styles.yAxisText}>50</Text>
+            <Text style={styles.yAxisText}>0</Text>
+          </View>
+          <View style={{ flex: 1, height: CHART_H + 24 }}>
+            {[0, 0.5, 1].map((r, i) => (
+              <View key={i} style={{
+                position: 'absolute', top: CHART_H * (1 - r),
+                left: 0, right: 0, height: 1, backgroundColor: '#383838',
+              }} />
+            ))}
+            <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: CHART_H, paddingHorizontal: 5 }}>
+              {weeklyCongestionRate.map((val, idx) => {
+                const dayOfWeek = idx + 1;
+                const barH = Math.max((val / 100) * CHART_H, 4);
+                const isSelected = dashboardStats.selectedDay === dayOfWeek;
+                const barColor = isSelected ? '#A1BE44' : '#444444';
+                return (
+                  <TouchableOpacity
+                    key={idx}
+                    style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: CHART_H }}
+                    activeOpacity={0.7}
+                    onPress={() => handleDaySelect(dayOfWeek)}
+                  >
+                    <Text style={[styles.barValText, isSelected && { color: '#A1BE44' }]}>{val}%</Text>
+                    <View style={[styles.bar, { height: barH, backgroundColor: barColor, width: barWidth - 10, borderRadius: 6 }]} />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <View style={{ flexDirection: 'row', paddingHorizontal: 5, marginTop: 8 }}>
+              {weeklyCongestionRate.map((_, idx) => {
+                const dayOfWeek = idx + 1;
+                const isSelected = dashboardStats.selectedDay === dayOfWeek;
+                return (
+                  <Text key={idx} style={[styles.barDayLabel, { flex: 1 }, isSelected && { color: '#A1BE44', fontWeight: 'bold' }]}>
+                    {DAY_LABELS[dayOfWeek]}
+                  </Text>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const renderHourlyLine = () => {
+    const selectedDay = dashboardStats.selectedDay;
+    const dayLabel = DAY_LABELS[selectedDay] ?? '';
+    const hourRange = getHourRange(selectedDay);
+
+    const CHART_H = 150;
+    const displayData = hourlyData.slice(0, hourRange.length);
+    const maxVal = Math.max(...displayData, 1);
+    const count = displayData.length;
+    const lineW = CARD_INNER_W - 30;
+    const points = displayData.map((val, i) => ({
+      x: count > 1 ? (i / (count - 1)) * lineW : 0,
+      y: CHART_H - (val / maxVal) * CHART_H,
+    }));
+
+    return (
+      <View style={styles.chartContainer}>
+        <Text style={styles.chartTitle}>{dayLabel}요일 시간대별 상세 분포</Text>
+        <Text style={styles.chartSubTitle}>
+          운영시간: {selectedDay === 6 ? '13:00 ~ 19:00' : '13:00 ~ 22:00'}
+        </Text>
+        <View style={{ flexDirection: 'row', height: CHART_H + 32, marginTop: 15 }}>
+          <View style={{ width: 30, height: CHART_H, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 6 }}>
+            <Text style={styles.yAxisText}>Max</Text>
+            <Text style={styles.yAxisText}>Mid</Text>
+            <Text style={styles.yAxisText}>0</Text>
+          </View>
+          <View style={{ flex: 1, height: CHART_H + 32 }}>
+            {[0, 0.5, 1].map((r, i) => (
+              <View key={i} style={{
+                position: 'absolute',
+                top: CHART_H * (1 - r),
+                left: 0, right: 0, height: 1,
+                backgroundColor: '#383838',
+              }} />
+            ))}
+            <View style={{ position: 'absolute', top: 0, left: 0, width: lineW, height: CHART_H }}>
+              {points.slice(0, -1).map((p, i) => {
+                const next = points[i + 1];
+                const dx = next.x - p.x;
+                const dy = next.y - p.y;
+                const len = Math.sqrt(dx * dx + dy * dy);
+                const angleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
+                const cx = p.x + dx / 2;
+                const cy = p.y + dy / 2;
+                return (
+                  <View
+                    key={i}
+                    style={{
+                      position: 'absolute',
+                      width: len,
+                      height: 2,
+                      backgroundColor: '#A1BE44',
+                      left: cx - len / 2,
+                      top: cy - 1,
+                      transform: [{ rotate: `${angleDeg}deg` }],
+                    }}
+                  />
+                );
+              })}
+              {points.map((p, i) => (
+                <View key={i} style={{
+                  position: 'absolute',
+                  left: p.x - 4,
+                  top: p.y - 4,
+                  width: 8, height: 8,
+                  borderRadius: 4,
+                  backgroundColor: '#A1BE44',
+                  borderWidth: 2, borderColor: '#2C2C2C',
+                }} />
+              ))}
+            </View>
+            <View style={{ position: 'absolute', top: CHART_H + 8, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between' }}>
+              {hourRange.map((hour, i) => {
+                const showLabel = selectedDay === 6 ? true : i % 2 === 0;
+                return showLabel ? (
+                  <Text key={i} style={styles.xAxisText}>{hour}시</Text>
+                ) : null;
+              })}
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const renderExpiringMembers = () => {
+    const list = dashboardStats.expiringMembers;
+
+    return (
+      <View style={styles.card}>
+        <Text style={styles.expiringTitle}>만료 임박 회원 (1주 이내)</Text>
+        <View style={styles.divider} />
+        {list.length === 0 ? (
+          <Text style={styles.emptyText}>만료 임박 회원이 없습니다.</Text>
+        ) : (
+          <>
+            <View style={styles.expiringHeader}>
+              <Text style={[styles.expiringCol, { flex: 1.2 }]}>이름</Text>
+              <Text style={[styles.expiringCol, { flex: 2 }]}>연락처</Text>
+              <Text style={[styles.expiringCol, { flex: 1.5 }]}>만료일</Text>
+              <Text style={[styles.expiringCol, { width: 50, textAlign: 'center' }]}>상태</Text>
+            </View>
+            {list.map((m, idx) => {
+              const dDay = m.dDay;
+              const ddayColor = dDay <= 3 ? '#FF4D4D' : dDay <= 7 ? '#FF9800' : '#A1BE44';
+              const maskedPhone = m.phone ? m.phone.replace(/(\d{3})-?(\d{4})-?(\d{4})/, '$1-****-$3') : '-';
+              return (
+                <View
+                  key={m.id}
+                  style={[styles.expiringRow, idx % 2 === 1 && { backgroundColor: '#222222' }]}
+                >
+                  <Text style={[styles.expiringValue, { flex: 1.2 }]}>{m.name}</Text>
+                  <Text style={[styles.expiringValue, { flex: 2 }]}>{maskedPhone}</Text>
+                  <Text style={[styles.expiringValue, { flex: 1.5, fontSize: 12 }]}>{m.endDate}</Text>
+                  <View style={{ width: 50, alignItems: 'center', justifyContent: 'center' }}>
+                    <View style={[styles.ddayBadge, { backgroundColor: `${ddayColor}33` }]}>
+                      <Text style={[styles.ddayText, { color: ddayColor }]}>D-{dDay}</Text>
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
+          </>
+        )}
+      </View>
+    );
+  };
+
+  const renderBottomControls = () => {
+    const selectedLabel = DAY_SELECT_OPTIONS.find(o => o.value === dashboardStats.selectedDay)?.label ?? '토요일';
+    return (
+      <View style={styles.controlCard}>
+        <View style={styles.controlRow}>
+          <Text style={styles.controlLabel}>상세 조회 요일</Text>
+          <View style={{ flex: 1, marginLeft: 10, position: 'relative', zIndex: 100 }}>
+            <TouchableOpacity
+              style={styles.dropdownBtn}
+              activeOpacity={0.8}
+              onPress={() => setDashboardStats(prev => ({ ...prev, dayDropdownOpen: !prev.dayDropdownOpen }))}
+            >
+              <Text style={styles.dropdownBtnText}>{selectedLabel}</Text>
+              <Text style={styles.dropdownArrow}>{dashboardStats.dayDropdownOpen ? '▲' : '▼'}</Text>
+            </TouchableOpacity>
+            {dashboardStats.dayDropdownOpen && (
+              <View style={styles.dropdownList}>
+                {DAY_SELECT_OPTIONS.map(opt => (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[styles.dropdownItem, dashboardStats.selectedDay === opt.value && styles.dropdownItemActive]}
+                    onPress={() => handleDaySelect(opt.value)}
+                  >
+                    <Text style={[styles.dropdownItemText, dashboardStats.selectedDay === opt.value && { color: '#A1BE44' }]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+        </View>
+        <TouchableOpacity
+          style={styles.refreshBtn}
+          activeOpacity={0.8}
+          onPress={async () => {
+            const token = await AsyncStorage.getItem('userToken');
+            if (token) {
+              await Promise.all([fetchDashboardStats(token), fetchDashboardSummary(token)]);
+            }
+          }}
+        >
+          <Text style={styles.refreshBtnText}>데이터 새로고침</Text>
+        </TouchableOpacity>
+      </View>
+    );
   };
 
   if (loading) {
@@ -522,35 +919,73 @@ const ManagerDashboard = ({ navigation }: any) => {
     );
   }
 
+  // 수정: 저장된 시간이 없을 경우를 대비한 fallback 역시 같은 형식으로 맞춤
+  const lastUpdatedDisplay = dashboardStats.lastUpdated
+    ? dashboardStats.lastUpdated
+    : getFormattedCurrentTime();
+
   return (
     <View style={styles.background}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />}
       >
-        <View style={styles.metricsRow}>
-          <View style={styles.metricBox}>
-            <Text style={styles.metricTitle}>총 회원 수</Text>
-            <Text style={styles.metricValue}>{metrics.totalMembers}명</Text>
+        <View style={styles.headerCard}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.dashboardTitleBig}>관리자{"\n"}대시보드</Text>
           </View>
-          <View style={styles.metricBox}>
-            <Text style={styles.metricTitle}>활성이용권</Text>
-            <Text style={[styles.metricValue, metrics.activeMemberships === 0 && { color: '#666' }]}>
-              {metrics.activeMemberships}건
-            </Text>
-          </View>
-          <View style={styles.metricBox}>
-            <Text style={styles.metricTitle}>금일 방문자</Text>
-            <Text style={styles.metricValue}>{metrics.todayVisitors}명</Text>
-          </View>
-          <View style={styles.metricBox}>
-            <Text style={styles.metricTitle}>커뮤니티 글</Text>
-            <Text style={styles.metricValue}>{metrics.totalPosts}건</Text>
+          <View style={styles.headerRight}>
+            <View style={styles.metricGridRow}>
+              <View style={styles.metricGridBox}>
+                <Text style={styles.headerMetricLabel}>총 회원수</Text>
+                <Text style={styles.headerMetricValue}>{metrics.totalMembers}명</Text>
+              </View>
+              <View style={styles.metricGridBox}>
+                <Text style={styles.headerMetricLabel}>금일 신규</Text>
+                <Text style={[styles.headerMetricValue, { color: '#A1BE44' }]}>{dashboardStats.newMembersToday}명</Text>
+              </View>
+            </View>
+            <View style={styles.metricGridRow}>
+              <View style={styles.metricGridBox}>
+                <Text style={styles.headerMetricLabel}>활성 이용권</Text>
+                <Text style={[styles.headerMetricValue, metrics.activeMemberships === 0 && { color: '#666' }]}>
+                  {metrics.activeMemberships}개
+                </Text>
+              </View>
+              <View style={styles.metricGridBox}>
+                <Text style={styles.headerMetricLabel}>업데이트</Text>
+                <Text style={[styles.headerMetricValue, { fontSize: 13, color: '#999999' }]}>
+                  {lastUpdatedDisplay}
+                </Text>
+              </View>
+            </View>
           </View>
         </View>
+
+        <View style={styles.summaryRow}>
+          <View style={styles.summaryBox}>
+            <Text style={styles.summaryLabel}>오늘 방문자</Text>
+            <Text style={[styles.summaryValue, { color: '#A1BE44' }]}>{dashboardSummary.totalVisitsToday}명</Text>
+          </View>
+          <View style={styles.summaryBox}>
+            <Text style={styles.summaryLabel}>주간 신규</Text>
+            <Text style={[styles.summaryValue, { color: '#4A90D9' }]}>{dashboardSummary.newMembersThisWeek}명</Text>
+          </View>
+          <View style={styles.summaryBox}>
+            <Text style={styles.summaryLabel}>3일내 만료</Text>
+            <Text style={[styles.summaryValue, { color: '#FF4D4D' }]}>{dashboardSummary.expiringIn3Days}명</Text>
+          </View>
+        </View>
+
+        <View style={styles.graphsWrapper}>
+          {renderWeeklyBar()}
+          {renderHourlyLine()}
+        </View>
+
+        {renderBottomControls()}
+
+        {renderExpiringMembers()}
 
         <View style={styles.card}>
           <View style={styles.cardHeader}>
@@ -562,21 +997,16 @@ const ManagerDashboard = ({ navigation }: any) => {
           <View style={styles.divider} />
           {recentMembers.length > 0 ? (
             recentMembers.map((memberResponse, index) => {
-              const member   = memberResponse.member || memberResponse;
-              const memberId = member.memberId || member.id;
-              
+              const member     = memberResponse.member || memberResponse;
+              const memberId   = member.memberId || member.id;
               const userName   = member.name || '이름 없음';
               const userPhone  = member.phone || '전화번호 없음';
               const profileUrl = member.profileImageUrl || member.profileImage;
               const hasValidImage = isValidImageUrl(profileUrl);
-
-              // 🔥 API 응답 구조에 맞게 이름으로 출석 여부 확인
-              const isVisited = visitedMemberNames.has(userName);
-              
+              const isVisited  = visitedMemberNames.has(userName);
               const badgeBg    = isVisited ? 'rgba(161,190,68,0.2)' : 'rgba(142,142,142,0.2)';
               const badgeColor = isVisited ? '#A1BE44' : '#8E8E8E';
               const label      = isVisited ? '출석함' : '미출석';
-
               return (
                 <TouchableOpacity
                   key={member.id || index}
@@ -587,9 +1017,7 @@ const ManagerDashboard = ({ navigation }: any) => {
                   {hasValidImage ? (
                     <Image source={{ uri: profileUrl }} style={styles.profileImg} />
                   ) : userName === '최강우' ? (
-                    <View style={styles.textProfileImg}>
-                      <Text style={styles.textProfileText}>최</Text>
-                    </View>
+                    <View style={styles.textProfileImg}><Text style={styles.textProfileText}>최</Text></View>
                   ) : (
                     <Image source={require('../assets/profile.png')} style={styles.profileImg} />
                   )}
@@ -622,9 +1050,7 @@ const ManagerDashboard = ({ navigation }: any) => {
                 <View style={styles.noticeTextContent}>
                   <View style={styles.noticeHeaderRow}>
                     {notice.important && (
-                      <View style={styles.noticeBadge}>
-                        <Text style={styles.noticeBadgeText}>중요</Text>
-                      </View>
+                      <View style={styles.noticeBadge}><Text style={styles.noticeBadgeText}>중요</Text></View>
                     )}
                     <Text style={styles.noticeTitle} numberOfLines={1}>{notice.title}</Text>
                   </View>
@@ -645,44 +1071,6 @@ const ManagerDashboard = ({ navigation }: any) => {
           )}
         </View>
 
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>최근 커뮤니티 글</Text>
-            <TouchableOpacity style={styles.viewAllBtn} activeOpacity={0.7} onPress={() => navigation.navigate('ManagerCommunity')}>
-              <Text style={styles.viewAllBtnText}>전체보기</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.divider} />
-          {posts.length > 0 ? (
-            posts.map((post, index) => {
-              const isOut          = post.differentGym;
-              const isPast         = post.isPast;
-              const postType       = isOut ? '아웃도어' : '센터';
-              const badgeBgColor   = isPast ? '#333333' : isOut ? 'rgba(0,129,15,0.2)' : 'rgba(0,114,185,0.2)';
-              const badgeTextColor = isPast ? '#888888' : isOut ? '#2CDE00' : '#009DFF';
-              return (
-                <View key={post.id} style={[styles.noticeListItem, index > 0 && { marginTop: 20 }, isPast && { opacity: 0.6 }]}>
-                  <View style={styles.noticeTextContent}>
-                    <View style={[styles.badge, { backgroundColor: badgeBgColor, alignSelf: 'flex-start', marginBottom: 8, marginLeft: -10 }]}>
-                      <Text style={[styles.badgeText, { color: badgeTextColor }]}>{postType}</Text>
-                    </View>
-                    <Text style={[styles.noticeTitle, isPast && { color: '#888888' }]} numberOfLines={1}>{post.title}</Text>
-                    <Text style={[styles.subText, { color: isPast ? '#666666' : '#ffffff', fontSize: 14 }]}>
-                      {post.writerName}  {formatDate(post.createdAt)} {isPast ? '(마감됨)' : ''}
-                    </Text>
-                  </View>
-                  <View style={styles.noticeActions}>
-                    <TouchableOpacity style={[styles.actionBtn, styles.deleteBtn]} onPress={() => confirmDelete('post', post.id)}>
-                      <Image source={require('../assets/trash.png')} style={[styles.actionIcon, { tintColor: isPast ? '#666666' : '#FF0000' }]} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              );
-            })
-          ) : (
-            <Text style={styles.emptyText}>등록된 게시글이 없습니다.</Text>
-          )}
-        </View>
       </ScrollView>
 
       <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={openScanner}>
@@ -698,9 +1086,7 @@ const ManagerDashboard = ({ navigation }: any) => {
             <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
             <TouchableOpacity style={styles.resultModalBtn} onPress={() => {
               setResultModalVisible(false);
-              if (typeof resultModalConfig.onConfirm === 'function') {
-                resultModalConfig.onConfirm();
-              }
+              if (typeof resultModalConfig.onConfirm === 'function') resultModalConfig.onConfirm();
             }}>
               <Text style={styles.resultModalBtnText}>확인</Text>
             </TouchableOpacity>
@@ -769,6 +1155,17 @@ const ManagerDashboard = ({ navigation }: any) => {
                   </View>
                 </View>
               )}
+              <TouchableOpacity
+                style={[styles.closeFullBtn, { backgroundColor: '#4A90D9', marginBottom: 10 }]}
+                onPress={() => {
+                  Animated.timing(detailHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
+                    setDetailVisible(false);
+                    setTimeout(() => setSendAlertModalVisible(true), 300);
+                  });
+                }}
+              >
+                <Text style={[styles.closeFullBtnText, { color: '#fff' }]}>알림 보내기</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={styles.closeFullBtn} onPress={closeDetailModal}>
                 <Text style={styles.closeFullBtnText}>닫기</Text>
               </TouchableOpacity>
@@ -814,6 +1211,40 @@ const ManagerDashboard = ({ navigation }: any) => {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={isSendAlertModalVisible} animationType="fade" transparent onRequestClose={() => setSendAlertModalVisible(false)}>
+        <View style={styles.alertModalOverlay}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%', alignItems: 'center' }}>
+            <View style={styles.alertModalBox}>
+              <View style={styles.alertModalHeader}>
+                <Text style={styles.alertModalTitle}>{selectedUser?.name}님에게 알림 보내기</Text>
+                <TouchableOpacity onPress={() => setSendAlertModalVisible(false)}>
+                  <Text style={styles.alertCloseBtn}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <TextInput
+                style={styles.alertInputField}
+                placeholder="알림 제목을 입력하세요"
+                placeholderTextColor="#999"
+                value={alertTitle}
+                onChangeText={setAlertTitle}
+              />
+              <TextInput
+                style={[styles.alertInputField, { height: 100, textAlignVertical: 'top' }]}
+                placeholder="알림 내용을 입력하세요"
+                placeholderTextColor="#999"
+                value={alertContent}
+                onChangeText={setAlertContent}
+                multiline
+              />
+              <TouchableOpacity style={styles.alertSubmitBtn} onPress={handleSendAlert} disabled={isProcessing}>
+                {isProcessing ? <ActivityIndicator color="#000" /> : <Text style={styles.alertSubmitBtnText}>발송하기</Text>}
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
     </View>
   );
 };
@@ -821,10 +1252,77 @@ const ManagerDashboard = ({ navigation }: any) => {
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A', paddingHorizontal: 20, paddingTop: 10 },
   scrollContent: { paddingBottom: 80 },
-  metricsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 25 },
-  metricBox: { flex: 1, backgroundColor: '#2C2C2C', borderRadius: 12, paddingVertical: 20, alignItems: 'center', marginHorizontal: 4 },
-  metricTitle: { color: '#999999', fontSize: 13, fontWeight: 'bold', marginBottom: 8 },
-  metricValue: { color: '#ffffff', fontSize: 19, fontWeight: '900' },
+
+  headerCard: {
+    backgroundColor: '#2C2C2C', borderRadius: 16,
+    paddingHorizontal: 20, paddingVertical: 20, marginBottom: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'
+  },
+  headerLeft: {
+    flex: 1, borderRightWidth: 1, borderRightColor: '#444',
+    paddingRight: 10, justifyContent: 'center'
+  },
+  dashboardTitleBig: { color: '#ffffff', fontSize: 24, fontWeight: 'bold', lineHeight: 32 },
+  headerRight: { flex: 2, paddingLeft: 15 },
+  metricGridRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  metricGridBox: { flex: 1, alignItems: 'flex-start', marginLeft: 5 },
+  headerMetricLabel: { color: '#999999', fontSize: 11, marginBottom: 4 },
+  headerMetricValue: { color: '#ffffff', fontSize: 16, fontWeight: '900' },
+
+  summaryRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    marginBottom: 16, gap: 8,
+  },
+  summaryBox: {
+    flex: 1, backgroundColor: '#2C2C2C', borderRadius: 12,
+    paddingVertical: 14, alignItems: 'center',
+  },
+  summaryLabel: { color: '#999999', fontSize: 11, marginBottom: 6 },
+  summaryValue: { fontSize: 18, fontWeight: '900' },
+
+  graphsWrapper: { marginBottom: 16 },
+  chartContainer: {
+    backgroundColor: '#2C2C2C', borderRadius: 16,
+    paddingHorizontal: 20, paddingVertical: 20, marginBottom: 16
+  },
+  chartTitle: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 2 },
+  chartSubTitle: { color: '#A1BE44', fontSize: 12, marginBottom: 5 },
+  chartAxisLabel: { color: '#888888', fontSize: 9, marginBottom: 2 },
+  yAxisText: { color: '#888888', fontSize: 10 },
+  xAxisText: { color: '#888888', fontSize: 10 },
+  bar: { width: '100%', borderRadius: 4, marginBottom: 0 },
+  barValText: { color: '#cccccc', fontSize: 10, fontWeight: 'bold', marginBottom: 4 },
+  barDayLabel: { color: '#999999', fontSize: 11, textAlign: 'center' },
+
+  expiringTitle: { color: '#F5C842', fontSize: 17, fontWeight: 'bold' },
+  expiringHeader: { flexDirection: 'row', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#444' },
+  expiringCol: { color: '#999999', fontSize: 13, fontWeight: 'bold' },
+  expiringRow: { flexDirection: 'row', paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
+  expiringValue: { color: '#ffffff', fontSize: 14 },
+  ddayBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+  ddayText: { fontSize: 12, fontWeight: 'bold' },
+
+  controlCard: { backgroundColor: '#2C2C2C', borderRadius: 16, padding: 20, marginBottom: 16 },
+  controlRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginBottom: 15 },
+  controlLabel: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
+  dropdownBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#3A3A3A', borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 10,
+  },
+  dropdownBtnText: { color: '#ffffff', fontSize: 14 },
+  dropdownArrow: { color: '#999999', fontSize: 10, marginLeft: 6 },
+  dropdownList: {
+    position: 'absolute', top: 45, left: 0, right: 0, zIndex: 99,
+    backgroundColor: '#2C2C2C', borderRadius: 8,
+    borderWidth: 1, borderColor: '#444',
+  },
+  dropdownItem: { paddingHorizontal: 12, paddingVertical: 12 },
+  dropdownItemActive: { backgroundColor: '#3A3A3A' },
+  dropdownItemText: { color: '#cccccc', fontSize: 14 },
+  refreshBtn: { backgroundColor: '#3A3A3A', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  refreshBtnText: { color: '#A1BE44', fontSize: 16, fontWeight: 'bold' },
+
   card: { backgroundColor: '#2C2C2C', borderRadius: 16, padding: 20, marginBottom: 20 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardTitle: { color: '#ffffff', fontSize: 19, fontWeight: 'bold' },
@@ -832,6 +1330,7 @@ const styles = StyleSheet.create({
   viewAllBtnText: { color: '#999999', fontSize: 14, fontWeight: 'bold' },
   divider: { height: 1, backgroundColor: '#444444', marginVertical: 15 },
   emptyText: { color: '#999', textAlign: 'center', marginVertical: 10, fontSize: 16 },
+
   rowItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   profileImg: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#444444', marginRight: 15 },
   textProfileImg: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#444444', marginRight: 15, justifyContent: 'center', alignItems: 'center' },
@@ -841,6 +1340,7 @@ const styles = StyleSheet.create({
   subText: { color: '#999999', fontSize: 15 },
   badge: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
   badgeText: { fontSize: 14, fontWeight: 'bold', textAlign: 'center' },
+
   noticeListItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   noticeTextContent: { flex: 1, paddingRight: 10 },
   noticeHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
@@ -851,8 +1351,10 @@ const styles = StyleSheet.create({
   actionBtn: { padding: 6, marginLeft: 6 },
   deleteBtn: { borderRadius: 8, padding: 8 },
   actionIcon: { width: 24, height: 24, resizeMode: 'contain' },
+
   fab: { position: 'absolute', bottom: 15, right: 20, width: 70, height: 70, borderRadius: 35, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4.65 },
   fabIcon: { width: 35, height: 35, tintColor: '#1A1A1A', resizeMode: 'contain' },
+
   scannerModalOverlay: { flex: 1, backgroundColor: '#1A1A1A' },
   scannerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: 60, backgroundColor: '#1A1A1A' },
   scannerTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' },
@@ -864,6 +1366,7 @@ const styles = StyleSheet.create({
   processingText: { color: '#ffffff', fontSize: 18, marginTop: 12, fontWeight: 'bold' },
   scannerFooter: { padding: 40, alignItems: 'center', backgroundColor: '#1A1A1A' },
   scannerDesc: { color: '#ffffff', fontSize: 18, marginTop: 5 },
+
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 25, paddingTop: 10, overflow: 'hidden', width: '100%' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333', borderRadius: 2, alignSelf: 'center', marginTop: 10, marginBottom: 20 },
@@ -878,20 +1381,29 @@ const styles = StyleSheet.create({
   detailValue: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
   closeFullBtn: { backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 10 },
   closeFullBtnText: { color: '#000', fontWeight: 'bold', fontSize: 18 },
-  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+
+  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
   resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
   resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
   resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 },
   resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
-  deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
   deleteModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
-  deleteModalText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center', lineHeight: 26 },
   deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
   deleteBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
   deleteBtnYesText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
   deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
   deleteBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
+
+  alertModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)', justifyContent: 'center', alignItems: 'center' },
+  alertModalBox: { width: 320, backgroundColor: '#2A2A2A', borderRadius: 16, padding: 20 },
+  alertModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  alertModalTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
+  alertInputField: { backgroundColor: '#1A1A1A', color: '#FFF', borderRadius: 8, padding: 15, marginBottom: 12, fontSize: 16, borderWidth: 1, borderColor: '#444' },
+  alertSubmitBtn: { backgroundColor: '#A1BE44', borderRadius: 8, paddingVertical: 15, alignItems: 'center', marginTop: 10 },
+  alertSubmitBtnText: { color: '#000', fontSize: 18, fontWeight: 'bold' },
+  alertCloseBtn: { color: '#999999', fontSize: 24, paddingHorizontal: 5 },
 });
 
 export default ManagerDashboard;

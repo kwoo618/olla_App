@@ -76,6 +76,7 @@ public class MembershipAdminService {
 
         membershipRepository.save(newMembership);
 
+
         log.info("이용권 연장 부여 성공 : 회원={}, 시작일={}, 기간={}개월",
                 member.getName(), effectiveStartDate, safeMonths);
     }
@@ -94,7 +95,6 @@ public class MembershipAdminService {
         }
         String cleanPhone = request.getPhone().replaceAll("-", "");
         String dummyEmail = "offline_" + cleanPhone + "@ollagaja.com";
-        String tempPassword = passwordEncoder.encode(cleanPhone);
 
         Member offlineMember = Member.builder()
                 .name(request.getName())
@@ -102,7 +102,7 @@ public class MembershipAdminService {
                 .birthDate(request.getBirthDate())
                 .phone(request.getPhone())
                 .email(dummyEmail)
-                .password(tempPassword)
+                .password(null)
                 .role(Role.USER)
                 .build();
 

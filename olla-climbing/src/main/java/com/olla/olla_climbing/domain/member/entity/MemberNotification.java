@@ -7,6 +7,9 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+// Jackson 직렬화 무시를 위한 import 추가 (수정)
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -17,6 +20,8 @@ public class MemberNotification extends BaseTimeEntity {
     private Long id;
 
     // 알림을 받을 수신자
+    @JsonIgnore // @JsonIgnore 추가 (프록시 객체 에러 방지) (수정)
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "member_id", nullable = false)
     private Member member;

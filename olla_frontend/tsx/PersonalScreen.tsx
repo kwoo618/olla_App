@@ -7,13 +7,14 @@ import {
   StyleSheet, 
   TextInput, 
   TouchableOpacity, 
-  ScrollView, 
   Modal,
-  KeyboardAvoidingView,
   Platform,
   Keyboard
 } from 'react-native';
 import { API_BASE_URL } from '../src/constants/Config';
+
+// ✅ 새로 설치한 라이브러리 Import
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 
 const PersonalScreen = ({ navigation, route }: any) => {
   const { accountData } = route.params || {};
@@ -109,17 +110,18 @@ const PersonalScreen = ({ navigation, route }: any) => {
   );
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.background} 
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={Keyboard.dismiss}>
-        <ScrollView 
-          contentContainerStyle={styles.container} 
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled" 
-          bounces={false}
-        >
+    <>
+      {/* ✅ 통합된 KeyboardAwareScrollView 적용 */}
+      <KeyboardAwareScrollView 
+        style={styles.background} 
+        contentContainerStyle={styles.container}
+        enableOnAndroid={true} // 안드로이드 호환성 핵심
+        extraScrollHeight={30} // 키보드와 입력창 사이 여유 공간 추가
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        <TouchableOpacity style={{ flex: 1, width: '100%' }} activeOpacity={1} onPress={Keyboard.dismiss}>
           <Text style={styles.title}>개인정보</Text>
 
           <View style={styles.inputHeader}>
@@ -162,12 +164,13 @@ const PersonalScreen = ({ navigation, route }: any) => {
             <Text style={styles.buttonText}>회원가입 완료</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginTop: 20 }}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginTop: 20, alignItems: 'center' }}>
             <Text style={styles.goBackText}>이전 단계로</Text>
           </TouchableOpacity>
-        </ScrollView>
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </KeyboardAwareScrollView>
 
+      {/* ✅ 모달은 스크롤뷰 외부에 배치하여 안전하게 렌더링 */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -186,14 +189,14 @@ const PersonalScreen = ({ navigation, route }: any) => {
           </View>
         </View>
       </Modal>
-    </KeyboardAvoidingView>
+    </>
   );
 };
 
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
-  container: { padding: 24, alignItems: 'center', paddingBottom: 60 },
-  title: { fontSize: 36, fontWeight: 'bold', marginTop: 60, marginBottom: 30, color: '#ffffff' },
+  container: { padding: 24, alignItems: 'center', paddingBottom: 60, width: '100%' },
+  title: { fontSize: 36, fontWeight: 'bold', marginTop: 60, marginBottom: 30, color: '#ffffff', alignSelf: 'center' },
   inputHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 10 },
   middleText: { color: '#ffffff', fontSize: 18, marginLeft: 5, fontWeight: 'bold' },
   inputWrapper: { width: '100%', height: 60, backgroundColor: '#000000', borderRadius: 12, borderWidth: 1, borderColor: '#444444', paddingHorizontal: 15, marginBottom: 25, flexDirection: 'row', alignItems: 'center' },

@@ -21,8 +21,9 @@ public class SignupRequest {
     @Pattern(regexp = "^[a-zA-Z0-9]{4,20}$", message = "아이디는 영문, 숫자만 사용하여 4~20자로 입력해주세요.") // 💡 한글 방지 정규식 추가    private String loginId;
     private String loginId;
 
+    // (?=.*[A-Za-z])(?=.*[0-9])(?=.*[@$!%*?&])(?=\S+$).{6,}의 자세한 뜻
     @NotBlank
-    @Pattern(regexp = "(?=.*[A-Za-z])(?=.*[0-9])(?=\\S+$).{6,}", message = "비밀번호는 최소 6자 이상이어야 하며, 영문자와 숫자를 포함해야 합니다.")
+    @Pattern(regexp = "(?=.*[A-Za-z])(?=.*[0-9])(?=.*[@$!%*?&])(?=\\S+$).{6,}", message = "비밀번호는 최소 6자 이상이어야 하며, 영문자와 숫자를 포함해야 합니다.")
     private String password;
 
     @NotBlank(message = "이름은 필수 입력입니다.")
@@ -54,7 +55,6 @@ public class SignupRequest {
     @Getter
     @NoArgsConstructor
     public static class MemberDetailDto { // 내부 클래스로 정의
-        private Integer age;
         private Double height;
         private Double weight;
         private Double armSpan;

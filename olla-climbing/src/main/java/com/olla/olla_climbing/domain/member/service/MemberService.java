@@ -1,6 +1,7 @@
 package com.olla.olla_climbing.domain.member.service;
 
 import com.olla.olla_climbing.domain.admin.service.GoogleSheetsService;
+import com.olla.olla_climbing.domain.image.service.ImageService;
 import com.olla.olla_climbing.domain.member.dto.response.OtherMemberProfileResponse;
 import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.entity.NotificationSetting;
@@ -8,7 +9,6 @@ import com.olla.olla_climbing.domain.member.dto.request.NotificationUpdateReques
 import com.olla.olla_climbing.domain.member.dto.response.NotificationResponse;
 import com.olla.olla_climbing.domain.member.dto.response.MemberResponse;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
-import com.olla.olla_climbing.global.infra.s3.S3ImageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,7 +27,7 @@ public class MemberService {
 
     private final MemberRepository memberRepository;
     private final GoogleSheetsService googleSheetsService;
-    private final S3ImageService s3ImageService;
+    private final ImageService imageService;
 
 
     // 회원가입 화면에서 DB 아이디 중복 확인 로직 (동철 수정)
@@ -120,7 +120,6 @@ public class MemberService {
 
         log.info("관리자가 회원 정보 수정 완료: {}", member.getId());
 
-        // googleSheetsService.updateMemberRow(member);
     }
 
     @Transactional(readOnly = true)
@@ -218,8 +217,8 @@ public class MemberService {
         Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("회원 정보가 없습니다."));
 
-        // 1. S3에 이미지 업로드
-        String imageUrl = s3ImageService.uploadImage(file);
+        // 1. 로컬 스토리지에 이미지 업로드
+        String imageUrl = imageService.uploadImage(file);
 
         // 2. 회원 엔티티에 URL 업데이트
         member.updateProfileImage(imageUrl);
@@ -227,5 +226,19 @@ public class MemberService {
         return imageUrl;
     }
 
+    @Transactional(readOnly = true)
+    public boolean isPhoneAvailableForSignup(String phone) {
+        return memberRepository.findByPhone(phone)
+                .map(member -> {
+                    // 비밀번호가 없거나 빈 문자열인 경우 = 오프라인 회원이므로 가입(연동) 가능 -> 사용 가능한 번호(false 반환)
+                    if (!org.springframework.util.StringUtils.hasText(member.getPassword())) {
+                        log.info("O2O 연동 가능한 오프라인 회원 전화번호 확인됨: {}", phone);
+                        return false; // 중복되지 않음 (가입 가능)
+                    }
+                    // 비밀번호가 이미 있다면 정식 가입된 온라인 회원이므로 중복 차단 -> true 반환
+                    return true;
+                })
+                .orElse(false); // DB에 아예 없는 번호면 당연히 가입 가능 -> 중복되지 않음(false)
+    }
 
 }
