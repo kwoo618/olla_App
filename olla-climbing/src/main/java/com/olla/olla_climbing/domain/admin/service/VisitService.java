@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -35,94 +36,78 @@ public class VisitService {
 
     @Transactional
     public VisitScanResponse processEntry(String qrToken, String adminLoginId, int deductionCount) {
-        // 1. 기본 검증
         if (deductionCount <= 0) {
-            return VisitScanResponse.builder().statusCode("ERROR").message("차감 횟수는 1회 이상이어야 합니다.").build();
+            return errorResponse("차감 횟수는 1회 이상이어야 합니다.");
         }
 
-        // 2. QR 토큰(JWT) 검증 및 ID 추출
         if (!jwtTokenProvider.validateToken(qrToken)) {
-            return VisitScanResponse.builder().statusCode("ERROR").message("유효하지 않거나 만료된 QR 코드입니다.").build();
+            return errorResponse("유효하지 않거나 만료된 QR 코드입니다.");
         }
+
         String memberLoginId = jwtTokenProvider.getLoginId(qrToken);
 
-        // 3. 회원 및 관리자 조회
         Member member = memberRepository.findByLoginIdAndIsDeletedFalse(memberLoginId)
                 .orElseThrow(() -> new IllegalArgumentException("회원 정보를 찾을 수 없습니다."));
         Member admin = memberRepository.findByLoginIdAndIsDeletedFalse(adminLoginId)
                 .orElseThrow(() -> new IllegalArgumentException("관리자 정보를 찾을 수 없습니다."));
 
-        // 💡 4. 중복 입장 방지 (당일 단위로 확장 및 Exception 반환)
+        // 당일 중복 입장 방지
         LocalDateTime startOfToday = LocalDateTime.of(LocalDate.now(), LocalTime.MIN);
         LocalDateTime endOfToday = LocalDateTime.of(LocalDate.now(), LocalTime.MAX);
-
-        boolean hasVisitedToday = visitLogRepository.existsByMemberIdAndCreatedAtBetween(
-                member.getId(), startOfToday, endOfToday
-        );
-
-        if (hasVisitedToday) {
-            // 프론트엔드가 캐치해서 에러 모달을 띄울 수 있도록 예외(Exception)를 던집니다.
+        if (visitLogRepository.existsByMemberIdAndCreatedAtBetween(member.getId(), startOfToday, endOfToday)) {
             throw new IllegalArgumentException("이미 오늘 출석이 완료된 회원입니다.");
         }
 
-        // 5. 회원의 유효한 모든 이용권 조회 (우선순위 판단을 위해 List로 조회)
         List<Membership> activeMemberships = membershipRepository
                 .findAllByMemberIdAndStatusAndIsDeletedFalse(member.getId(), MembershipStatus.ACTIVE);
 
         if (activeMemberships.isEmpty()) {
-            return VisitScanResponse.builder().statusCode("ERROR").memberName(member.getName()).message("활성화된 이용권이 없습니다.").build();
+            return VisitScanResponse.builder()
+                    .statusCode("ERROR").memberName(member.getName())
+                    .message("활성화된 이용권이 없습니다.").build();
         }
 
-        // 6. 이용권 우선순위 엔진 (기간권 > 횟수권)
+        // 이용권 우선순위: 기간권 → 횟수권
         Membership targetMembership = null;
         String remainingInfo = "";
         String statusCode = "SUCCESS";
         String message = "";
 
-        // 6-1. 1순위: 기간권 찾기
         for (Membership m : activeMemberships) {
-            if ("PERIOD".equals(m.getMembershipTypeName())) {
-                if (!LocalDate.now().isAfter(m.getEndDate())) {
+            if ("PERIOD".equals(m.getMembershipTypeName()) && !LocalDate.now().isAfter(m.getEndDate())) {
+                targetMembership = m;
+                remainingInfo = m.getEndDate() + " 까지";
+                message = member.getName() + " 회원님(기간권) 반갑습니다!";
+                if (LocalDate.now().plusDays(3).isAfter(m.getEndDate())) statusCode = "WARNING";
+                break;
+            }
+        }
+
+        if (targetMembership == null) {
+            for (Membership m : activeMemberships) {
+                if ("COUNT".equals(m.getMembershipTypeName()) && m.getRemainingCount() >= deductionCount) {
                     targetMembership = m;
-                    remainingInfo = m.getEndDate().toString() + " 까지";
-                    message = member.getName() + " 회원님(기간권) 반갑습니다!";
-                    // 만료 3일 전이면 경고 코드
-                    if (LocalDate.now().plusDays(3).isAfter(m.getEndDate())) statusCode = "WARNING";
+                    m.useCount(deductionCount);
+                    remainingInfo = "잔여 " + m.getRemainingCount() + "회";
+                    message = member.getName() + " 회원님(" + deductionCount + "명 차감) 반갑습니다!";
+                    if (m.getRemainingCount() <= 2) statusCode = "WARNING";
                     break;
                 }
             }
         }
 
-        // 6-2. 2순위: 기간권이 없으면 횟수권 사용
         if (targetMembership == null) {
-            for (Membership m : activeMemberships) {
-                if ("COUNT".equals(m.getMembershipTypeName())) {
-                    if (m.getRemainingCount() >= deductionCount) {
-                        targetMembership = m;
-                        m.useCount(deductionCount); // 횟수 차감 (내부에서 0회 시 EXPIRED 처리 권장)
-                        remainingInfo = "잔여 " + m.getRemainingCount() + "회";
-                        message = member.getName() + " 회원님(" + deductionCount + "명 차감) 반갑습니다!";
-                        if (m.getRemainingCount() <= 2) statusCode = "WARNING";
-                        break;
-                    }
-                }
-            }
+            return VisitScanResponse.builder()
+                    .statusCode("ERROR").memberName(member.getName())
+                    .message("사용 가능한 이용권이 없거나 잔여 횟수가 부족합니다.").build();
         }
 
-        // 6-3. 둘 다 없으면 에러
-        if (targetMembership == null) {
-            return VisitScanResponse.builder().statusCode("ERROR").memberName(member.getName()).message("사용 가능한 이용권이 없거나 잔여 횟수가 부족합니다.").build();
-        }
-
-        // 7. 사후 처리 (누적 방문수 증가 + 로그 저장 + 시트 연동 + 알림 발송)
         targetMembership.increaseAccumulatedVisits();
-
         visitLogRepository.save(VisitLog.builder().member(member).admin(admin).build());
 
         String todayStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy. MM. dd"));
         googleSheetsService.updateVisitData(member.getId(), todayStr, targetMembership.getAccumulatedVisits());
 
-        // 알림 발송 (푸시)
         notificationService.sendMembershipNotification(member, "입장 완료 🧗", message + " 즐거운 클라이밍 되세요!");
 
         return VisitScanResponse.builder()
@@ -156,15 +141,21 @@ public class VisitService {
 
     @Transactional(readOnly = true)
     public List<LocalDate> getMonthlyVisitDates(Long memberId, String yearMonth) {
-        java.time.YearMonth ym = java.time.YearMonth.parse(yearMonth);
-        java.time.LocalDateTime start = ym.atDay(1).atStartOfDay();
-        java.time.LocalDateTime end = ym.atEndOfMonth().atTime(23, 59, 59);
+        YearMonth ym = YearMonth.parse(yearMonth);
+        LocalDateTime start = ym.atDay(1).atStartOfDay();
+        LocalDateTime end = ym.atEndOfMonth().atTime(23, 59, 59);
 
         return visitLogRepository.findAllByMemberIdAndCreatedAtBetween(memberId, start, end)
                 .stream()
                 .map(log -> log.getCreatedAt().toLocalDate())
                 .distinct()
                 .sorted()
-                .collect(java.util.stream.Collectors.toList());
+                .collect(Collectors.toList());
+    }
+
+    // ── private 헬퍼 ─────────────────────────────────────────────
+
+    private VisitScanResponse errorResponse(String message) {
+        return VisitScanResponse.builder().statusCode("ERROR").message(message).build();
     }
 }

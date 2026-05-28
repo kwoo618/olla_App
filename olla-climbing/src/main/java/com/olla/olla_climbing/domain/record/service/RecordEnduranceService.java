@@ -22,11 +22,9 @@ public class RecordEnduranceService {
     private final MemberRepository memberRepository;
     private final EnduranceRankingService enduranceRankingService;
 
-    // 기록 저장
     @Transactional
     public RecordEnduranceResponse saveRecord(String loginId, RecordEnduranceRequest request) {
-        Member member = memberRepository.findByLoginId(loginId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
+        Member member = findMember(loginId);
 
         RecordEndurance record = RecordEndurance.builder()
                 .member(member)
@@ -37,37 +35,28 @@ public class RecordEnduranceService {
                 .build();
 
         RecordEndurance savedRecord = enduranceRepository.save(record);
-
-        // 거리 랭킹과 시간 랭킹 각각 업데이트
         enduranceRankingService.updateMainEnduranceDistanceRanking(member, savedRecord.getTotalScore());
         enduranceRankingService.updateMainEnduranceTimeRanking(member, Double.valueOf(savedRecord.getTimeSeconds()));
 
         return RecordEnduranceResponse.from(savedRecord);
     }
 
-    // 최고 기록 조회 (거리 랭킹 기준)
+    // 최고 기록 조회 (거리 기준 totalScore 우선)
     @Transactional(readOnly = true)
     public RecordEnduranceResponse getBestRecord(String loginId) {
-        Member member = memberRepository.findByLoginId(loginId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
-
-        // 최고 기록 조회 시, 기본적으로 '거리 기준' 최고 기록을 반환하도록 설정
+        Member member = findMember(loginId);
         return enduranceRepository.findTopByMemberIdOrderByTotalScoreDesc(member.getId())
                 .map(RecordEnduranceResponse::from)
                 .orElse(null);
     }
 
-    // 전체 상세 내역 조회
     @Transactional(readOnly = true)
     public List<RecordEnduranceResponse> getDetailedHistory(String loginId) {
-        Member member = memberRepository.findByLoginId(loginId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
-
+        Member member = findMember(loginId);
         return enduranceRepository.findByMemberIdOrderByRecordDateDesc(member.getId())
                 .stream().map(RecordEnduranceResponse::from).collect(Collectors.toList());
     }
 
-    // 기록 삭제
     @Transactional
     public void deleteRecord(String loginId, Long recordId) {
         RecordEndurance record = enduranceRepository.findById(recordId)
@@ -78,9 +67,14 @@ public class RecordEnduranceService {
         }
 
         enduranceRepository.delete(record);
-
-        // 삭제 시 두 랭킹 모두 강등/동기화 진행
         enduranceRankingService.syncMainDistanceRankingOnRecordDelete(record.getMember());
         enduranceRankingService.syncMainTimeRankingOnRecordDelete(record.getMember());
+    }
+
+    // ── private 헬퍼 ─────────────────────────────────────────────
+
+    private Member findMember(String loginId) {
+        return memberRepository.findByLoginId(loginId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
     }
 }

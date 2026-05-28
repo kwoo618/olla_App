@@ -8,7 +8,11 @@ import org.springframework.data.jpa.repository.Query;
 
 public interface NoticeRepository extends JpaRepository<Notice, Long> {
 
-    // 상단 고정(isImportant = true)을 먼저, 그 다음 최신순(createdAt DESC) 정렬하여 페이징 조회
+    // 중요 공지 상단 고정 후 최신순 정렬
     @Query("SELECT n FROM Notice n ORDER BY n.isImportant DESC, n.createdAt DESC")
     Page<Notice> findAllOrderByIsImportantDescAndCreatedAtDesc(Pageable pageable);
+
+    // [추가] 대시보드 최근 공지 5개 조회용 - findAll() 전체 로드 방지
+    @Query("SELECT n FROM Notice n ORDER BY n.createdAt DESC")
+    Page<Notice> findTop5ByOrderByCreatedAtDesc(Pageable pageable);
 }

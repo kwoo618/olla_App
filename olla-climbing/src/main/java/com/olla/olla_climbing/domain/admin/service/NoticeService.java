@@ -9,12 +9,10 @@ import com.olla.olla_climbing.domain.image.service.ImageService;
 import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-// (동철 수정) 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
@@ -25,15 +23,11 @@ public class NoticeService {
     private final MemberRepository memberRepository;
     private final ImageService imageService;
 
-    // (동철 수정) 공지사항 사용자도 볼 수 있게 수정 
-    // 유저/관리자 공용 조회 메서드 추가
     @Transactional(readOnly = true)
     public Page<NoticeResponse> getNotices(Pageable pageable) {
-        return noticeRepository.findAll(pageable)
-                .map(NoticeResponse::from);
+        return noticeRepository.findAll(pageable).map(NoticeResponse::from);
     }
-    
-    // 상세 조회 메서드 추가
+
     @Transactional(readOnly = true)
     public NoticeResponse getNotice(Long noticeId) {
         Notice notice = noticeRepository.findById(noticeId)
@@ -46,14 +40,13 @@ public class NoticeService {
         Member admin = memberRepository.findByLoginId(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("관리자 정보를 찾을 수 없습니다."));
 
-        // 이미지 업로드 로직 추가
         String imageUrl = imageService.uploadImage(file);
 
         Notice notice = Notice.builder()
                 .member(admin)
                 .title(request.getTitle())
                 .content(request.getContent())
-                .imageUrl(imageUrl) // 업로드된 경로 저장
+                .imageUrl(imageUrl)
                 .isImportant(request.isImportant())
                 .build();
 
@@ -61,12 +54,10 @@ public class NoticeService {
         return NoticeResponse.from(notice);
     }
 
-
     @Transactional
     public NoticeResponse updateNotice(Long noticeId, NoticeUpdateRequest request) {
         Notice notice = noticeRepository.findById(noticeId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 공지사항입니다."));
-
         notice.updateNotice(request.getTitle(), request.getContent(), request.getImageUrl(), request.isImportant());
         return NoticeResponse.from(notice);
     }
@@ -75,7 +66,6 @@ public class NoticeService {
     public void deleteNotice(Long noticeId) {
         Notice notice = noticeRepository.findById(noticeId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 공지사항입니다."));
-
         noticeRepository.delete(notice);
     }
 }

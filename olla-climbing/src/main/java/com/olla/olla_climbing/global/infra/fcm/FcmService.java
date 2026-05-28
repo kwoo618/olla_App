@@ -12,13 +12,12 @@ import org.springframework.util.StringUtils;
 @Service
 public class FcmService {
 
-    /**
-     * 💡 @Async: 메인 로직(스캔, 가입 등)과 별개의 스레드에서 작동하여 응답 속도에 영향을 주지 않음
-     */
+    // 비동기 처리: 푸시 발송 실패가 메인 비즈니스 로직에 영향을 주지 않도록 별도 스레드에서 실행
     @Async
-    public void sendPushNotification(String fcmToken, String title, String content, String type, String targetId) {
+    public void sendPushNotification(String fcmToken, String title, String content,
+                                     String type, String targetId) {
         if (!StringUtils.hasText(fcmToken)) {
-            log.warn("🔔 FCM 토큰이 존재하지 않아 푸시 발송을 생략합니다. (로그아웃 또는 미동의)");
+            log.debug("FCM 토큰 없음 - 푸시 발송 생략 (로그아웃 또는 토큰 미등록)");
             return;
         }
 
@@ -33,14 +32,12 @@ public class FcmService {
                     .putData("targetId", targetId != null ? targetId : "")
                     .build();
 
-            // 실제 구글(FCM)/애플(APNs) 서버로 푸시 알림 전송 요청
             String response = FirebaseMessaging.getInstance().send(message);
-            log.info("✅ FCM 푸시 발송 성공 - 응답: {}", response);
+            log.debug("FCM 푸시 발송 성공: {}", response);
 
         } catch (Exception e) {
-            // 💡 [iOS 완벽 방어막] 애플 APNs 연동이 안 되어 있어 예외가 터지더라도 여기서 조용히 처리됩니다.
-            // 에러가 메인 서비스로 전파되지 않으므로 DB 롤백 등의 대참사가 발생하지 않습니다!
-            log.error("⚠️ FCM 푸시 발송 실패 (메인 로직은 정상 유지됨) - 토큰: {}, 사유: {}", fcmToken, e.getMessage());
+            // FCM 실패가 메인 트랜잭션 롤백으로 이어지지 않도록 예외를 삼킴
+            log.error("FCM 푸시 발송 실패 - 토큰: {}, 사유: {}", fcmToken, e.getMessage());
         }
     }
 }

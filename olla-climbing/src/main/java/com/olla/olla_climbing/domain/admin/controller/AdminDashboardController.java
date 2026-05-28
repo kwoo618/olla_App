@@ -27,7 +27,7 @@ public class AdminDashboardController {
     }
 
     @GetMapping("/summary")
-    @Operation(summary = "대시보드 상단 핵심 요약 통계 조회 (통합 API)")
+    @Operation(summary = "대시보드 상단 핵심 요약 통계 조회")
     public ResponseEntity<ApiResponse<AdminDashboardSummaryResponse>> getDashboardSummary() {
         return ResponseEntity.ok(ApiResponse.success(adminDashboardService.getDashboardSummary()));
     }

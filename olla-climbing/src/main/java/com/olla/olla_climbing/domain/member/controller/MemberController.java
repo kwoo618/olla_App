@@ -29,8 +29,8 @@ public class MemberController {
     @Operation(summary = "내 프로필 조회", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<ApiResponse<MemberResponse>> getMemberProfile(@AuthenticationPrincipal Member member) {
         if (member == null) throw new IllegalArgumentException("로그인 인증 정보가 없습니다.");
-        MemberResponse response = memberService.getMyInfo(member.getLoginId());
-        return ResponseEntity.ok(ApiResponse.success(200, "프로필 조회 성공", response));
+        return ResponseEntity.ok(ApiResponse.success(200, "프로필 조회 성공",
+                memberService.getMyInfo(member.getLoginId())));
     }
 
     @PatchMapping("/me/info")
@@ -45,10 +45,11 @@ public class MemberController {
 
     @GetMapping("/me/notifications/settings")
     @Operation(summary = "내 알림 설정 조회", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<ApiResponse<NotificationResponse>> getNotificationSettings(@AuthenticationPrincipal Member member) {
+    public ResponseEntity<ApiResponse<NotificationResponse>> getNotificationSettings(
+            @AuthenticationPrincipal Member member) {
         if (member == null) throw new IllegalArgumentException("로그인 인증 정보가 없습니다.");
-        NotificationResponse response = memberService.getNotificationSettings(member.getLoginId());
-        return ResponseEntity.ok(ApiResponse.success(200, "알림 설정 조회 성공", response));
+        return ResponseEntity.ok(ApiResponse.success(200, "알림 설정 조회 성공",
+                memberService.getNotificationSettings(member.getLoginId())));
     }
 
     @PatchMapping("/me/notifications/settings")
@@ -57,15 +58,16 @@ public class MemberController {
             @AuthenticationPrincipal Member member,
             @RequestBody NotificationUpdateRequest request) {
         if (member == null) throw new IllegalArgumentException("로그인 인증 정보가 없습니다.");
-        NotificationResponse response = memberService.updateNotificationSettings(member.getLoginId(), request);
-        return ResponseEntity.ok(ApiResponse.success(200, "알림 설정이 수정되었습니다.", response));
+        return ResponseEntity.ok(ApiResponse.success(200, "알림 설정이 수정되었습니다.",
+                memberService.updateNotificationSettings(member.getLoginId(), request)));
     }
 
     @GetMapping("/{memberId}/profile")
     @Operation(summary = "타 회원 프로필 조회", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<ApiResponse<OtherMemberProfileResponse>> getOtherMemberProfile(@PathVariable("memberId") Long memberId) {
-        OtherMemberProfileResponse response = memberService.getOtherMemberProfile(memberId);
-        return ResponseEntity.ok(ApiResponse.success(200, "타 회원 프로필 조회 성공", response));
+    public ResponseEntity<ApiResponse<OtherMemberProfileResponse>> getOtherMemberProfile(
+            @PathVariable Long memberId) {
+        return ResponseEntity.ok(ApiResponse.success(200, "타 회원 프로필 조회 성공",
+                memberService.getOtherMemberProfile(memberId)));
     }
 
     @DeleteMapping("/me")
@@ -87,16 +89,12 @@ public class MemberController {
     }
 
     @PostMapping(value = "/me/profile-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "프로필 이미지 업로드 (S3)", security = @SecurityRequirement(name = "bearerAuth"))
+    @Operation(summary = "프로필 이미지 업로드", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<ApiResponse<String>> uploadProfileImage(
             @AuthenticationPrincipal Member member,
-            @RequestPart("image") MultipartFile image) { // 프론트에서 body: image 로 보냄
-
+            @RequestPart("image") MultipartFile image) {
         if (member == null) throw new IllegalArgumentException("로그인 인증 정보가 없습니다.");
-
-        String imageUrl = memberService.updateProfileImage(member.getLoginId(), image);
-
-        // 프론트 요청대로 data 안에 profileImageUrl(문자열)을 그대로 내려줍니다.
-        return ResponseEntity.ok(ApiResponse.success(200, "프로필 이미지가 성공적으로 업로드되었습니다.", imageUrl));
+        return ResponseEntity.ok(ApiResponse.success(200, "프로필 이미지가 성공적으로 업로드되었습니다.",
+                memberService.updateProfileImage(member.getLoginId(), image)));
     }
 }
