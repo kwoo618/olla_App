@@ -25,30 +25,28 @@ public class CrewScheduler {
     private final PostParticipantRepository participantRepository;
     private final NotificationService notificationService;
 
-    // 매일 아침 9시에 내일 예정된 모임 리마인드 알림 발송
-    @Scheduled(cron = "0 0 9 * * *")
+    // 매일 오전 9시 20분: 내일 예정된 모임 참여자 전체에게 리마인드 발송
+    // (다른 스케줄러와 실행 시간 분리: 9:00 / 9:10 / 9:20)
+    @Scheduled(cron = "0 20 9 * * *")
     @Transactional(readOnly = true)
     public void sendMeetingReminders() {
-        log.info("⏰ 모임 D-1 리마인드 스케줄러 시작");
+        log.info("모임 D-1 리마인드 스케줄러 시작");
 
-        // 내일의 시작(00:00)과 끝(23:59)
         LocalDateTime startOfTomorrow = LocalDateTime.of(LocalDate.now().plusDays(1), LocalTime.MIN);
         LocalDateTime endOfTomorrow = LocalDateTime.of(LocalDate.now().plusDays(1), LocalTime.MAX);
 
-        // 내일 예정된 모든 활성(삭제되지 않은) 게시글 조회
-        List<Post> tomorrowsPosts = postRepository.findByMeetDateTimeBetweenAndIsDeletedFalse(startOfTomorrow, endOfTomorrow);
+        List<Post> tomorrowsPosts = postRepository
+                .findByMeetDateTimeBetweenAndIsDeletedFalse(startOfTomorrow, endOfTomorrow);
 
         int count = 0;
         for (Post post : tomorrowsPosts) {
-            // 해당 게시글에 참여 중인 모든 참여자(방장 포함) 조회
             List<PostParticipant> participants = participantRepository.findByPost(post);
-
             for (PostParticipant participant : participants) {
                 notificationService.sendCrewReminderNotification(participant.getMember(), post);
                 count++;
             }
         }
 
-        log.info("⏰ 모임 D-1 리마인드 완료: 총 {}개의 모임, {}명의 회원에게 발송됨", tomorrowsPosts.size(), count);
+        log.info("모임 D-1 리마인드 완료: {}개 모임, {}명 발송", tomorrowsPosts.size(), count);
     }
 }

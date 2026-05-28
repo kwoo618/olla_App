@@ -7,6 +7,7 @@ import com.olla.olla_climbing.domain.community.entity.Post;
 import com.olla.olla_climbing.domain.community.repository.CommentRepository;
 import com.olla.olla_climbing.domain.community.repository.PostRepository;
 import com.olla.olla_climbing.domain.member.entity.Member;
+import com.olla.olla_climbing.domain.member.enums.Role;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
 import com.olla.olla_climbing.domain.member.service.NotificationService;
 import lombok.RequiredArgsConstructor;
@@ -28,8 +29,7 @@ public class CommentService {
     public void createComment(Long postId, String loginId, CommentRequest request) {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 게시글입니다."));
-        Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
-                .orElseThrow(() -> new IllegalArgumentException("사용자 정보가 없습니다."));
+        Member member = findActiveMember(loginId);
 
         Comment parent = null;
         if (request.getParentId() != null) {
@@ -48,8 +48,6 @@ public class CommentService {
                 .build();
 
         commentRepository.save(comment);
-
-        // 댓글 작성 시 게시글 작성자에게 알림 전송 (내 글에 내가 댓글 달아도 알림은 안 가도록 NotificationService에서 처리)
         notificationService.sendCommentNotification(post.getMember(), member, post);
     }
 
@@ -63,14 +61,19 @@ public class CommentService {
     public void deleteComment(Long commentId, String loginId) {
         Comment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new IllegalArgumentException("댓글이 존재하지 않습니다."));
+        Member currentMember = findActiveMember(loginId);
 
-        Member currentMember = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
-                .orElseThrow(() -> new IllegalArgumentException("사용자 정보가 없습니다."));
-
-        if (!comment.getMember().getLoginId().equals(loginId) && currentMember.getRole() != com.olla.olla_climbing.domain.member.enums.Role.ADMIN) {
+        if (!comment.getMember().getLoginId().equals(loginId) && currentMember.getRole() != Role.ADMIN) {
             throw new IllegalArgumentException("자신의 댓글 또는 관리자만 삭제할 수 있습니다.");
         }
 
         comment.markAsDeleted();
+    }
+
+    // ── private 헬퍼 ─────────────────────────────────────────────
+
+    private Member findActiveMember(String loginId) {
+        return memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
+                .orElseThrow(() -> new IllegalArgumentException("사용자 정보가 없습니다."));
     }
 }

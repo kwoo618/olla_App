@@ -29,14 +29,13 @@ public class AdminVisitController {
             @AuthenticationPrincipal Member admin,
             @Valid @RequestBody VisitScanRequest request) {
         if (admin == null) throw new IllegalArgumentException("관리자 인증 정보가 없습니다.");
-        VisitScanResponse response = visitService.processEntry(request.getQrToken(), admin.getLoginId(), request.getDeductionCount());
-        return ResponseEntity.ok(ApiResponse.success(response));
+        return ResponseEntity.ok(ApiResponse.success(
+                visitService.processEntry(request.getQrToken(), admin.getLoginId(), request.getDeductionCount())));
     }
 
     @GetMapping("/today")
     @Operation(summary = "당일 출석 대시보드 조회", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<ApiResponse<VisitDashboardResponse>> getTodayVisitDashboard() {
-        VisitDashboardResponse response = visitService.getTodayDashboard();
-        return ResponseEntity.ok(ApiResponse.success(response));
+        return ResponseEntity.ok(ApiResponse.success(visitService.getTodayDashboard()));
     }
 }

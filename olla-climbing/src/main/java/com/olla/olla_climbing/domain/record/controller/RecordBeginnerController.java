@@ -20,59 +20,43 @@ import java.util.List;
 @RequiredArgsConstructor
 public class RecordBeginnerController {
 
-    private final RecordBeginnerService recordLeadService;
+    private final RecordBeginnerService recordBeginnerService;
 
     @PostMapping
-    @Operation(summary = "초보벽 지구력 기록 저장", description = "초보벽 지구력 등반 기록을 저장합니다.", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<ApiResponse<RecordBeginnerResponse>> saveLeadRecord(
+    @Operation(summary = "초보벽 기록 저장", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<ApiResponse<RecordBeginnerResponse>> saveRecord(
             @AuthenticationPrincipal Member member,
             @Valid @RequestBody RecordBeginnerRequest request) {
-
-        if (member == null) {
-            throw new IllegalArgumentException("로그인 인증 정보가 없습니다.");
-        }
-
-        RecordBeginnerResponse response = recordLeadService.saveRecord(member.getLoginId(), request);
-        return ResponseEntity.ok(ApiResponse.success(201, "초보벽 기록이 성공적으로 저장되었습니다.", response));
+        if (member == null) throw new IllegalArgumentException("로그인 인증 정보가 없습니다.");
+        return ResponseEntity.ok(ApiResponse.success(201, "초보벽 기록이 성공적으로 저장되었습니다.",
+                recordBeginnerService.saveRecord(member.getLoginId(), request)));
     }
 
     @GetMapping("/best")
-    @Operation(summary = "난이도별 최고 기록 조회", description = "각 난이도(색상)별 회원의 가장 높은 기록을 조회합니다.", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<ApiResponse<List<RecordBeginnerResponse>>> getBestLeadRecords(
+    @Operation(summary = "난이도별 최고 기록 조회", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<ApiResponse<List<RecordBeginnerResponse>>> getBestRecords(
             @AuthenticationPrincipal Member member) {
-
-        if (member == null) {
-            throw new IllegalArgumentException("로그인 인증 정보가 없습니다.");
-        }
-
-        List<RecordBeginnerResponse> responses = recordLeadService.getBestRecords(member.getLoginId());
-        return ResponseEntity.ok(ApiResponse.success(200, "최고 기록 조회 성공", responses));
+        if (member == null) throw new IllegalArgumentException("로그인 인증 정보가 없습니다.");
+        return ResponseEntity.ok(ApiResponse.success(200, "최고 기록 조회 성공",
+                recordBeginnerService.getBestRecords(member.getLoginId())));
     }
 
     @GetMapping("/history")
-    @Operation(summary = "기록 전체 상세 내역", description = "모든 리드 등반 기록을 날짜 최신순으로 조회합니다.", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<ApiResponse<List<RecordBeginnerResponse>>> getDetailedLeadHistory(
+    @Operation(summary = "기록 전체 상세 내역", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<ApiResponse<List<RecordBeginnerResponse>>> getDetailedHistory(
             @AuthenticationPrincipal Member member) {
-
-        if (member == null) {
-            throw new IllegalArgumentException("로그인 인증 정보가 없습니다.");
-        }
-
-        List<RecordBeginnerResponse> responses = recordLeadService.getDetailedHistory(member.getLoginId());
-        return ResponseEntity.ok(ApiResponse.success(200, "상세 내역 조회 성공", responses));
+        if (member == null) throw new IllegalArgumentException("로그인 인증 정보가 없습니다.");
+        return ResponseEntity.ok(ApiResponse.success(200, "상세 내역 조회 성공",
+                recordBeginnerService.getDetailedHistory(member.getLoginId())));
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "리드 기록 삭제", description = "자신의 특정 리드 기록을 삭제합니다.", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<ApiResponse<Void>> deleteLeadRecord(
+    @Operation(summary = "기록 삭제", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<ApiResponse<Void>> deleteRecord(
             @AuthenticationPrincipal Member member,
-            @PathVariable("id") Long recordId) {
-
-        if (member == null) {
-            throw new IllegalArgumentException("로그인 인증 정보가 없습니다.");
-        }
-
-        recordLeadService.deleteRecord(member.getLoginId(), recordId);
+            @PathVariable Long id) {
+        if (member == null) throw new IllegalArgumentException("로그인 인증 정보가 없습니다.");
+        recordBeginnerService.deleteRecord(member.getLoginId(), id);
         return ResponseEntity.ok(ApiResponse.success(200, "기록이 성공적으로 삭제되었습니다.", null));
     }
 }

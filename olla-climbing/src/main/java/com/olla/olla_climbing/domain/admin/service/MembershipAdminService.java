@@ -15,18 +15,17 @@ import com.olla.olla_climbing.domain.member.repository.MemberRepository;
 import com.olla.olla_climbing.domain.member.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.util.StringUtils;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
-import java.util.stream.Collectors;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -38,24 +37,19 @@ public class MembershipAdminService {
     private final GoogleSheetsService googleSheetsService;
     private final AdminNotificationRepository adminNotificationRepository;
     private final NotificationService notificationService;
-    private final PasswordEncoder passwordEncoder;
 
     @Transactional
     public void grantMembership(Long memberId, Integer addMonths, Integer addCount, LocalDate startDate) {
-        // 1. 회원 조회
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new IllegalArgumentException("회원을 찾을 수 없습니다."));
 
-        // 💡 [핵심 추가] 기존 이용권의 최대 종료일 찾기
         LocalDate latestEndDate = membershipRepository.findMaxEndDateByMemberId(memberId).orElse(null);
 
-        // 💡 [핵심 로직] 시작 날짜 결정
+        // 기존 유효 이용권이 있으면 그 종료일부터 이어서 시작 (연장), 없으면 오늘 또는 수동 지정일
         LocalDate effectiveStartDate;
         if (latestEndDate != null && latestEndDate.isAfter(LocalDate.now().minusDays(1))) {
-            // 이미 유효한 이용권이 있다면, 그 종료일이 새로운 시작일이 됨 (연장)
             effectiveStartDate = latestEndDate;
         } else {
-            // 기존 이용권이 없거나 이미 예전에 만료되었다면, 입력받은 날짜 혹은 오늘부터 시작
             effectiveStartDate = (startDate != null) ? startDate : LocalDate.now();
         }
 
@@ -66,19 +60,17 @@ public class MembershipAdminService {
             throw new IllegalArgumentException("기간(개월) 또는 횟수 중 하나는 반드시 입력해야 합니다.");
         }
 
-        // 2. 새로운 이용권 레코드 생성
         Membership newMembership = Membership.builder()
                 .member(member)
-                .startDate(effectiveStartDate) // 계산된 연장 시작일 적용
+                .startDate(effectiveStartDate)
                 .durationMonth(safeMonths > 0 ? safeMonths : null)
                 .remainingCount(safeCount > 0 ? safeCount : null)
                 .build();
 
         membershipRepository.save(newMembership);
 
-
-        log.info("이용권 연장 부여 성공 : 회원={}, 시작일={}, 기간={}개월",
-                member.getName(), effectiveStartDate, safeMonths);
+        log.info("이용권 부여 완료: 회원={}, 시작일={}, 기간={}개월, 횟수={}회",
+                member.getName(), effectiveStartDate, safeMonths, safeCount);
     }
 
     @Transactional
@@ -88,11 +80,14 @@ public class MembershipAdminService {
         membership.markAsDeleted();
     }
 
+    // 컨트롤러가 생성된 회원 정보를 응답에 포함할 수 있도록 함
     @Transactional
     public MemberResponse createOfflineMember(AdminMemberCreateRequest request) {
         if (memberRepository.findByPhone(request.getPhone()).isPresent()) {
             throw new IllegalArgumentException("이미 등록된 전화번호입니다.");
         }
+
+        // 오프라인 회원은 비밀번호, 실제 이메일이 없으므로 더미 이메일 생성
         String cleanPhone = request.getPhone().replaceAll("-", "");
         String dummyEmail = "offline_" + cleanPhone + "@ollagaja.com";
 
@@ -107,14 +102,21 @@ public class MembershipAdminService {
                 .build();
 
         Member savedMember = memberRepository.save(offlineMember);
+
+        log.info("오프라인 회원 등록 완료: 이름={}, 전화번호={}", savedMember.getName(), savedMember.getPhone());
+
         return MemberResponse.from(savedMember);
     }
 
     @Transactional
     public void pauseMembership(Long membershipId) {
-        Membership membership = membershipRepository.findById(membershipId).orElseThrow(() -> new IllegalArgumentException("존재하지 않는 이용권입니다."));
+        Membership membership = membershipRepository.findById(membershipId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 이용권입니다."));
         membership.pause();
-        googleSheetsService.updateMembershipPauseDate(membership.getMember().getId(), LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy. MM. dd")));
+        googleSheetsService.updateMembershipPauseDate(
+                membership.getMember().getId(),
+                LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy. MM. dd"))
+        );
     }
 
     @Transactional
@@ -122,13 +124,14 @@ public class MembershipAdminService {
         Membership membership = membershipRepository.findById(membershipId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 이용권입니다."));
         membership.unpause();
-        String newEndDateStr = membership.getEndDate() != null ? membership.getEndDate().format(DateTimeFormatter.ofPattern("yyyy. MM. dd")) : "";
+        String newEndDateStr = membership.getEndDate() != null
+                ? membership.getEndDate().format(DateTimeFormatter.ofPattern("yyyy. MM. dd"))
+                : "";
         googleSheetsService.unpauseMembershipData(membership.getMember().getId(), newEndDateStr);
     }
 
     @Transactional(readOnly = true)
     public List<MembershipResponse> getMyMembership(Long memberId) {
-        // 내 이용권 조회도 여러 개가 있을 수 있으니 List 반환으로 변경 (컨트롤러 쪽 리턴 타입도 맞춰야 할 수 있음)
         List<Membership> activeMemberships = membershipRepository.findAllByMemberIdAndStatusIn(
                 memberId, List.of(MembershipStatus.ACTIVE, MembershipStatus.HOLDING)
         );
@@ -137,13 +140,9 @@ public class MembershipAdminService {
 
     @Transactional(readOnly = true)
     public Page<AdminMemberResponse> getAdminMemberList(String searchName, Pageable pageable) {
-        Page<Member> memberPage;
-
-        if (StringUtils.hasText(searchName)) {
-            memberPage = memberRepository.findByNameContaining(searchName, pageable);
-        } else {
-            memberPage = memberRepository.findAll(pageable);
-        }
+        Page<Member> memberPage = StringUtils.hasText(searchName)
+                ? memberRepository.findByNameContaining(searchName, pageable)
+                : memberRepository.findAll(pageable);
 
         return memberPage.map(member -> {
             List<Membership> activeMemberships = membershipRepository.findAllByMemberIdAndStatusIn(
@@ -153,6 +152,7 @@ public class MembershipAdminService {
         });
     }
 
+    // 매일 오전 9시: 오늘 만료 + 3일 후 만료 회원 요약 알림 생성
     @Scheduled(cron = "0 0 9 * * *")
     @Transactional
     public void generateExpirySummaryAlert() {
@@ -177,6 +177,7 @@ public class MembershipAdminService {
                 .build();
 
         adminNotificationRepository.save(alert);
+        log.info("관리자 만료 요약 알림 저장 완료");
     }
 
     @Transactional
