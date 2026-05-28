@@ -65,6 +65,10 @@ public class MemberService {
         updateMemberPrivacy(member, request);
 
         memberRepository.save(member);
+
+        // 이름/연락처/암벽화사이즈 등 시트에 반영되는 정보가 변경될 수 있으므로 동기화
+        googleSheetsService.syncNewMember(member);
+
         return MemberResponse.from(member);
     }
 
