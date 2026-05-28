@@ -1,4 +1,4 @@
-package com.olla.olla_climbing.domain.admin.controller;
+package com.olla.olla_climbing.domain.member.controller;
 
 import com.olla.olla_climbing.domain.admin.dto.response.MembershipResponse;
 import com.olla.olla_climbing.domain.admin.service.MembershipAdminService;

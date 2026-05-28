@@ -1,4 +1,4 @@
-package com.olla.olla_climbing.domain.admin.controller;
+package com.olla.olla_climbing.domain.member.controller;
 
 import com.olla.olla_climbing.domain.admin.dto.response.NoticeResponse;
 import com.olla.olla_climbing.domain.admin.service.NoticeService;
@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/notices") // 💡 admin이 빠진 유저 전용 URL
+@RequestMapping("/api/v1/notices")
 @RequiredArgsConstructor
 @Tag(name = "Notice API", description = "사용자용 공지사항 API")
 public class NoticeController {

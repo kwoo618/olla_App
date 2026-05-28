@@ -19,7 +19,7 @@ import java.util.Collections;
 public class GoogleSheetsConfig {
 
     private static final String APPLICATION_NAME = "Olla Climbing Dashboard";
-    private static final String CREDENTIALS_FILE_PATH = "google-credentials.json";
+    private static final String CREDENTIALS_FILE_PATH = "google/google-credentials.json";
 
     @Bean
     public Sheets googleSheetsClient() throws IOException, GeneralSecurityException {
