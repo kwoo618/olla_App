@@ -28,8 +28,8 @@ public class Membership extends BaseTimeEntity {
     @JoinColumn(name = "member_id")
     private Member member;
 
-    private Integer durationMonth; // 기간권: 개월 수
-    private Integer remainingCount; // 횟수권: 남은 횟수
+    private Integer durationMonth;   // 기간권: 개월 수 (null이면 기간권 아님)
+    private Integer remainingCount;  // 일일권: 남은 횟수 (null이면 일일권 아님)
 
     private LocalDate startDate;
     private LocalDate endDate;
@@ -52,26 +52,27 @@ public class Membership extends BaseTimeEntity {
         this.startDate = startDate != null ? startDate : LocalDate.now();
         this.durationMonth = durationMonth;
         this.remainingCount = remainingCount;
-
-        // 기간권일 경우 종료일 자동 계산
         if (this.durationMonth != null) {
             this.endDate = this.startDate.plusMonths(durationMonth);
         }
     }
 
-    // 💡 [추가] 외부(DTO, 시트)에서 권종을 알아야 할 때 사용하는 비즈니스 메서드
+    // [수정] 2가지 → 3가지 분류
+    // 한 회원이 기간권+일일권 동시 보유 시 "회원권+일일권"으로 표기
     public String getMembershipTypeName() {
-        if (this.durationMonth != null) return "PERIOD";
-        if (this.remainingCount != null) return "COUNT";
-        return "NONE";
+        boolean hasPeriod = this.durationMonth != null;
+        boolean hasCount  = this.remainingCount != null;
+        if (hasPeriod && hasCount) return "회원권+일일권";
+        if (hasPeriod) return "회원권";
+        if (hasCount)  return "일일권";
+        return "없음";
     }
 
-    // 기존의 일시정지(pause), 해제(unpause) 로직은 동일하게 유지
     public void pause() {
         if (this.endDate == null || this.isPaused) return;
         this.isPaused = true;
         this.pauseStartDate = LocalDate.now();
-        this.remainingDaysAtPause = ChronoUnit.DAYS.between(pauseStartDate, this.endDate);
+        this.remainingDaysAtPause = ChronoUnit.DAYS.between(this.pauseStartDate, this.endDate);
         this.status = MembershipStatus.HOLDING;
     }
 
@@ -84,38 +85,11 @@ public class Membership extends BaseTimeEntity {
         this.status = MembershipStatus.ACTIVE;
     }
 
-    public void expire() {
-        this.status = MembershipStatus.EXPIRED;
-    }
-
-    public void decreaseCount(int count) {
-        if (this.remainingCount == null || this.remainingCount < count) {
-            throw new IllegalArgumentException("잔여 횟수가 부족합니다.");
-        }
-        this.remainingCount -= count;
-        if (this.remainingCount <= 0) {
-            this.status = MembershipStatus.EXPIRED;
-        }
-    }
-
-    public void increaseAccumulatedVisits() {
-        if (this.accumulatedVisits == null) {
-            this.accumulatedVisits = 0;
-        }
-        this.accumulatedVisits++;
-    }
+    public void expire() { this.status = MembershipStatus.EXPIRED; }
 
     public void markAsDeleted() {
         this.isDeleted = true;
         this.status = MembershipStatus.EXPIRED;
-    }
-
-    public void addDuration(int addMonths) {
-        this.durationMonth += addMonths;
-        this.endDate = this.endDate.plusMonths(addMonths);
-    }
-    public void addRemainingCount(int addCount) {
-        this.remainingCount += addCount;
     }
 
     public void useCount(int deductionCount) {
@@ -123,6 +97,20 @@ public class Membership extends BaseTimeEntity {
             throw new IllegalStateException("잔여 횟수가 부족합니다.");
         }
         this.remainingCount -= deductionCount;
+        if (this.remainingCount <= 0) this.status = MembershipStatus.EXPIRED;
     }
 
+    public void increaseAccumulatedVisits() {
+        if (this.accumulatedVisits == null) this.accumulatedVisits = 0;
+        this.accumulatedVisits++;
+    }
+
+    public void addDuration(int addMonths) {
+        this.durationMonth += addMonths;
+        this.endDate = this.endDate.plusMonths(addMonths);
+    }
+
+    public void addRemainingCount(int addCount) {
+        this.remainingCount += addCount;
+    }
 }
