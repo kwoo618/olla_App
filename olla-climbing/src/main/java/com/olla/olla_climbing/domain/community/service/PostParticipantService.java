@@ -22,74 +22,53 @@ public class PostParticipantService {
 
     @Transactional
     public void joinPost(Long postId, String loginId) {
+        // 비관적 락: 동시 참여 요청 시 인원 초과 방지
         Post post = postRepository.findByIdWithPessimisticLock(postId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 게시글입니다."));
-        Member member = memberRepository.findByLoginId(loginId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
+        Member member = findActiveMember(loginId);
 
-        // 방어 로직 1: 삭제된 게시글인지 확인
         if (post.isDeleted()) {
             throw new IllegalArgumentException("삭제된 게시글에는 참여할 수 없습니다.");
         }
-
-        // 방어 로직 2: 작성자 본인인지 확인
         if (post.getMember().getId().equals(member.getId())) {
             throw new IllegalArgumentException("작성자는 이미 참여된 상태입니다.");
         }
-
-        // 방어 로직 3: 이미 참여한 상태인지 확인
         if (participantRepository.existsByPostAndMember(post, member)) {
             throw new IllegalArgumentException("이미 참여한 모집글입니다.");
         }
 
-        // 인원 추가 (엔티티 내부에 구현된 비즈니스 로직 호출, 초과 시 여기서 에러 발생)
         post.addParticipant();
+        participantRepository.save(PostParticipant.builder().post(post).member(member).build());
 
-        PostParticipant participant = PostParticipant.builder()
-                .post(post)
-                .member(member)
-                .build();
-        participantRepository.save(participant);
-
-        // [알림] 모임 방장에게 참여 알림 발송 (isJoin = true)
         notificationService.sendParticipantNotification(
-                post.getMember().getId(),
-                member.getName(),
-                post.getTitle(),
-                post.getId(),
-                true // 취소일 때는 false
-        );
+                post.getMember().getId(), member.getName(), post.getTitle(), post.getId(), true);
     }
 
     @Transactional
     public void cancelJoin(Long postId, String loginId) {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 게시글입니다."));
-        Member member = memberRepository.findByLoginId(loginId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
+        Member member = findActiveMember(loginId);
 
-        // 방어 로직 1: 작성자 본인인지 확인
         if (post.getMember().getId().equals(member.getId())) {
             throw new IllegalArgumentException("작성자는 참여를 취소할 수 없습니다. 취소를 원할 경우 글을 삭제해주세요.");
         }
 
-        // 방어 로직 2: 실제 참여 내역이 있는지 확인
         PostParticipant participant = participantRepository.findByPostAndMember(post, member)
                 .orElseThrow(() -> new IllegalArgumentException("해당 모집글에 참여한 내역이 없습니다."));
 
-        // 인원 감소
         post.removeParticipant();
-
-        // 중간 테이블에서 데이터 삭제
         participantRepository.delete(participant);
 
-        // [알림] 모임 방장에게 취소 알림 발송 (isJoin = false)
+        // [버그 수정] 기존 코드에서 취소 알림임에도 isJoin=true 를 전달하던 버그 수정
         notificationService.sendParticipantNotification(
-                post.getMember().getId(),
-                member.getName(),
-                post.getTitle(),
-                post.getId(),
-                true // 취소일 때는 false
-        );
+                post.getMember().getId(), member.getName(), post.getTitle(), post.getId(), false);
+    }
+
+    // ── private 헬퍼 ─────────────────────────────────────────────
+
+    private Member findActiveMember(String loginId) {
+        return memberRepository.findByLoginId(loginId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
     }
 }

@@ -25,21 +25,20 @@ public class VisitController {
     private final VisitService visitService;
 
     @GetMapping("/qr")
-    @Operation(summary = "입장용 일회용 QR 토큰 발급", security = @SecurityRequirement(name = "bearerAuth"))
+    @Operation(summary = "입장용 QR 토큰 발급", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<ApiResponse<String>> generateQrToken(@AuthenticationPrincipal Member member) {
         if (member == null) throw new IllegalArgumentException("인증 정보가 없습니다.");
-        String qrToken = jwtTokenProvider.createQrToken(member.getLoginId());
-        return ResponseEntity.ok(ApiResponse.success(200, "QR 토큰 발급 성공", qrToken));
+        return ResponseEntity.ok(ApiResponse.success(200, "QR 토큰 발급 성공",
+                jwtTokenProvider.createQrToken(member.getLoginId())));
     }
 
     @GetMapping("/my-history")
-    @Operation(summary = "내 출석 캘린더 조회")
+    @Operation(summary = "내 출석 캘린더 조회", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<ApiResponse<List<LocalDate>>> getMyVisitHistory(
             @AuthenticationPrincipal Member member,
             @RequestParam String yearMonth) {
         if (member == null) throw new IllegalArgumentException("인증 정보가 없습니다.");
-
-        List<LocalDate> dates = visitService.getMonthlyVisitDates(member.getId(), yearMonth);
-        return ResponseEntity.ok(ApiResponse.success(200, "출석 기록 조회 성공", dates));
+        return ResponseEntity.ok(ApiResponse.success(200, "출석 기록 조회 성공",
+                visitService.getMonthlyVisitDates(member.getId(), yearMonth)));
     }
 }

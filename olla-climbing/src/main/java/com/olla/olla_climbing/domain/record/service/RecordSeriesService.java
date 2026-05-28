@@ -25,45 +25,27 @@ public class RecordSeriesService {
 
     @Transactional
     public RecordSeriesResponse saveRecord(String loginId, RecordSeriesRequest request) {
-        Member member = memberRepository.findByLoginId(loginId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
+        Member member = findMember(loginId);
 
         List<Difficulty> sequence = request.getSequenceLog();
-        double calculatedTotalScore = 0.0;
-
-        // 공식: 해당 난이도 점수 × {1 + (순서 - 1) × 0.1}
-        for (int i = 0; i < sequence.size(); i++) {
-            Difficulty difficulty = sequence.get(i);
-            int baseScore = difficulty.getBaseScore();
-            double multiplier = 1.0 + (i * 0.1); 
-            calculatedTotalScore += (baseScore * multiplier);
-        }
-
-        calculatedTotalScore = Math.round(calculatedTotalScore * 10.0) / 10.0;
+        double totalScore = calculateTotalScore(sequence);
 
         RecordSeries record = RecordSeries.builder()
                 .member(member)
                 .sequenceLog(sequence)
-                .totalScore(calculatedTotalScore)
+                .totalScore(totalScore)
                 .recordDate(request.getRecordDate())
                 .build();
 
-        // (동철 수정) 1. 기록을 한 번만 저장
         RecordSeries savedRecord = recordSeriesRepository.save(record);
-
-        // (동철 수정) 2. 에러 해결: 기존 메서드 사양에 맞춰 인자를 2개(member, score)로 수정
-        // 💡 주의: 이 메서드가 내부에서 'SERIES' 타입으로 저장하고 있는지 확인이 필요합니다.
         seriesRankingService.updateBeginnerSeriesRanking(member, savedRecord.getTotalScore());
 
-        // (동철 수정) 3. 중복 저장 제거 및 savedRecord 반환
         return RecordSeriesResponse.from(savedRecord);
     }
 
     @Transactional(readOnly = true)
     public RecordSeriesResponse getBestRecord(String loginId) {
-        Member member = memberRepository.findByLoginId(loginId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
-
+        Member member = findMember(loginId);
         return recordSeriesRepository.findTopByMemberIdOrderByTotalScoreDesc(member.getId())
                 .map(RecordSeriesResponse::from)
                 .orElse(null);
@@ -71,9 +53,7 @@ public class RecordSeriesService {
 
     @Transactional(readOnly = true)
     public List<RecordSeriesResponse> getDetailedHistory(String loginId) {
-        Member member = memberRepository.findByLoginId(loginId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
-
+        Member member = findMember(loginId);
         return recordSeriesRepository.findByMemberIdOrderByRecordDateDesc(member.getId())
                 .stream().map(RecordSeriesResponse::from).collect(Collectors.toList());
     }
@@ -88,7 +68,22 @@ public class RecordSeriesService {
         }
 
         recordSeriesRepository.delete(record);
-
         seriesRankingService.syncSeriesRankingOnRecordDelete(record.getMember());
+    }
+
+    // ── private 헬퍼 ─────────────────────────────────────────────
+
+    private Member findMember(String loginId) {
+        return memberRepository.findByLoginId(loginId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
+    }
+
+    // 공식: 난이도 기초점수 × (1 + 순서 × 0.1), 소수점 1자리 반올림
+    private double calculateTotalScore(List<Difficulty> sequence) {
+        double total = 0.0;
+        for (int i = 0; i < sequence.size(); i++) {
+            total += sequence.get(i).getBaseScore() * (1.0 + i * 0.1);
+        }
+        return Math.round(total * 10.0) / 10.0;
     }
 }

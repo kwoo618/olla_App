@@ -2,20 +2,21 @@ package com.olla.olla_climbing.domain.member.service;
 
 import com.olla.olla_climbing.domain.admin.service.GoogleSheetsService;
 import com.olla.olla_climbing.domain.image.service.ImageService;
+import com.olla.olla_climbing.domain.member.dto.request.MemberUpdateRequest;
+import com.olla.olla_climbing.domain.member.dto.request.NotificationUpdateRequest;
+import com.olla.olla_climbing.domain.member.dto.response.MemberResponse;
+import com.olla.olla_climbing.domain.member.dto.response.NotificationResponse;
 import com.olla.olla_climbing.domain.member.dto.response.OtherMemberProfileResponse;
 import com.olla.olla_climbing.domain.member.entity.Member;
+import com.olla.olla_climbing.domain.member.entity.MemberDetail;
+import com.olla.olla_climbing.domain.member.entity.MemberPrivacy;
 import com.olla.olla_climbing.domain.member.entity.NotificationSetting;
-import com.olla.olla_climbing.domain.member.dto.request.NotificationUpdateRequest;
-import com.olla.olla_climbing.domain.member.dto.response.NotificationResponse;
-import com.olla.olla_climbing.domain.member.dto.response.MemberResponse;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.olla.olla_climbing.domain.member.dto.request.MemberUpdateRequest;
-import com.olla.olla_climbing.domain.member.entity.MemberDetail;
-import com.olla.olla_climbing.domain.member.entity.MemberPrivacy;
+import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
@@ -29,82 +30,41 @@ public class MemberService {
     private final GoogleSheetsService googleSheetsService;
     private final ImageService imageService;
 
-
-    // 회원가입 화면에서 DB 아이디 중복 확인 로직 (동철 수정)
     @Transactional(readOnly = true)
     public boolean existsByLoginId(String loginId) {
         return memberRepository.findByLoginIdAndIsDeletedFalse(loginId).isPresent();
-        }
-    // Transactional(readOnly = true) -> 데이터 조회 시 성능 최적화, 트랜잭션 관리
+    }
+
+    @Transactional(readOnly = true)
+    public boolean existsByEmail(String email) {
+        return memberRepository.existsByEmail(email);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean existsByPhone(String phone) {
+        return memberRepository.existsByPhone(phone);
+    }
+
     @Transactional(readOnly = true)
     public MemberResponse getMyInfo(String loginId) {
-        // 1. 회원 조회
-        // N+1 방지를 위해 @EntityGraph가 적용된 쿼리를 사용합니다.
-        // 이제 member, detail, privacy, notification 테이블을 JOIN해서 쿼리 1방에 가져옵니다.
+        // N+1 방지를 위해 detail, privacy, notificationSetting 을 한 번의 쿼리로 함께 조회
         Member member = memberRepository.findWithDetailsByLoginId(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
-
-        // 2. 엔티티를 DTO로 변환하여 반환
         return MemberResponse.from(member);
     }
 
-    @Transactional // 더티 체킹을 위해 반드시 필요! (readOnly = true 쓰면 안 됨)
+    @Transactional
     public MemberResponse updateMyInfo(String loginId, MemberUpdateRequest request) {
-        // 1. 회원 조회 (영속성 컨텍스트에 올라감 = JPA가 지켜보기 시작함)
-        // JPA가 지켜보기 시작하게 하는 코드(영속성 컨텍스트에 올라감) : findById, findByLoginId 등으로 조회해서 엔티티 객체를 가져오는 것
         Member member = memberRepository.findByLoginId(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
 
-        // (동철 수정) 에러 유발하던 중복 로직 및 파라미터 불일치 코드 정리
         member.updateBasicInfo(request.getName(), request.getPhone());
+        member.updateAdditionalInfo(request.getGender(), resolveBirthDate(member, request));
+        updateProfileImage(member, request.getProfileImageUrl());
+        updateMemberDetail(member, request);
+        updateMemberPrivacy(member, request);
 
-        LocalDate parsedBirthDate = member.getBirthDate();
-        // 날짜 파싱 로직
-        if (request.getBirthDate() != null) {
-            parsedBirthDate = request.getBirthDate();
-        }
-        member.updateAdditionalInfo(request.getGender(), parsedBirthDate);
-
-        member.updateAdditionalInfo(request.getGender(), parsedBirthDate);
-
-        // 프로필 이미지 처리 로직 고도화
-        String requestImageUrl = request.getProfileImageUrl();
-
-        if ("DEFAULT".equals(requestImageUrl)) {
-            // 프론트에서 "DEFAULT"라는 문자열을 보내면 사진 삭제(기본 이미지로 변경) 신호로 간주
-            member.updateProfileImage(null); // DB 컬럼을 null로 비움
-        } else if (org.springframework.util.StringUtils.hasText(requestImageUrl)) {
-            // 실제 S3 URL 값이 넘어오면 해당 주소로 업데이트
-            member.updateProfileImage(requestImageUrl);
-        }
-
-       //  상세 정보 수정 로직 통합 (수정할때 데이터 꼬일 수 있어서 수정)
-        if (member.getMemberDetail() == null) {
-            member.setMemberDetail(new MemberDetail(member));
-        }
-        member.getMemberDetail().update(
-                request.getHeight(), request.getWeight(),
-            request.getArmSpan(), request.getFootSize()
-        );
-
-        //  공개 설정 수정 - Boolean null 체크 추가 (데이터 유실 방지)
-        if (member.getMemberPrivacy() == null) {
-            member.setMemberPrivacy(new MemberPrivacy(member));
-        }
-
-        member.getMemberPrivacy().update(
-            request.getIsPublicPhone() != null ? request.getIsPublicPhone() : member.getMemberPrivacy().isPhonePublic(),
-            request.getIsEmailPublic() != null ? request.getIsEmailPublic() : member.getMemberPrivacy().isEmailPublic(),
-            request.getIsHeightPublic() != null ? request.getIsHeightPublic() : member.getMemberPrivacy().isHeightPublic(),
-            request.getIsWeightPublic() != null ? request.getIsWeightPublic() : member.getMemberPrivacy().isWeightPublic(),
-            request.getIsArmSpanPublic() != null ? request.getIsArmSpanPublic() : member.getMemberPrivacy().isArmSpanPublic(),
-            request.getIsFootSizePublic() != null ? request.getIsFootSizePublic() : member.getMemberPrivacy().isFootSizePublic()
-        );
-
-        // 5. DB 저장(save) 명령어 없음! @Transactional이 끝나면 알아서 UPDATE 됨 (Dirty Checking)
         memberRepository.save(member);
-
-        // 6. 수정된 결과를 다시 DTO로 만들어서 반환
         return MemberResponse.from(member);
     }
 
@@ -114,47 +74,35 @@ public class MemberService {
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
 
         member.updateBasicInfo(request.getName(), request.getPhone());
+        member.updateAdditionalInfo(request.getGender(), resolveBirthDate(member, request));
 
-        LocalDate parsedBirthDate = request.getBirthDate() != null ? request.getBirthDate() : member.getBirthDate();
-        member.updateAdditionalInfo(request.getGender(), parsedBirthDate);
-
-        log.info("관리자가 회원 정보 수정 완료: {}", member.getId());
-
+        log.info("관리자 회원 정보 수정 완료: memberId={}", memberId);
     }
 
     @Transactional(readOnly = true)
     public OtherMemberProfileResponse getOtherMemberProfile(Long memberId) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
-
         if (member.isDeleted()) {
             throw new IllegalArgumentException("탈퇴한 회원의 정보는 조회할 수 없습니다.");
         }
-
         return OtherMemberProfileResponse.of(member);
-    }
-
-    @Transactional(readOnly = true)
-    public boolean existsByEmail(String email) {
-        return memberRepository.existsByEmail(email); // 이메일 중복 확인용
     }
 
     @Transactional
     public void withdrawMember(String loginId) {
         Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않거나 이미 탈퇴한 회원입니다."));
-
-        member.withdraw(); // 엔티티 내부의 데이터 변조 로직 실행
+        member.withdraw();
         log.info("회원 탈퇴 완료: loginId={}", loginId);
     }
-
 
     @Transactional
     public void withdrawMemberById(Long memberId) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
         member.withdraw();
-        log.info("관리자에 의한 회원 강제 탈퇴 완료: {}", memberId);
+        log.info("관리자 강제 탈퇴 완료: memberId={}", memberId);
     }
 
     @Transactional
@@ -164,18 +112,33 @@ public class MemberService {
         member.updateFcmToken(fcmToken);
     }
 
+    @Transactional(readOnly = true)
+    public NotificationResponse getNotificationSettings(String loginId) {
+        Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
+                .orElseThrow(() -> new IllegalArgumentException("회원 정보가 없습니다."));
+
+        if (member.getNotificationSetting() == null) {
+            // 설정이 없으면 기본값(전체 ON) 반환
+            return NotificationResponse.builder()
+                    .isGlobalNotificationOn(true)
+                    .isMembershipNotificationOn(true)
+                    .isActivityNotificationOn(true)
+                    .isCrewNotificationOn(true)
+                    .isNoticeNotificationOn(true)
+                    .build();
+        }
+        return NotificationResponse.from(member.getNotificationSetting());
+    }
+
     @Transactional
     public NotificationResponse updateNotificationSettings(String loginId, NotificationUpdateRequest request) {
         Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("회원 정보가 없습니다."));
 
-        // 🌟 [수정 완료] 프로젝트 내 다른 가이드(MemberDetail 등)와 일치하도록 생성자 패턴으로 에러 해결!
         if (member.getNotificationSetting() == null) {
-            NotificationSetting newSetting = new NotificationSetting(member);
-            member.assignNotificationSetting(newSetting);
+            member.assignNotificationSetting(new NotificationSetting(member));
         }
 
-        // 이제 에러 없이 정상적으로 업데이트 트랜잭션이 작동합니다.
         member.getNotificationSetting().update(
                 request.getIsGlobalNotificationOn(),
                 request.getIsMembershipNotificationOn(),
@@ -187,58 +150,59 @@ public class MemberService {
         return NotificationResponse.from(member.getNotificationSetting());
     }
 
-    @Transactional(readOnly = true)
-    public NotificationResponse getNotificationSettings(String loginId) {
-        Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
-                .orElseThrow(() -> new IllegalArgumentException("회원 정보가 없습니다."));
-
-        // 🌟 [추가] 조회할 때도 데이터가 없으면 기본값이 켜진 상태로 응답하도록 방어 🌟
-        if (member.getNotificationSetting() == null) {
-            return NotificationResponse.builder()
-                    .isGlobalNotificationOn(true)
-                    .isMembershipNotificationOn(true)
-                    .isActivityNotificationOn(true)
-                    .isCrewNotificationOn(true)
-                    .isNoticeNotificationOn(true)
-                    .build();
-        }
-
-        return NotificationResponse.from(member.getNotificationSetting());
-    }
-
-
-    @Transactional(readOnly = true)
-    public boolean existsByPhone(String phone) {
-        return memberRepository.existsByPhone(phone);
-    }
-
     @Transactional
     public String updateProfileImage(String loginId, MultipartFile file) {
         Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("회원 정보가 없습니다."));
-
-        // 1. 로컬 스토리지에 이미지 업로드
         String imageUrl = imageService.uploadImage(file);
-
-        // 2. 회원 엔티티에 URL 업데이트
         member.updateProfileImage(imageUrl);
-
         return imageUrl;
     }
 
+    // 오프라인(비밀번호 없음) 회원은 중복으로 보지 않아 O2O 연동 가입 허용
     @Transactional(readOnly = true)
     public boolean isPhoneAvailableForSignup(String phone) {
         return memberRepository.findByPhone(phone)
-                .map(member -> {
-                    // 비밀번호가 없거나 빈 문자열인 경우 = 오프라인 회원이므로 가입(연동) 가능 -> 사용 가능한 번호(false 반환)
-                    if (!org.springframework.util.StringUtils.hasText(member.getPassword())) {
-                        log.info("O2O 연동 가능한 오프라인 회원 전화번호 확인됨: {}", phone);
-                        return false; // 중복되지 않음 (가입 가능)
-                    }
-                    // 비밀번호가 이미 있다면 정식 가입된 온라인 회원이므로 중복 차단 -> true 반환
-                    return true;
-                })
-                .orElse(false); // DB에 아예 없는 번호면 당연히 가입 가능 -> 중복되지 않음(false)
+                .map(member -> StringUtils.hasText(member.getPassword()))
+                .orElse(false);
     }
 
+    // ── private 헬퍼 ─────────────────────────────────────────────
+
+    private LocalDate resolveBirthDate(Member member, MemberUpdateRequest request) {
+        return request.getBirthDate() != null ? request.getBirthDate() : member.getBirthDate();
+    }
+
+    private void updateProfileImage(Member member, String requestImageUrl) {
+        if ("DEFAULT".equals(requestImageUrl)) {
+            member.updateProfileImage(null);
+        } else if (StringUtils.hasText(requestImageUrl)) {
+            member.updateProfileImage(requestImageUrl);
+        }
+    }
+
+    private void updateMemberDetail(Member member, MemberUpdateRequest request) {
+        if (member.getMemberDetail() == null) {
+            member.setMemberDetail(new MemberDetail(member));
+        }
+        member.getMemberDetail().update(
+                request.getHeight(), request.getWeight(),
+                request.getArmSpan(), request.getFootSize()
+        );
+    }
+
+    private void updateMemberPrivacy(Member member, MemberUpdateRequest request) {
+        if (member.getMemberPrivacy() == null) {
+            member.setMemberPrivacy(new MemberPrivacy(member));
+        }
+        MemberPrivacy privacy = member.getMemberPrivacy();
+        privacy.update(
+                request.getIsPublicPhone() != null ? request.getIsPublicPhone() : privacy.isPhonePublic(),
+                request.getIsEmailPublic() != null ? request.getIsEmailPublic() : privacy.isEmailPublic(),
+                request.getIsHeightPublic() != null ? request.getIsHeightPublic() : privacy.isHeightPublic(),
+                request.getIsWeightPublic() != null ? request.getIsWeightPublic() : privacy.isWeightPublic(),
+                request.getIsArmSpanPublic() != null ? request.getIsArmSpanPublic() : privacy.isArmSpanPublic(),
+                request.getIsFootSizePublic() != null ? request.getIsFootSizePublic() : privacy.isFootSizePublic()
+        );
+    }
 }

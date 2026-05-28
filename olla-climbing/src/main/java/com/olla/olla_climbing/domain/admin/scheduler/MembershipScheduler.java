@@ -21,22 +21,24 @@ public class MembershipScheduler {
     private final MembershipRepository membershipRepository;
     private final NotificationService notificationService;
 
-    @Scheduled(cron = "0 0 9 * * *")
+    // 매일 오전 9시 10분: 3일 후 만료 예정 회원에게 갱신 안내 발송
+    // (MembershipAdminService의 만료 요약 알림과 실행 시간 분리: 9:00 vs 9:10)
+    @Scheduled(cron = "0 10 9 * * *")
     @Transactional(readOnly = true)
     public void notifyExpiringMembers() {
-        log.info("⏰ [스케줄러] 만료 임박 회원 알림 발송 시작");
+        log.info("만료 임박 회원 알림 발송 시작");
 
-        LocalDate targetDate = LocalDate.now().plusDays(3);
-
-        List<Membership> expiringMemberships = membershipRepository.findByEndDateAndStatus(targetDate, MembershipStatus.ACTIVE);
+        List<Membership> expiringMemberships = membershipRepository
+                .findByEndDateAndStatus(LocalDate.now().plusDays(3), MembershipStatus.ACTIVE);
 
         for (Membership membership : expiringMemberships) {
-            String title = "이용권 만료 안내 🎫";
-            String content = "회원님의 이용권이 3일 후 만료될 예정입니다. 올라가자에서 연장 혜택을 확인해보세요!";
-
-            notificationService.sendMembershipNotification(membership.getMember(), title, content);
+            notificationService.sendMembershipNotification(
+                    membership.getMember(),
+                    "이용권 만료 안내 🎫",
+                    "회원님의 이용권이 3일 후 만료될 예정입니다. 올라가자에서 연장 혜택을 확인해보세요!"
+            );
         }
 
-        log.info("⏰ [스케줄러] 만료 임박 알림 처리 완료. 총 {}명 발송", expiringMemberships.size());
+        log.info("만료 임박 알림 발송 완료: {}명", expiringMemberships.size());
     }
 }

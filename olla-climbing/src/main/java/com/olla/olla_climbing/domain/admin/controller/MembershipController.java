@@ -24,14 +24,13 @@ public class MembershipController {
     private final MembershipAdminService membershipService;
 
     @GetMapping("/me")
-    @Operation(summary = "내 이용권 조회")
-    // 💡 단일 객체가 아닌 List<MembershipResponse> 로 반환 타입 변경
-    public ResponseEntity<ApiResponse<List<MembershipResponse>>> getMyMembership(@AuthenticationPrincipal Member member) {
+    @Operation(summary = "내 이용권 목록 조회")
+    public ResponseEntity<ApiResponse<List<MembershipResponse>>> getMyMembership(
+            @AuthenticationPrincipal Member member) {
+
         if (member == null) throw new IllegalArgumentException("로그인 인증 정보가 없습니다.");
 
-        // 💡 서비스에서 받아오는 타입도 List로 맞춰줍니다.
         List<MembershipResponse> response = membershipService.getMyMembership(member.getId());
-
-        return ResponseEntity.ok(ApiResponse.success(response));
+        return ResponseEntity.ok(ApiResponse.success(200, "내 이용권 조회 성공", response));
     }
 }
