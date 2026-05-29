@@ -2,6 +2,7 @@ package com.olla.olla_climbing.global.infra.sms;
 
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+/*
 import net.nurigo.sdk.NurigoApp;
 import net.nurigo.sdk.message.model.Message;
 import net.nurigo.sdk.message.request.SingleMessageSendingRequest;
@@ -9,7 +10,7 @@ import net.nurigo.sdk.message.response.SingleMessageSentResponse;
 import net.nurigo.sdk.message.service.DefaultMessageService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-
+*/
 // TODO: [출시 대비 리팩토링] 사용하지 않는 외부 API 통신 빈 등록 해제
 @Slf4j
 // @Service

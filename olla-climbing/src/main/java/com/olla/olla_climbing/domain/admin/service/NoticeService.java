@@ -25,7 +25,8 @@ public class NoticeService {
 
     @Transactional(readOnly = true)
     public Page<NoticeResponse> getNotices(Pageable pageable) {
-        return noticeRepository.findAll(pageable).map(NoticeResponse::from);
+        return noticeRepository.findAllOrderByIsImportantDescAndCreatedAtDesc(pageable)
+                .map(NoticeResponse::from);
     }
 
     @Transactional(readOnly = true)
@@ -40,6 +41,7 @@ public class NoticeService {
         Member admin = memberRepository.findByLoginId(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("관리자 정보를 찾을 수 없습니다."));
 
+        // 파일 있으면 업로드, 없으면 request의 imageUrl 사용 (둘 다 없으면 null)
         String imageUrl = (file != null && !file.isEmpty())
                 ? imageService.uploadImage(file)
                 : request.getImageUrl();
@@ -60,7 +62,8 @@ public class NoticeService {
     public NoticeResponse updateNotice(Long noticeId, NoticeUpdateRequest request) {
         Notice notice = noticeRepository.findById(noticeId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 공지사항입니다."));
-        notice.updateNotice(request.getTitle(), request.getContent(), request.getImageUrl(), request.isImportant());
+        notice.updateNotice(request.getTitle(), request.getContent(),
+                request.getImageUrl(), request.isImportant());
         return NoticeResponse.from(notice);
     }
 
