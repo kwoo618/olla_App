@@ -16,9 +16,16 @@ public class ImageService {
     @Value("${file.upload-dir:./olla-uploads/}")
     private String uploadDir;
 
+    // [수정] file이 null이거나 비어있으면 예외 대신 null 반환
+    // 이유: 공지사항 등 이미지가 선택사항인 API에서 파일 없이 요청 시 500 에러 발생
     public String uploadImage(MultipartFile file) {
-        if (file == null || file.isEmpty() || file.getOriginalFilename() == null) {
-            throw new IllegalArgumentException("업로드할 파일이 비어있습니다.");
+        if (file == null || file.isEmpty()) {
+            return null;
+        }
+
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null) {
+            return null;
         }
 
         File directory = new File(uploadDir);
@@ -26,9 +33,7 @@ public class ImageService {
             directory.mkdirs();
         }
 
-        String originalFilename = file.getOriginalFilename();
         String extension = originalFilename.substring(originalFilename.lastIndexOf("."));
-        // UUID + timestamp 조합으로 파일명 중복 방지
         String savedFileName = UUID.randomUUID().toString().substring(0, 8)
                 + "_" + System.currentTimeMillis() + extension;
 

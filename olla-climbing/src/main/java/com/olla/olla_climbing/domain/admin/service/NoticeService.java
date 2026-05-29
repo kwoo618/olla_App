@@ -40,7 +40,10 @@ public class NoticeService {
         Member admin = memberRepository.findByLoginId(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("관리자 정보를 찾을 수 없습니다."));
 
-        String imageUrl = imageService.uploadImage(file);
+        // [수정] 파일 있으면 업로드, 없으면 request의 imageUrl 사용 (null 가능)
+        String imageUrl = (file != null && !file.isEmpty())
+                ? imageService.uploadImage(file)
+                : request.getImageUrl();
 
         Notice notice = Notice.builder()
                 .member(admin)
