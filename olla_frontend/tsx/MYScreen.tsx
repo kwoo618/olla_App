@@ -178,7 +178,7 @@ const MYScreen = ({ navigation }: any) => {
       if (!userToken) return;
       const headers = { Authorization: `Bearer ${userToken}` };
       const notiRes = await axios.get(`${API_BASE_URL}/members/me/notifications/settings`, { headers });
-      const nData = notiRes.data?.data?.data || notiRes.data?.data;
+      const nData = notiRes.data.data;
       if (nData) {
         setNotiState({
           isGlobalNotificationOn: nData.isGlobalNotificationOn ?? true,
@@ -201,7 +201,7 @@ const MYScreen = ({ navigation }: any) => {
       const headers = { Authorization: `Bearer ${userToken}` };
 
       const userRes = await axios.get(`${API_BASE_URL}/members/me`, { headers });
-      const data = userRes.data?.data?.data || userRes.data?.data;
+      const data = userRes.data.data;
 
       if (data) {
         setIsAdmin(String(data.role || '').toUpperCase().includes('ADMIN') || String(data.memberRole || '').toUpperCase().includes('ADMIN'));
@@ -240,7 +240,7 @@ const MYScreen = ({ navigation }: any) => {
       }
 
       const memRes = await axios.get(`${API_BASE_URL}/memberships/me`, { headers });
-      const memData = memRes.data?.data?.data;
+      const memData = memRes.data.data;
 
       const dataList: any[] = Array.isArray(memData)
         ? memData
@@ -393,7 +393,7 @@ const MYScreen = ({ navigation }: any) => {
       const res = await axios.patch(`${API_BASE_URL}/members/me/notifications/settings`, requestBody, {
         headers: { Authorization: `Bearer ${userToken}` }
       });
-      const nData = res.data?.data?.data || res.data?.data;
+      const nData = res.data.data;
       if (nData) {
         setNotiState({
           isGlobalNotificationOn: nData.isGlobalNotificationOn ?? optimisticState.isGlobalNotificationOn,
@@ -576,9 +576,8 @@ const MYScreen = ({ navigation }: any) => {
           }
         );
 
-        const uploadedUrl = uploadRes.data?.data?.data ||
-          uploadRes.data?.data ||
-          uploadRes.data?.profileImageUrl;
+        const uploadedUrl = uploadRes.data.data ||
+          uploadRes.data.profileImageUrl;
 
         if (uploadedUrl && typeof uploadedUrl === 'string') {
           finalImageUrl = uploadedUrl;

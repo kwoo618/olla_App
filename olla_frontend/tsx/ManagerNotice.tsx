@@ -1,419 +1,18 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Alert } from 'react-native';
+import React from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, Modal, TextInput, KeyboardAvoidingView, Platform,
-  ActivityIndicator, Animated, RefreshControl, Dimensions, PanResponder, TouchableWithoutFeedback
+  ActivityIndicator, Animated, RefreshControl, TouchableWithoutFeedback,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { launchImageLibrary } from 'react-native-image-picker';
-import { API_BASE_URL } from '../src/constants/Config';
+import { useManagerNotice, formatDate, resolveImageUrl } from '../ts/ManagerNotice';
 
-const NOTICE_API = `${API_BASE_URL}/admin/notices`;
-
-axios.interceptors.request.use(
-  async (config) => {
-    try {
-      const token = await AsyncStorage.getItem('userToken');
-      if (token) config.headers.Authorization = `Bearer ${token}`;
-    } catch (e) {
-      console.error('토큰 가져오기 실패:', e);
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-interface Notice {
-  id:         number;
-  authorName: string;
-  title:      string;
-  content:    string;
-  imageUrl:   string | null;
-  createdAt:  string;
-  important:  boolean;
-}
-
-interface NoticeBody {
-  title:       string;
-  content:     string;
-  imageUrl:    string;
-  important:   boolean;
-  topFixed:    boolean;
-  isImportant: boolean;
-  isTopFixed:  boolean;
-}
-
+// ─── 컴포넌트 ────────────────────────────────────────────────────────────────
 const ManagerNotice = ({ route, navigation }: any) => {
-  const [refreshing, setRefreshing] = useState(false);
-  const [notices, setNotices]       = useState<Notice[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [isImageUploading, setIsImageUploading] = useState(false);
+  const n = useManagerNotice(navigation, route);
 
-  const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-
-  // ─── 커스텀 결과 알림 모달 상태 ───
-  const [resultModalVisible, setResultModalVisible] = useState(false);
-  const [resultModalConfig, setResultModalConfig]   = useState({ title: '', message: '', type: 'info', onConfirm: () => {} });
-
-  const showResultModal = (title: string, message: string, type: 'info' | 'success' | 'error' = 'info', onConfirm: () => void = () => {}) => {
-    setResultModalConfig({ title, message, type, onConfirm });
-    setResultModalVisible(true);
-  };
-
-  // ─── 상세 보기 모달 상태 및 드래그 애니메이션 (HomeScreen 방식 적용) ───
-  const [isDetailModalVisible, setDetailModalVisible] = useState(false);
-  const [detailNotice, setDetailNotice]               = useState<Notice | null>(null);
-  
-  const DETAIL_MODAL_HEIGHT = SCREEN_HEIGHT * 0.62;
-  
-  const detailHeightAnim = useRef(new Animated.Value(0)).current;
-  const currentDetailSnap = useRef(0);
-
-  const detailPanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
-      onPanResponderGrant: () => {
-        detailHeightAnim.setOffset(currentDetailSnap.current);
-        detailHeightAnim.setValue(0);
-      },
-      onPanResponderMove: (_, gestureState) => {
-        // 위로 당기는 것은 제한하고, 아래로만 드래그 가능하게 설정 (Math.min 사용)
-        detailHeightAnim.setValue(Math.min(0, -gestureState.dy));
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        detailHeightAnim.flattenOffset();
-        const finalHeight = currentDetailSnap.current - gestureState.dy;
-        const CLOSE_THRESHOLD = currentDetailSnap.current * 0.7; // 70% 미만으로 줄어들면 닫힘
-
-        if (finalHeight < CLOSE_THRESHOLD) {
-          closeDetailModal();
-        } else {
-          // 충분히 내리지 않았으면 원래 높이로 복귀
-          Animated.spring(detailHeightAnim, { toValue: currentDetailSnap.current, useNativeDriver: false }).start();
-        }
-      }
-    })
-  ).current;
-
-  // ─── 작성/수정 모달 상태 및 드래그 애니메이션 ───
-  const [isWriteModalVisible, setWriteModalVisible] = useState(false);
-  const [modalMode, setModalMode]                   = useState<'create' | 'edit'>('create');
-  const [selectedNoticeId, setSelectedNoticeId]     = useState<number | null>(null);
-
-  const [newTitle, setNewTitle]               = useState('');
-  const [newContent, setNewContent]           = useState('');
-  const [isImportant, setIsImportant]         = useState(false);
-  const [saving, setSaving]                   = useState(false);
-
-  const [selectedImageUri, setSelectedImageUri] = useState<string>('');
-  const [uploadedImageUrl, setUploadedImageUrl] = useState<string>('');
-
-  const WRITE_MODAL_HEIGHT = SCREEN_HEIGHT * 0.85; 
-  
-  const writeHeightAnim = useRef(new Animated.Value(0)).current;
-  const currentWriteSnap = useRef(WRITE_MODAL_HEIGHT);
-
-  const writePanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
-      onPanResponderGrant: () => {
-        writeHeightAnim.setOffset(currentWriteSnap.current);
-        writeHeightAnim.setValue(0);
-      },
-      onPanResponderMove: (_, gestureState) => {
-        writeHeightAnim.setValue(Math.min(0, -gestureState.dy));
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        writeHeightAnim.flattenOffset();
-        const finalHeight = currentWriteSnap.current - gestureState.dy;
-        const CLOSE_THRESHOLD = currentWriteSnap.current * 0.7; 
-
-        if (finalHeight < CLOSE_THRESHOLD) {
-          closeWriteModal();
-        } else {
-          Animated.spring(writeHeightAnim, { toValue: currentWriteSnap.current, useNativeDriver: false }).start();
-        }
-      }
-    })
-  ).current;
-
-  // ─── 삭제 모달 상태 ───
-  const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
-  const [noticeToDelete, setNoticeToDelete]           = useState<number | null>(null);
-
-  useEffect(() => {
-    fetchNotices();
-  }, []);
-
-  useEffect(() => {
-    const editId = route?.params?.editNoticeId;
-    if (editId) {
-      openEditModalById(editId);
-      navigation?.setParams?.({ editNoticeId: undefined });
-    }
-  }, [route?.params?.editNoticeId]);
-
-  const sortedNotices = useMemo(() =>
-    [...notices].sort((a, b) => {
-      if (a.important !== b.important) return a.important ? -1 : 1;
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    }),
-    [notices]
-  );
-
-  const fetchNotices = async (isRefresh = false) => {
-    try {
-      if (!isRefresh) setLoading(true);
-      const res = await axios.get(NOTICE_API, {
-        params: { page: 0, size: 100, sort: 'createdAt,desc' },
-      });
-      const list: Notice[] = res.data?.data?.data?.content ?? res.data?.data?.data ?? [];
-      setNotices(list);
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.message || '공지사항을 불러오는데 실패했습니다.';
-      showResultModal('오류', errorMessage, 'error');
-    } finally {
-      if (!isRefresh) setLoading(false);
-    }
-  };
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await fetchNotices(true);
-    setRefreshing(false);
-  }, []);
-
-  const fetchNoticeDetail = async (id: number): Promise<Notice | null> => {
-    try {
-      const res = await axios.get(`${NOTICE_API}/${id}`);
-      return res.data?.data?.data ?? null;
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.message || '공지 정보를 불러오는데 실패했습니다.';
-      showResultModal('오류', errorMessage, 'error');
-      return null;
-    }
-  };
-
-  const formatDate = (isoString: string) => isoString?.split('T')[0] ?? '-';
-
-  // ─── 상세 보기 모달 제어 ───
-  const openDetailModal = async (notice: Notice) => {
-    const detail = await fetchNoticeDetail(notice.id);
-    if (!detail) return;
-    setDetailNotice(detail);
-    setDetailModalVisible(true);
-    
-    currentDetailSnap.current = DETAIL_MODAL_HEIGHT;
-    detailHeightAnim.setValue(0);
-    setTimeout(() => {
-      Animated.timing(detailHeightAnim, { toValue: DETAIL_MODAL_HEIGHT, duration: 300, useNativeDriver: false }).start();
-    }, 50);
-  };
-
-  const closeDetailModal = (callback?: () => void) => {
-    Animated.timing(detailHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
-      setDetailModalVisible(false);
-      setDetailNotice(null);
-      if (callback) callback();
-    });
-  };
-
-  // ─── 이미지 첨부 제어 ───
-  const handleSelectImage = () => {
-    launchImageLibrary({ 
-      mediaType: 'photo', 
-      quality: 0.5,
-      maxWidth: 1024, 
-      maxHeight: 1024,
-    }, async (response) => {
-      if (response.didCancel || response.errorCode) return;
-      if (response.assets && response.assets.length > 0) {
-        const asset = response.assets[0];
-        
-        setSelectedImageUri(asset.uri ?? '');
-
-        try {
-          setIsImageUploading(true);
-          const userToken = await AsyncStorage.getItem('userToken');
-          const formData = new FormData();
-          formData.append('file', {
-            uri: Platform.OS === 'ios' ? asset.uri?.replace('file://', '') : asset.uri,
-            type: asset.type || 'image/jpeg',
-            name: asset.fileName || `notice_${Date.now()}.jpg`,
-          } as any);
-
-          const uploadRes = await axios.post(
-            `${API_BASE_URL}/images`,
-            formData,
-            {
-              headers: { Authorization: `Bearer ${userToken}` },
-              timeout: 30000,
-            }
-          );
-
-          const dataObj = uploadRes.data?.data?.data;
-          const uploadedUrl = dataObj && typeof dataObj === 'object'
-            ? Object.values(dataObj)[0] as string
-            : typeof dataObj === 'string' ? dataObj : null;
-
-          if (uploadedUrl) {
-            setSelectedImageUri(uploadedUrl);
-            setUploadedImageUrl(uploadedUrl);
-          } else {
-            throw new Error('URL 반환 없음');
-          }
-        } catch (e: any) {
-          showResultModal('업로드 실패', 
-            e.response?.data?.message || e.response?.status?.toString() || e.message || '알 수 없는 오류', 
-            'error'
-          );
-          setSelectedImageUri('');
-          setUploadedImageUrl('');
-        } finally {
-          setIsImageUploading(false);
-        }
-      }
-    });
-  };
-
-  // ─── 작성/수정 모달 제어 ───
-  const openWriteModal = () => {
-    setModalMode('create');
-    setSelectedNoticeId(null);
-    setNewTitle('');
-    setNewContent('');
-    setIsImportant(false);
-    setSelectedImageUri('');
-    setUploadedImageUrl('');
-    setWriteModalVisible(true);
-    
-    currentWriteSnap.current = WRITE_MODAL_HEIGHT;
-    writeHeightAnim.setValue(0);
-    setTimeout(() => {
-      Animated.timing(writeHeightAnim, { toValue: WRITE_MODAL_HEIGHT, duration: 300, useNativeDriver: false }).start();
-    }, 50);
-  };
-
-  const openEditModal = async (notice: Notice) => {
-    const detail = await fetchNoticeDetail(notice.id);
-    if (!detail) return;
-    
-    setModalMode('edit');
-    setSelectedNoticeId(detail.id);
-    setNewTitle(detail.title);
-    setNewContent(detail.content);
-    setIsImportant(detail.important);
-    setSelectedImageUri(detail.imageUrl ?? '');
-    setUploadedImageUrl(detail.imageUrl ?? '');
-    setWriteModalVisible(true);
-    
-    currentWriteSnap.current = WRITE_MODAL_HEIGHT;
-    writeHeightAnim.setValue(0);
-    setTimeout(() => {
-      Animated.timing(writeHeightAnim, { toValue: WRITE_MODAL_HEIGHT, duration: 300, useNativeDriver: false }).start();
-    }, 50);
-  };
-
-  const openEditModalById = async (id: number) => {
-    const detail = await fetchNoticeDetail(id);
-    if (!detail) return;
-    
-    setModalMode('edit');
-    setSelectedNoticeId(detail.id);
-    setNewTitle(detail.title);
-    setNewContent(detail.content);
-    setIsImportant(detail.important);
-    setSelectedImageUri(detail.imageUrl ?? '');
-    setUploadedImageUrl(detail.imageUrl ?? '');
-    setWriteModalVisible(true);
-    
-    currentWriteSnap.current = WRITE_MODAL_HEIGHT;
-    writeHeightAnim.setValue(0);
-    setTimeout(() => {
-      Animated.timing(writeHeightAnim, { toValue: WRITE_MODAL_HEIGHT, duration: 300, useNativeDriver: false }).start();
-    }, 50);
-  };
-
-  const closeWriteModal = (callback?: () => void) => {
-    Animated.timing(writeHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
-      setWriteModalVisible(false);
-      if (callback) callback();
-    });
-  };
-
-  // ─── 공지 저장 및 삭제 제어 ───
-  const handleSaveNotice = async () => {
-    if (!newTitle.trim() || !newContent.trim()) return;
-    setSaving(true);
-
-    const body: NoticeBody = {
-      title:       newTitle.trim(),
-      content:     newContent.trim(),
-      imageUrl:    uploadedImageUrl,
-      important:   isImportant,
-      topFixed:    isImportant,
-      isImportant: isImportant,
-      isTopFixed:  isImportant,
-    };
-
-    try {
-      if (modalMode === 'create') {
-        await axios.post(NOTICE_API, body);
-      } else {
-        await axios.put(`${NOTICE_API}/${selectedNoticeId}`, body);
-      }
-      closeWriteModal(() => {
-        setTimeout(() => {
-          showResultModal('성공', modalMode === 'create' ? '새 공지가 등록되었습니다.' : '공지가 수정되었습니다.', 'success');
-        }, 300);
-      });
-      await fetchNotices(true);
-    } catch (error: any) {
-      const msg = error?.response?.data?.message ?? '저장에 실패했습니다.';
-      closeWriteModal(() => {
-        setTimeout(() => {
-          showResultModal('오류', msg, 'error');
-        }, 300);
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const confirmDelete = (id: number) => {
-    setNoticeToDelete(id);
-    setDeleteModalVisible(true);
-  };
-
-  const cancelDelete = () => {
-    setDeleteModalVisible(false);
-    setNoticeToDelete(null);
-  };
-
-  const executeDelete = async () => {
-    if (noticeToDelete === null) return;
-    try {
-      await axios.delete(`${NOTICE_API}/${noticeToDelete}`);
-      cancelDelete();
-      setTimeout(() => {
-        showResultModal('성공', '공지사항이 삭제되었습니다.', 'success');
-      }, 300);
-      await fetchNotices(true);
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.message || '삭제에 실패했습니다.';
-      cancelDelete();
-      setTimeout(() => {
-        showResultModal('오류', errorMessage, 'error');
-      }, 300);
-    }
-  };
-
-  if (loading) {
+  // ─── 로딩 ────────────────────────────────────────────────────────────────
+  if (n.loading) {
     return (
       <View style={[styles.background, styles.center]}>
         <ActivityIndicator size="large" color="#A1BE44" />
@@ -424,18 +23,22 @@ const ManagerNotice = ({ route, navigation }: any) => {
   return (
     <SafeAreaView style={styles.background} edges={[]}>
 
+      {/* ─── 공지 목록 ────────────────────────────────────────────────────── */}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />
-        }
+        refreshControl={<RefreshControl refreshing={n.refreshing} onRefresh={n.onRefresh} tintColor="#A1BE44" />}
       >
-        {sortedNotices.length === 0 ? (
+        {n.sortedNotices.length === 0 ? (
           <Text style={styles.emptyText}>등록된 공지사항이 없습니다.</Text>
         ) : (
-          sortedNotices.map((notice) => (
-            <TouchableOpacity key={notice.id} style={styles.noticeCard} activeOpacity={0.75} onPress={() => openDetailModal(notice)}>
+          n.sortedNotices.map((notice) => (
+            <TouchableOpacity
+              key={notice.id}
+              style={styles.noticeCard}
+              activeOpacity={0.75}
+              onPress={() => n.openDetailModal(notice)}
+            >
               <View style={styles.noticeContent}>
                 <View style={styles.noticeHeaderRow}>
                   {notice.important && (
@@ -446,16 +49,20 @@ const ManagerNotice = ({ route, navigation }: any) => {
                   <Text style={styles.noticeTitle} numberOfLines={1}>{notice.title}</Text>
                 </View>
                 <Text style={styles.noticeDate}>{formatDate(notice.createdAt)}</Text>
-                {notice.authorName ? (
-                  <Text style={styles.noticeAuthor}>{notice.authorName}</Text>
-                ) : null}
+                {notice.authorName ? <Text style={styles.noticeAuthor}>{notice.authorName}</Text> : null}
               </View>
 
               <View style={styles.noticeActions}>
-                <TouchableOpacity style={styles.actionBtn} onPress={(e) => { e.stopPropagation(); openEditModal(notice); }}>
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  onPress={(e) => { e.stopPropagation(); n.openEditModal(notice); }}
+                >
                   <Image source={require('../assets/fix.png')} style={[styles.actionIcon, { tintColor: '#A1BE44' }]} />
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.actionBtn, styles.deleteBtn]} onPress={(e) => { e.stopPropagation(); confirmDelete(notice.id); }}>
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.deleteBtn]}
+                  onPress={(e) => { e.stopPropagation(); n.confirmDelete(notice.id); }}
+                >
                   <Image source={require('../assets/trash.png')} style={[styles.actionIcon, { tintColor: '#FF0000' }]} />
                 </TouchableOpacity>
               </View>
@@ -464,44 +71,39 @@ const ManagerNotice = ({ route, navigation }: any) => {
         )}
       </ScrollView>
 
-      <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={openWriteModal}>
+      {/* ─── FAB ─────────────────────────────────────────────────────────── */}
+      <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={n.openWriteModal}>
         <Text style={styles.fabText}>+ 작성</Text>
       </TouchableOpacity>
 
-      {/* ─── 커스텀 알림 결과 모달 ─── */}
-      <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
+      {/* ─── 결과 알림 모달 ───────────────────────────────────────────────── */}
+      <Modal visible={n.resultModalVisible} animationType="fade" transparent onRequestClose={n.closeResultModal}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
-            <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>
-              {resultModalConfig.title}
+            <Text style={[styles.resultModalTitle, { color: n.resultModalConfig.type === 'error' ? '#FF4D4D' : '#A1BE44' }]}>
+              {n.resultModalConfig.title}
             </Text>
-            <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
-            <TouchableOpacity style={styles.resultModalBtn} onPress={() => {
-              setResultModalVisible(false);
-              if (typeof resultModalConfig.onConfirm === 'function') {
-                resultModalConfig.onConfirm();
-              }
-            }}>
+            <Text style={styles.resultModalMessage}>{n.resultModalConfig.message}</Text>
+            <TouchableOpacity style={styles.resultModalBtn} onPress={n.closeResultModal}>
               <Text style={styles.resultModalBtnText}>확인</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* ─── 공지 상세 보기 바텀시트 모달 (HomeScreen 코드 방식 완벽 적용) ─── */}
-      <Modal visible={isDetailModalVisible} animationType="fade" transparent={true} onRequestClose={() => closeDetailModal()}>
+      {/* ─── 공지 상세 바텀시트 ───────────────────────────────────────────── */}
+      <Modal visible={n.isDetailModalVisible} animationType="fade" transparent onRequestClose={() => n.closeDetailModal()}>
         <View style={styles.modalOverlay}>
-          <TouchableWithoutFeedback onPress={() => closeDetailModal()}>
+          <TouchableWithoutFeedback onPress={() => n.closeDetailModal()}>
             <View style={StyleSheet.absoluteFill} />
           </TouchableWithoutFeedback>
-          
-          <Animated.View style={[styles.detailBottomSheet, { height: detailHeightAnim, overflow: 'hidden' }]}>
-            
-            <View {...detailPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
+
+          <Animated.View style={[styles.detailBottomSheet, { height: n.detailHeightAnim, overflow: 'hidden' }]}>
+            <View {...n.detailPanResponder.panHandlers} style={{ width: '100%' }}>
               <View style={styles.dragHandle} />
               <View style={styles.sheetHeader}>
                 <Text style={styles.sheetTitle} numberOfLines={1}>공지 상세</Text>
-                <TouchableOpacity onPress={() => closeDetailModal()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <TouchableOpacity onPress={() => n.closeDetailModal()} hitSlop={{ top:10, bottom:10, left:10, right:10 }}>
                   <Text style={styles.closeIcon}>✕</Text>
                 </TouchableOpacity>
               </View>
@@ -509,7 +111,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
-              {detailNotice?.important && (
+              {n.detailNotice?.important && (
                 <View style={styles.detailBadgeRow}>
                   <View style={styles.noticeBadge}>
                     <Text style={styles.noticeBadgeText}>중요</Text>
@@ -517,40 +119,40 @@ const ManagerNotice = ({ route, navigation }: any) => {
                 </View>
               )}
 
-              <Text style={styles.detailTitle}>{detailNotice?.title}</Text>
+              <Text style={styles.detailTitle}>{n.detailNotice?.title}</Text>
 
               <View style={styles.detailMetaRow}>
-                <Text style={styles.detailMeta}>{formatDate(detailNotice?.createdAt ?? '')}</Text>
-                {detailNotice?.authorName ? (
-                  <Text style={styles.detailMeta}> · {detailNotice.authorName}</Text>
+                <Text style={styles.detailMeta}>{formatDate(n.detailNotice?.createdAt ?? '')}</Text>
+                {n.detailNotice?.authorName ? (
+                  <Text style={styles.detailMeta}> · {n.detailNotice.authorName}</Text>
                 ) : null}
               </View>
 
               <View style={styles.horizontalDivider} />
 
-              {!!detailNotice?.imageUrl && (
+              {!!n.detailNotice?.imageUrl && (
                 <Image
-                  source={{ uri: detailNotice.imageUrl }}
+                  source={{ uri: resolveImageUrl(n.detailNotice.imageUrl) }}
                   style={styles.detailImage}
                   resizeMode="cover"
                 />
               )}
 
-              <Text style={styles.detailContent}>{detailNotice?.content}</Text>
+              <Text style={styles.detailContent}>{n.detailNotice?.content}</Text>
 
               <View style={styles.btnRow}>
                 <TouchableOpacity
                   style={styles.cancelBtn}
-                  onPress={() => closeDetailModal(() => {
-                    setTimeout(() => detailNotice && openEditModal(detailNotice), 100);
+                  onPress={() => n.closeDetailModal(() => {
+                    setTimeout(() => n.detailNotice && n.openEditModal(n.detailNotice), 100);
                   })}
                 >
                   <Text style={styles.cancelBtnText}>수정</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.registerBtn, { backgroundColor: '#A1BE44' }]}
-                  onPress={() => closeDetailModal(() => {
-                    setTimeout(() => detailNotice && confirmDelete(detailNotice.id), 100);
+                  style={[styles.registerBtn, { backgroundColor: '#FF4D4D' }]}
+                  onPress={() => n.closeDetailModal(() => {
+                    setTimeout(() => n.detailNotice && n.confirmDelete(n.detailNotice.id), 100);
                   })}
                 >
                   <Text style={styles.registerBtnText}>삭제</Text>
@@ -561,36 +163,44 @@ const ManagerNotice = ({ route, navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 작성 / 수정 바텀 시트 모달 ─── */}
-      <Modal visible={isWriteModalVisible} animationType="fade" transparent={true} onRequestClose={() => closeWriteModal()}>
+      {/* ─── 작성 / 수정 바텀시트 ─────────────────────────────────────────── */}
+      <Modal visible={n.isWriteModalVisible} animationType="fade" transparent onRequestClose={() => n.closeWriteModal()}>
         <View style={styles.modalOverlay}>
-          <TouchableWithoutFeedback onPress={() => closeWriteModal()}>
+          <TouchableWithoutFeedback onPress={() => n.closeWriteModal()}>
             <View style={StyleSheet.absoluteFill} />
           </TouchableWithoutFeedback>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', flex: 1, justifyContent: 'flex-end' }} pointerEvents="box-none">
-            <Animated.View style={[styles.bottomSheet, { height: writeHeightAnim, overflow: 'hidden' }]}>
-              
-              <View {...writePanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
+
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{ width: '100%', flex: 1, justifyContent: 'flex-end' }}
+            pointerEvents="box-none"
+          >
+            <Animated.View style={[styles.bottomSheet, { height: n.writeHeightAnim, overflow: 'hidden' }]}>
+              <View {...n.writePanResponder.panHandlers} style={{ width: '100%' }}>
                 <View style={styles.dragHandle} />
                 <View style={styles.sheetHeader}>
                   <Text style={styles.sheetTitle}>
-                    {modalMode === 'create' ? '새 공지 작성' : '공지 수정'}
+                    {n.modalMode === 'create' ? '새 공지 작성' : '공지 수정'}
                   </Text>
-                  <TouchableOpacity onPress={() => closeWriteModal()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <TouchableOpacity onPress={() => n.closeWriteModal()} hitSlop={{ top:10, bottom:10, left:10, right:10 }}>
                     <Text style={styles.closeIcon}>✕</Text>
                   </TouchableOpacity>
                 </View>
                 <View style={styles.horizontalDivider} />
               </View>
 
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 60 }}
+                keyboardShouldPersistTaps="handled"
+              >
                 <Text style={styles.inputLabel}>공지 제목</Text>
                 <TextInput
                   style={styles.textInput}
                   placeholder="공지 제목을 입력해주세요."
                   placeholderTextColor="#666666"
-                  value={newTitle}
-                  onChangeText={setNewTitle}
+                  value={n.newTitle}
+                  onChangeText={n.setNewTitle}
                 />
 
                 <Text style={styles.inputLabel}>공지 내용</Text>
@@ -598,60 +208,60 @@ const ManagerNotice = ({ route, navigation }: any) => {
                   style={[styles.textInput, styles.contentInput]}
                   placeholder="공지 내용을 입력해 주세요."
                   placeholderTextColor="#666666"
-                  multiline={true}
+                  multiline
                   textAlignVertical="top"
-                  value={newContent}
-                  onChangeText={setNewContent}
+                  value={n.newContent}
+                  onChangeText={n.setNewContent}
                 />
 
                 <Text style={styles.inputLabel}>이미지 첨부 (선택)</Text>
-                <TouchableOpacity 
-                  style={styles.imagePickerWrapper} 
-                  activeOpacity={0.7} 
-                  onPress={handleSelectImage}
-                  disabled={isImageUploading}
+                <TouchableOpacity
+                  style={styles.imagePickerWrapper}
+                  activeOpacity={0.7}
+                  onPress={n.handleSelectImage}
+                  disabled={n.isImageUploading}
                 >
-                  {selectedImageUri ? (
-                    <Image source={{ uri: selectedImageUri }} style={styles.imagePreview} resizeMode="cover" />
+                  {n.selectedImageUri ? (
+                    <Image source={{ uri: n.selectedImageUri }} style={styles.imagePreview} resizeMode="cover" />
                   ) : (
                     <View style={styles.imagePlaceholder}>
                       <Text style={styles.imagePlaceholderText}>탭하여 이미지 선택</Text>
                     </View>
                   )}
-                  {isImageUploading && (
+                  {n.isImageUploading && (
                     <View style={[styles.imageEditOverlay, { height: '100%', justifyContent: 'center' }]}>
                       <ActivityIndicator size="small" color="#ffffff" />
                       <Text style={[styles.imageEditOverlayText, { marginTop: 8 }]}>업로드 중...</Text>
                     </View>
                   )}
-                  {selectedImageUri && !isImageUploading ? (
+                  {n.selectedImageUri && !n.isImageUploading && (
                     <View style={styles.imageEditOverlay}>
                       <Text style={styles.imageEditOverlayText}>수정</Text>
                     </View>
-                  ) : null}
+                  )}
                 </TouchableOpacity>
 
                 <View style={{ height: 20 }} />
 
-                <TouchableOpacity style={styles.checkboxRow} activeOpacity={0.8} onPress={() => setIsImportant(!isImportant)}>
-                  <View style={[styles.checkbox, isImportant && styles.checkboxChecked]}>
-                    {isImportant && <Text style={styles.checkmark}>✓</Text>}
+                <TouchableOpacity style={styles.checkboxRow} activeOpacity={0.8} onPress={() => n.setIsImportant(!n.isImportant)}>
+                  <View style={[styles.checkbox, n.isImportant && styles.checkboxChecked]}>
+                    {n.isImportant && <Text style={styles.checkmark}>✓</Text>}
                   </View>
                   <Text style={styles.checkboxLabel}>중요 공지로 설정</Text>
                 </TouchableOpacity>
 
                 <View style={styles.btnRow}>
-                  <TouchableOpacity style={styles.cancelBtn} onPress={() => closeWriteModal()} disabled={saving}>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={() => n.closeWriteModal()} disabled={n.saving}>
                     <Text style={styles.cancelBtnText}>취소</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.registerBtn, (!newTitle || !newContent || saving) && { opacity: 0.5 }]}
-                    onPress={handleSaveNotice}
-                    disabled={!newTitle || !newContent || saving}
+                    style={[styles.registerBtn, (!n.newTitle || !n.newContent || n.saving) && { opacity: 0.5 }]}
+                    onPress={n.handleSaveNotice}
+                    disabled={!n.newTitle || !n.newContent || n.saving}
                   >
-                    {saving
+                    {n.saving
                       ? <ActivityIndicator size="small" color="#000" />
-                      : <Text style={styles.registerBtnText}>{modalMode === 'create' ? '등록하기' : '수정하기'}</Text>
+                      : <Text style={styles.registerBtnText}>{n.modalMode === 'create' ? '등록하기' : '수정하기'}</Text>
                     }
                   </TouchableOpacity>
                 </View>
@@ -661,16 +271,16 @@ const ManagerNotice = ({ route, navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 삭제 확인 모달 ─── */}
-      <Modal visible={isDeleteModalVisible} animationType="fade" transparent={true} onRequestClose={cancelDelete}>
+      {/* ─── 삭제 확인 모달 ───────────────────────────────────────────────── */}
+      <Modal visible={n.isDeleteModalVisible} animationType="fade" transparent onRequestClose={n.cancelDelete}>
         <View style={styles.centerModalOverlay}>
           <View style={styles.deleteModalBox}>
             <Text style={styles.deleteTitle}>공지사항을 삭제하시겠습니까?</Text>
             <View style={styles.deleteBtnRow}>
-              <TouchableOpacity style={styles.btnYes} onPress={executeDelete}>
+              <TouchableOpacity style={styles.btnYes} onPress={n.executeDelete}>
                 <Text style={styles.btnTextBlack}>예</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.btnNo} onPress={cancelDelete}>
+              <TouchableOpacity style={styles.btnNo} onPress={n.cancelDelete}>
                 <Text style={styles.btnTextWhite}>아니오</Text>
               </TouchableOpacity>
             </View>
@@ -682,6 +292,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
   );
 };
 
+// ─── 스타일 ──────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   background:    { flex: 1, backgroundColor: '#1A1A1A', paddingHorizontal: 20, paddingTop: 20 },
   center:        { justifyContent: 'center', alignItems: 'center' },
@@ -713,7 +324,7 @@ const styles = StyleSheet.create({
   },
   fabText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
 
-  modalOverlay:      { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
+  modalOverlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   bottomSheet:       { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, width: '100%' },
   detailBottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, width: '100%' },
   dragHandle:        { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
@@ -724,14 +335,13 @@ const styles = StyleSheet.create({
 
   inputLabel:   { color: '#ffffff', fontSize: 16, fontWeight: '600', marginBottom: 10, marginLeft: 2 },
   textInput:    { backgroundColor: '#000', borderWidth: 1, borderColor: '#333333', borderRadius: 12, color: '#ffffff', padding: 16, fontSize: 17, marginBottom: 20 },
-  
   contentInput: { height: 140, paddingTop: 16 },
 
-  imagePickerWrapper: { width: '100%', height: 140, borderRadius: 12, backgroundColor: '#2C2C2C', overflow: 'hidden', borderWidth: 1, borderColor: '#444444', justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
-  imagePreview:       { width: '100%', height: '100%' },
-  imagePlaceholder:   { alignItems: 'center' },
+  imagePickerWrapper:   { width: '100%', height: 140, borderRadius: 12, backgroundColor: '#2C2C2C', overflow: 'hidden', borderWidth: 1, borderColor: '#444444', justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
+  imagePreview:         { width: '100%', height: '100%' },
+  imagePlaceholder:     { alignItems: 'center' },
   imagePlaceholderText: { color: '#666666', fontSize: 15 },
-  imageEditOverlay:   { position: 'absolute', bottom: 0, width: '100%', backgroundColor: 'rgba(0,0,0,0.6)', paddingVertical: 6, alignItems: 'center' },
+  imageEditOverlay:     { position: 'absolute', bottom: 0, width: '100%', backgroundColor: 'rgba(0,0,0,0.6)', paddingVertical: 6, alignItems: 'center' },
   imageEditOverlayText: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
 
   checkboxRow:     { flexDirection: 'row', alignItems: 'center', marginBottom: 25, marginTop: 5 },
@@ -753,7 +363,7 @@ const styles = StyleSheet.create({
   detailImage:    { width: '100%', height: 200, borderRadius: 12, marginBottom: 20, backgroundColor: '#2C2C2C' },
   detailContent:  { color: '#dddddd', fontSize: 16, lineHeight: 26, marginBottom: 30 },
 
-  centerModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  centerModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
   deleteModalBox:     { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
   deleteTitle:        { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginBottom: 25, textAlign: 'center' },
   deleteBtnRow:       { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
@@ -762,7 +372,7 @@ const styles = StyleSheet.create({
   btnTextBlack:       { color: '#000000', fontSize: 18, fontWeight: 'bold' },
   btnTextWhite:       { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
 
-  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
   resultModalBox:     { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
   resultModalTitle:   { fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
   resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 },

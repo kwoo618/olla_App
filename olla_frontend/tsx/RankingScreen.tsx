@@ -293,7 +293,7 @@ const RankingScreen = ({ route }: any) => {
   const fetchMyProfile = async (): Promise<{ id: number | null; nickname: string; profileImageUrl: string | null }> => {
     try {
       const res = await axios.get(MY_PROFILE_URL);
-      const data = res.data?.data?.data;
+      const data = res.data.data;
 
       if (data) {
         const nickname        = data.nickname ?? data.name ?? '알 수 없음';
