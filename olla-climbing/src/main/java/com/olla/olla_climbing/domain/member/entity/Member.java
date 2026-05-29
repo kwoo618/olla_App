@@ -55,9 +55,6 @@ public class Member extends BaseTimeEntity {
     @Column(name = "profile_image_url", length = 1000)
     private String profileImageUrl;
 
-    // [제거] currentRefreshToken 필드 삭제
-    // RefreshToken은 refresh_token 테이블로 단일 관리 (이중 저장 시 불일치 인증 버그 위험)
-
     private boolean isDeleted = false;
 
     @OneToOne(mappedBy = "member", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
