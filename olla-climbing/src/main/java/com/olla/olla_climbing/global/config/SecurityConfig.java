@@ -85,16 +85,21 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
 
-        config.setAllowedOrigins(List.of(
-                "http://localhost:3000",    // 프론트 로컬 개발 환경
-                "http://localhost:8081",    // React Native Metro 개발 환경
-                "https://ollagaja.com" // 운영 프론트 도메인
-        ));
+        // ── 테스트 시: 아래 줄 활성화, 배포 시: 주석 처리 ──
+        config.setAllowedOriginPatterns(List.of("*"));
+
+        // ── 배포 시: 아래 줄 활성화, 테스트 시: 주석 처리 ──
+        // config.setAllowedOrigins(List.of(
+        //         "http://localhost:3000",
+        //         "http://localhost:8081",
+        //         "https://ollagaja.com",
+        //         "http://api.ollagaja.com:8080"
+        // ));
 
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
-        config.setAllowCredentials(true);
-        config.setMaxAge(3600L); // preflight 캐시 시간 (초)
+        config.setAllowCredentials(false);
+        config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
