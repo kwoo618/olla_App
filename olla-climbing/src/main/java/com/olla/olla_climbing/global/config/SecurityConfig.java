@@ -85,20 +85,17 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
 
-        // ── 테스트 시: 아래 줄 활성화, 배포 시: 주석 처리 ──
-        config.setAllowedOriginPatterns(List.of("*"));
-
-        // ── 배포 시: 아래 줄 활성화, 테스트 시: 주석 처리 ──
-        // config.setAllowedOrigins(List.of(
-        //         "http://localhost:3000",
-        //         "http://localhost:8081",
-        //         "https://ollagaja.com",
-        //         "http://api.ollagaja.com:8080"
-        // ));
+        config.setAllowedOrigins(List.of(
+                "http://localhost:3000",
+                "http://localhost:8081",
+                "http://localhost",
+                "https://ollagaja.com",
+                "http://api.ollagaja.com:8080"
+        ));
 
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
-        config.setAllowCredentials(false);
+        config.setAllowCredentials(true);
         config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
