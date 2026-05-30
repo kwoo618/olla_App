@@ -149,8 +149,33 @@ export const useLogin = (navigation: any) => {
         showResultModal('로그인 오류', '인증 정보를 찾을 수 없습니다.', 'error');
       }
     } catch (error: any) {
-      const errorMessage = error.response?.data?.message || '아이디 또는 비밀번호를 확인해주세요.';
-      showResultModal('로그인 실패', errorMessage, 'error');
+      // 🚨 디버깅을 위해 에러의 민낯을 모달에 그대로 띄우도록 수정한 부분
+      let modalTitle = '로그인 실패';
+      let debugMessage = '';
+
+      if (error.response) {
+        // 1. 서버에 도달했고, 서버가 에러 코드를 뱉은 경우 (401, 404, 500 등)
+        const status = error.response.status;
+        const serverMessage = error.response.data?.message || '상세 메시지 없음';
+        
+        modalTitle = `서버 응답 에러 (${status})`;
+        debugMessage = `상태 코드: ${status}\n서버 메시지: ${serverMessage}`;
+        
+      } else if (error.request) {
+        // 2. 서버에 아예 도달하지 못했거나 응답이 없는 경우 (Network Error, CORS 등)
+        modalTitle = '네트워크/연결 오류';
+        const rawMessage = error.message;
+        const targetUrl = error.config?.url || 'URL 알 수 없음';
+        
+        debugMessage = `에러 원인: ${rawMessage}\n\n[요청한 주소]\n${targetUrl}\n\n(※ http 차단 설정이나 서버가 내려간 상태일 수 있습니다.)`;
+        
+      } else {
+        // 3. Axios 요청 자체를 세팅하다가 발생한 오류
+        modalTitle = '요청 셋팅 오류';
+        debugMessage = error.message;
+      }
+
+      showResultModal(modalTitle, debugMessage, 'error');
     }
   };
 
