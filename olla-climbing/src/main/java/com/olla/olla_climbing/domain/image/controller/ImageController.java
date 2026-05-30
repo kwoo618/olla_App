@@ -15,17 +15,20 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/images")
 @RequiredArgsConstructor
-@Tag(name = "Image API", description = "서버 로컬 스토리지 이미지 호스팅 API (AWS 전면 대체)")
+@Tag(name = "Image API")
 public class ImageController {
 
-    private final ImageService imageService; // 리팩토링된 서비스 주입
+    private final ImageService imageService;
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "단일 이미지 업로드", description = "사진 파일을 서버 로컬 디렉토리에 업로드하고 접근 가능한 상대 URL 주소를 반환합니다.")
-    public ResponseEntity<ApiResponse<Map<String, String>>> uploadImage(@RequestPart(value = "file") MultipartFile file) {
+    @Operation(summary = "단일 이미지 업로드")
+    public ResponseEntity<ApiResponse<Map<String, String>>> uploadImage(
+            @RequestPart(value = "file", required = false) MultipartFile file) {
         String imageUrl = imageService.uploadImage(file);
-
-        // 프로젝트 글로벌 룰 북 규칙 준수: ApiResponse형태로 래핑하여 리턴
-        return ResponseEntity.ok(ApiResponse.success(201, "이미지가 서버 로컬에 무결하게 적재되었습니다.", Map.of("imageUrl", imageUrl)));
+        if (imageUrl == null) {
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error(400, "업로드할 파일이 없습니다."));
+        }
+        return ResponseEntity.ok(ApiResponse.success(201, "이미지 업로드 성공", Map.of("imageUrl", imageUrl)));
     }
 }

@@ -18,7 +18,6 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    // 1. 우리가 새로 만든 커스텀 비즈니스 예외 처리
     @ExceptionHandler(CustomException.class)
     public ResponseEntity<ApiResponse<Void>> handleCustomException(CustomException ex) {
         ErrorCode errorCode = ex.getErrorCode();
@@ -27,24 +26,19 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(errorCode.getHttpStatus().value(), errorCode.getMessage()));
     }
 
-    // 2. @Valid 검증 실패 예외 처리 (기존 로직 유지 및 규격화)
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiResponse<Map<String, String>>> handleValidationExceptions(MethodArgumentNotValidException ex) {
+    public ResponseEntity<ApiResponse<Map<String, String>>> handleValidationExceptions(
+            MethodArgumentNotValidException ex) {
         Map<String, String> errors = new HashMap<>();
-
-        ex.getBindingResult().getAllErrors().forEach((error) ->{
+        ex.getBindingResult().getAllErrors().forEach(error -> {
             String fieldName = ((FieldError) error).getField();
-            String errorMessage = error.getDefaultMessage();
-            errors.put(fieldName, errorMessage);
+            errors.put(fieldName, error.getDefaultMessage());
         });
- 
-        // 상태 코드 400과 함께, data 필드에 errors 맵을 담아서 반환
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(HttpStatus.BAD_REQUEST.value(), "입력값이 올바르지 않습니다.", errors));
     }
 
-    // 3. 기존 IllegalArgumentException 예외 처리
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException ex) {
         return ResponseEntity
@@ -53,31 +47,30 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
-    public ResponseEntity<Object> handleDataIntegrityViolationException(DataIntegrityViolationException e) {
-        log.error("DB 제약조건 위배 에러 발생: {}", e.getMessage());
-
+    public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        log.error("DB 제약조건 위배: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error(400, "필수 데이터(이메일 등)가 누락되었거나 이미 존재하는 데이터입니다."));
-    }
-
-    // 4. 최후의 수단: 모든 예외 처리 (500 Internal Server Error)
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResponse<Void>> handleAllException(Exception ex) {
-        ex.printStackTrace(); // 콘솔에 에러 원인 출력
-        return ResponseEntity
-                .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR.value(), "서버 내부 오류가 발생했습니다. 관리자에게 문의하세요."));
+                .body(ApiResponse.error(400, "필수 데이터가 누락되었거나 이미 존재하는 데이터입니다."));
     }
 
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
-    public ResponseEntity<ApiResponse<Void>> handleOptimisticLockException(ObjectOptimisticLockingFailureException e) {
-
+    public ResponseEntity<ApiResponse<Void>> handleOptimisticLockException(
+            ObjectOptimisticLockingFailureException ex) {
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
-                .body(ApiResponse.error(
-                        HttpStatus.CONFLICT.value(), // 409 정수값
-                        "동시에 너무 많은 요청이 발생했습니다. 잠시 후 다시 시도해주세요."
-                ));
+                .body(ApiResponse.error(HttpStatus.CONFLICT.value(),
+                        "동시에 너무 많은 요청이 발생했습니다. 잠시 후 다시 시도해주세요."));
+    }
+
+    // [수정] ex.printStackTrace() → log.error 로 교체
+    // printStackTrace는 로그 시스템을 우회하고 운영 환경 콘솔에 직접 출력해 성능 악영향
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiResponse<Void>> handleAllException(Exception ex) {
+        log.error("예상치 못한 서버 오류 발생: ", ex);
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                        "서버 내부 오류가 발생했습니다. 관리자에게 문의하세요."));
     }
 }

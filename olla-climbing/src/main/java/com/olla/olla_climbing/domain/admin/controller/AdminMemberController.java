@@ -30,17 +30,17 @@ public class AdminMemberController {
 
     @PatchMapping("/{memberId}/info")
     @Operation(summary = "오프라인 회원 정보 수정 (관리자)")
-    public ResponseEntity<ApiResponse<String>> updateMemberInfo(
+    public ResponseEntity<ApiResponse<Void>> updateMemberInfo(
             @PathVariable("memberId") Long memberId,
             @RequestBody MemberUpdateRequest request) {
         memberService.updateMemberByAdmin(memberId, request);
-        return ResponseEntity.ok(ApiResponse.success("회원 정보가 성공적으로 수정되었습니다."));
+        return ResponseEntity.ok(ApiResponse.success(200, "회원 정보가 성공적으로 수정되었습니다.", null));
     }
 
     @DeleteMapping("/{id}")
     @Operation(summary = "회원 강제 삭제 (관리자)")
-    public ResponseEntity<ApiResponse<String>> deleteMember(@PathVariable("id") Long id) {
+    public ResponseEntity<ApiResponse<Void>> deleteMember(@PathVariable("id") Long id) {
         memberService.withdrawMemberById(id);
-        return ResponseEntity.ok(ApiResponse.success("회원이 성공적으로 삭제되었습니다."));
+        return ResponseEntity.ok(ApiResponse.success(200, "회원이 성공적으로 삭제되었습니다.", null));
     }
 }

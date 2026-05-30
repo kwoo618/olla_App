@@ -1,79 +1,20 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Modal, Image, RefreshControl } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
-import { API_BASE_URL } from '../src/constants/Config';
-
-interface Notice {
-  id: number;
-  important: boolean;
-  title: string;
-  content: string;
-  imageUrl?: string;
-  createdAt: string;
-}
+import { useNotice, getFullImageUrl } from '../ts/Notice';
 
 const NoticeScreen = ({ navigation }: any) => {
-  const [refreshing, setRefreshing] = useState(false);
-
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [notices, setNotices] = useState<Notice[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const [resultModalVisible, setResultModalVisible] = useState(false);
-  const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info', onConfirm: () => {} });
-
-  const showResultModal = (title: string, message: string, type: 'info' | 'success' | 'error' = 'info', onConfirm: () => void = () => {}) => {
-    setResultModalConfig({ title, message, type, onConfirm });
-    setResultModalVisible(true);
-  };
-
-  const fetchNotices = async () => {
-    try {
-      const token = await AsyncStorage.getItem('userToken');
-      if (!token) {
-        showResultModal('인증 오류', '로그인 정보가 없습니다.', 'error', () => {
-          navigation.navigate('Login');
-        });
-        return;
-      }
-
-      const response = await axios.get(`${API_BASE_URL}/admin/notices`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      const raw = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
-      const list: Notice[] = Array.isArray(raw) ? raw : [];
-
-      list.sort((a, b) => {
-        if (a.important !== b.important) return a.important ? -1 : 1;
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      });
-
-      setNotices(list);
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.message || '네트워크 연결을 확인해주세요.';
-      showResultModal('오류', errorMessage, 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchNotices();
-  }, []);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await fetchNotices();
-    setRefreshing(false);
-  }, []);
-
-  const toggleExpand = (id: number) => {
-    setExpandedId(expandedId === id ? null : id);
-  };
+  // 비즈니스 로직(Hook)에서 데이터와 제어 함수를 가져옵니다.
+  const {
+    loading,
+    refreshing,
+    notices,
+    expandedId,
+    toggleExpand,
+    onRefresh,
+    resultModalVisible,
+    setResultModalVisible,
+    resultModalConfig
+  } = useNotice(navigation);
 
   if (loading) {
     return (
@@ -98,6 +39,9 @@ const NoticeScreen = ({ navigation }: any) => {
         }
         renderItem={({ item }) => {
           const isExpanded = expandedId === item.id;
+          
+          // 💡 상대경로 이미지를 절대경로로 변환합니다.
+          const imageUrl = getFullImageUrl(item.imageUrl);
 
           return (
             <View style={styles.noticeWrapper}>
@@ -125,10 +69,11 @@ const NoticeScreen = ({ navigation }: any) => {
               {isExpanded && (
                 <View style={styles.noticeContent}>
                   <Text style={styles.noticeContentText}>{item.content}</Text>
+                  
                   {/* ── 이미지가 있을 때만 토글 영역 내 표시 ── */}
-                  {!!item.imageUrl && (
+                  {!!imageUrl && (
                     <Image
-                      source={{ uri: item.imageUrl }}
+                      source={{ uri: imageUrl }}
                       style={styles.noticeImage}
                       resizeMode="cover"
                     />
@@ -148,12 +93,15 @@ const NoticeScreen = ({ navigation }: any) => {
               {resultModalConfig.title}
             </Text>
             <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
-            <TouchableOpacity style={styles.resultModalBtn} onPress={() => {
-              setResultModalVisible(false);
-              if (typeof resultModalConfig.onConfirm === 'function') {
-                resultModalConfig.onConfirm();
-              }
-            }}>
+            <TouchableOpacity 
+              style={styles.resultModalBtn} 
+              onPress={() => {
+                setResultModalVisible(false);
+                if (typeof resultModalConfig.onConfirm === 'function') {
+                  resultModalConfig.onConfirm();
+                }
+              }}
+            >
               <Text style={styles.resultModalBtnText}>확인</Text>
             </TouchableOpacity>
           </View>
@@ -221,7 +169,6 @@ const styles = StyleSheet.create({
     paddingTop: 15,
   },
   noticeContentText: { color: '#CCCCCC', fontSize: 16, lineHeight: 24 },
-  // ── 토글 내 이미지 스타일 추가 ──
   noticeImage: { width: '100%', height: 200, borderRadius: 10, marginTop: 16 },
 
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
