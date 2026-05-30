@@ -232,7 +232,7 @@ const ManagerDashboard = ({ navigation }: any) => {
       setDashboardStats(prev => ({
         ...prev,
         newMembersToday: data.newMembersToday ?? prev.newMembersToday,
-        lastUpdated: getFormattedCurrentTime(), // 수정: 새로고침 한 당시의 시각을 저장
+        lastUpdated: getFormattedCurrentTime(), 
         expiringMembers: realExpiring.length > 0 ? realExpiring : prev.expiringMembers,
       }));
 
@@ -743,7 +743,10 @@ const ManagerDashboard = ({ navigation }: any) => {
     const displayData = hourlyData.slice(0, hourRange.length);
     const maxVal = Math.max(...displayData, 1);
     const count = displayData.length;
-    const lineW = CARD_INNER_W - 30;
+    
+    // 전체 너비(SCREEN_WIDTH)에서 (좌우 공백 40 + 컴포넌트 패딩 40 + Y축 30 + 점 여백 20) = 총 130을 뺀 값을 그래프 너비로 고정
+    const lineW = SCREEN_WIDTH - 130; 
+    
     const points = displayData.map((val, i) => ({
       x: count > 1 ? (i / (count - 1)) * lineW : 0,
       y: CHART_H - (val / maxVal) * CHART_H,
@@ -763,14 +766,16 @@ const ManagerDashboard = ({ navigation }: any) => {
           </View>
           <View style={{ flex: 1, height: CHART_H + 32 }}>
             {[0, 0.5, 1].map((r, i) => (
-              <View key={i} style={{
+              <View key={`bg-${i}`} style={{
                 position: 'absolute',
                 top: CHART_H * (1 - r),
                 left: 0, right: 0, height: 1,
                 backgroundColor: '#383838',
               }} />
             ))}
-            <View style={{ position: 'absolute', top: 0, left: 0, width: lineW, height: CHART_H }}>
+            
+            {/* 데이터 표시선 및 점 (점들이 잘리지 않도록 좌측 10px 만큼 offset) */}
+            <View style={{ position: 'absolute', top: 0, left: 10, width: lineW, height: CHART_H }}>
               {points.slice(0, -1).map((p, i) => {
                 const next = points[i + 1];
                 const dx = next.x - p.x;
@@ -781,7 +786,7 @@ const ManagerDashboard = ({ navigation }: any) => {
                 const cy = p.y + dy / 2;
                 return (
                   <View
-                    key={i}
+                    key={`line-${i}`}
                     style={{
                       position: 'absolute',
                       width: len,
@@ -795,7 +800,7 @@ const ManagerDashboard = ({ navigation }: any) => {
                 );
               })}
               {points.map((p, i) => (
-                <View key={i} style={{
+                <View key={`dot-${i}`} style={{
                   position: 'absolute',
                   left: p.x - 4,
                   top: p.y - 4,
@@ -806,12 +811,25 @@ const ManagerDashboard = ({ navigation }: any) => {
                 }} />
               ))}
             </View>
-            <View style={{ position: 'absolute', top: CHART_H + 8, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between' }}>
+
+            {/* X축 시간 라벨 (점과 동일한 x좌표상에 배치하기 위해 절대위치로 변경) */}
+            <View style={{ position: 'absolute', top: CHART_H + 8, left: 10, width: lineW, height: 20 }}>
               {hourRange.map((hour, i) => {
                 const showLabel = selectedDay === 6 ? true : i % 2 === 0;
-                return showLabel ? (
-                  <Text key={i} style={styles.xAxisText}>{hour}시</Text>
-                ) : null;
+                if (!showLabel) return null;
+                
+                const px = count > 1 ? (i / (count - 1)) * lineW : 0;
+                return (
+                  <Text
+                    key={`label-${i}`}
+                    style={[
+                      styles.xAxisText,
+                      { position: 'absolute', left: px - 15, width: 30, textAlign: 'center' }
+                    ]}
+                  >
+                    {hour}시
+                  </Text>
+                );
               })}
             </View>
           </View>
@@ -919,7 +937,6 @@ const ManagerDashboard = ({ navigation }: any) => {
     );
   }
 
-  // 수정: 저장된 시간이 없을 경우를 대비한 fallback 역시 같은 형식으로 맞춤
   const lastUpdatedDisplay = dashboardStats.lastUpdated
     ? dashboardStats.lastUpdated
     : getFormattedCurrentTime();

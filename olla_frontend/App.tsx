@@ -3,8 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, StatusBar, M
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import messaging from '@react-native-firebase/messaging'; // FCM 추가 
-import AsyncStorage from '@react-native-async-storage/async-storage'; // AsyncStorage 추가
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_BASE_URL } from './src/constants/Config';
 
@@ -15,7 +14,7 @@ type RootParamList = {
   Community: { filter?: 'ALL' | 'MY_WRITTEN' | 'MY_APPLIED' } | undefined; 
   MY: undefined; ManagerDashboard: undefined;
   ManagerUser: undefined; ManagerTicket: undefined; ManagerNotice: undefined; ManagerCommunity: undefined;
-  AdminNotification: undefined; // 추가: 관리자 알림함 타입 등록
+  AdminNotification: undefined; 
 };
 
 // 스크린 임포트
@@ -25,7 +24,7 @@ import PersonalScreen from './tsx/PersonalScreen';
 import LoadingScreen from './tsx/LoadingScreen';
 import HomeScreen from './tsx/HomeScreen';
 import NoticeScreen from './tsx/NoticeScreen';
-import NotificationScreen from './tsx/NotificationScreen'; // 스크린 임포트 추가
+import NotificationScreen from './tsx/NotificationScreen'; 
 import RecodeScreen from './tsx/RecodeScreen';
 import RankingScreen from './tsx/RankingScreen';
 import CommunityScreen from './tsx/CommunityScreen';
@@ -35,7 +34,7 @@ import ManagerUser from './tsx/ManagerUser';
 import ManagerTicket from './tsx/ManagerTicket';
 import ManagerNotice from './tsx/ManagerNotice';
 import ManagerCommunity from './tsx/ManagerCommunity';
-import AdminNotificationScreen from './tsx/AdminNotificationScreen'; // 추가: 관리자 알림함 스크린 임포트
+import AdminNotificationScreen from './tsx/AdminNotificationScreen'; 
 
 const Stack = createNativeStackNavigator<RootParamList>();
 
@@ -68,34 +67,19 @@ const BottomNavItem = ({ name, label, icon, currentRoute, nav, isAdmin = false }
 };
 
 const AppContent = () => {
-  /* useEffect(() => { //임시 주석 처리 FCM 관련 
-
-  // 앱 켜져 있을 때 알림 받기 FCM 
-  const unsubscribe = messaging().onMessage(async remoteMessage => {
-
-    console.log('Foreground Message:', remoteMessage);
-
-    Alert.alert(
-      remoteMessage.notification?.title || '알림',
-      remoteMessage.notification?.body || ''
-    );
-  });
-
-  return unsubscribe;
-
-}, []); */ 
-
   const navigationRef = useNavigationContainerRef<RootParamList>();
   const insets = useSafeAreaInsets(); 
   
-  // 초기 라우트를 결정하기 위한 상태 추가
   const [initialRoute, setInitialRoute] = useState<keyof RootParamList | null>(null);
-  
   const [routeName, setRouteName] = useState<string>('');
   const [slideDirection, setSlideDirection] = useState<'slide_from_right' | 'slide_from_left'>('slide_from_right');
   const prevRouteName = useRef<string>('Home'); 
 
   const [isExitModalVisible, setExitModalVisible] = useState(false);
+
+  // 💡 [추가] 읽지 않은 알림 상태 및 마지막으로 띄운 알림 ID 기록
+  const [hasUnreadNotification, setHasUnreadNotification] = useState(false);
+  const lastAlertId = useRef<number | null>(null);
 
   // --- 데이터 유지 ---
   const [profileData, setProfileData] = useState({ name: '권클라이밍', phone: '010-1234-5678', age: '25', height: '175', weight: '70', arm: '180', shoe: '260' });
@@ -115,6 +99,60 @@ const AppContent = () => {
   const [consecutiveData, setConsecutiveData] = useState([{ id: 1, colors: ['#EAEAEA', '#F4D03F', '#58D68D', '#5DADE2'] }]);
   const [users, setUsers] = useState([{ id: 1, name: '권클라이밍', phone: '010-1234-5678', status: '활동중', ticket: { type: '회원권', start: '2026-03-01', end: '2026-06-01' } }]);
 
+  const adminScreens = ['ManagerDashboard', 'ManagerUser', 'ManagerTicket', 'ManagerNotice', 'ManagerCommunity'];
+  const isAdminMode = adminScreens.includes(routeName);
+
+  // 💡 [추가] FCM을 대체하는 앱 내부 실시간 알림 폴링 (Polling) 로직
+  useEffect(() => {
+    const fetchUnreadNotifications = async () => {
+      try {
+        const userToken = await AsyncStorage.getItem('userToken');
+        if (!userToken || initialRoute !== 'Home') return; // 로그인 완료 전에 도는 것 방지
+
+        // 관리자 모드냐 사용자 모드냐에 따라 엔드포인트 변경
+        const endpoint = isAdminMode 
+          ? `${API_BASE_URL}/admin/alerts?page=0&size=10`
+          : `${API_BASE_URL}/notifications?page=0&size=10`;
+
+        const response = await axios.get(endpoint, {
+          headers: { Authorization: `Bearer ${userToken}` }
+        });
+
+        const dataObj = response.data?.data?.data || response.data?.data || response.data;
+        const list = Array.isArray(dataObj) ? dataObj : (dataObj?.content || []);
+
+        // 안 읽은 알림 필터링
+        const unreadItems = list.filter((item: any) => !(item.isRead === true || item.read === true));
+
+        if (unreadItems.length > 0) {
+          setHasUnreadNotification(true);
+          const latest = unreadItems[0]; // 가장 최근 안 읽은 알림
+
+          // 아직 팝업으로 띄우지 않은 새 알림이라면 팝업 표시
+          if (lastAlertId.current !== latest.id) {
+            lastAlertId.current = latest.id;
+            Alert.alert(
+              '새로운 알림',
+              latest.title || '새로운 알림이 도착했습니다.'
+            );
+          }
+        } else {
+          setHasUnreadNotification(false);
+        }
+      } catch (error) {
+        // 백그라운드 폴링 실패 시 무시 (토큰 만료 등은 메인 렌더링에서 처리됨)
+      }
+    };
+
+    // 처음 한 번 실행
+    fetchUnreadNotifications();
+
+    // 30초마다 실행
+    const intervalId = setInterval(fetchUnreadNotifications, 30000);
+    return () => clearInterval(intervalId);
+  }, [initialRoute, isAdminMode]); // 로그인 상태나 모드가 변경될 때 재시작
+
+
   // 앱 시작 시 로그인 상태 및 유저 정보 확인 로직
   useEffect(() => {
     const checkLoginStatus = async () => {
@@ -123,25 +161,17 @@ const AppContent = () => {
         
         if (userToken) {
           try {
-            // 🌟 1. 토큰이 있으면 서버에 유저 정보를 요청합니다. (백엔드 API 엔드포인트에 맞게 수정 필요)
             const response = await axios.get(`${API_BASE_URL}/members/me`, {
               headers: { Authorization: `Bearer ${userToken}` }
             });
-
-            // 🌟 2. 서버에서 유저 정보를 성공적으로 받아왔다면, App.tsx의 상태(State)에 저장합니다.
             const userData = response.data.data;
-            
-            // 🌟 3. 데이터 세팅이 끝난 후 홈 화면으로 이동
             setInitialRoute('Home');
-
           } catch (apiError) {
             console.log('토큰이 만료되었거나 유효하지 않음:', apiError);
-            // 🌟 4. API 요청이 실패했다면 (토큰 만료 등) 기기에서 토큰을 지우고 로그인 화면으로 보냅니다.
             await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole']);
             setInitialRoute('Login');
           }
         } else {
-          // 토큰이 아예 없으면 로그인 화면으로
           setInitialRoute('Login');
         }
       } catch (error) {
@@ -153,11 +183,8 @@ const AppContent = () => {
     checkLoginStatus();
   }, []);
 
-  // 관리자 알림함(AdminNotification)은 내부 헤더를 쓰므로 글로벌 네비바를 숨김 처리
   const hideNavScreens = ['Login', 'Signup', 'PersonalInfo', 'Loading', 'AdminNotification'];
   const shouldShowNav = routeName ? !hideNavScreens.includes(routeName) : false;
-  const adminScreens = ['ManagerDashboard', 'ManagerUser', 'ManagerTicket', 'ManagerNotice', 'ManagerCommunity'];
-  const isAdminMode = adminScreens.includes(routeName);
 
   const handleStateChange = () => {
     const currentRoute = navigationRef.getCurrentRoute()?.name;
@@ -181,7 +208,6 @@ const AppContent = () => {
     prevRouteName.current = currentRoute; 
   };
 
-  // initialRoute가 설정될 때까지 렌더링을 멈추거나 검은 화면(로딩 화면) 렌더링
   if (initialRoute === null) {
     return <View style={styles.globalContainer} />;
   }
@@ -203,7 +229,6 @@ const AppContent = () => {
           <View style={[styles.topNav, { paddingTop: Math.max(insets.top, 10) }]}>
             <View style={styles.topNavInner}>
               
-              {/* 🌟 1. 가운데 타이틀: 공지사항 또는 알림 화면일 때만 나타납니다. */}
               {(routeName === 'Notice' || routeName === 'Notification') && (
                 <Text style={styles.globalCenterTitle}>
                   {routeName === 'Notice' ? '공지사항' : '알림'}
@@ -212,7 +237,6 @@ const AppContent = () => {
 
               {!isAdminMode ? (
                 <>
-                  {/* 🌟 2. 왼쪽 영역: 해당 화면에서는 뒤로가기 버튼, 아니면 로고 */}
                   {routeName === 'Notice' || routeName === 'Notification' ? (
                     <TouchableOpacity style={styles.backBtn} onPress={() => navigationRef.goBack()} hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
                       <Text style={styles.backBtnText}>←</Text>
@@ -221,13 +245,16 @@ const AppContent = () => {
                     <Text style={styles.logoText}>olla</Text>
                   )}
 
-                  {/* 🌟 3. 오른쪽 영역: 알림 버튼 (Notice나 Notification 화면에서는 숨김 처리) */}
                   {routeName !== 'Notice' && routeName !== 'Notification' ? (
                     <TouchableOpacity onPress={() => navigationRef.navigate('Notification')} hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
-                      <Image source={require('./assets/Vector.png')} style={styles.topIcon} />
+                      <View>
+                        <Image source={require('./assets/Vector.png')} style={styles.topIcon} />
+                        {/* 💡 [수정] 안 읽은 알림이 있으면 빨간 점 표시 */}
+                        {hasUnreadNotification && <View style={styles.bellBadge} />}
+                      </View>
                     </TouchableOpacity>
                   ) : (
-                    <View style={{ width: 20 }} /> // 좌우 균형을 맞추기 위한 빈 공간
+                    <View style={{ width: 20 }} /> 
                   )}
                 </>
               ) : (
@@ -237,14 +264,17 @@ const AppContent = () => {
                     <Text style={styles.adminSubText}>관리자</Text>
                   </View>
                   
-                  {/* 💡 수정: 우측 영역 버튼 배치 그룹화 (알림함 버튼 추가) */}
                   <View style={styles.adminRightControls}>
                     <TouchableOpacity 
                       style={styles.adminAlertBtn} 
                       onPress={() => navigationRef.navigate('AdminNotification')}
                       hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
                     >
-                      <Image source={require('./assets/Vector.png')} style={styles.adminAlertIcon} />
+                      <View>
+                        <Image source={require('./assets/Vector.png')} style={styles.adminAlertIcon} />
+                        {/* 💡 [수정] 관리자 모드 알림함 뱃지 */}
+                        {hasUnreadNotification && <View style={styles.adminBellBadge} />}
+                      </View>
                       <Text style={styles.adminAlertText}>알림함</Text>
                     </TouchableOpacity>
 
@@ -347,15 +377,21 @@ const styles = StyleSheet.create({
 
   logoText: { fontSize: 24, fontWeight: '900', color: '#A1BE44' }, 
   topIcon: { width: 20, height: 20, resizeMode: 'contain' }, 
+  
+  // 💡 [추가] 일반 사용자 알림 뱃지 스타일
+  bellBadge: { position: 'absolute', top: -2, right: -2, width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF4D4D', borderWidth: 1, borderColor: '#1A1A1A' },
+
   adminLogoContainer: { flexDirection: 'column' },
   adminSubText: { color: '#999999', fontSize: 9, fontWeight: 'bold', marginTop: -3 },
   
-  // 💡 추가된 스타일 객체들
   adminRightControls: { flexDirection: 'row', alignItems: 'center' },
   adminAlertBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2C2C2C', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, marginRight: 8, borderWidth: 0.5, borderColor: '#444' },
   adminAlertIcon: { width: 13, height: 13, tintColor: '#A1BE44', marginRight: 6, resizeMode: 'contain' },
-  adminAlertText: { color: '#ffffff', fontSize: 13, fontWeight: 'bold' },
+  
+  // 💡 [추가] 관리자 알림 뱃지 스타일
+  adminBellBadge: { position: 'absolute', top: -3, right: 3, width: 6, height: 6, borderRadius: 3, backgroundColor: '#FF4D4D' },
 
+  adminAlertText: { color: '#ffffff', fontSize: 13, fontWeight: 'bold' },
   adminExitBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#331111', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
   adminExitIcon: { width: 14, height: 14, tintColor: '#FF4D4D', marginRight: 6 },
   adminExitText: { color: '#FF4D4D', fontSize: 13, fontWeight: 'bold' },

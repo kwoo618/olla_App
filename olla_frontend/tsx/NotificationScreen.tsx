@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Modal, RefreshControl } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Modal, RefreshControl, PermissionsAndroid, Platform, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_BASE_URL } from '../src/constants/Config';
+import { useFocusEffect } from '@react-navigation/native'; // 💡 [수정] 화면 진입 시 새로고침을 위한 import
 
 interface NotificationItem {
   id: number;
@@ -14,7 +15,6 @@ interface NotificationItem {
   important?: boolean;
 }
 
-// 💡 내 회원권 타입
 interface MyMembership {
   id: number;
   name: string;
@@ -29,7 +29,6 @@ const NotificationScreen = ({ navigation }: any) => {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 💡 내 회원권 만료 임박 상태
   const [myMemberships, setMyMemberships] = useState<MyMembership[]>([]);
   const [membershipLoading, setMembershipLoading] = useState(true);
 
@@ -47,11 +46,10 @@ const NotificationScreen = ({ navigation }: any) => {
     return { Authorization: `Bearer ${token}` };
   };
 
-  // 💡 내 회원권 조회 후 7일 이내 만료 임박 항목만 추출
   const fetchMyMemberships = async () => {
     try {
       const headers = await getAuthHeader();
-      const response = await axios.get(`${API_BASE_URL}/memberships/my`, { headers });
+      const response = await axios.get(`${API_BASE_URL}/memberships/me`, { headers });
 
       const data = response.data?.data ?? response.data ?? {};
       let list: any[] = Array.isArray(data) ? data : data.content ?? data.memberships ?? [];
@@ -111,10 +109,20 @@ const NotificationScreen = ({ navigation }: any) => {
     }
   };
 
-  useEffect(() => {
-    fetchNotifications();
-    fetchMyMemberships();
-  }, []);
+  // 💡 [수정] useEffect 대신 useFocusEffect 사용 (화면에 진입할 때마다 즉시 새로고침)
+  useFocusEffect(
+    useCallback(() => {
+      const init = async () => {
+        if (Platform.OS === 'android' && Platform.Version >= 33) {
+          const granted = await PermissionsAndroid.request('android.permission.POST_NOTIFICATIONS');
+        }
+        setLoading(true);
+        await Promise.all([fetchNotifications(), fetchMyMemberships()]);
+      };
+      
+      init();
+    }, [])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -141,7 +149,6 @@ const NotificationScreen = ({ navigation }: any) => {
     }
   };
 
-  // 💡 만료 임박 회원권 섹션
   const renderMembershipSection = () => {
     if (membershipLoading || myMemberships.length === 0) return null;
 
@@ -267,68 +274,22 @@ const styles = StyleSheet.create({
   center: { justifyContent: 'center', alignItems: 'center' },
   listContent: { padding: 20, paddingBottom: 30 },
   emptyText: { color: '#999999', textAlign: 'center', marginTop: 50, fontSize: 16 },
-
-  // ─── 만료 임박 섹션 ───
-  expiringCard: {
-    backgroundColor: '#2A2A2A',
-    borderRadius: 12,
-    marginBottom: 20,
-    overflow: 'hidden',
-    borderLeftWidth: 3,
-    borderLeftColor: '#FF9800',
-  },
-  expiringHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333333',
-  },
+  expiringCard: { backgroundColor: '#2A2A2A', borderRadius: 12, marginBottom: 20, overflow: 'hidden', borderLeftWidth: 3, borderLeftColor: '#FF9800' },
+  expiringHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#333333' },
   expiringIcon: { fontSize: 22, marginRight: 12 },
   expiringHeaderText: { flex: 1 },
   expiringTitle: { color: '#F5C842', fontSize: 15, fontWeight: 'bold', marginBottom: 2 },
   expiringSubTitle: { color: '#999999', fontSize: 12 },
-  expiringRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333333',
-  },
+  expiringRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#333333' },
   expiringRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   expiringName: { color: '#ffffff', fontSize: 15, fontWeight: '600', marginBottom: 2 },
   expiringDate: { color: '#999999', fontSize: 12 },
-  ddayBadge: {
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 8,
-    minWidth: 48,
-    alignItems: 'center',
-  },
+  ddayBadge: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, minWidth: 48, alignItems: 'center' },
   ddayText: { fontSize: 13, fontWeight: 'bold' },
-  urgentBadge: {
-    backgroundColor: 'rgba(255,77,77,0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
+  urgentBadge: { backgroundColor: 'rgba(255,77,77,0.15)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   urgentBadgeText: { color: '#FF4D4D', fontSize: 11, fontWeight: 'bold' },
-
-  // ─── 알림 리스트 ───
-  noticeWrapper: {
-    backgroundColor: '#2A2A2A',
-    borderRadius: 12,
-    marginBottom: 15,
-    overflow: 'hidden',
-  },
-  noticeHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-  },
+  noticeWrapper: { backgroundColor: '#2A2A2A', borderRadius: 12, marginBottom: 15, overflow: 'hidden' },
+  noticeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 },
   noticeInfo: { flex: 1 },
   noticeHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#A1BE44', marginRight: 8 },
@@ -337,15 +298,8 @@ const styles = StyleSheet.create({
   noticeTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', flex: 1 },
   noticeDate: { color: '#999999', fontSize: 14 },
   expandIcon: { color: '#999999', fontSize: 18, marginLeft: 10, fontWeight: 'bold' },
-  noticeContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#333333',
-    paddingTop: 15,
-  },
+  noticeContent: { paddingHorizontal: 20, paddingBottom: 20, borderTopWidth: 1, borderTopColor: '#333333', paddingTop: 15 },
   noticeContentText: { color: '#CCCCCC', fontSize: 16, lineHeight: 24 },
-
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
   resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
