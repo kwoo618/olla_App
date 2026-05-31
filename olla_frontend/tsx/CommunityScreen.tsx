@@ -1,8 +1,27 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, TextInput, RefreshControl, KeyboardAvoidingView, Platform, Dimensions, PanResponder, TouchableWithoutFeedback, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, TextInput, RefreshControl, KeyboardAvoidingView, Platform, Dimensions, PanResponder, TouchableWithoutFeedback, ActivityIndicator, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
-import { useCommunityData, getProfileImage, formatCommentDate } from '../ts/Community';
+import { Calendar, LocaleConfig } from 'react-native-calendars';
+import { useCommunityData, getProfileImage, formatCommentDate, getToday, p } from '../ts/Community';
+
+// 달력 한글화 설정
+LocaleConfig.locales['kr'] = {
+  monthNames: ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'],
+  monthNamesShort: ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'],
+  dayNames: ['일요일','월요일','화요일','수요일','목요일','금요일','토요일'],
+  dayNamesShort: ['일','월','화','수','목','금','토'],
+  today: '오늘',
+};
+LocaleConfig.defaultLocale = 'kr';
+
+const calendarTheme = {
+  backgroundColor: '#212121', calendarBackground: '#212121', textSectionTitleColor: '#999999',
+  selectedDayBackgroundColor: '#A1BE44', selectedDayTextColor: '#000000', todayTextColor: '#A1BE44',
+  dayTextColor: '#ffffff', textDisabledColor: '#444444', monthTextColor: '#ffffff',
+  textDayFontWeight: '500' as const, textMonthFontWeight: 'bold' as const, textDayHeaderFontWeight: '500' as const,
+  textDayFontSize: 16, textMonthFontSize: 18, textDayHeaderFontSize: 14,
+};
 
 const CommunityScreen = ({ route, navigation }: any) => {
   const isFocused = useIsFocused();
@@ -15,6 +34,8 @@ const CommunityScreen = ({ route, navigation }: any) => {
     selectedUser, selectedPost, setSelectedPost, isEditMode,
     resultModalVisible, resultModalConfig, createAlertVisible, setCreateAlertVisible, createAlertMessage,
     deleteTarget, setDeleteTarget, closeTarget, setCloseTarget, commentDeleteTarget, setCommentDeleteTarget,
+    isCalendarVisible, openCalendar, closeCalendar,
+    isTimePickerVisible, tempHour, setTempHour, tempMinute, setTempMinute, openTimePicker, closeTimePicker, confirmTimeSelection,
     onRefresh, searchPosts, clearSearch, toggleLike, toggleJoin, executeDelete, executeClose,
     submitPost, submitComment, executeCommentDelete, loadUserDetail, loadPostDetail, setupCreateForm, setupEditForm, closeResultModal
   } = useCommunityData(currentFilter, isFocused);
@@ -101,7 +122,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
     })
   ).current;
 
-  // 모달 제어 함수들
   const openDetailModal = async (authorId: number, authorName: string, isMine: boolean) => {
     if (await loadUserDetail(authorId, authorName, isMine)) {
       setDetailVisible(true);
@@ -145,6 +165,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
   };
 
   const closeCreateModal = () => {
+    Keyboard.dismiss();
     Animated.timing(createHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => setCreateVisible(false));
   };
 
@@ -157,6 +178,14 @@ const CommunityScreen = ({ route, navigation }: any) => {
       </SafeAreaView>
     );
   }
+
+  // 💡 시간 배열 데이터 및 현재 시간 정보
+  const hours = Array.from({ length: 24 }, (_, i) => p(i));
+  const minutes = ['00', '10', '20', '30', '40', '50'];
+  const now = new Date();
+  const currentHour = now.getHours();
+  const currentMinute = now.getMinutes();
+  const isTodaySelected = !form.date || form.date === getToday();
 
   return (
     <SafeAreaView style={s.bg} edges={[]}>
@@ -462,18 +491,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
               </View>
             </View>
           </Modal>
-
-          {resultModalVisible && (
-            <View style={[StyleSheet.absoluteFill, { zIndex: 999, elevation: 999 }]}>
-              <View style={s.resultModalOverlay}>
-                <View style={s.resultModalBox}>
-                  <Text style={[s.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>{resultModalConfig.title}</Text>
-                  <Text style={s.resultModalMessage}>{resultModalConfig.message}</Text>
-                  <TouchableOpacity style={s.resultModalBtn} onPress={closeResultModal}><Text style={s.resultModalBtnText}>확인</Text></TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          )}
         </View>
       </Modal>
 
@@ -516,16 +533,30 @@ const CommunityScreen = ({ route, navigation }: any) => {
                       onChangeText={v => setForm(f => ({ ...f, desc: v }))} 
                     />
                   </View>
-                  <View style={{ flexDirection: 'row' }}>
+
+                  {/* 💡 날짜 및 시간 픽커 버튼 */}
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 }}>
                     <View style={{ flex: 1, marginRight: 8 }}>
                       <Text style={s.label}>날짜</Text>
-                      <View style={s.inputWrap}><TextInput style={s.input} placeholder="YYYY/MM/DD" placeholderTextColor="#666" value={form.date} onChangeText={v => { const n = v.replace(/\D/g, ''); setForm(f => ({ ...f, date: n.length > 6 ? `${n.slice(0, 4)}/${n.slice(4, 6)}/${n.slice(6, 8)}` : n.length > 4 ? `${n.slice(0, 4)}/${n.slice(4)}` : n })); }} keyboardType="numeric" maxLength={10} /></View>
+                      <View style={s.pickerInputBox}>
+                        <Text style={form.date ? s.pickerTextActive : s.pickerTextPlaceholder}>
+                          {form.date || '날짜 선택'}
+                        </Text>
+                        <TouchableOpacity onPress={openCalendar} style={s.calendarIconBtn}>
+                          <Image source={require('../assets/DATE.png')} style={s.dateIcon} />
+                        </TouchableOpacity>
+                      </View>
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={s.label}>시간</Text>
-                      <View style={s.inputWrap}><TextInput style={s.input} placeholder="00:00" placeholderTextColor="#666" value={form.time} onChangeText={v => { const n = v.replace(/\D/g, ''); setForm(f => ({ ...f, time: n.length > 2 ? `${n.slice(0, 2)}:${n.slice(2, 4)}` : n })); }} keyboardType="numeric" maxLength={5} /></View>
+                      <TouchableOpacity style={s.pickerInputBox} onPress={openTimePicker}>
+                        <Text style={form.time ? s.pickerTextActive : s.pickerTextPlaceholder}>
+                          {form.time || '시간 선택'}
+                        </Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
+
                   <Text style={s.label}>모집인원</Text>
                   <View style={s.counterRow}>
                     <TouchableOpacity style={s.counterBtn} onPress={() => setForm(f => ({ ...f, people: String(Math.max(2, parseInt(f.people || '2') - 1)) }))}><Text style={s.counterBtnText}>-</Text></TouchableOpacity>
@@ -545,6 +576,80 @@ const CommunityScreen = ({ route, navigation }: any) => {
               </ScrollView>
             </Animated.View>
           </KeyboardAvoidingView>
+
+          {/* 💡 [iOS 중첩 버그 방지 & 과거 날짜 막기] Calendar 오버레이 */}
+          {isCalendarVisible && (
+            <View style={[StyleSheet.absoluteFill, s.calendarOverlay, { zIndex: 1000, elevation: 10 }]}>
+              <View style={s.calendarBox}>
+                <Text style={s.calendarTitle}>날짜 선택</Text>
+                <Calendar
+                  current={form.date || getToday()}
+                  minDate={getToday()} // 💡 과거 날짜 클릭 원천 차단
+                  onDayPress={(day: any) => { 
+                    setForm(f => ({ ...f, date: day.dateString })); 
+                    closeCalendar(); 
+                  }}
+                  theme={calendarTheme}
+                  markedDates={{ [form.date || getToday()]: { selected: true, selectedColor: '#A1BE44' } }}
+                />
+                <TouchableOpacity style={s.calendarCloseBtn} onPress={closeCalendar}>
+                  <Text style={s.calendarCloseText}>닫기</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* 💡 [iOS 중첩 버그 방지 & 과거 시간 막기] 시간 선택기 오버레이 */}
+          {isTimePickerVisible && (
+            <View style={[StyleSheet.absoluteFill, s.calendarOverlay, { zIndex: 1000, elevation: 10 }]}>
+              <View style={s.timePickerBox}>
+                <Text style={s.calendarTitle}>시간 선택</Text>
+                <View style={s.timePickerCols}>
+                  {/* 시(Hour) 선택 스크롤 */}
+                  <ScrollView style={s.timeScroll} showsVerticalScrollIndicator={false} nestedScrollEnabled>
+                    {hours.map(h => {
+                      const isHourDisabled = isTodaySelected && parseInt(h) < currentHour;
+                      return (
+                        <TouchableOpacity 
+                          key={`hour-${h}`} 
+                          style={[s.timeItem, tempHour === h && s.timeItemActive, isHourDisabled && { opacity: 0.2 }]} 
+                          onPress={() => !isHourDisabled && setTempHour(h)}
+                          disabled={isHourDisabled}
+                        >
+                          <Text style={[s.timeItemText, tempHour === h && s.timeItemTextActive]}>{h}시</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                  <View style={s.timeDivider}><Text style={s.timeDividerText}>:</Text></View>
+                  {/* 분(Minute) 선택 스크롤 */}
+                  <ScrollView style={s.timeScroll} showsVerticalScrollIndicator={false} nestedScrollEnabled>
+                    {minutes.map(m => {
+                      const isMinDisabled = isTodaySelected && parseInt(tempHour) === currentHour && parseInt(m) < currentMinute;
+                      return (
+                        <TouchableOpacity 
+                          key={`min-${m}`} 
+                          style={[s.timeItem, tempMinute === m && s.timeItemActive, isMinDisabled && { opacity: 0.2 }]} 
+                          onPress={() => !isMinDisabled && setTempMinute(m)}
+                          disabled={isMinDisabled}
+                        >
+                          <Text style={[s.timeItemText, tempMinute === m && s.timeItemTextActive]}>{m}분</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+                <View style={s.timeBtnRow}>
+                  <TouchableOpacity style={[s.timeConfirmBtn, { backgroundColor: '#333' }]} onPress={closeTimePicker}>
+                    <Text style={[s.timeConfirmText, { color: '#fff' }]}>취소</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[s.timeConfirmBtn, { marginLeft: 10 }]} onPress={confirmTimeSelection}>
+                    <Text style={s.timeConfirmText}>확인</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          )}
 
           {createAlertVisible && (
             <View style={s.innerAlertOverlay}>
@@ -683,7 +788,31 @@ const s = StyleSheet.create({
   commentInputAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#444', marginRight: 10 },
   commentTextInput: { flex: 1, backgroundColor: '#000000', color: '#ffffff', fontSize: 15, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, minHeight: 40, maxHeight: 100 },
   commentSubmitBtn: { color: '#666666', fontSize: 16, fontWeight: 'bold', marginLeft: 12, paddingVertical: 10 },
-  tabTextActive: { color: '#fff' }
+  tabTextActive: { color: '#fff' },
+
+  // 달력 및 시간 선택기 추가 스타일
+  pickerInputBox: { height: 50, backgroundColor: '#000', borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 15, paddingRight: 8, borderWidth: 1, borderColor: '#333' },
+  pickerTextActive: { color: '#fff', fontSize: 16 },
+  pickerTextPlaceholder: { color: '#666', fontSize: 16 },
+  calendarIconBtn: { padding: 5 },
+  dateIcon: { width: 22, height: 22, tintColor: '#A1BE44' },
+  calendarOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
+  calendarBox: { width: '90%', backgroundColor: '#212121', borderRadius: 16, padding: 15 },
+  calendarTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
+  calendarCloseBtn: { marginTop: 15, paddingVertical: 14, backgroundColor: '#333', borderRadius: 10, alignItems: 'center' },
+  calendarCloseText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  timePickerBox: { width: '80%', backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
+  timePickerCols: { flexDirection: 'row', height: 200, width: '100%', justifyContent: 'center', alignItems: 'center' },
+  timeScroll: { flex: 1, backgroundColor: '#1A1A1A', borderRadius: 10, marginHorizontal: 5 },
+  timeDivider: { width: 20, alignItems: 'center', justifyContent: 'center' },
+  timeDividerText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
+  timeItem: { paddingVertical: 12, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#262626' },
+  timeItemActive: { backgroundColor: 'rgba(161, 190, 68, 0.2)' },
+  timeItemText: { color: '#999', fontSize: 18 },
+  timeItemTextActive: { color: '#A1BE44', fontWeight: 'bold' },
+  timeBtnRow: { flexDirection: 'row', marginTop: 20, width: '100%' },
+  timeConfirmBtn: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 10, alignItems: 'center' },
+  timeConfirmText: { color: '#000', fontSize: 18, fontWeight: 'bold' },
 });
 
 export default CommunityScreen;

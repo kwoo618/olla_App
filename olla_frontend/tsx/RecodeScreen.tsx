@@ -6,14 +6,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRecode, MAX_HOLDS, BASE_SCORES, rainbowColors, formatTime } from '../ts/Recode'; 
 
-const RecodeScreen = ({
-  route, navigation,
-  difficultyData, setDifficultyData,
-  enduranceData,  setEnduranceData,
-  consecutiveData, setConsecutiveData,
-}: any) => {
+const RecodeScreen = ({ route, navigation }: any) => {
 
   const {
+    difficultyData, enduranceData, consecutiveData, 
     refreshing, onRefresh, expandedSection, toggleSection, beginnerHistoryData,
     resultModalVisible, resultModalConfig, closeResultModal,
     isDeleteModalVisible, confirmDelete, executeDelete, cancelDelete,
@@ -28,7 +24,7 @@ const RecodeScreen = ({
     
     isConsecutiveModalVisible, openConsecutiveModal, closeConsecutiveModal, consecutiveHeightAnim, consecutivePanResponder,
     selectedConsecutiveList, setSelectedConsecutiveList, removeConsecutiveItem, showDetails, setShowDetails, displayTotalScore, handleSaveConsecutiveRecord,
-  } = useRecode({ route, navigation, difficultyData, setDifficultyData, enduranceData, setEnduranceData, consecutiveData, setConsecutiveData });
+  } = useRecode({ route, navigation });
 
   const renderMapNode = (item: any) => {
     if (item.type === 'text') return <Text key={item.id} style={[styles.mapAbsText, { left: item.x - 15, top: item.y - 8 }]}>{item.val}</Text>;
@@ -104,16 +100,16 @@ const RecodeScreen = ({
           )}
         </View>
 
-        {/* 초보벽 최근 기록 (시간순) 아코디언 */}
+        {/* 오늘의 초보벽 기록 아코디언 */}
         <View style={styles.simpleAccordionWrapper}>
           <TouchableOpacity style={styles.simpleAccordionHeader} onPress={() => toggleSection('beginnerHistory')} activeOpacity={0.8}>
-            <Text style={styles.simpleAccordionTitle}>초보벽 최근 기록</Text>
+            <Text style={styles.simpleAccordionTitle}>오늘의 초보벽 기록</Text>
             <Text style={styles.chevronIcon}>{expandedSection === 'beginnerHistory' ? '∨' : '＞'}</Text>
           </TouchableOpacity>
           {expandedSection === 'beginnerHistory' && (
             <View style={styles.outerContainer}>
               {beginnerHistoryData.length === 0 ? (
-                <View style={styles.recordItemCard}><Text style={styles.emptyText}>최근 등록된 기록이 없습니다.</Text></View>
+                <View style={styles.recordItemCard}><Text style={styles.emptyText}>오늘 등록된 기록이 없습니다.</Text></View>
               ) : (
                 beginnerHistoryData.map((item: any, index: number) => (
                   <View key={item.id} style={styles.rowCardWithTrash}>
@@ -153,7 +149,7 @@ const RecodeScreen = ({
           {expandedSection === 'endurance' && (
             <View style={styles.outerContainer}>
               {enduranceData.length === 0 ? (
-                <View style={styles.recordItemCard}><Text style={styles.emptyText}>지구력 기록이 없습니다.</Text></View>
+                <View style={styles.recordItemCard}><Text style={styles.emptyText}>오늘 등록된 지구력 기록이 없습니다.</Text></View>
               ) : (
                 enduranceData.map((item: any) => (
                   <View key={item.id} style={styles.rowCardWithTrash}>
@@ -183,7 +179,7 @@ const RecodeScreen = ({
           {expandedSection === 'consecutive' && (
             <View style={styles.outerContainer}>
               {consecutiveData.length === 0 ? (
-                <View style={styles.recordItemCard}><Text style={styles.emptyText}>연속 기록이 없습니다.</Text></View>
+                <View style={styles.recordItemCard}><Text style={styles.emptyText}>오늘 등록된 연속 기록이 없습니다.</Text></View>
               ) : (
                 consecutiveData.map((item: any, index: number) => (
                   <View key={item.id ?? index} style={styles.rowCardWithTrash}>
@@ -334,7 +330,6 @@ const RecodeScreen = ({
                         <View style={{ width: 350, height: 235 }}>
                           {mapElements.map(renderMapNode)}
                           
-                          {/* 💡 Hook에서 계산해준 선 그리기 데이터(pathSegmentsData)를 매핑 */}
                           {pathSegmentsData.map((seg: any) => (
                             <View key={seg.key} style={{ position: 'absolute', left: seg.left, top: seg.top, width: seg.width, height: 4, backgroundColor: seg.color, transform: [{ rotate: `${seg.angle}deg` }], zIndex: seg.zIndex, borderRadius: 2 }} />
                           ))}
@@ -439,7 +434,9 @@ const RecodeScreen = ({
           <View style={styles.resultModalBox}>
             <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>{resultModalConfig.title}</Text>
             <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
-            <TouchableOpacity style={styles.resultModalBtn} onPress={closeResultModal}><Text style={styles.resultModalBtnText}>확인</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.resultModalBtn} onPress={closeResultModal}>
+              <Text style={styles.resultModalBtnText}>확인</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

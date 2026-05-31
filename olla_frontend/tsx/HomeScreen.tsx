@@ -1,10 +1,10 @@
 import React, { useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, RefreshControl, Dimensions, PanResponder, TouchableWithoutFeedback } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
+import Svg, { Circle } from 'react-native-svg';
 import { HomeData } from '../ts/Home';
 
 const HomeScreen = ({ navigation }: any) => {
-  // 💡 마법의 훅 호출: 모든 복잡한 데이터 로직을 가져옵니다.
   const {
     refreshing, resultModalVisible, resultModalConfig, qrToken, userStats, notice,
     membership, attendedDates, viewDate, selectedFullDate, today,
@@ -82,13 +82,17 @@ const HomeScreen = ({ navigation }: any) => {
     else if (title === '지구력 랭킹') navigation.navigate('Ranking', { targetTab: '지구력' });
   };
 
-  let fillPercentage = 0;
+  // 💡 정확한 "남은 퍼센테이지(0~100%)" 계산 로직
+  let remainPercentage = 0;
   if (!isCountType && hasMembership && membership.startDate && membership.endDate) {
     const s = new Date(membership.startDate); s.setHours(0, 0, 0, 0);
     const e = new Date(membership.endDate); e.setHours(0, 0, 0, 0);
-    const totalDays = Math.max(1, Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)));
-    const usedDays = Math.max(0, totalDays - membership.remainingDays);
-    fillPercentage = Math.min((usedDays / totalDays) * 100, 100);
+    // 전체 일수 = (종료일 - 시작일) + 1
+    const totalDays = Math.max(1, Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+    const remainDays = Math.max(0, membership.remainingDays);
+    remainPercentage = Math.min((remainDays / totalDays) * 100, 100);
+  } else if (isCountType && hasMembership) {
+    remainPercentage = 100; // 일일권은 남은 횟수 상관없이 그래프를 가득 채웁니다
   }
 
   const circleText = membership.isLoading ? '' : hasMembership ? (isCountType ? `${membership.remainingCount}회` : `D-${membership.remainingDays}`) : membership.hasFuture ? '예정' : '없음';
@@ -101,6 +105,12 @@ const HomeScreen = ({ navigation }: any) => {
   const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
   const days: (number | null)[] = [...Array(firstDayOfMonth).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
   const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
+
+  // 💡 원형 프로그레스 바 (시계 방향으로 줄어들게) 설정
+  const circleRadius = 21;
+  const circleCircumference = 2 * Math.PI * circleRadius;
+  // 남은 양만큼의 offset 계산 (비율에 맞춰 음수 적용으로 오른쪽이 비워지며 시계방향 진행)
+  const strokeDashoffset = circleCircumference * (1 - remainPercentage / 100);
 
   return (
     <View style={styles.background}>
@@ -126,11 +136,37 @@ const HomeScreen = ({ navigation }: any) => {
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.UserCardCentered} onPress={() => handlePopupPress('회원권')}>
-            <View style={[styles.circleGraphDummy, !hasMembership && !membership.hasFuture && { borderColor: '#444444' }]}>
-              <Text style={[styles.circleGraphText, !hasMembership && { color: '#999999', fontSize: 13 }, !hasMembership && membership.hasFuture && { color: '#A1BE44', fontSize: 13 }]}>
-                {circleText}
-              </Text>
+            {/* 💡 원형 프로그레스 바 적용 */}
+            <View style={styles.circleGraphContainer}>
+              {hasMembership && remainPercentage > 0 ? (
+                <Svg width="50" height="50" viewBox="0 0 50 50">
+                  <Circle cx="25" cy="25" r="21" stroke="#444444" strokeWidth="4" fill="none" />
+                  <Circle
+                    cx="25" cy="25" r="21"
+                    stroke="#A1BE44"
+                    strokeWidth="4"
+                    fill="none"
+                    strokeDasharray={`${circleCircumference}`}
+                    strokeDashoffset={-strokeDashoffset} // 💡 핵심: 마이너스로 오른쪽(시계방향)부터 비워지게
+                    strokeLinecap="round"
+                    rotation="-90"
+                    origin="25, 25"
+                  />
+                </Svg>
+              ) : (
+                <View style={[styles.circleGraphDummy, !hasMembership && !membership.hasFuture && { borderColor: '#444444' }]} />
+              )}
+              <View style={styles.circleTextWrapper}>
+                <Text style={[
+                  styles.circleGraphText, 
+                  !hasMembership && { color: '#999999', fontSize: 13 }, 
+                  !hasMembership && membership.hasFuture && { color: '#A1BE44', fontSize: 13 }
+                ]}>
+                  {circleText}
+                </Text>
+              </View>
             </View>
+
             <Text style={styles.cardTitleCentered}>{membershipCardTitle}</Text>
             {!hasMembership && membership.hasFuture && <Text style={styles.futureStartDateText}>{membership.futureStartDate}</Text>}
           </TouchableOpacity>
@@ -196,7 +232,6 @@ const HomeScreen = ({ navigation }: any) => {
         </View>
       </ScrollView>
 
-      {/* 💡 깔끔해진 모달 닫기 처리 */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={closeResultModal}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -240,8 +275,9 @@ const HomeScreen = ({ navigation }: any) => {
                     <View style={styles.memCardHeader}>
                       <Text style={styles.memCardTitle}>{isCountType ? '잔여 횟수' : (membership.hasFuture && !hasMembership ? '시작 예정' : '남은 이용 기간')}</Text>
                     </View>
+                    {/* 💡 회원권 상세의 가로 프로그레스 바 영역 */}
                     {!isCountType && hasMembership && (
-                      <View style={styles.progressBarBg}><View style={[styles.progressBarFill, { width: `${fillPercentage}%` }]} /></View>
+                      <View style={styles.progressBarBg}><View style={[styles.progressBarFill, { width: `${remainPercentage}%` }]} /></View>
                     )}
                     <View style={[styles.memCardDates, (!hasMembership) && { justifyContent: 'center' }]}>
                       {hasMembership ? (
@@ -262,7 +298,7 @@ const HomeScreen = ({ navigation }: any) => {
                     <View style={styles.memHalfCard}>
                       <Text style={styles.memHalfTitle}>상태</Text>
                       <Text style={[styles.memHalfValueWhite, !hasMembership && !membership.hasFuture && { fontSize: 18, color: '#FF6B6B' }, !hasMembership && membership.hasFuture && { fontSize: 18, color: '#A1BE44' }]} numberOfLines={1} adjustsFontSizeToFit>
-                        {membership.status || (hasMembership ? '이용중' : '구매 필요')}
+                        {displayStatus || (hasMembership ? '이용중' : '구매 필요')}
                       </Text>
                     </View>
                   </View>
@@ -291,8 +327,12 @@ const styles = StyleSheet.create({
   QRCardCentered: { width: '60%', backgroundColor: '#2A2A2A', padding: 20, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   UserCardCentered: { width: '38%', backgroundColor: '#2A2A2A', padding: 20, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   largeIcon: { width: 45, height: 45, marginBottom: 10, resizeMode: 'contain', tintColor: '#A1BE44' },
-  circleGraphDummy: { width: 50, height: 50, borderRadius: 25, borderWidth: 4, borderColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  
+  circleGraphContainer: { width: 50, height: 50, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  circleTextWrapper: { position: 'absolute', justifyContent: 'center', alignItems: 'center' },
+  circleGraphDummy: { width: 50, height: 50, borderRadius: 25, borderWidth: 4, borderColor: '#A1BE44', justifyContent: 'center', alignItems: 'center' },
   circleGraphText: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
+  
   cardTitleCentered: { color: '#ffffff', fontSize: 18, fontWeight: '600' },
   futureStartDateText: { color: '#A1BE44', fontSize: 11, marginTop: 4, textAlign: 'center', paddingVertical: 18 },
   

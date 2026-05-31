@@ -38,7 +38,9 @@ export const translateGender = (gender: string | null | undefined): string => {
 export const resolveImageUrl = (url: string | null | undefined): string | null => {
   if (!url || url === 'null' || url === 'undefined') return null;
   if (url.startsWith('http')) return url;
-  return `${BASE}${url}`;
+  // 상대경로일 경우 API_BASE_URL에서 /api/v1을 제거하고 도메인만 붙여줍니다.
+  const domain = BASE.replace('/api/v1', '');
+  return `${domain}${url}`;
 };
 
 export const isValidImageUrl = (url: string | null | undefined): url is string =>
@@ -204,7 +206,6 @@ export const useManagerDashboard = (navigation: any) => {
       }
 
       if (data.totalMembers      != null) setMetrics(prev => ({ ...prev, totalMembers:      Number(data.totalMembers) }));
-      if (data.activeMemberships != null) setMetrics(prev => ({ ...prev, activeMemberships: Number(data.activeMemberships) }));
     } catch (e: any) {
       console.log('대시보드 통계 로드 실패:', e.response?.data?.message ?? e.message);
     }
@@ -217,7 +218,7 @@ export const useManagerDashboard = (navigation: any) => {
       const data = extractData(res);
 
       setDashboardSummary({
-        totalVisitsToday:   Number(data.totalVisitsToday   ?? 0),
+        totalVisitsToday:   Number(data.totalVisitsToday  ?? 0),
         expiringIn3Days:    Number(data.expiringIn3Days    ?? 0),
         newMembersThisWeek: Number(data.newMembersThisWeek ?? 0),
       });
@@ -317,36 +318,38 @@ export const useManagerDashboard = (navigation: any) => {
     }
   }, []);
 
+  // 💡 핵심 변경: 전체 회원/이용권 목록에서 ACTIVE 상태인 이용권만 추출하여 개수 집계
   const fetchActiveMemberships = useCallback(async () => {
     try {
       const headers = await authHeader();
-      const res  = await axios.get(`${ADMIN}/memberships/active`, { headers });
-      const d    = extractData(res);
-      let count  = 0;
-      if      (typeof d === 'number')                count = d;
-      else if (typeof d?.totalElements === 'number') count = d.totalElements;
-      else if (typeof d?.count === 'number')         count = d.count;
-      else if (Array.isArray(d))                     count = d.length;
-      else if (Array.isArray(d?.content))            count = d.totalElements ?? d.content.length;
-      setMetrics(prev => ({ ...prev, activeMemberships: count }));
-    } catch {
-      try {
-        const headers = await authHeader();
-        const res  = await axios.get(`${ADMIN}/memberships/members`, { headers, params: { size: 1000 } });
-        const list = extractList(res);
-        const count = list.filter((user: any) => {
-          const m = user.member ?? user;
-          if (user.deleted || m.isDeleted || m.status === 'DELETED') return false;
-          return (
-            user.membershipStatus === 'ACTIVE' || user.status === 'ACTIVE' ||
-            (Array.isArray(user.memberships) && user.memberships.some((ms: any) => ms.status === 'ACTIVE')) ||
-            user.activeMembership?.status === 'ACTIVE'
-          );
-        }).length;
-        setMetrics(prev => ({ ...prev, activeMemberships: count }));
-      } catch (e: any) {
-        console.log('활성 이용권 폴백 실패:', e.message);
-      }
+      // 전체 이용권 목록을 가져옵니다. (페이징 없이 충분히 큰 사이즈 지정)
+      const res = await axios.get(`${ADMIN}/memberships/members`, { headers, params: { page: 0, size: 2000 } });
+      const usersList = extractList(res);
+
+      let activeCount = 0;
+
+      usersList.forEach((user: any) => {
+        // 회원이 삭제되었는지 확인
+        const m = user.member ?? user;
+        if (user.deleted === true || m.isDeleted === true || m.status === 'DELETED') return;
+
+        // 회원이 보유한 여러 개의 이용권(memberships 배열)을 각각 검사
+        if (Array.isArray(user.memberships)) {
+          user.memberships.forEach((membership: any) => {
+            if (String(membership.membershipStatus || membership.status).toUpperCase() === 'ACTIVE') {
+              activeCount += 1;
+            }
+          });
+        } 
+        // 만약 단일 객체(activeMembership)로 내려올 경우를 대비한 방어 코드
+        else if (user.activeMembership && String(user.activeMembership.status).toUpperCase() === 'ACTIVE') {
+          activeCount += 1;
+        }
+      });
+
+      setMetrics(prev => ({ ...prev, activeMemberships: activeCount }));
+    } catch (e: any) {
+      console.log('활성 이용권 집계 실패:', e.response?.data?.message ?? e.message);
     }
   }, []);
 
@@ -365,7 +368,7 @@ export const useManagerDashboard = (navigation: any) => {
         fetchPosts(),
         fetchMembers(),
         fetchVisits(),
-        fetchActiveMemberships(),
+        fetchActiveMemberships(), // 변경된 집계 로직 호출
       ]);
     } catch (e: any) {
       console.log('데이터 로딩 실패:', e.response?.data?.message ?? e.message);
@@ -396,8 +399,12 @@ export const useManagerDashboard = (navigation: any) => {
   }, [fetchHourlyByDay]);
 
   const refreshDashboardData = useCallback(async () => {
-    await Promise.all([fetchDashboardMain(), fetchDashboardSummary()]);
-  }, [fetchDashboardMain, fetchDashboardSummary]);
+    await Promise.all([
+      fetchDashboardMain(), 
+      fetchDashboardSummary(),
+      fetchActiveMemberships() // 새로고침 시 활성 이용권도 다시 계산
+    ]);
+  }, [fetchDashboardMain, fetchDashboardSummary, fetchActiveMemberships]);
 
   // ─── 공지 / 게시글 삭제 ───────────────────────────────────────────────────
   const executeDelete = useCallback(async () => {

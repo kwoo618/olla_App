@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_BASE_URL } from '../src/constants/Config';
 
-const MAX_HOLDS: { [key: string]: number } = { // 홀드 개수 모음
+const MAX_HOLDS: { [key: string]: number } = { 
   "흰색": 26, "노랑": 33, "초록": 28, "파랑": 26, "빨강": 26, "보라": 25, "주황": 28, "검정": 30
 };
 
@@ -24,6 +24,11 @@ const isStarted = (startDate: string): boolean => {
   const start = new Date(startDate);
   start.setHours(0, 0, 0, 0);
   return start <= getTodayDate();
+};
+
+const isPeriodTicket = (typeStr: string) => {
+  const s = String(typeStr || '').toUpperCase();
+  return s === 'PERIOD' || s.includes('회원권') || s.includes('기간');
 };
 
 export const HomeData = () => {
@@ -98,7 +103,7 @@ export const HomeData = () => {
       const response = await axios.get(`${API_BASE_URL}/visit/qr`, {
         headers: { Authorization: `Bearer ${userToken}` }
       });
-      const qrData = response.data.data; // QR API 
+      const qrData = response.data.data; 
       if (qrData) setQrToken(qrData);
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'QR 코드 발급에 실패했습니다.';
@@ -128,7 +133,6 @@ export const HomeData = () => {
       let nickname = '';
       let memberId: number | null = null;
       
-      // 프로필 정보 조회
       try {
         const profileRes = await axios.get(`${API_BASE_URL}/members/me`, config);
         const pData = profileRes.data.data;
@@ -140,7 +144,6 @@ export const HomeData = () => {
         }
       } catch (error) { console.error('프로필 로드 실패'); }
 
-      // 공지사항 로드
       try {
         const noticeResponse = await axios.get(`${API_BASE_URL}/admin/notices`);
         const noticeList = noticeResponse.data.data.content || []; 
@@ -157,59 +160,75 @@ export const HomeData = () => {
         }
       } catch (error) { setNotice({ title: '공지사항을 불러올 수 없습니다.', content: '', important: false }); }
 
-      // 내 이용권 내역
       try {
         const memResponse = await axios.get(`${API_BASE_URL}/memberships/me`, config);
-        const dataList = memResponse.data.data || []; // 빈 배열로 올 경우 || 를 통해서 앱 터지는것 방지
+        const dataList = memResponse.data.data || []; 
 
         if (Array.isArray(dataList) && dataList.length > 0) {
           const activeList = dataList.filter((m: any) => m.status === 'ACTIVE' && isStarted(m.startDate));
           const futureList = dataList.filter((m: any) => m.status === 'ACTIVE' && !isStarted(m.startDate));
           
-          const periodList = activeList.filter((m: any) => String(m.membershipType).toUpperCase() === 'PERIOD');
-          const countList = activeList.filter((m: any) => String(m.membershipType).toUpperCase() === 'COUNT');
+          if (activeList.length > 0) {
+            activeList.sort((a: any, b: any) => {
+              const dateA = new Date(a.startDate).getTime();
+              const dateB = new Date(b.startDate).getTime();
+              if (dateA !== dateB) return dateA - dateB;
+              
+              const isPeriodA = isPeriodTicket(a.membershipType) ? 1 : 0;
+              const isPeriodB = isPeriodTicket(b.membershipType) ? 1 : 0;
+              return isPeriodB - isPeriodA;
+            });
 
-          let totalRemainingDays = 0;
-          let earliestStart = '';
-          let latestEnd = '';
-          
-          periodList.forEach((m: any) => {
-            if (m.endDate) {
-              const end = new Date(m.endDate);
+            const topMem = activeList[0];
+            const isPeriod = isPeriodTicket(topMem.membershipType);
+            
+            let remainingDays = 0;
+            if (isPeriod && topMem.endDate) {
+              const end = new Date(topMem.endDate);
               end.setHours(0, 0, 0, 0);
               const diff = Math.round((end.getTime() - getTodayDate().getTime()) / (1000 * 60 * 60 * 24));
-              totalRemainingDays += diff > 0 ? diff : 0;
-              if (!earliestStart || m.startDate < earliestStart) earliestStart = m.startDate;
-              if (!latestEnd || m.endDate > latestEnd) latestEnd = m.endDate;
+              remainingDays = diff > 0 ? diff : 0;
             }
-          });
 
-          const totalRemainingCount = countList.reduce((sum: number, m: any) => sum + (m.remainingCount ?? 0), 0);
-          const hasPeriod = periodList.length > 0 && totalRemainingDays > 0;
-          const hasCount = countList.length > 0 && totalRemainingCount > 0;
-          const hasFuture = futureList.length > 0;
-          const futureStartDate = hasFuture ? (futureList.sort((a: any, b: any) => a.startDate.localeCompare(b.startDate))[0]?.startDate || '') : '';
+            const totalRemainingCount = !isPeriod 
+              ? activeList.filter(m => !isPeriodTicket(m.membershipType)).reduce((acc, m) => acc + (m.remainingCount ?? 0), 0)
+              : 0;
 
-          let membershipType = '-';
-          if (hasPeriod) membershipType = '회원권';
-          else if (hasCount) membershipType = '일일권';
-          else if (hasFuture) membershipType = '시작 예정';
+            setMembership({
+              membershipType: isPeriod ? '회원권' : '일일권',
+              remainingDays: isPeriod ? remainingDays : 0,
+              remainingCount: totalRemainingCount,
+              startDate: topMem.startDate || '',
+              endDate: topMem.endDate || '',
+              status: '이용중',
+              hasFuture: false,
+              futureStartDate: '',
+              isLoading: false
+            });
 
-          let statusText = '만료';
-          if (hasPeriod || hasCount) statusText = '이용중';
-          else if (hasFuture) statusText = '시작 예정';
+          } else if (futureList.length > 0) {
+            futureList.sort((a: any, b: any) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+            const topMem = futureList[0];
 
-          setMembership({
-            membershipType, remainingDays: totalRemainingDays, remainingCount: totalRemainingCount,
-            startDate: earliestStart, endDate: latestEnd, status: statusText,
-            hasFuture, futureStartDate, isLoading: false
-          });
+            setMembership({
+              membershipType: '시작 예정',
+              remainingDays: 0,
+              remainingCount: 0,
+              startDate: '',
+              endDate: '',
+              status: '시작 예정',
+              hasFuture: true,
+              futureStartDate: topMem.startDate || '',
+              isLoading: false
+            });
+          } else {
+            setMembership(prev => ({ ...prev, status: '만료', isLoading: false }));
+          }
         } else {
           setMembership(prev => ({ ...prev, hasFuture: false, futureStartDate: '', isLoading: false }));
         }
       } catch (error) { setMembership(prev => ({ ...prev, isLoading: false })); }
 
-      // 기록 랭킹 & 최고 기록
       if (nickname || memberId !== null) {
         try {
           const endRes = await axios.get(`${API_BASE_URL}/rankings/endurance/distance`, config);
@@ -247,7 +266,7 @@ export const HomeData = () => {
             const isRoundTrip = String(r.attemptType || r.type).toUpperCase().includes('ROUND') || r.isRoundTrip;
             
             let holdCount = r.maxHoldNo ?? r.score ?? 0;
-            const isSuccess = r.success === true || r.isSuccess === true; // 백엔드 boolean 대응
+            const isSuccess = r.success === true || r.isSuccess === true; 
             if (isSuccess || holdCount === 0) holdCount = maxHoldForColor;
             
             const score = (colorIdx * 100000) + (isRoundTrip ? 50000 : 0) + Number(holdCount);

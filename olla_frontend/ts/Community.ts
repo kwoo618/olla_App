@@ -37,6 +37,13 @@ export const translateGender = (gender: string) => {
   return gender;
 };
 
+// 오늘 날짜 반환 유틸 (YYYY-MM-DD)
+export const getToday = () => {
+  const d = new Date();
+  const offset = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - offset).toISOString().split('T')[0];
+};
+
 export interface CommentType {
   id: number;
   content: string;
@@ -75,6 +82,12 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
   const [editPostId, setEditPostId] = useState<number | null>(null);
   const [form, setForm] = useState({ category: '센터' as '센터'|'아웃도어', title: '', desc: '', date: '', time: '', people: '2', location: '' });
 
+  // 달력 및 시간 선택기 상태
+  const [isCalendarVisible, setCalendarVisible] = useState(false);
+  const [isTimePickerVisible, setTimePickerVisible] = useState(false);
+  const [tempHour, setTempHour] = useState('12');
+  const [tempMinute, setTempMinute] = useState('00');
+
   // 상세/댓글 상태
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [selectedPost, setSelectedPost] = useState<any>(null); 
@@ -95,6 +108,7 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
   };
 
   const showCreateAlert = (msg: string) => {
+    Keyboard.dismiss();
     setCreateAlertMessage(msg);
     setCreateAlertVisible(true);
   };
@@ -314,7 +328,7 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
         },
         isMe: isMine
       });
-      return true; // 성공 시 UI 애니메이션 실행을 위해 true 반환
+      return true;
     } catch (e: any) {
       showResultModal('프로필 조회 불가', e.response?.data?.message || e.message, 'error');
       return false;
@@ -362,9 +376,59 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
     }
   };
 
+  // 💡 달력 모달 제어
+  const openCalendar = () => { Keyboard.dismiss(); setCalendarVisible(true); };
+  const closeCalendar = () => setCalendarVisible(false);
+
+  // 💡 시간 선택기 모달 제어 (오늘 날짜면 과거 시간 차단 로직 포함)
+  const openTimePicker = () => {
+    Keyboard.dismiss();
+    if (form.time) {
+      const [h, m] = form.time.split(':');
+      setTempHour(h);
+      setTempMinute(m);
+    } else {
+      const now = new Date();
+      const isToday = !form.date || form.date === getToday();
+      
+      if (isToday) {
+        // 오늘 날짜인 경우 가장 가까운 미래 10분 단위로 세팅
+        let h = now.getHours();
+        let m = Math.ceil(now.getMinutes() / 10) * 10;
+        if (m >= 60) {
+          h = (h + 1) % 24;
+          m = 0;
+        }
+        setTempHour(p(h));
+        setTempMinute(p(m));
+      } else {
+        setTempHour('12');
+        setTempMinute('00');
+      }
+    }
+    setTimePickerVisible(true);
+  };
+  const closeTimePicker = () => setTimePickerVisible(false);
+
+  // 💡 확인 버튼 클릭 시 이중 검증
+  const confirmTimeSelection = () => {
+    const isToday = !form.date || form.date === getToday();
+    if (isToday) {
+      const now = new Date();
+      const selH = parseInt(tempHour);
+      const selM = parseInt(tempMinute);
+      if (selH < now.getHours() || (selH === now.getHours() && selM < now.getMinutes())) {
+        showCreateAlert('과거 시간은 선택할 수 없습니다.');
+        return;
+      }
+    }
+    setForm(f => ({ ...f, time: `${tempHour}:${tempMinute}` }));
+    closeTimePicker();
+  };
+
   const setupCreateForm = () => {
     setIsEditMode(false); setEditPostId(null);
-    setForm({ category:'센터', title:'', desc:'', date:'', time:'', people:'2', location:'' });
+    setForm({ category:'센터', title:'', desc:'', date: '', time: '', people:'2', location:'' });
   };
 
   const setupEditForm = (post: any) => {
@@ -372,7 +436,7 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
     const md = new Date(post.rawMeetDateTime);
     setForm({
       category: post.differentGym ? '아웃도어' : '센터', title: post.title, desc: post.desc,
-      date: isNaN(md.getTime()) ? '' : `${md.getFullYear()}/${p(md.getMonth()+1)}/${p(md.getDate())}`,
+      date: isNaN(md.getTime()) ? '' : `${md.getFullYear()}-${p(md.getMonth()+1)}-${p(md.getDate())}`,
       time: isNaN(md.getTime()) ? '' : `${p(md.getHours())}:${p(md.getMinutes())}`,
       people: String(post.maxMember), location: post.gymPlace||'',
     });
@@ -384,19 +448,15 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
 
     if (!title?.trim()) errorMsg = '제목을 적어주십시오.';
     else if (!desc?.trim()) errorMsg = '내용을 적어주십시오.';
-    else if (!date?.trim()) errorMsg = '날짜를 적어주십시오.';
-    else if (!time?.trim()) errorMsg = '시간을 적어주십시오.';
+    else if (!date?.trim()) errorMsg = '날짜를 선택해주십시오.';
+    else if (!time?.trim()) errorMsg = '시간을 선택해주십시오.';
     else if (category === '아웃도어' && !location?.trim()) errorMsg = '아웃도어 장소 정보를 입력해주세요.';
-    else if (date?.length !== 10 || time?.length !== 5) errorMsg = '날짜(YYYY/MM/DD)와 시간(HH:MM)을 올바르게 입력해주세요.';
 
     if (errorMsg) return showCreateAlert(errorMsg);
     
-    const [yr, mo, dy] = date.split('/').map(Number);
+    // 달력에서 넘어온 YYYY-MM-DD 파싱
+    const [yr, mo, dy] = date.split('-').map(Number);
     const [hr, mn] = time.split(':').map(Number);
-    
-    if (mo < 1 || mo > 12) return showCreateAlert('올바른 월을 입력해주세요.');
-    if (dy < 1 || dy > new Date(yr, mo, 0).getDate()) return showCreateAlert(`${mo}월은 ${new Date(yr, mo, 0).getDate()}일까지입니다.`);
-    if (hr > 23 || mn > 59) return showCreateAlert('올바른 시간을 입력해주세요.');
     
     const dt = new Date(yr, mo - 1, dy, hr, mn);
     if (dt < new Date()) return showCreateAlert('과거 시간으로 등록할 수 없습니다.');
@@ -412,7 +472,7 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
       else await axios.post(POSTS, payload, { headers });
       
       initData(currentFilter);
-      onSuccess(); // UI의 closeModal 실행
+      onSuccess(); 
       setTimeout(() => showResultModal('성공', isEditMode ? '게시글이 성공적으로 수정되었습니다.' : '모집 글이 성공적으로 작성되었습니다.', 'success'), 500);
     } catch (e: any) {
       showCreateAlert(e.response?.data?.message || '처리에 실패했습니다.');
@@ -426,6 +486,8 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
     selectedUser, selectedPost, setSelectedPost, isEditMode,
     resultModalVisible, resultModalConfig, createAlertVisible, setCreateAlertVisible, createAlertMessage,
     deleteTarget, setDeleteTarget, closeTarget, setCloseTarget, commentDeleteTarget, setCommentDeleteTarget,
+    isCalendarVisible, openCalendar, closeCalendar,
+    isTimePickerVisible, tempHour, setTempHour, tempMinute, setTempMinute, openTimePicker, closeTimePicker, confirmTimeSelection,
     onRefresh, searchPosts, clearSearch, toggleLike, toggleJoin, executeDelete, executeClose,
     submitPost, submitComment, executeCommentDelete, loadUserDetail, loadPostDetail, setupCreateForm, setupEditForm, closeResultModal
   };

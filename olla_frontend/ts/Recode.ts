@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { Animated, PanResponder, Dimensions } from 'react-native';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { Animated, PanResponder, Dimensions, Keyboard } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../src/constants/Config';
@@ -29,6 +29,8 @@ export const ENUM_TO_KR: Record<string, string> = {
   BLUE: '파랑',  RED: '빨강',   PURPLE: '보라', BLACK: '검정',
 };
 
+const colorOrder = ['흰색', '노랑', '초록', '파랑', '빨강', '보라', '주황', '검정'];
+
 const BOX_SEQUENCE = [
   '1-1','1-2','1-3','1-4','1-5','1-6',
   '2-1','2-2','2-3','2-4','2-5','2-6','2-7','2-8','2-9','2-10','2-11','2-12',
@@ -50,6 +52,7 @@ const getSectionLabel = (oneWayCount: number, additionalBlocks: number): string 
   return '4-2'; 
 };
 
+// 💡 오늘 날짜 문자열 YYYY-MM-DD 반환
 const getLocalDateStr = (): string => {
   const now = new Date();
   const year = now.getFullYear();
@@ -58,12 +61,25 @@ const getLocalDateStr = (): string => {
   return `${year}-${month}-${day}`;
 };
 
-export const useRecode = ({
-  route, navigation,
-  difficultyData, setDifficultyData,
-  enduranceData,  setEnduranceData,
-  consecutiveData, setConsecutiveData,
-}: any) => {
+const getAuthHeader = async () => {
+  const token = await AsyncStorage.getItem('userToken');
+  return { headers: { Authorization: `Bearer ${token}` } };
+};
+
+export const useRecode = ({ route, navigation }: any) => {
+  const [difficultyData, setDifficultyData] = useState<any[]>([
+    { color: '흰색', hex: '#FFFFFF', type: null, current: 0, status: '미기록' },
+    { color: '노랑', hex: '#FFE600', type: null, current: 0, status: '미기록' },
+    { color: '초록', hex: '#00C853', type: null, current: 0, status: '미기록' },
+    { color: '파랑', hex: '#007AFF', type: null, current: 0, status: '미기록' },
+    { color: '빨강', hex: '#FF3B30', type: null, current: 0, status: '미기록' },
+    { color: '보라', hex: '#AF52DE', type: null, current: 0, status: '미기록' },
+    { color: '주황', hex: '#FF8A00', type: null, current: 0, status: '미기록' },
+    { color: '검정', hex: '#555555', type: null, current: 0, status: '미기록' },
+  ]);
+  const [enduranceData, setEnduranceData] = useState<any[]>([]);
+  const [consecutiveData, setConsecutiveData] = useState<any[]>([]);
+
   const [refreshing, setRefreshing] = useState(false);
   const [showTimerFinishConfirm, setShowTimerFinishConfirm] = useState(false); 
   const [beginnerHistoryData, setBeginnerHistoryData] = useState<any[]>([]);
@@ -75,14 +91,16 @@ export const useRecode = ({
   const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info' as 'info'|'success'|'error' });
 
   const showResultModal = useCallback((title: string, message: string, type: 'info' | 'success' | 'error' = 'info') => {
+    Keyboard.dismiss();
     setResultModalConfig({ title, message, type });
     setResultModalVisible(true);
   }, []);
 
   const checkMembership = async () => {
     try {
-      const res = await axios.get(MEMBERSHIP_URL);
-      const rawData = res.data?.data?.data ?? res.data?.data; 
+      const config = await getAuthHeader();
+      const res = await axios.get(MEMBERSHIP_URL, config); 
+      const rawData = res.data.data; 
       if (rawData) {
         const memberships = Array.isArray(rawData) ? rawData : [rawData];
         let isValid = false;
@@ -120,34 +138,68 @@ export const useRecode = ({
   };
 
   // ── 데이터 로드 ──
+  // 💡 [수정] 진짜 최고 기록(문신)을 유지하기 위한 로직! (오늘 기록 삭제의 영향을 받지 않음)
   const fetchBestRecords = async () => {
     try {
-      const res = await axios.get(`${API_BASE_URL}/records/beginner/best`);
-      const raw = res.data?.data?.data ?? [];
-      const list = Array.isArray(raw) ? raw : Array.isArray(raw?.list) ? raw.list : [];
+      const config = await getAuthHeader();
+      // 최고 기록 전용 API 호출
+      const bestRes = await axios.get(`${API_BASE_URL}/records/beginner/best`, config).catch(() => null);
+      let rawData = bestRes?.data?.data;
+      
+      let bestList: any[] = [];
+      // 백엔드가 배열을 주든, Object(Map)를 주든 무조건 끄집어냄
+      if (Array.isArray(rawData)) {
+        bestList = rawData;
+      } else if (rawData && typeof rawData === 'object') {
+        if (Array.isArray(rawData.content)) bestList = rawData.content;
+        else if (Array.isArray(rawData.list)) bestList = rawData.list;
+        else bestList = Object.values(rawData); // { "WHITE": {...} } 형태 대비
+      }
+
+      // 최고기록 전용 API가 비어있다면, 안전하게 최신 500개 히스토리를 불러와서 직접 최고기록 산출
+      if (bestList.length === 0) {
+        const histRes = await axios.get(`${API_BASE_URL}/records/beginner/history`, { ...config, params: { size: 500 } }).catch(() => null);
+        const histData = histRes?.data?.data;
+        if (Array.isArray(histData)) bestList = histData;
+        else if (Array.isArray(histData?.content)) bestList = histData.content;
+        else if (Array.isArray(histData?.list)) bestList = histData.list;
+      }
 
       setDifficultyData((prevData: any[]) =>
         prevData.map((item: any) => {
-          const enumColor = KR_TO_ENUM[item.color];
-          const maxHold   = MAX_HOLDS[item.color] ?? item.total ?? 0;
-          const recordsForColor = list.filter((r: any) => r.difficulty === enumColor);
+          const krColor = item.color;
+          const enumColor = KR_TO_ENUM[krColor];
+          const maxHold = MAX_HOLDS[krColor] ?? 0;
+          
           let bestRecord = null;
           let highestScore = -1;
 
-          recordsForColor.forEach((r: any) => {
-            const isSuccess = r.success !== undefined ? r.success : r.isSuccess;
-            const holdCount = isSuccess ? maxHold : (r.maxHoldNo ?? 0);
-            const score = r.score ?? holdCount; 
-            if (score > highestScore) { highestScore = score; bestRecord = r; }
+          bestList.forEach((r: any) => {
+            const rColorEnum = r.difficulty || r.color;
+            if (rColorEnum === enumColor || rColorEnum === krColor) {
+              const isSuccess = r.success !== undefined ? r.success : r.isSuccess;
+              const holdCount = isSuccess ? maxHold : (r.maxHoldNo ?? r.score ?? 0);
+              const isRoundTrip = String(r.attemptType || r.type).toUpperCase().includes('ROUND') || r.isRoundTrip;
+              const colorIdx = colorOrder.indexOf(krColor);
+              
+              // 왕복 가점과 성공여부를 포함하여 '진짜 가장 높은 점수' 산출
+              const score = (colorIdx * 100000) + (isRoundTrip ? 50000 : 0) + Number(holdCount);
+              if (score > highestScore) {
+                highestScore = score;
+                bestRecord = { ...r, calculatedHold: holdCount, isSuccess, isRoundTrip };
+              }
+            }
           });
 
           if (bestRecord) {
             const b = bestRecord as any;
-            const isRT = String(b.attemptType ?? '').toUpperCase() === 'ROUND_TRIP';
-            const isSuccess = b.success !== undefined ? b.success : b.isSuccess;
-            const rawHold = b.maxHoldNo !== undefined ? b.maxHoldNo : b.score;
-            const holdCount = isSuccess ? maxHold : (rawHold ?? 0);
-            return { ...item, id: b.id, type: isRT ? '왕복' : '편도', current: holdCount, status: isSuccess ? '완료' : '진행중' };
+            return { 
+              ...item, 
+              id: b.id, 
+              type: b.isRoundTrip ? '왕복' : '편도', 
+              current: b.calculatedHold, 
+              status: b.isSuccess ? '완료' : '진행중' 
+            };
           }
           return { ...item, type: null, current: 0, status: '미기록' };
         })
@@ -155,12 +207,23 @@ export const useRecode = ({
     } catch (error) { console.error('최고 기록 로드 실패'); }
   };
 
+  // 💡 [수정] 초보벽 최근 기록: 넉넉하게 500개를 가져와서 철저히 '오늘 날짜' 데이터만 뽑아냅니다.
   const fetchBeginnerHistoryRecords = async () => {
     try {
-      const res = await axios.get(`${API_BASE_URL}/records/beginner/history`);
-      const raw = res.data?.data?.data ?? [];
-      const list = Array.isArray(raw) ? raw : Array.isArray(raw?.list) ? raw.list : [];
-      const sortedList = list.sort((a: any, b: any) => b.id - a.id);
+      const config = await getAuthHeader();
+      const reqConfig = { ...config, params: { page: 0, size: 500, sort: 'id,desc' } };
+      
+      const res = await axios.get(`${API_BASE_URL}/records/beginner/history`, reqConfig); 
+      const raw = res.data.data ?? [];
+      const list = Array.isArray(raw) ? raw : Array.isArray(raw?.content) ? raw.content : Array.isArray(raw?.list) ? raw.list : [];
+      
+      const todayStr = getLocalDateStr();
+      const todayList = list.filter((item: any) => {
+        const dateStr = item.recordDate || item.createdAt || '';
+        return dateStr.startsWith(todayStr); // 오늘 기록만 필터링!
+      });
+
+      const sortedList = todayList.sort((a: any, b: any) => b.id - a.id);
 
       const mapped = sortedList.map((item: any) => {
         const krColor = ENUM_TO_KR[item.difficulty] ?? '흰색';
@@ -179,11 +242,23 @@ export const useRecode = ({
     } catch (error) { console.error('초보벽 최근 기록 로드 실패'); }
   };
 
+  // 💡 [수정] 지구력 기록도 동일하게 적용
   const fetchEnduranceRecords = async () => {
     try {
-      const res = await axios.get(`${ENDURANCE_BASE_URL}/history`);
-      const raw = res.data?.data?.data ?? [];
-      const mapped = (Array.isArray(raw) ? raw : []).map((item: any) => ({
+      const config = await getAuthHeader();
+      const reqConfig = { ...config, params: { page: 0, size: 500, sort: 'id,desc' } };
+
+      const res = await axios.get(`${ENDURANCE_BASE_URL}/history`, reqConfig); 
+      const raw = res.data.data ?? [];
+      const list = Array.isArray(raw) ? raw : Array.isArray(raw?.content) ? raw.content : [];
+      
+      const todayStr = getLocalDateStr();
+      const todayList = list.filter((item: any) => {
+        const dateStr = item.recordDate || item.createdAt || '';
+        return dateStr.startsWith(todayStr);
+      });
+
+      const mapped = todayList.map((item: any) => ({
         id: item.id, type: '편도', arrow: item.oneWayCount % 2 !== 0 ? '<-' : '->', 
         laps: String(item.oneWayCount), time: formatTime(item.timeSeconds),
         section: getSectionLabel(item.oneWayCount, item.additionalBlocks),
@@ -192,11 +267,23 @@ export const useRecode = ({
     } catch (error) { console.error('지구력 기록 로드 실패'); }
   };
 
+  // 💡 [수정] 연속 완등 기록도 동일하게 적용
   const fetchSeriesRecords = async () => {
     try {
-      const res = await axios.get(`${SERIES_BASE_URL}/history`);
-      const raw = res.data?.data?.data ?? [];
-      const mapped = (Array.isArray(raw) ? raw : []).map((item: any) => ({
+      const config = await getAuthHeader();
+      const reqConfig = { ...config, params: { page: 0, size: 500, sort: 'id,desc' } };
+
+      const res = await axios.get(`${SERIES_BASE_URL}/history`, reqConfig); 
+      const raw = res.data.data ?? [];
+      const list = Array.isArray(raw) ? raw : Array.isArray(raw?.content) ? raw.content : [];
+      
+      const todayStr = getLocalDateStr();
+      const todayList = list.filter((item: any) => {
+        const dateStr = item.recordDate || item.createdAt || '';
+        return dateStr.startsWith(todayStr);
+      });
+
+      const mapped = todayList.map((item: any) => ({
         id: item.id, score: item.totalScore ?? 0,
         colors: (item.sequenceLog ?? []).map((diffEnum: string) => {
           const krName = ENUM_TO_KR[diffEnum] ?? '흰색';
@@ -209,9 +296,8 @@ export const useRecode = ({
   };
 
   const loadAllData = useCallback(async () => {
-    setEnduranceData([]); setConsecutiveData([]); setBeginnerHistoryData([]);
     await Promise.all([ checkMembership(), fetchBestRecords(), fetchBeginnerHistoryRecords(), fetchEnduranceRecords(), fetchSeriesRecords() ]);
-  }, []);
+  }, [difficultyData]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -222,7 +308,7 @@ export const useRecode = ({
   useEffect(() => {
     loadAllData();
     if (route?.params?.openSection) setExpandedSection(route.params.openSection);
-  }, [route?.params?.openSection, loadAllData]);
+  }, [route?.params?.openSection]);
 
   const toggleSection = (section: string) => setExpandedSection(expandedSection === section ? null : section);
 
@@ -236,19 +322,23 @@ export const useRecode = ({
   const executeDelete = async () => {
     if (!itemToDelete) return;
     try {
+      const config = await getAuthHeader();
       const id = Number(itemToDelete.id);
+      
       if (itemToDelete.type === 'difficulty') { 
-        await axios.delete(`${API_BASE_URL}/records/beginner/${id}`);       
-        await fetchBestRecords(); await fetchBeginnerHistoryRecords(); 
+        await axios.delete(`${API_BASE_URL}/records/beginner/${id}`, config);       
+        await fetchBestRecords(); // 💡 오늘꺼 지워져도 다른 최고 기록이 있는지 재검사
+        await fetchBeginnerHistoryRecords(); 
       }
       else if (itemToDelete.type === 'endurance') { 
-        await axios.delete(`${ENDURANCE_BASE_URL}/${id}`); 
+        await axios.delete(`${ENDURANCE_BASE_URL}/${id}`, config); 
         await fetchEnduranceRecords();  
       }
       else if (itemToDelete.type === 'consecutive') { 
-        await axios.delete(`${SERIES_BASE_URL}/${id}`);    
+        await axios.delete(`${SERIES_BASE_URL}/${id}`, config);    
         await fetchSeriesRecords();     
       }
+      
       setDeleteModalVisible(false); setItemToDelete(null);
       setTimeout(() => showResultModal('성공', '기록이 삭제되었습니다.', 'success'), 500);
     } catch (error: any) {
@@ -359,7 +449,8 @@ export const useRecode = ({
       recordDate: getLocalDateStr(),
     };
     try {
-      await axios.post(`${API_BASE_URL}/records/beginner`, payload);
+      const config = await getAuthHeader(); 
+      await axios.post(`${API_BASE_URL}/records/beginner`, payload, config);
       await fetchBestRecords(); await fetchBeginnerHistoryRecords();
       closeRecordModal(); setTimeout(() => showResultModal('성공', '등반 기록이 저장되었습니다.', 'success'), 500);
     } catch (error: any) {
@@ -442,7 +533,8 @@ export const useRecode = ({
 
     const payload = { oneWayCount: Number(enduranceLaps), additionalBlocks: Number(additionalBlocks), timeSeconds: Number(timeSeconds), recordDate: getLocalDateStr() };
     try {
-      await axios.post(ENDURANCE_BASE_URL, payload);
+      const config = await getAuthHeader(); 
+      await axios.post(ENDURANCE_BASE_URL, payload, config);
       await fetchEnduranceRecords(); closeEnduranceModal(); setTimeout(() => showResultModal('성공', '지구력 기록이 저장되었습니다.', 'success'), 500);
     } catch (error: any) {
       closeEnduranceModal(); setTimeout(() => showResultModal('오류', '지구력 기록 저장에 실패했습니다.', 'error'), 500);
@@ -485,12 +577,14 @@ export const useRecode = ({
   const handleSaveConsecutiveRecord = async () => {
     if (selectedConsecutiveList.length === 0) { showResultModal('알림', '연속으로 완등한 난이도를 입력해주세요.', 'info'); return; }
     try {
-      await axios.post(SERIES_BASE_URL, { sequenceLog: selectedConsecutiveList.map(i => KR_TO_ENUM[i.color] ?? 'WHITE'), recordDate: getLocalDateStr() });
+      const config = await getAuthHeader(); 
+      await axios.post(SERIES_BASE_URL, { sequenceLog: selectedConsecutiveList.map(i => KR_TO_ENUM[i.color] ?? 'WHITE'), recordDate: getLocalDateStr() }, config);
       await fetchSeriesRecords(); closeConsecutiveModal(); setTimeout(() => showResultModal('성공', '기록이 저장되었습니다.', 'success'), 500);
     } catch (error) { closeConsecutiveModal(); setTimeout(() => showResultModal('오류', '저장 실패', 'error'), 500); }
   };
 
   return {
+    difficultyData, enduranceData, consecutiveData, 
     refreshing, onRefresh, expandedSection, toggleSection,
     beginnerHistoryData,
     

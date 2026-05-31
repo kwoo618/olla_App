@@ -79,7 +79,6 @@ const ManagerDashboard = ({ navigation }: any) => {
     dash.openScanner();
   };
 
-  // ✅ 핵심 수정: checkAdminAndFetchData를 의존성에 추가
   useEffect(() => {
     dash.checkAdminAndFetchData();
   }, [dash.checkAdminAndFetchData]);

@@ -171,7 +171,7 @@ export const useRanking = (route: any) => {
     try {
       const headers = await getAuthHeader();
       const response = await axios.get(`${PROFILE_API_URL}/${memberId}/profile`, { headers });
-      const d = response.data?.data?.data || response.data?.data;
+      const d = response.data.data;
       
       if (!d) { 
         showAlert('프로필 조회 불가', '정보를 불러올 수 없습니다.'); 
@@ -241,7 +241,7 @@ export const useRanking = (route: any) => {
       let myBestList: any[] = [];
       try {
         const res = await axios.get(MY_BEGINNER_BEST_URL, { headers });
-        const raw = res.data?.data?.data || res.data?.data;
+        const raw = res.data.data;
         myBestList = Array.isArray(raw) ? raw : (Array.isArray(raw?.list) ? raw.list : []);
       } catch (error: any) {
         console.log('내 초보벽 기록 로드 실패');
@@ -252,7 +252,7 @@ export const useRanking = (route: any) => {
       rankResponses.forEach((response, colorIdx) => {
         const currentColor = colors[colorIdx];
         const maxHold      = MAX_HOLDS[currentColor.name] ?? 0;
-        const rawList = extractList(response.data?.data?.data || response.data?.data);
+        const rawList = extractList(response.data.data);
 
         const mappedList = rawList.map((item: any, i: number) => {
           const hasDecimal  = item.score !== undefined && item.score !== null && item.score % 1 !== 0;
@@ -331,7 +331,7 @@ export const useRanking = (route: any) => {
     try {
       const headers = await getAuthHeader();
       const res     = await axios.get(RANKING_ENDURANCE_URL, { headers });
-      const rawList = extractList(res.data?.data?.data || res.data?.data);
+      const rawList = extractList(res.data.data);
 
       const mapped = rawList.map((item: any, i: number) => ({
         id:              item.memberId ?? `rank-endurance-${i}`,
@@ -357,7 +357,7 @@ export const useRanking = (route: any) => {
     try {
       const headers = await getAuthHeader();
       const res     = await axios.get(RANKING_SERIES_URL, { headers });
-      const rawList = extractList(res.data?.data?.data || res.data?.data);
+      const rawList = extractList(res.data.data);
 
       const mapped = rawList.map((item: any, i: number) => {
         const colorHexList = (item.sequenceLog ?? []).map((diffEnum: string) => {

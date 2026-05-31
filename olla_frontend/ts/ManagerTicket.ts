@@ -8,6 +8,9 @@ const MEMBER_LIST_API      = `${API_BASE_URL}/admin/memberships/members`;
 const MEMBERSHIP_GRANT_API = `${API_BASE_URL}/admin/memberships/grant`;
 const MEMBERSHIP_BASE_API  = `${API_BASE_URL}/admin/memberships`;
 
+// 💡 iOS 모달 중첩 방지를 위한 안전 딜레이 시간
+const MODAL_SAFE_DELAY = Platform.OS === 'ios' ? 400 : 150;
+
 // 유틸 
 export const resolveMembershipType = (
   typeStr: string,
@@ -131,17 +134,6 @@ export const useManagerTicket = (navigation: any) => {
     title: string; message: string; type: string; onConfirm: () => void;
   }>({ title: '', message: '', type: 'info', onConfirm: () => {} });
 
-  const showResultModal = useCallback((
-    title: string,
-    message: string,
-    type: 'info' | 'success' | 'error' = 'info',
-    onConfirm: () => void = () => {},
-  ) => {
-    Keyboard.dismiss();
-    setResultModalConfig({ title, message, type, onConfirm });
-    setResultModalVisible(true);
-  }, []);
-
   // 확인 모달 
   const [confirmModalVisible, setConfirmModalVisible] = useState(false);
   const [confirmModalConfig, setConfirmModalConfig]   = useState({
@@ -149,16 +141,37 @@ export const useManagerTicket = (navigation: any) => {
     onConfirm: () => {}, isDestructive: false,
   });
 
+  // 💡 [안전 장치] 모달 띄우기 유틸리티 (앱 멈춤 방지를 위해 InteractionManager 제거)
+  const safeShowModal = useCallback((showAction: () => void) => {
+    Keyboard.dismiss();
+    setTimeout(() => {
+      showAction();
+    }, MODAL_SAFE_DELAY);
+  }, []);
+
+  const showResultModal = useCallback((
+    title: string,
+    message: string,
+    type: 'info' | 'success' | 'error' = 'info',
+    onConfirm: () => void = () => {},
+  ) => {
+    safeShowModal(() => {
+      setResultModalConfig({ title, message, type, onConfirm });
+      setResultModalVisible(true);
+    });
+  }, [safeShowModal]);
+
   const showConfirmModal = useCallback((
     message: string,
     onConfirm: () => void,
     isDestructive = false,
     confirmText   = '확인',
   ) => {
-    Keyboard.dismiss();
-    setConfirmModalConfig({ message, confirmText, cancelText: '취소', onConfirm, isDestructive });
-    setConfirmModalVisible(true);
-  }, []);
+    safeShowModal(() => {
+      setConfirmModalConfig({ message, confirmText, cancelText: '취소', onConfirm, isDestructive });
+      setConfirmModalVisible(true);
+    });
+  }, [safeShowModal]);
 
   // 관리 바텀시트
   const [isManageVisible, setManageVisible]         = useState(false);
@@ -213,6 +226,9 @@ export const useManagerTicket = (navigation: any) => {
   const [editType, setEditType]                           = useState<'PERIOD' | 'COUNT'>('PERIOD');
   const [addValue, setAddValue]                           = useState('');
 
+  // 💡 폼 내부 에러 텍스트 (앱 멈춤 방지용 안전 설계)
+  const [formError, setFormError]                         = useState('');
+
   const targetEditBaseSnap = useRef(GRANT_START_HEIGHT);
   const editHeightAnim     = useRef(new Animated.Value(0)).current;
   const currentEditSnap    = useRef(GRANT_START_HEIGHT);
@@ -252,6 +268,7 @@ export const useManagerTicket = (navigation: any) => {
 
   // 모달 제어
   const openManageModal = useCallback((group: any) => {
+    Keyboard.dismiss();
     setSelectedManageItem(group);
     setManageVisible(true);
     const mergedCount   = group.displayMemberships ? group.displayMemberships.length : 1;
@@ -263,15 +280,18 @@ export const useManagerTicket = (navigation: any) => {
   }, [manageHeightAnim, MANAGE_HEIGHT_1, MANAGE_HEIGHT_2]);
 
   const closeManageModal = useCallback((callback?: () => void) => {
+    Keyboard.dismiss();
     Animated.timing(manageHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
       setManageVisible(false);
       setSelectedManageItem(null);
-      if (callback) setTimeout(callback, Platform.OS === 'ios' ? 500 : 300);
+      if (callback) callback(); 
     });
   }, [manageHeightAnim]);
 
   const openEditModal = useCallback(() => {
+    Keyboard.dismiss();
     setEditModalVisible(true);
+    setFormError(''); // 모달 열때 에러 초기화
     targetEditBaseSnap.current = GRANT_START_HEIGHT;
     currentEditSnap.current    = GRANT_START_HEIGHT;
     editHeightAnim.setValue(0);
@@ -279,6 +299,7 @@ export const useManagerTicket = (navigation: any) => {
   }, [editHeightAnim, GRANT_START_HEIGHT]);
 
   const closeEditModal = useCallback((callback?: () => void) => {
+    Keyboard.dismiss();
     Animated.timing(editHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
       setEditModalVisible(false);
       setSelectedUser(null);
@@ -286,11 +307,22 @@ export const useManagerTicket = (navigation: any) => {
       setAddValue('');
       setEditStart('');
       setEditEnd('');
+      setFormError(''); // 모달 닫을때 에러 초기화
       targetEditBaseSnap.current = GRANT_START_HEIGHT;
       currentEditSnap.current    = GRANT_START_HEIGHT;
-      if (callback) callback();
+      if (callback) callback(); 
     });
   }, [editHeightAnim, GRANT_START_HEIGHT]);
+
+  // 달력 모달 열기/닫기 제어
+  const openStartCalendar = useCallback(() => {
+    Keyboard.dismiss();
+    setStartCalendarVisible(true);
+  }, []);
+
+  const closeStartCalendar = useCallback(() => {
+    setStartCalendarVisible(false);
+  }, []);
 
   // API
   const fetchUsers = useCallback(async (token: string) => {
@@ -334,7 +366,7 @@ export const useManagerTicket = (navigation: any) => {
   // 선택된 유저/타입 변경 시 시작일 자동 계산
   useEffect(() => {
     if (!selectedUser) return;
-    const targetType         = editType === 'PERIOD' ? '회원권' : '일일권';
+    const targetType = editType === 'PERIOD' ? '회원권' : '일일권';
     const existingMemberships = selectedUser.memberships.filter((m: any) =>
       resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount) === targetType,
     );
@@ -353,44 +385,75 @@ export const useManagerTicket = (navigation: any) => {
         const mm   = String(nextDay.getMonth() + 1).padStart(2, '0');
         const dd   = String(nextDay.getDate()).padStart(2, '0');
         setEditStart(`${yyyy}-${mm}-${dd}`);
-        setEditEnd('');
         return;
       }
     }
-    setEditStart('');
-    setEditEnd('');
+    setEditStart(getToday());
   }, [selectedUser, editType]);
+
+  // 입력값이 변경될 때마다 자동 계산 및 에러 메시지 리셋
+  useEffect(() => {
+    setFormError(''); // 입력 시 에러 숨김
+    if (editType === 'PERIOD' && addValue && !isNaN(Number(addValue))) {
+      const startD = new Date(editStart || getToday());
+      startD.setMonth(startD.getMonth() + Number(addValue)); // 입력한 개월 수 만큼 달 추가
+      const yyyy = startD.getFullYear();
+      const mm   = String(startD.getMonth() + 1).padStart(2, '0');
+      const dd   = String(startD.getDate()).padStart(2, '0');
+      setEditEnd(`${yyyy}-${mm}-${dd}`);
+    } else {
+      setEditEnd(''); // 횟수권이거나 입력된 개월 수가 없을 때
+    }
+  }, [editStart, addValue, editType]);
 
   // 회원 선택 
   const handleSelectUser = useCallback((group: any) => {
+    Keyboard.dismiss();
     setSelectedUser(group);
     setEditType('PERIOD');
     setAddValue('');
     setEditEnd('');
+    setFormError('');
     targetEditBaseSnap.current = GRANT_EXPANDED_HEIGHT;
     currentEditSnap.current    = GRANT_EXPANDED_HEIGHT;
     Animated.spring(editHeightAnim, { toValue: GRANT_EXPANDED_HEIGHT, useNativeDriver: false }).start();
   }, [editHeightAnim, GRANT_EXPANDED_HEIGHT]);
 
-  // 이용권 등록 
+  // 💡 이용권 등록 및 유효성 검사 (과거 날짜 완벽 차단)
   const handleGrantTicket = useCallback(async () => {
     if (!selectedUser) return;
-    const startDateStr = editStart || getToday();
+    setFormError(''); // 이전 에러 초기화
 
+    const startDateStr = editStart || getToday();
+    const numericAddValue = Number(addValue);
+
+    // 💡 1. 입력값 검증
+    if (!addValue || isNaN(numericAddValue) || numericAddValue <= 0) {
+      const unit = editType === 'PERIOD' ? '개월 수' : '횟수';
+      setFormError(`유효한 ${unit}를 입력해주십시오.`);
+      return;
+    }
+
+    // 💡 2. 회원권일 경우 과거 날짜 차단 검증
     if (editType === 'PERIOD') {
       if (!editEnd || editEnd.length !== 10) {
-        showResultModal('알림', '종료일을 정확하게 입력해주십시오.', 'info');
+        setFormError('종료일을 정확하게 계산할 수 없습니다.');
         return;
       }
+      
       const startD = new Date(startDateStr); startD.setHours(0, 0, 0, 0);
       const endD   = new Date(editEnd);      endD.setHours(0, 0, 0, 0);
+      const todayD = new Date();             todayD.setHours(0, 0, 0, 0);
+
+      // 시작일보다 종료일이 과거일 수 없음
       if (endD.getTime() < startD.getTime()) {
-        showResultModal('등록 불가', '종료일이 시작일보다 과거일 수 없습니다.', 'error');
+        setFormError('종료일이 시작일보다 과거일 수 없습니다.');
         return;
       }
-    } else {
-      if (addValue && (isNaN(Number(addValue)) || Number(addValue) < 0)) {
-        showResultModal('알림', '유효한 횟수를 입력해주십시오.', 'error');
+      
+      // 이미 끝난 날짜를 등록하는 것 차단 (오늘 날짜 기준)
+      if (endD.getTime() < todayD.getTime()) {
+        setFormError(`종료일(${editEnd})이 현재 날짜보다 과거입니다.\n시작일이나 개월 수를 늘려주세요.`);
         return;
       }
     }
@@ -398,31 +461,30 @@ export const useManagerTicket = (navigation: any) => {
     try {
       const token    = await AsyncStorage.getItem('userToken');
       const memberId = selectedUser.memberId || selectedUser.id;
-      const requestBody = editType === 'PERIOD'
-        ? { memberId, startDate: startDateStr, endDate: editEnd }
-        : { memberId, addCount: addValue && !isNaN(Number(addValue)) && Number(addValue) > 0 ? Number(addValue) : 1, startDate: startDateStr };
+      
+      const requestBody = {
+        memberId,
+        startDate: startDateStr,
+        addMonths: editType === 'PERIOD' ? numericAddValue : 0,
+        addCount: editType === 'COUNT' ? numericAddValue : 0,
+      };
 
       await axios.post(MEMBERSHIP_GRANT_API, requestBody, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       closeEditModal(() => {
-        setTimeout(() => {
-          showResultModal('성공', '이용권이 성공적으로 등록되었습니다.', 'success');
-          fetchUsers(token!);
-        }, Platform.OS === 'ios' ? 500 : 300);
+        showResultModal('성공', '이용권이 성공적으로 등록되었습니다.', 'success');
+        fetchUsers(token!);
       });
     } catch (error: any) {
       const serverMessage = error.response?.data?.message ?? '이용권 등록에 실패했습니다.';
-      closeEditModal(() => {
-        setTimeout(() => {
-          if (serverMessage?.includes('is_deleted') || serverMessage?.includes('default value')) {
-            showResultModal('서버 설정 오류', 'Membership 엔티티의 is_deleted 필드에 기본값이 없습니다.\n백엔드 서버를 수정해주세요.', 'error');
-          } else {
-            showResultModal('오류', serverMessage, 'error');
-          }
-        }, Platform.OS === 'ios' ? 500 : 300);
-      });
+      // 백엔드 에러 발생 시에도 빨간 글씨로 모달 내부에 표시하여 앱 멈춤 방지
+      if (serverMessage?.includes('is_deleted') || serverMessage?.includes('default value')) {
+        setFormError('서버 설정 오류: 백엔드의 Membership 엔티티를 확인하세요.');
+      } else {
+        setFormError(serverMessage);
+      }
     }
   }, [selectedUser, editStart, editEnd, editType, addValue, closeEditModal, showResultModal, fetchUsers]);
 
@@ -441,14 +503,11 @@ export const useManagerTicket = (navigation: any) => {
           await axios.patch(`${MEMBERSHIP_BASE_API}/${membershipId}/${endpoint}`, {}, {
             headers: { Authorization: `Bearer ${token}` },
           });
-          setTimeout(() => {
-            showResultModal('성공', `이용권이 ${actionText} 되었습니다.`, 'success');
-            fetchUsers(token!);
-          }, Platform.OS === 'ios' ? 500 : 300);
+          
+          showResultModal('성공', `이용권이 ${actionText} 되었습니다.`, 'success');
+          fetchUsers(token!);
         } catch (error: any) {
-          setTimeout(() => {
-            showResultModal('오류', error.response?.data?.message ?? '상태 변경에 실패했습니다.', 'error');
-          }, Platform.OS === 'ios' ? 500 : 300);
+          showResultModal('오류', error.response?.data?.message ?? '상태 변경에 실패했습니다.', 'error');
         }
       });
     });
@@ -462,27 +521,24 @@ export const useManagerTicket = (navigation: any) => {
       await axios.delete(`${MEMBERSHIP_BASE_API}/${membershipId}`, {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
-      setTimeout(() => {
-        showResultModal('성공', '해당 내역 1건이 성공적으로 삭제되었습니다.', 'success', async () => {
-          await fetchUsers(token);
-        });
-      }, Platform.OS === 'ios' ? 500 : 300);
+      showResultModal('성공', '해당 내역 1건이 성공적으로 삭제되었습니다.', 'success', async () => {
+        await fetchUsers(token);
+      });
     } catch (error: any) {
       const errorMessage = error.response?.data?.message ?? '이용권 삭제에 실패했습니다.';
-      setTimeout(() => {
-        showResultModal('오류', errorMessage, 'error');
-      }, Platform.OS === 'ios' ? 500 : 300);
+      showResultModal('오류', errorMessage, 'error');
     }
   }, [showResultModal, fetchUsers]);
 
   const confirmDeleteSpecificTicket = useCallback((membershipId: number, description: string) => {
     if (!membershipId) { showResultModal('오류', '이용권 ID를 확인할 수 없습니다.', 'error'); return; }
+    
     closeManageModal(() => {
       showConfirmModal(
         `${description}\n해당 내역을 정말 삭제하시겠습니까?`,
         () => {
           setConfirmModalVisible(false);
-          setTimeout(() => executeDeleteTicket(membershipId), Platform.OS === 'ios' ? 500 : 300);
+          setTimeout(() => executeDeleteTicket(membershipId), MODAL_SAFE_DELAY);
         },
         true,
         '삭제',
@@ -579,26 +635,27 @@ export const useManagerTicket = (navigation: any) => {
   }, [users, modalSearch]);
 
   return {
-    // 목록
     loading, refreshing, searchQuery, setSearchQuery, groupedHolders, onRefresh,
-    // 결과 모달
     resultModalVisible, setResultModalVisible, resultModalConfig,
-    // 확인 모달
     confirmModalVisible, setConfirmModalVisible, confirmModalConfig,
-    // 관리 바텀시트
+    
+    // 모달 내 폼 에러 상태
+    formError,
+
     isManageVisible, selectedManageItem,
     manageHeightAnim, managePanResponder,
     openManageModal, closeManageModal,
-    // 등록 바텀시트
+    
     isEditModalVisible, modalSearch, setModalSearch,
     selectedUser, editType, setEditType,
     addValue, setAddValue,
-    editStart, setEditStart, isStartCalendarVisible, setStartCalendarVisible,
+    editStart, setEditStart, 
+    isStartCalendarVisible, openStartCalendar, closeStartCalendar, 
     editEnd, setEditEnd, isEndCalendarVisible, setEndCalendarVisible,
     editHeightAnim, editPanResponder,
     openEditModal, closeEditModal,
     handleSelectUser, handleGrantTicket,
-    // 액션
+    
     togglePauseStatus, confirmDeleteSpecificTicket,
     groupedSearchResults,
   };

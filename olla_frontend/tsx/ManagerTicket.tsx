@@ -2,8 +2,8 @@ import React from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   ScrollView, Image, Modal, KeyboardAvoidingView, Platform,
-  ActivityIndicator, Animated, RefreshControl, StyleSheet as RNStyleSheet,
-  TouchableWithoutFeedback,
+  ActivityIndicator, Animated, RefreshControl,
+  TouchableWithoutFeedback, Keyboard
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
@@ -87,7 +87,7 @@ const ManagerTicket = ({ navigation }: any) => {
         ) : (
           t.groupedHolders.map((group: any) => {
             const { memberId, name, displayMemberships, memberships } = group;
-            const subText     = displayMemberships.map((m: any) => m._type).join(' / ');
+            const subText      = displayMemberships.map((m: any) => m._type).join(' / ');
             const activeCount  = memberships.filter((m: any) => String(m.membershipStatus).toUpperCase() === 'ACTIVE').length;
             const holdingCount = memberships.filter((m: any) => String(m.membershipStatus).toUpperCase() === 'HOLDING').length;
 
@@ -166,7 +166,7 @@ const ManagerTicket = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 결과 모달 ─────────────────────────────────────────────────────── */}
+      {/* ─── 결과 모달 (메인) ─────────────────────────────────────────────────────── */}
       <Modal visible={t.resultModalVisible} animationType="fade" transparent onRequestClose={() => t.setResultModalVisible(false)}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -369,73 +369,47 @@ const ManagerTicket = ({ navigation }: any) => {
                       <View style={styles.dateBlock}>
                         <Text style={styles.inputLabel}>시작일</Text>
                         <View style={styles.dateInputBox}>
-                          <TextInput
-                            style={styles.dateTextInput}
-                            placeholder="YYYY-MM-DD"
-                            placeholderTextColor="#666"
-                            value={t.editStart || getToday()}
-                            onChangeText={(text) => {
-                              const numeric = text.replace(/[^0-9]/g, '');
-                              let formatted = numeric;
-                              if (numeric.length > 4 && numeric.length <= 6) formatted = `${numeric.slice(0,4)}-${numeric.slice(4)}`;
-                              else if (numeric.length > 6)                   formatted = `${numeric.slice(0,4)}-${numeric.slice(4,6)}-${numeric.slice(6,8)}`;
-                              t.setEditStart(formatted);
-                            }}
-                            keyboardType="numeric"
-                            maxLength={10}
-                          />
-                          <TouchableOpacity onPress={() => t.setStartCalendarVisible(true)} style={styles.calendarIconBtn}>
+                          <Text style={t.editStart ? styles.pickerTextActive : styles.pickerTextPlaceholder}>
+                            {t.editStart || '날짜 선택'}
+                          </Text>
+                          <TouchableOpacity onPress={t.openStartCalendar} style={styles.calendarIconBtn}>
                             <Image source={require('../assets/DATE.png')} style={styles.dateIcon} />
                           </TouchableOpacity>
                         </View>
-                        {t.editStart && t.editStart !== getToday() && (
-                          <TouchableOpacity onPress={() => t.setEditStart('')} style={styles.resetDateBtn}>
-                            <Text style={styles.resetDateText}>오늘로 초기화</Text>
-                          </TouchableOpacity>
-                        )}
                       </View>
 
                       <View style={styles.dateSpacer} />
 
-                      {/* 종료일 or 횟수 */}
-                      {t.editType === 'PERIOD' ? (
-                        <View style={styles.dateBlock}>
-                          <Text style={styles.inputLabel}>종료일</Text>
-                          <View style={styles.dateInputBox}>
-                            <TextInput
-                              style={styles.dateTextInput}
-                              placeholder="YYYY-MM-DD"
-                              placeholderTextColor="#666"
-                              value={t.editEnd}
-                              onChangeText={(text) => {
-                                const numeric = text.replace(/[^0-9]/g, '');
-                                let formatted = numeric;
-                                if (numeric.length > 4 && numeric.length <= 6) formatted = `${numeric.slice(0,4)}-${numeric.slice(4)}`;
-                                else if (numeric.length > 6)                   formatted = `${numeric.slice(0,4)}-${numeric.slice(4,6)}-${numeric.slice(6,8)}`;
-                                t.setEditEnd(formatted);
-                              }}
-                              keyboardType="numeric"
-                              maxLength={10}
-                            />
-                            <TouchableOpacity onPress={() => t.setEndCalendarVisible(true)} style={styles.calendarIconBtn}>
-                              <Image source={require('../assets/DATE.png')} style={styles.dateIcon} />
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      ) : (
-                        <View style={styles.dateBlock}>
-                          <Text style={styles.inputLabel}>횟수 (비우면 1회)</Text>
-                          <TextInput
-                            style={styles.amountInput}
-                            placeholder="기본 1회"
-                            placeholderTextColor="#666"
-                            keyboardType="numeric"
-                            value={t.addValue}
-                            onChangeText={t.setAddValue}
-                          />
-                        </View>
-                      )}
+                      {/* 개월 수 or 횟수 입력 */}
+                      <View style={styles.dateBlock}>
+                        <Text style={styles.inputLabel}>
+                          {t.editType === 'PERIOD' ? '개월 수 (기본 1개월)' : '횟수 (기본 1회)'}
+                        </Text>
+                        <TextInput
+                          style={styles.amountInput}
+                          placeholder={t.editType === 'PERIOD' ? "기본 1개월" : "기본 1회"}
+                          placeholderTextColor="#666"
+                          keyboardType="numeric"
+                          value={t.addValue}
+                          onChangeText={t.setAddValue}
+                        />
+                      </View>
                     </View>
+
+                    <View style={styles.dateHelperRow}>
+                      {t.editStart && t.editStart !== getToday() ? (
+                        <TouchableOpacity onPress={() => t.setEditStart('')}>
+                          <Text style={styles.resetDateText}>↺ 오늘로 초기화</Text>
+                        </TouchableOpacity>
+                      ) : <View />}
+
+                      {t.editType === 'PERIOD' && t.editEnd ? (
+                        <Text style={styles.autoEndDateText}>※ 예상 종료일: {t.editEnd}</Text>
+                      ) : <View />}
+                    </View>
+
+                    {/* 💡 [안전장치] 폼 내부에 에러 텍스트 직접 표시 */}
+                    {t.formError ? <Text style={styles.formErrorText}>{t.formError}</Text> : null}
 
                     <TouchableOpacity style={styles.submitBtn} onPress={t.handleGrantTicket}>
                       <Text style={styles.submitBtnText}>등록 완료</Text>
@@ -445,46 +419,30 @@ const ManagerTicket = ({ navigation }: any) => {
               </ScrollView>
             </Animated.View>
           </KeyboardAvoidingView>
+
+          {/* 💡 [iOS 중첩 방지] 모달 내부 달력 오버레이 렌더링 */}
+          {t.isStartCalendarVisible && (
+            <View style={[StyleSheet.absoluteFill, styles.calendarOverlay, { zIndex: 1000, elevation: 10 }]}>
+              <View style={styles.calendarBox}>
+                <Text style={styles.calendarTitle}>시작일 선택</Text>
+                <Calendar
+                  current={t.editStart || getToday()}
+                  onDayPress={(day: any) => { 
+                    t.setEditStart(day.dateString); 
+                    t.closeStartCalendar(); 
+                  }}
+                  theme={calendarTheme}
+                  markedDates={{ [t.editStart || getToday()]: { selected: true, selectedColor: '#A1BE44' } }}
+                />
+                <TouchableOpacity style={styles.calendarCloseBtn} onPress={t.closeStartCalendar}>
+                  <Text style={styles.calendarCloseText}>닫기</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
         </View>
       </Modal>
-
-      {/* ─── 시작일 달력 ───────────────────────────────────────────────────── */}
-      <Modal visible={t.isStartCalendarVisible} animationType="fade" transparent>
-        <View style={styles.calendarOverlay}>
-          <View style={styles.calendarBox}>
-            <Text style={styles.calendarTitle}>시작일 선택</Text>
-            <Calendar
-              current={t.editStart || getToday()}
-              onDayPress={(day: any) => { t.setEditStart(day.dateString); t.setStartCalendarVisible(false); }}
-              theme={calendarTheme}
-              markedDates={{ [t.editStart || getToday()]: { selected: true, selectedColor: '#A1BE44' } }}
-            />
-            <TouchableOpacity style={styles.calendarCloseBtn} onPress={() => t.setStartCalendarVisible(false)}>
-              <Text style={styles.calendarCloseText}>닫기</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ─── 종료일 달력 ───────────────────────────────────────────────────── */}
-      <Modal visible={t.isEndCalendarVisible} animationType="fade" transparent>
-        <View style={styles.calendarOverlay}>
-          <View style={styles.calendarBox}>
-            <Text style={styles.calendarTitle}>종료일 선택</Text>
-            <Calendar
-              current={t.editEnd || t.editStart || getToday()}
-              minDate={t.editStart || getToday()}
-              onDayPress={(day: any) => { t.setEditEnd(day.dateString); t.setEndCalendarVisible(false); }}
-              theme={calendarTheme}
-              markedDates={{ [t.editEnd]: { selected: true, selectedColor: '#A1BE44' } }}
-            />
-            <TouchableOpacity style={styles.calendarCloseBtn} onPress={() => t.setEndCalendarVisible(false)}>
-              <Text style={styles.calendarCloseText}>닫기</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
     </SafeAreaView>
   );
 };
@@ -557,21 +515,28 @@ const styles = StyleSheet.create({
   typeBtnText:    { color: '#999', fontWeight: 'bold', fontSize: 16 },
   typeBtnTextActive: { color: '#A1BE44' },
 
-  horizontalDateRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
+  horizontalDateRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   dateBlock:    { flex: 1 },
   dateSpacer:   { width: 15 },
   inputLabel:   { color: '#fff', fontSize: 17, fontWeight: 'bold', marginBottom: 10, marginLeft: 2 },
 
-  dateInputBox:    { height: 55, backgroundColor: '#000', borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 12, paddingRight: 5, borderWidth: 1, borderColor: '#333' },
-  dateTextInput:   { flex: 1, color: '#fff', fontSize: 17, padding: 0 },
-  calendarIconBtn: { padding: 8 },
-  dateIcon:        { width: 22, height: 22, tintColor: '#A1BE44' },
+  dateInputBox:          { height: 55, backgroundColor: '#000', borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 12, paddingRight: 5, borderWidth: 1, borderColor: '#333' },
+  dateTextInput:         { flex: 1, color: '#fff', fontSize: 17, padding: 0 },
+  pickerTextActive:      { color: '#fff', fontSize: 17 },
+  pickerTextPlaceholder: { color: '#666', fontSize: 17 },
+  calendarIconBtn:       { padding: 8 },
+  dateIcon:              { width: 22, height: 22, tintColor: '#A1BE44' },
 
-  resetDateBtn: { marginTop: 6, alignSelf: 'flex-start' },
-  resetDateText:{ color: '#A1BE44', fontSize: 13 },
   amountInput:  { height: 55, backgroundColor: '#000', borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#333', color: '#fff', fontSize: 17 },
 
-  submitBtn:     { backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 18, alignItems: 'center', marginTop: 10 },
+  dateHelperRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, paddingHorizontal: 5 },
+  resetDateText:   { color: '#A1BE44', fontSize: 14, fontWeight: 'bold' },
+  autoEndDateText: { color: '#A1BE44', fontSize: 14, fontWeight: 'bold' },
+
+  // 💡 빨간색 폼 에러 텍스트 스타일
+  formErrorText: { color: '#FF4D4D', fontSize: 14, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
+
+  submitBtn:     { backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 18, alignItems: 'center', marginTop: 5 },
   submitBtnText: { color: '#000', fontSize: 18, fontWeight: 'bold' },
 
   calendarOverlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
