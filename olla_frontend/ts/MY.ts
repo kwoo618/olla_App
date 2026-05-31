@@ -9,10 +9,9 @@ import { API_BASE_URL } from '../src/constants/Config';
 // --- 유틸 함수 ---
 export const getFullImageUrl = (path: string) => {
   if (!path) return null;
-  // http, file, content 등 절대 경로는 그대로 반환 (로컬 갤러리 이미지 대응)
   if (path.startsWith('http') || path.startsWith('file:') || path.startsWith('content:')) return path;
-  const domain = API_BASE_URL.replace('/api/v1', '');
-  return `${domain}${path}`;
+  const formattedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${API_BASE_URL}${formattedPath}`;
 };
 
 const getTodayDate = () => {
@@ -294,33 +293,50 @@ export const useMyPage = (navigation: any) => {
       const userToken = await AsyncStorage.getItem('userToken');
       let finalImageUrl = profileData.profileImageUrl;
 
+      // 1. 이미지 업로드 로직 (헤더에 multipart/form-data 추가)
       if (pendingImageAsset.current) {
         const asset = pendingImageAsset.current;
         const formData = new FormData();
-        formData.append('image', {
+        formData.append('file', { // 🚨 API 명세서 12번 참고: 파라미터명이 'image'가 아니라 'file'일 수 있습니다.
           uri: Platform.OS === 'ios' ? asset.uri?.replace('file://', '') : asset.uri,
           type: asset.type || 'image/jpeg',
           name: asset.fileName || `profile_${Date.now()}.jpg`,
         } as any);
 
-        const uploadRes = await axios.post(`${API_BASE_URL}/members/me/profile-image`, formData, { headers: { Authorization: `Bearer ${userToken}` }, timeout: 30000 });
-        finalImageUrl = uploadRes.data.data || uploadRes.data.profileImageUrl;
+        const uploadRes = await axios.post(`${API_BASE_URL}/members/me/profile-image`, formData, { 
+          headers: { 
+            Authorization: `Bearer ${userToken}`,
+            'Content-Type': 'multipart/form-data', // 필수 추가
+          }, 
+          timeout: 30000 
+        });
+        // 약속된 응답 포맷 대응
+        finalImageUrl = uploadRes.data.data.imageUrl || uploadRes.data.data.profileImageUrl; 
         pendingImageAsset.current = null;
       }
 
+      // 2. 프로필 정보 업데이트 로직
       const requestBody = {
-        name: profileData.name, phone: profileData.phone, gender: profileData.gender, birthDate: profileData.birthDate,
+        name: profileData.name, 
+        phone: profileData.phone, 
+        gender: profileData.gender, 
+        birthDate: profileData.birthDate,
         height: profileData.height ? parseFloat(profileData.height) : null,
         weight: profileData.weight ? parseFloat(profileData.weight) : null,
         armSpan: profileData.arm ? parseFloat(profileData.arm) : null,
         footSize: profileData.shoe ? parseFloat(profileData.shoe) : null,
-        isPublicPhone: profileToggles.showPhone, isHeightPublic: profileToggles.showHeight,
-        isWeightPublic: profileToggles.showWeight, isArmSpanPublic: profileToggles.showArm,
+        isPublicPhone: profileToggles.showPhone, 
+        isHeightPublic: profileToggles.showHeight,
+        isWeightPublic: profileToggles.showWeight, 
+        isArmSpanPublic: profileToggles.showArm,
         isFootSizePublic: profileToggles.showShoe,
         age: parseInt(calcAgeFromBirth(profileData.birthDate)) || 0,
       };
 
-      await axios.patch(`${API_BASE_URL}/members/me/info`, requestBody, { headers: { Authorization: `Bearer ${userToken}` } });
+      await axios.patch(`${API_BASE_URL}/members/me/info`, requestBody, { 
+        headers: { Authorization: `Bearer ${userToken}` } 
+      });
+      
       setProfileData((prev: any) => ({ ...prev, profileImageUrl: finalImageUrl }));
 
       closeProfileModal(() => {
@@ -329,7 +345,20 @@ export const useMyPage = (navigation: any) => {
       });
     } catch (e: any) {
       pendingImageAsset.current = null;
-      closeProfileModal(() => setTimeout(() => showResultModal('오류', '저장 실패', 'error'), 500));
+      
+      // 🚨 서버가 꺼져있거나 네트워크 통신 실패 시
+      if (!e.response) {
+        closeProfileModal(() => setTimeout(() => showResultModal('네트워크 오류', '서버와 통신할 수 없습니다.', 'error'), 500));
+        return;
+      }
+
+      // 디버깅을 위해 콘솔에 출력
+      console.log('프로필 저장 에러 상태코드:', e.response.status);
+      console.log('프로필 저장 에러 응답:', e.response.data);
+
+      // 백엔드의 에러 메시지를 모달에 띄움
+      const errorMessage = e.response.data.message || '저장에 실패했습니다.';
+      closeProfileModal(() => setTimeout(() => showResultModal('저장 실패', `에러코드: ${e.response.status}\n${errorMessage}`, 'error'), 500));
     } finally {
       setIsImageUploading(false);
     }
