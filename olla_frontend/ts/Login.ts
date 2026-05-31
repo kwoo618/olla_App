@@ -156,10 +156,8 @@ export const useLogin = (navigation: any) => {
       if (error.response) {
         // 1. 서버에 도달했고, 서버가 에러 코드를 뱉은 경우 (401, 404, 500 등)
         const status = error.response.status;
-        const serverMessage = error.response.data?.message || '상세 메시지 없음';
-        
-        modalTitle = `서버 응답 에러 (${status})`;
-        debugMessage = `상태 코드: ${status}\n서버 메시지: ${serverMessage}`;
+        const serverMessage = error.response.data?.message || '\n가입된 아이디가 없습니다';
+        debugMessage = `${serverMessage}`;
         
       } else if (error.request) {
         // 2. 서버에 아예 도달하지 못했거나 응답이 없는 경우 (Network Error, CORS 등)
