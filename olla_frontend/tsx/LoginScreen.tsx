@@ -52,11 +52,8 @@ const LoginScreen = ({ navigation }: any) => {
         scrollEnabled={focusedField !== null}
         resetScrollToCoords={{ x: 0, y: 0 }}
       >
-        <TouchableOpacity 
-          style={styles.touchableWrapper} 
-          activeOpacity={1} 
-          onPress={() => { Keyboard.dismiss(); handleBlur(); }}
-        >
+        {/* 🚨 TouchableOpacity를 View로 수정하여 터치 가로채기 방지 🚨 */}
+        <View style={styles.touchableWrapper}>
           <View style={styles.innerContainer}>
             <Image source={require('../assets/olla_logo_white.png')} style={styles.logo} />
 
@@ -116,7 +113,7 @@ const LoginScreen = ({ navigation }: any) => {
             </View>
           </View>
           <View style={{ height: 50 }} />
-        </TouchableOpacity>
+        </View>
       </KeyboardAwareScrollView>
 
       {/* ─── 커스텀 알림 결과 모달 ─── */}

@@ -149,28 +149,11 @@ const AdminNotificationScreen = ({ navigation }: any) => {
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
   center: { justifyContent: 'center', alignItems: 'center' },
-
   topNav: { backgroundColor: '#1A1A1A', borderBottomWidth: 0.5, borderBottomColor: '#2A2A2A' },
-  topNavInner: {
-    height: 50,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    position: 'relative',
-  },
+  topNavInner: { height: 50, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, position: 'relative' },
   backBtn: { padding: 5, zIndex: 10 },
   backBtnText: { color: '#ffffff', fontSize: 28 },
-  headerTitle: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    textAlign: 'center',
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: 'bold',
-    zIndex: 1,
-  },
-
+  headerTitle: { position: 'absolute', left: 0, right: 0, textAlign: 'center', color: '#ffffff', fontSize: 20, fontWeight: 'bold', zIndex: 1 },
   listContent: { padding: 20, paddingBottom: 30 },
   emptyText: { color: '#999999', textAlign: 'center', marginTop: 50, fontSize: 16 },
 
@@ -193,36 +176,16 @@ const styles = StyleSheet.create({
   expiringHeaderText: { flex: 1 },
   expiringTitle: { color: '#F5C842', fontSize: 15, fontWeight: 'bold', marginBottom: 2 },
   expiringSubTitle: { color: '#999999', fontSize: 12 },
-  expiringRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-  },
-  expiringRowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#333333',
-  },
+  expiringRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 13 },
+  expiringRowBorder: { borderBottomWidth: 1, borderBottomColor: '#333333' },
   expiringRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   urgentDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#FF4D4D', marginRight: 5 },
   expiringName: { color: '#ffffff', fontSize: 15, fontWeight: '600', marginBottom: 2 },
   expiringPhone: { color: '#999999', fontSize: 12 },
   expiringDate: { color: '#999999', fontSize: 12, marginBottom: 4 },
-  ddayBadge: {
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 8,
-    minWidth: 52,
-    alignItems: 'center',
-  },
+  ddayBadge: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, minWidth: 52, alignItems: 'center' },
   ddayText: { fontSize: 13, fontWeight: 'bold' },
-  urgentBadge: {
-    backgroundColor: 'rgba(255,77,77,0.15)',
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
+  urgentBadge: { backgroundColor: 'rgba(255,77,77,0.15)', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
   urgentBadgeText: { color: '#FF4D4D', fontSize: 11, fontWeight: 'bold' },
 
   noticeWrapper: {
@@ -243,15 +206,8 @@ const styles = StyleSheet.create({
   noticeTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', flex: 1 },
   noticeDate: { color: '#999999', fontSize: 14 },
   expandIcon: { color: '#999999', fontSize: 18, marginLeft: 10, fontWeight: 'bold' },
-  noticeContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#333333',
-    paddingTop: 15,
-  },
+  noticeContent: { paddingHorizontal: 20, paddingBottom: 20, borderTopWidth: 1, borderTopColor: '#333333', paddingTop: 15 },
   noticeContentText: { color: '#CCCCCC', fontSize: 16, lineHeight: 24 },
-
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
   resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 },

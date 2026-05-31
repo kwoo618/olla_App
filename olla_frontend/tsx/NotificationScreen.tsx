@@ -1,6 +1,15 @@
+
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Modal, RefreshControl } from 'react-native';
 import { useNotification, NotificationItem } from '../ts/Notifications'; 
+
+// 💡 TS7006 해결: myMemberships 배열 안의 객체(m)에 대한 타입 정의
+interface MembershipType {
+  id: string | number;
+  name: string;
+  endDate: string;
+  dDay: number;
+}
 
 const NotificationScreen = ({ navigation }: any) => {
   const {
@@ -31,7 +40,8 @@ const NotificationScreen = ({ navigation }: any) => {
           </View>
         </View>
         
-        {myMemberships.map((m) => {
+        // 💡 여기에 MembershipType을 명시하여 TS7006 오류 해결
+        {myMemberships.map((m: MembershipType) => {
           const ddayColor = m.dDay <= 3 ? '#FF4D4D' : '#FF9800';
           const ddayLabel = m.dDay === 0 ? 'D-Day' : `D-${m.dDay}`;
           return (

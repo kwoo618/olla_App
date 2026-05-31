@@ -161,7 +161,9 @@ const ManagerDashboard = ({ navigation }: any) => {
             {[0, 0.5, 1].map((r, i) => (
               <View key={i} style={{ position: 'absolute', top: CHART_H * (1 - r), left: 0, right: 0, height: 1, backgroundColor: '#383838' }} />
             ))}
-            <View style={{ position: 'absolute', top: 0, left: 0, width: lineW, height: CHART_H }}>
+            
+            {/* 데이터 표시선 및 점 (점들이 잘리지 않도록 좌측 10px 만큼 offset) */}
+            <View style={{ position: 'absolute', top: 0, left: 10, width: lineW, height: CHART_H }}>
               {points.slice(0, -1).map((p, i) => {
                 const next  = points[i + 1];
                 const dx    = next.x - p.x;
