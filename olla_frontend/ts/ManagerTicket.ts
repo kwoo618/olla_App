@@ -160,7 +160,7 @@ export const useManagerTicket = (navigation: any) => {
     setConfirmModalVisible(true);
   }, []);
 
-  // ─── 관리 바텀시트 ─────────────────────────────────────────────────────────
+  // 관리 바텀시트
   const [isManageVisible, setManageVisible]         = useState(false);
   const [selectedManageItem, setSelectedManageItem] = useState<any>(null);
 

@@ -1,64 +1,175 @@
-// 동료가 파일을 줄 때까지 사용하는 임시 데이터 파일입니다.
+import { useState, useEffect, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
+import { API_BASE_URL } from '../src/constants/Config';
 
 export interface NotificationItem {
-  id: string | number;
+  id: number;
   title: string;
   content: string;
+  createdAt: string;
   isRead?: boolean;
   read?: boolean;
   important?: boolean;
-  createdAt?: string;
 }
 
-export interface MembershipType {
-  id: string | number;
+export interface MyMembership {
+  id: number;
   name: string;
   endDate: string;
   dDay: number;
-}
-
-// 💡 추가됨: 모달 설정의 타입을 정의하여 onConfirm 에러(TS2339) 해결
-export interface ResultModalConfigType {
-  title: string;
-  message: string;
-  type: string;
-  onConfirm?: () => void; // onConfirm 함수가 있을 수도, 없을 수도 있음을 명시
+  status: string;
 }
 
 export const useNotification = (navigation: any) => {
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   
-  const notifications: NotificationItem[] = [
-    {
-      id: '1',
-      title: '임시 알림입니다.',
-      content: '동료분이 ts 파일을 올려주시면 진짜 데이터로 바뀝니다.',
-      isRead: false,
-      important: true,
-      createdAt: '2026-05-30T10:00:00'
-    }
-  ];
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  
+  const [myMemberships, setMyMemberships] = useState<MyMembership[]>([]);
+  const [membershipLoading, setMembershipLoading] = useState(true);
 
-  const myMemberships: MembershipType[] = [
-    {
-      id: 'm1',
-      name: '임시 자유 이용권',
-      endDate: '2026-06-05',
-      dDay: 2
+  // --- 결과 모달 상태 ---
+  const [resultModalVisible, setResultModalVisible] = useState(false);
+  const [resultModalConfig, setResultModalConfig] = useState({ 
+    title: '', 
+    message: '', 
+    type: 'info' as 'info' | 'success' | 'error', 
+    onConfirm: () => {} 
+  });
+
+  const showResultModal = useCallback((
+    title: string, 
+    message: string, 
+    type: 'info' | 'success' | 'error' = 'info', 
+    onConfirm: () => void = () => {}
+  ) => {
+    setResultModalConfig({ title, message, type, onConfirm });
+    setResultModalVisible(true);
+  }, []);
+
+  const getAuthHeader = async () => {
+    const token = await AsyncStorage.getItem('userToken');
+    if (!token) throw new Error('NO_TOKEN');
+    return { Authorization: `Bearer ${token}` };
+  };
+
+  // --- 내 회원권(만료 임박) 조회 ---
+  const fetchMyMemberships = useCallback(async () => {
+    try {
+      const headers = await getAuthHeader();
+      const response = await axios.get(`${API_BASE_URL}/memberships/my`, { headers });
+
+      const data = response.data?.data ?? response.data ?? {};
+      const list: any[] = Array.isArray(data) ? data : data.content ?? data.memberships ?? [];
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const expiring: MyMembership[] = list
+        .map((m: any) => {
+          const endDate = m.endDate ?? m.end_date ?? null;
+          if (!endDate) return null;
+          
+          const end = new Date(endDate);
+          end.setHours(0, 0, 0, 0);
+          const diffMs = end.getTime() - today.getTime();
+          const dDay = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+          
+          return {
+            id: m.id ?? 0,
+            name: m.name ?? m.membershipName ?? m.type ?? '이용권',
+            endDate,
+            dDay,
+            status: m.status ?? 'ACTIVE',
+          };
+        })
+        .filter((m): m is MyMembership => m !== null && m.dDay >= 0 && m.dDay <= 7 && m.status === 'ACTIVE');
+
+      setMyMemberships(expiring);
+    } catch (error: any) {
+      if (error.message === 'NO_TOKEN') return;
+      console.log('회원권 조회 실패:', error);
+    } finally {
+      setMembershipLoading(false);
     }
-  ];
+  }, []);
+
+  // --- 알림 목록 조회 ---
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const headers = await getAuthHeader();
+      const response = await axios.get(`${API_BASE_URL}/notifications?page=0&size=50`, { headers });
+
+      let list: NotificationItem[] = [];
+      if (response.data) {
+        const dataObj = response.data.data || response.data;
+        list = dataObj.content || dataObj.data?.content || dataObj.data || dataObj;
+        if (!Array.isArray(list)) list = [];
+      }
+
+      setNotifications(list);
+    } catch (error: any) {
+      if (error.message === 'NO_TOKEN') {
+        showResultModal('인증 오류', '로그인 정보가 없습니다.', 'error', () => navigation.navigate('Login'));
+        return;
+      }
+      const errorMessage = error.response?.data?.message || '네트워크 연결을 확인해주세요.';
+      showResultModal('오류', errorMessage, 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [navigation, showResultModal]);
+
+  // --- 초기 로드 ---
+  useEffect(() => {
+    fetchNotifications();
+    fetchMyMemberships();
+  }, [fetchNotifications, fetchMyMemberships]);
+
+  // --- 당겨서 새로고침 ---
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([fetchNotifications(), fetchMyMemberships()]);
+    setRefreshing(false);
+  }, [fetchNotifications, fetchMyMemberships]);
+
+  // --- 알림 펼치기 & 읽음 처리 ---
+  const toggleExpandAndRead = useCallback(async (item: NotificationItem) => {
+    if (!item || !item.id) return;
+    
+    const isCurrentlyExpanded = expandedId === item.id;
+    setExpandedId(isCurrentlyExpanded ? null : item.id);
+
+    const isItemRead = item.isRead === true || item.read === true;
+    
+    if (!isCurrentlyExpanded && !isItemRead) {
+      try {
+        const headers = await getAuthHeader();
+        await axios.patch(`${API_BASE_URL}/notifications/${item.id}/read`, {}, { headers });
+        
+        setNotifications(prev =>
+          prev.map(noti => noti.id === item.id ? { ...noti, isRead: true, read: true } : noti)
+        );
+      } catch (error) {
+        console.log('읽음 처리 실패:', error);
+      }
+    }
+  }, [expandedId]);
 
   return {
-    loading: false,
-    refreshing: false,
+    loading,
+    refreshing,
     notifications,
     myMemberships,
-    membershipLoading: false,
-    expandedId: null as string | number | null,
-    toggleExpandAndRead: (item: NotificationItem) => console.log('알림 클릭됨', item),
-    onRefresh: () => console.log('새로고침 됨'),
-    resultModalVisible: false,
-    setResultModalVisible: (val: boolean) => {},
-    // 💡 수정됨: resultModalConfig가 ResultModalConfigType을 따르도록 지정
-    resultModalConfig: { title: '', message: '', type: 'info' } as ResultModalConfigType,
+    membershipLoading,
+    expandedId,
+    toggleExpandAndRead,
+    onRefresh,
+    resultModalVisible,
+    setResultModalVisible,
+    resultModalConfig,
   };
 };
