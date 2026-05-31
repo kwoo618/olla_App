@@ -5,22 +5,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../src/constants/Config';
 
 export const usePersonal = (navigation: any, route: any) => {
-  // 이전 화면에서 넘겨받은 가입 기본 정보 (id, password, name, phone 등)
   const { accountData } = route.params || {};
 
-  // --- 입력 상태 관리 ---
   const [height, setHeight] = useState('');
   const [weight, setWeight] = useState('');
   const [armSpan, setArmSpan] = useState('');
   const [footSize, setFootSize] = useState('');
 
-  // --- 토글(공개/비공개) 상태 관리 ---
   const [isHeightPublic, setIsHeightPublic] = useState(true);
   const [isWeightPublic, setIsWeightPublic] = useState(true);
   const [isArmPublic, setIsArmPublic] = useState(true);
   const [isFootPublic, setIsFootPublic] = useState(true);
 
-  // --- 모달 상태 관리 ---
+  // ✅ 로딩 상태 추가 (통신 중 버튼 중복 클릭 방지)
+  const [isLoading, setIsLoading] = useState(false);
+
   const [resultModalVisible, setResultModalVisible] = useState(false);
   const [resultModalConfig, setResultModalConfig] = useState({ 
     title: '', 
@@ -42,15 +41,18 @@ export const usePersonal = (navigation: any, route: any) => {
     }
   };
 
-  // --- 회원가입 및 자동 로그인 실행 ---
   const handleFinalSignup = async () => {
+    // 🚨 1단계 확인: 버튼이 제대로 눌렸는지 콘솔창(Terminal)에서 확인하세요!
+    console.log("✅ 버튼 클릭됨! accountData 확인:", accountData);
+
     if (!accountData) {
-      showResultModal('오류', '계정 정보가 유실되었습니다. 다시 가입해주세요.', 'error', () => navigation.goBack());
+      showResultModal('오류', '계정 정보가 유실되었습니다. 이전 단계로 돌아갑니다.', 'error', () => navigation.goBack());
       return;
     }
 
+    setIsLoading(true); // 로딩 시작
+
     try {
-      // 1. 최종 회원가입 요청
       const requestBody = {
         ...accountData,
         role: 'USER',
@@ -62,7 +64,6 @@ export const usePersonal = (navigation: any, route: any) => {
           footSize: footSize ? parseFloat(footSize) : null
         },
         privacy: {
-          // 백엔드 파싱 오류 방지를 위한 듀얼 매핑
           isPhonePublic: true, phonePublic: true,
           isEmailPublic: true, emailPublic: true,
           isHeightPublic: isHeightPublic, heightPublic: isHeightPublic,
@@ -72,16 +73,18 @@ export const usePersonal = (navigation: any, route: any) => {
         }
       };
 
-      await axios.post(`${API_BASE_URL}/auth/signup`, requestBody);
+      console.log("🚀 백엔드 요청 주소:", `${API_BASE_URL}/auth/signup`);
 
-      // 2. 가입 성공 시 자동 로그인 시도
+      // 🚨 Axios 타임아웃 5초 설정 (무한 멈춤 방지)
+      await axios.post(`${API_BASE_URL}/auth/signup`, requestBody, { timeout: 5000 });
+
+      // 자동 로그인 시도
       try {
         const loginResponse = await axios.post(`${API_BASE_URL}/auth/login`, {
           loginId: accountData.loginId,
           password: accountData.password
-        });
+        }, { timeout: 5000 });
 
-        // 명세서에 따른 공통 데이터 뎁스 확인
         const accessToken = loginResponse.data?.data?.accessToken || loginResponse.data?.accessToken;
         const refreshToken = loginResponse.data?.data?.refreshToken || loginResponse.data?.refreshToken;
         const role = loginResponse.data?.data?.role || loginResponse.data?.role;
@@ -92,34 +95,34 @@ export const usePersonal = (navigation: any, route: any) => {
           if (role) await AsyncStorage.setItem('userRole', role);
         }
       } catch (loginError: any) {
-        console.error("자동 로그인 에러:", loginError.response?.data?.message || loginError.message);
-        // 자동 로그인 실패 시 로그인 화면으로 유도할 수도 있으나 기존 플로우 유지 (Loading 화면으로 이동)
+        console.error("자동 로그인 에러:", loginError.message);
       }
 
-      // 3. 로딩(환영) 화면으로 이동
       navigation.replace('Loading', { type: 'signup' });
       
     } catch (error: any) {
-      // 🚨 디버깅을 위해 에러 상세 출력
+      console.error("❌ 통신 에러 발생:", error); // 터미널에 상세 에러 출력
       let modalTitle = '가입 실패';
       let debugMessage = '';
 
       if (error.response) {
-        const status = error.response.status;
-        const serverMessage = error.response.data?.message || '상세 메시지 없음';
-        modalTitle = `서버 응답 에러 (${status})`;
-        debugMessage = `상태 코드: ${status}\n서버 메시지: ${serverMessage}`;
+        modalTitle = `서버 응답 에러 (${error.response.status})`;
+        debugMessage = error.response.data?.message || '상세 메시지 없음';
+      } else if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        // ✅ 타임아웃 에러 잡기
+        modalTitle = '서버 응답 지연';
+        debugMessage = '서버와 연결할 수 없습니다.\n(API 주소 또는 서버 실행 상태를 확인하세요)';
       } else if (error.request) {
-        modalTitle = '네트워크/연결 오류';
-        const rawMessage = error.message;
-        const targetUrl = error.config?.url || 'URL 알 수 없음';
-        debugMessage = `에러 원인: ${rawMessage}\n\n[요청 주소]\n${targetUrl}\n\n(※ http 통신 차단 또는 서버 다운 확인)`;
+        modalTitle = '네트워크 오류';
+        debugMessage = '서버에 요청을 보냈으나 응답이 없습니다.\n(인터넷 연결 또는 서버 다운)';
       } else {
         modalTitle = '요청 셋팅 오류';
         debugMessage = error.message;
       }
 
       showResultModal(modalTitle, debugMessage, 'error');
+    } finally {
+      setIsLoading(false); // 통신 종료 후 로딩 해제
     }
   };
 
@@ -133,6 +136,7 @@ export const usePersonal = (navigation: any, route: any) => {
     isArmPublic, setIsArmPublic,
     isFootPublic, setIsFootPublic,
     resultModalVisible, resultModalConfig, closeResultModal,
-    handleFinalSignup
+    handleFinalSignup,
+    isLoading // 로딩 상태 반환 추가
   };
 };

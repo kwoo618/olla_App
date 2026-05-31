@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Modal, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Modal } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { usePersonal } from '../ts/Personal';
 
@@ -34,7 +34,9 @@ const PersonalScreen = ({ navigation, route }: any) => {
 
   return (
     <>
-      {/* ✅ 통합된 KeyboardAwareScrollView 적용 */}
+      {/* ✅ 통합된 KeyboardAwareScrollView 적용 
+          전체를 감싸던 TouchableOpacity를 제거했습니다. 
+          keyboardShouldPersistTaps="handled" 속성이 화면 빈 공간 클릭 시 키보드를 닫아주는 역할을 대신합니다. */}
       <KeyboardAwareScrollView 
         style={styles.background} 
         contentContainerStyle={styles.container}
@@ -44,80 +46,78 @@ const PersonalScreen = ({ navigation, route }: any) => {
         showsVerticalScrollIndicator={false}
         bounces={false}
       >
-        <TouchableOpacity style={{ flex: 1, width: '100%' }} activeOpacity={1} onPress={Keyboard.dismiss}>
-          <Text style={styles.title}>개인정보</Text>
+        <Text style={styles.title}>개인정보</Text>
 
-          <View style={styles.inputHeader}>
-            <Text style={styles.middleText}>키(선택)</Text>
-            <CustomSwitch isOn={isHeightPublic} onToggle={() => setIsHeightPublic(!isHeightPublic)} />
-          </View>
-          <View style={styles.inputWrapper}>
-            <TextInput 
-              style={styles.inputText} 
-              placeholder="키를 입력하세요" 
-              placeholderTextColor="#ffffff80" 
-              value={height} 
-              onChangeText={setHeight} 
-              keyboardType="numeric" 
-            />
-            <Text style={styles.unitText}>cm</Text>
-          </View>
+        <View style={styles.inputHeader}>
+          <Text style={styles.middleText}>키(선택)</Text>
+          <CustomSwitch isOn={isHeightPublic} onToggle={() => setIsHeightPublic(!isHeightPublic)} />
+        </View>
+        <View style={styles.inputWrapper}>
+          <TextInput 
+            style={styles.inputText} 
+            placeholder="키를 입력하세요" 
+            placeholderTextColor="#ffffff80" 
+            value={height} 
+            onChangeText={setHeight} 
+            keyboardType="numeric" 
+          />
+          <Text style={styles.unitText}>cm</Text>
+        </View>
 
-          <View style={styles.inputHeader}>
-            <Text style={styles.middleText}>몸무게(선택)</Text>
-            <CustomSwitch isOn={isWeightPublic} onToggle={() => setIsWeightPublic(!isWeightPublic)} />
-          </View>
-          <View style={styles.inputWrapper}>
-            <TextInput 
-              style={styles.inputText} 
-              placeholder="몸무게를 입력하세요" 
-              placeholderTextColor="#ffffff80" 
-              value={weight} 
-              onChangeText={setWeight} 
-              keyboardType="numeric" 
-            />
-            <Text style={styles.unitText}>kg</Text>
-          </View>
+        <View style={styles.inputHeader}>
+          <Text style={styles.middleText}>몸무게(선택)</Text>
+          <CustomSwitch isOn={isWeightPublic} onToggle={() => setIsWeightPublic(!isWeightPublic)} />
+        </View>
+        <View style={styles.inputWrapper}>
+          <TextInput 
+            style={styles.inputText} 
+            placeholder="몸무게를 입력하세요" 
+            placeholderTextColor="#ffffff80" 
+            value={weight} 
+            onChangeText={setWeight} 
+            keyboardType="numeric" 
+          />
+          <Text style={styles.unitText}>kg</Text>
+        </View>
 
-          <View style={styles.inputHeader}>
-            <Text style={styles.middleText}>팔길이/윙스팬(선택)</Text>
-            <CustomSwitch isOn={isArmPublic} onToggle={() => setIsArmPublic(!isArmPublic)} />
-          </View>
-          <View style={styles.inputWrapper}>
-            <TextInput 
-              style={styles.inputText} 
-              placeholder="팔길이를 입력하세요" 
-              placeholderTextColor="#ffffff80" 
-              value={armSpan} 
-              onChangeText={setArmSpan} 
-              keyboardType="numeric" 
-            />
-            <Text style={styles.unitText}>cm</Text>
-          </View>
+        <View style={styles.inputHeader}>
+          <Text style={styles.middleText}>팔길이/윙스팬(선택)</Text>
+          <CustomSwitch isOn={isArmPublic} onToggle={() => setIsArmPublic(!isArmPublic)} />
+        </View>
+        <View style={styles.inputWrapper}>
+          <TextInput 
+            style={styles.inputText} 
+            placeholder="팔길이를 입력하세요" 
+            placeholderTextColor="#ffffff80" 
+            value={armSpan} 
+            onChangeText={setArmSpan} 
+            keyboardType="numeric" 
+          />
+          <Text style={styles.unitText}>cm</Text>
+        </View>
 
-          <View style={styles.inputHeader}>
-            <Text style={styles.middleText}>발 사이즈(선택)</Text>
-            <CustomSwitch isOn={isFootPublic} onToggle={() => setIsFootPublic(!isFootPublic)} />
-          </View>
-          <View style={styles.inputWrapper}>
-            <TextInput 
-              style={styles.inputText} 
-              placeholder="발 사이즈를 입력하세요" 
-              placeholderTextColor="#ffffff80" 
-              value={footSize} 
-              onChangeText={setFootSize} 
-              keyboardType="numeric" 
-            />
-            <Text style={styles.unitText}>mm</Text>
-          </View>
+        <View style={styles.inputHeader}>
+          <Text style={styles.middleText}>발 사이즈(선택)</Text>
+          <CustomSwitch isOn={isFootPublic} onToggle={() => setIsFootPublic(!isFootPublic)} />
+        </View>
+        <View style={styles.inputWrapper}>
+          <TextInput 
+            style={styles.inputText} 
+            placeholder="발 사이즈를 입력하세요" 
+            placeholderTextColor="#ffffff80" 
+            value={footSize} 
+            onChangeText={setFootSize} 
+            keyboardType="numeric" 
+          />
+          <Text style={styles.unitText}>mm</Text>
+        </View>
 
-          <TouchableOpacity onPress={handleFinalSignup} style={styles.button}>
-            <Text style={styles.buttonText}>회원가입 완료</Text>
-          </TouchableOpacity>
+        <TouchableOpacity onPress={handleFinalSignup} style={styles.button}>
+          <Text style={styles.buttonText}>회원가입 완료</Text>
+        </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginTop: 20, alignItems: 'center' }}>
-            <Text style={styles.goBackText}>이전 단계로</Text>
-          </TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginTop: 20, alignItems: 'center' }}>
+          <Text style={styles.goBackText}>이전 단계로</Text>
         </TouchableOpacity>
       </KeyboardAwareScrollView>
 
@@ -163,4 +163,4 @@ const styles = StyleSheet.create({
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
 });
 
-export default PersonalScreen;
+export default PersonalScreen; 
