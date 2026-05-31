@@ -293,11 +293,14 @@ export const useMyPage = (navigation: any) => {
       const userToken = await AsyncStorage.getItem('userToken');
       let finalImageUrl = profileData.profileImageUrl;
 
-      // 1. 이미지 업로드 로직 (헤더에 multipart/form-data 추가)
+
+      // 1. 이미지 업로드 로직
       if (pendingImageAsset.current) {
         const asset = pendingImageAsset.current;
         const formData = new FormData();
-        formData.append('file', { // 🚨 API 명세서 12번 참고: 파라미터명이 'image'가 아니라 'file'일 수 있습니다.
+        
+        // 🚨 'file'로 바꿨던 부분을 다시 'image'로 원복합니다!
+        formData.append('image', { 
           uri: Platform.OS === 'ios' ? asset.uri?.replace('file://', '') : asset.uri,
           type: asset.type || 'image/jpeg',
           name: asset.fileName || `profile_${Date.now()}.jpg`,
@@ -306,11 +309,11 @@ export const useMyPage = (navigation: any) => {
         const uploadRes = await axios.post(`${API_BASE_URL}/members/me/profile-image`, formData, { 
           headers: { 
             Authorization: `Bearer ${userToken}`,
-            'Content-Type': 'multipart/form-data', // 필수 추가
+            'Content-Type': 'multipart/form-data', 
           }, 
           timeout: 30000 
         });
-        // 약속된 응답 포맷 대응
+        
         finalImageUrl = uploadRes.data.data.imageUrl || uploadRes.data.data.profileImageUrl; 
         pendingImageAsset.current = null;
       }
