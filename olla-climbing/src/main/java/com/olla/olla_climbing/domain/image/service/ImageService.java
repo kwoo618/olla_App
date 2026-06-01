@@ -16,7 +16,6 @@ public class ImageService {
     @Value("${file.upload-dir:./olla-uploads/}")
     private String uploadDir;
 
-    // 이유: 공지사항 등 이미지가 선택사항인 API에서 파일 없이 요청 시 500 에러 발생
     public String uploadImage(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             return null;
@@ -27,7 +26,10 @@ public class ImageService {
             return null;
         }
 
+        // [수정] getAbsoluteFile()로 절대경로 강제 변환
+        // 상대경로 사용 시 Tomcat 임시폴더로 저장되는 버그 방지
         File directory = new File(uploadDir).getAbsoluteFile();
+
         if (!directory.exists()) {
             directory.mkdirs();
         }
