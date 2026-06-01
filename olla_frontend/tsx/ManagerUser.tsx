@@ -130,7 +130,8 @@ const ManagerUser = ({ navigation }: any) => {
                 </TouchableOpacity>
               </View>
             </View>
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
+            {/* [수정 포인트] flex: 1 추가 및 paddingBottom 늘림 */}
+            <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }}>
               {selectedUser && (
                 <View style={styles.infoBox}>
                   <View style={styles.detailRow}><Text style={styles.detailLabel}>이름</Text><Text style={styles.detailValue}>{selectedUser.name}</Text></View>
@@ -173,7 +174,8 @@ const ManagerUser = ({ navigation }: any) => {
                   </TouchableOpacity>
                 </View>
               </View>
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }} keyboardShouldPersistTaps="handled">
+              {/* [수정 포인트] flex: 1 추가 및 paddingBottom 늘림 */}
+              <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>이름</Text>
                   <TextInput style={styles.inputField} placeholder="이름 입력" placeholderTextColor="#666" value={newName} onChangeText={setNewName} />
@@ -243,7 +245,8 @@ const ManagerUser = ({ navigation }: any) => {
                   </TouchableOpacity>
                 </View>
               </View>
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }} keyboardShouldPersistTaps="handled">
+              {/* [수정 포인트] flex: 1 추가 및 paddingBottom 늘림 */}
+              <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>제목</Text>
                   <TextInput style={styles.inputField} placeholder="제목 입력" placeholderTextColor="#666" value={alertTitle} onChangeText={setAlertTitle} />

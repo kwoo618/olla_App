@@ -142,7 +142,10 @@ const ManagerDashboard = ({ navigation }: any) => {
     const displayData = dash.hourlyData.slice(0, hourRange.length);
     const maxVal      = Math.max(...displayData, 1);
     const count       = displayData.length;
-    const lineW       = CARD_INNER_W - 30;
+    
+    // 차트 영역을 화면 안에 맞추기 위한 정확한 넓이 계산
+    const lineW       = CARD_INNER_W - 90; 
+    
     const points      = displayData.map((val, i) => ({
       x: count > 1 ? (i / (count - 1)) * lineW : 0,
       y: CHART_H - (val / maxVal) * CHART_H,
@@ -185,12 +188,21 @@ const ManagerDashboard = ({ navigation }: any) => {
                 }} />
               ))}
             </View>
-            <View style={{ position: 'absolute', top: CHART_H + 8, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between' }}>
-              {hourRange.map((hour, i) =>
-                (selectedDay === 6 || i % 2 === 0) ? (
-                  <Text key={i} style={styles.xAxisText}>{hour}시</Text>
-                ) : null,
-              )}
+            
+            {/* 시간대 모든 라벨 1시간 간격으로 출력 */}
+            <View style={{ position: 'absolute', top: CHART_H + 8, left: 10, width: lineW }}>
+              {hourRange.map((hour, i) => {
+                const pointX = count > 1 ? (i / (count - 1)) * lineW : 0;
+                
+                return (
+                  <Text 
+                    key={i} 
+                    style={[styles.xAxisText, { position: 'absolute', left: pointX - 15, width: 30, textAlign: 'center' }]}
+                  >
+                    {hour}시
+                  </Text>
+                );
+              })}
             </View>
           </View>
         </View>
@@ -487,7 +499,8 @@ const ManagerDashboard = ({ navigation }: any) => {
                 </TouchableOpacity>
               </View>
             </View>
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
+            {/* [수정] ScrollView에 flex: 1을 추가하여 남은 공간을 꽉 채우고, 버튼들이 잘리지 않도록 함 */}
+            <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }}>
               {dash.selectedUser && (
                 <View style={styles.detailContainer}>
                   <View style={styles.detailProfileWrapper}>
@@ -638,7 +651,10 @@ const styles = StyleSheet.create({
   chartTitle:     { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 2 },
   chartSubTitle:  { color: '#A1BE44', fontSize: 12, marginBottom: 5 },
   yAxisText:      { color: '#888888', fontSize: 10 },
-  xAxisText:      { color: '#888888', fontSize: 10 },
+  
+  // 폰트 사이즈를 9로 줄여 1시간 간격 표시 시 겹침 방지
+  xAxisText:      { color: '#888888', fontSize: 9 }, 
+  
   bar:            { borderRadius: 6 },
   barValText:     { color: '#cccccc', fontSize: 10, fontWeight: 'bold', marginBottom: 4 },
   barDayLabel:    { color: '#999999', fontSize: 11, textAlign: 'center' },
