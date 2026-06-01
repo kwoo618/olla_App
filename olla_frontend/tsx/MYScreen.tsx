@@ -192,7 +192,7 @@ const MYScreen = ({ navigation }: any) => {
         </TouchableOpacity>
         
         <TouchableOpacity style={styles.deleteAccountBtn} onPress={() => setDeleteModalVisible(true)}>
-          <Text style={styles.deleteAccountText}>회원탈퇴</Text>
+          <Text style={styles.deleteAccountText}>계정삭제</Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -327,7 +327,7 @@ const MYScreen = ({ navigation }: any) => {
       <Modal visible={isDeleteModalVisible} transparent animationType="fade" onRequestClose={() => setDeleteModalVisible(false)}>
         <View style={styles.centerModalOverlay}>
           <View style={styles.centerModalBox}>
-            <Text style={[styles.centerModalText, { textAlign: 'center' }]}>정말로 탈퇴하시겠습니까?{'\n'}모든 데이터가 삭제됩니다.</Text>
+            <Text style={[styles.centerModalText, { textAlign: 'center' }]}>정말로 삭제하시겠습니까?{'\n'}모든 데이터가 삭제됩니다.</Text>
             <View style={styles.centerBtnRow}>
               <TouchableOpacity style={[styles.centerBtnYes, { backgroundColor: '#FF4D4D' }]} onPress={executeDeleteAccount}><Text style={styles.centerBtnYesText}>탈퇴하기</Text></TouchableOpacity>
               <TouchableOpacity style={styles.centerBtnNo} onPress={() => setDeleteModalVisible(false)}><Text style={styles.centerBtnNoText}>취소</Text></TouchableOpacity>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { DeviceEventEmitter } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_BASE_URL } from '../src/constants/Config';
@@ -60,7 +61,7 @@ export const useNotification = (navigation: any) => {
   const fetchMyMemberships = useCallback(async () => {
     try {
       const headers = await getAuthHeader();
-      const response = await axios.get(`${API_BASE_URL}/memberships/my`, { headers });
+      const response = await axios.get(`${API_BASE_URL}/memberships/me`, { headers });
 
       const data = response.data?.data ?? response.data ?? {};
       const list: any[] = Array.isArray(data) ? data : data.content ?? data.memberships ?? [];
@@ -153,6 +154,8 @@ export const useNotification = (navigation: any) => {
         setNotifications(prev =>
           prev.map(noti => noti.id === item.id ? { ...noti, isRead: true, read: true } : noti)
         );
+        DeviceEventEmitter.emit('notificationRead');
+        
       } catch (error) {
         console.log('읽음 처리 실패:', error);
       }

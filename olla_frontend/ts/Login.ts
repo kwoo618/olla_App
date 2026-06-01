@@ -135,8 +135,9 @@ export const useLogin = (navigation: any) => {
 
           if (enabled) {
             const fcmToken = await messaging().getToken();
-            await axios.post(`${API_BASE_URL}/members/fcm-token`, 
-              { deviceToken: fcmToken }, 
+            
+            await axios.post(`${API_BASE_URL}/members/me/fcm-token`, 
+              { token: fcmToken }, 
               { headers: { Authorization: `Bearer ${token}` } }
             );
           }

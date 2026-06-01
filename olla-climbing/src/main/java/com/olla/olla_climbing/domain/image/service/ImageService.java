@@ -27,7 +27,7 @@ public class ImageService {
             return null;
         }
 
-        File directory = new File(uploadDir);
+        File directory = new File(uploadDir).getAbsoluteFile();
         if (!directory.exists()) {
             directory.mkdirs();
         }

@@ -5,13 +5,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { API_BASE_URL } from '../src/constants/Config';
+import messaging from '@react-native-firebase/messaging';
 
 // 이미지 절대경로 변환
 export const getFullImageUrl = (path: string) => {
   if (!path) return null;
   if (path.startsWith('http') || path.startsWith('file:') || path.startsWith('content:')) return path;
+  const domain = API_BASE_URL.replace('/api/v1', '');
   const formattedPath = path.startsWith('/') ? path : `/${path}`;
-  return `${API_BASE_URL}${formattedPath}`;
+  return `${domain}${formattedPath}`;
 };
 
 const getTodayDate = () => {
@@ -263,7 +265,6 @@ export const useMyPage = (navigation: any) => {
     setRefreshing(false);
   }, [fetchMyInfo, fetchNotiSettings]);
 
-
   // 알림 토글 백엔드 전송 (Spring Boot is 누락 방어)
   const handleNotiToggle = async (field: keyof NotiState) => {
     const currentValue = notiState[field];
@@ -407,11 +408,27 @@ export const useMyPage = (navigation: any) => {
     }
   };
 
-  // 로그아웃 (기기 토큰 파기)
+  // 로그아웃 (기기 토큰 파기 + FCM 토큰 서버 삭제)
   const executeLogout = async () => {
     try {
       const token = await AsyncStorage.getItem('userToken');
       const refreshToken = await AsyncStorage.getItem('refreshToken');
+
+      // FCM 토큰을 서버에서 삭제 (로그아웃 후 알림 수신 차단)
+      try {
+        const fcmToken = await messaging().getToken();
+        if (token && fcmToken) {
+          await axios.delete(`${API_BASE_URL}/members/me/fcm-token`, {
+            headers: { Authorization: `Bearer ${token}` },
+            data: { token: fcmToken },
+            timeout: 3000,
+          });
+        }
+      } catch (fcmError) {
+        // FCM 토큰 삭제 실패해도 로그아웃은 계속 진행
+        console.log('FCM 토큰 삭제 실패 (무시):', fcmError);
+      }
+
       if (token && refreshToken) {
         await axios.post(`${API_BASE_URL}/auth/logout`, { refreshToken }, { headers: { Authorization: `Bearer ${token}` }, timeout: 3000 });
       }

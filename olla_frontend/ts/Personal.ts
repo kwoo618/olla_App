@@ -17,7 +17,6 @@ export const usePersonal = (navigation: any, route: any) => {
   const [isArmPublic, setIsArmPublic] = useState(true);
   const [isFootPublic, setIsFootPublic] = useState(true);
 
-  // ✅ 로딩 상태 추가 (통신 중 버튼 중복 클릭 방지)
   const [isLoading, setIsLoading] = useState(false);
 
   const [resultModalVisible, setResultModalVisible] = useState(false);
