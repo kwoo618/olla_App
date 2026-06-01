@@ -168,8 +168,8 @@ export const useManagerUser = (navigation: any) => {
         headers: { Authorization: `Bearer ${token}` },
         params: { size: 1000, sort: 'id,desc' } 
       });
-      // 💡 [API 명세서 대응] response.data.data.content 로 접근
-      const raw = response.data?.data?.content || response.data?.data || [];
+      
+      const raw = response.data.data.content ||  [];
       setUsers(Array.isArray(raw) ? raw : []);
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || "목록 로드 실패";
@@ -314,8 +314,7 @@ export const useManagerUser = (navigation: any) => {
       Keyboard.dismiss();
       const token = await AsyncStorage.getItem('userToken');
       const response = await axios.get(`${PROFILE_API}/${memberId}/profile`, { headers: { Authorization: `Bearer ${token}` } });
-      // 💡 [API 명세서 대응] response.data.data 로 단건 조회 접근
-      const d = response.data?.data; 
+      const d = response.data.data; 
       if (!d) return;
       
       const rawGender = d.detail?.gender || d.gender;
@@ -348,7 +347,7 @@ export const useManagerUser = (navigation: any) => {
   const closeDetailModal = useCallback(() => {
     Animated.timing(detailHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => { 
       setDetailVisible(false); 
-      setSelectedUser(null); 
+      // setSelectedUser(null); 
     });
   }, [detailHeightAnim]);
 

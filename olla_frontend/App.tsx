@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, StatusBar, Modal, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, StatusBar, Modal, DeviceEventEmitter } from 'react-native';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -107,9 +107,8 @@ const AppContent = () => {
     const fetchUnreadNotifications = async () => {
       try {
         const userToken = await AsyncStorage.getItem('userToken');
-        if (!userToken || initialRoute !== 'Home') return; // 로그인 완료 전에 도는 것 방지
+        if (!userToken || initialRoute !== 'Home') return; 
 
-        // 관리자 모드냐 사용자 모드냐에 따라 엔드포인트 변경
         const endpoint = isAdminMode 
           ? `${API_BASE_URL}/admin/alerts?page=0&size=10`
           : `${API_BASE_URL}/notifications?page=0&size=10`;
@@ -121,26 +120,20 @@ const AppContent = () => {
         const dataObj = response.data?.data?.data || response.data?.data || response.data;
         const list = Array.isArray(dataObj) ? dataObj : (dataObj?.content || []);
 
-        // 안 읽은 알림 필터링
         const unreadItems = list.filter((item: any) => !(item.isRead === true || item.read === true));
 
         if (unreadItems.length > 0) {
           setHasUnreadNotification(true);
-          const latest = unreadItems[0]; // 가장 최근 안 읽은 알림
+          const latest = unreadItems[0]; 
 
-          // 아직 팝업으로 띄우지 않은 새 알림이라면 팝업 표시
           if (lastAlertId.current !== latest.id) {
             lastAlertId.current = latest.id;
-            Alert.alert(
-              '새로운 알림',
-              latest.title || '새로운 알림이 도착했습니다.'
-            );
           }
         } else {
           setHasUnreadNotification(false);
         }
       } catch (error) {
-        // 백그라운드 폴링 실패 시 무시 (토큰 만료 등은 메인 렌더링에서 처리됨)
+        // 무시
       }
     };
 
@@ -149,7 +142,15 @@ const AppContent = () => {
 
     // 30초마다 실행
     const intervalId = setInterval(fetchUnreadNotifications, 30000);
-    return () => clearInterval(intervalId);
+
+    // 이벤트 리스너 추가 - 알림 화면에서 '읽음' 처리를 했다는 방송이 오면 즉시 업데이트
+    const subscription = DeviceEventEmitter.addListener('notificationRead', () => {
+      fetchUnreadNotifications();
+    });
+    return () => {
+      clearInterval(intervalId);
+      subscription.remove(); // 컴포넌트 정리 시 리스너도 꼭 제거해 줍니다.
+    };
   }, [initialRoute, isAdminMode]); // 로그인 상태나 모드가 변경될 때 재시작
 
 

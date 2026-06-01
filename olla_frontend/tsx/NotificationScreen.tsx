@@ -33,7 +33,6 @@ const NotificationScreen = ({ navigation }: any) => {
     return (
       <View style={styles.expiringCard}>
         <View style={styles.expiringHeader}>
-          <Text style={styles.expiringIcon}>🎫</Text>
           <View style={styles.expiringHeaderText}>
             <Text style={styles.expiringTitle}>이용권 만료 임박</Text>
             <Text style={styles.expiringSubTitle}>만료가 7일 이내로 남은 이용권이 있습니다</Text>

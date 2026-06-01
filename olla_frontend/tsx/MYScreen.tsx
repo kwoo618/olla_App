@@ -196,7 +196,11 @@ const MYScreen = ({ navigation }: any) => {
         </TouchableOpacity>
         
         <TouchableOpacity style={styles.deleteAccountBtn} onPress={() => setDeleteModalVisible(true)}>
+<<<<<<< HEAD
           <Text style={styles.deleteAccountText}>계정 삭제</Text>
+=======
+          <Text style={styles.deleteAccountText}>계정삭제</Text>
+>>>>>>> 519f86bf7d59dc776a954fc61421ae73c4c893de
         </TouchableOpacity>
       </ScrollView>
 
