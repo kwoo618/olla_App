@@ -30,7 +30,6 @@ public class MemberUpdateRequest {
     private Double armSpan;
     private Double footSize;
 
-    // is 접두사 필드 → 수동 setter로 Jackson 파싱 버그 방지
     private Boolean isPublicPhone;
     private Boolean isEmailPublic;
     private Boolean isHeightPublic;

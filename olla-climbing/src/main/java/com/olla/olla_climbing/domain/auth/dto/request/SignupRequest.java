@@ -1,6 +1,7 @@
 package com.olla.olla_climbing.domain.auth.dto.request;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.enums.Role;
 import jakarta.validation.constraints.Email;
@@ -9,7 +10,6 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 import java.time.LocalDate;
 
@@ -51,7 +51,6 @@ public class SignupRequest {
     private MemberDetailDto detail; 
     private PrivacyDto privacy;
 
-    @Setter
     @Getter
     @NoArgsConstructor
     public static class MemberDetailDto { // 내부 클래스로 정의
@@ -61,7 +60,6 @@ public class SignupRequest {
         private Double footSize;
     }
 
-    @Setter
     @Getter
     @NoArgsConstructor
     public static class PrivacyDto {
@@ -71,6 +69,24 @@ public class SignupRequest {
         private boolean isWeightPublic;
         private boolean isArmSpanPublic;
         private boolean isFootSizePublic;
+
+        @JsonProperty("isPhonePublic")
+        public void setIsPhonePublic(boolean value) { this.isPhonePublic = value; }
+
+        @JsonProperty("isEmailPublic")
+        public void setIsEmailPublic(boolean value) { this.isEmailPublic = value; }
+
+        @JsonProperty("isHeightPublic")
+        public void setIsHeightPublic(boolean value) { this.isHeightPublic = value; }
+
+        @JsonProperty("isWeightPublic")
+        public void setIsWeightPublic(boolean value) { this.isWeightPublic = value; }
+
+        @JsonProperty("isArmSpanPublic")
+        public void setIsArmSpanPublic(boolean value) { this.isArmSpanPublic = value; }
+
+        @JsonProperty("isFootSizePublic")
+        public void setIsFootSizePublic(boolean value) { this.isFootSizePublic = value; }
     }
 
     // DTO -> Entity 변환 메서드
