@@ -26,7 +26,6 @@ public class ImageService {
             return null;
         }
 
-        // [수정] getAbsoluteFile()로 절대경로 강제 변환
         // 상대경로 사용 시 Tomcat 임시폴더로 저장되는 버그 방지
         File directory = new File(uploadDir).getAbsoluteFile();
 
