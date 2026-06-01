@@ -6,5 +6,5 @@
 // export const API_BASE_URL = 'https://ollagaja.com/api/v1'
 //export const API_BASE_URL = 'http://192.168.0.157:8080/api/v1';
 //export const API_BASE_URL = 'http://172.30.1.40:8080/api/v1'; // 센티멘탈 
-//export const API_BASE_URL = 'https://api.ollagaja.com:8443/api/v1'; // 배포된 서버
+// export const API_BASE_URL = 'https://api.ollagaja.com:8443/api/v1'; // 배포된 서버
 export const API_BASE_URL = 'http://localhost:8080/api/v1';

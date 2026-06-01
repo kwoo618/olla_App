@@ -52,7 +52,7 @@ const getSectionLabel = (oneWayCount: number, additionalBlocks: number): string 
   return '4-2'; 
 };
 
-// 💡 오늘 날짜 문자열 YYYY-MM-DD 반환
+// 오늘 날짜 문자열 반환
 const getLocalDateStr = (): string => {
   const now = new Date();
   const year = now.getFullYear();
@@ -138,7 +138,7 @@ export const useRecode = ({ route, navigation }: any) => {
   };
 
   // ── 데이터 로드 ──
-  // 💡 [수정] 진짜 최고 기록(문신)을 유지하기 위한 로직! (오늘 기록 삭제의 영향을 받지 않음)
+  // 진짜 최고 기록을 유지하기 위한 로직
   const fetchBestRecords = async () => {
     try {
       const config = await getAuthHeader();
@@ -207,7 +207,7 @@ export const useRecode = ({ route, navigation }: any) => {
     } catch (error) { console.error('최고 기록 로드 실패'); }
   };
 
-  // 💡 [수정] 초보벽 최근 기록: 넉넉하게 500개를 가져와서 철저히 '오늘 날짜' 데이터만 뽑아냅니다.
+  // 초보벽 최근 기록 데이터만 뽑아냄
   const fetchBeginnerHistoryRecords = async () => {
     try {
       const config = await getAuthHeader();
@@ -220,7 +220,7 @@ export const useRecode = ({ route, navigation }: any) => {
       const todayStr = getLocalDateStr();
       const todayList = list.filter((item: any) => {
         const dateStr = item.recordDate || item.createdAt || '';
-        return dateStr.startsWith(todayStr); // 오늘 기록만 필터링!
+        return dateStr.startsWith(todayStr); // 여기서 오늘 날짜랑 똑같은 것만 걸러냄
       });
 
       const sortedList = todayList.sort((a: any, b: any) => b.id - a.id);
@@ -267,7 +267,7 @@ export const useRecode = ({ route, navigation }: any) => {
     } catch (error) { console.error('지구력 기록 로드 실패'); }
   };
 
-  // 💡 [수정] 연속 완등 기록도 동일하게 적용
+  // 연속 완등 기록도 동일하게 적용
   const fetchSeriesRecords = async () => {
     try {
       const config = await getAuthHeader();

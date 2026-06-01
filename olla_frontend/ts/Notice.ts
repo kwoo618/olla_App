@@ -3,7 +3,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_BASE_URL } from '../src/constants/Config';
 
-// 💡 [API 명세서 대응] 이미지 상대경로 -> 절대경로 변환 유틸
 export const getFullImageUrl = (path?: string) => {
   if (!path) return undefined;
   if (path.startsWith('http')) return path;
@@ -64,7 +63,7 @@ export const useNotice = (navigation: any) => {
       });
 
       
-      const raw = response.data.data || [];
+      const raw = response.data.data.content || [];
       const list: Notice[] = Array.isArray(raw) ? raw : [];
 
       // 정렬: 중요 공지가 위로, 그 다음 최신순 정렬

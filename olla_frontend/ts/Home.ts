@@ -145,20 +145,38 @@ export const HomeData = () => {
       } catch (error) { console.error('프로필 로드 실패'); }
 
       try {
-        const noticeResponse = await axios.get(`${API_BASE_URL}/admin/notices`);
-        const noticeList = noticeResponse.data.data.content || []; 
+        const noticeResponse = await axios.get(`${API_BASE_URL}/notices`, config);
+        const responseData = noticeResponse.data.data;
+        const noticeList = Array.isArray(responseData) ? responseData : (responseData?.content || []);
 
         if (noticeList.length > 0) {
-          const target = noticeList.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-          setNotice({
-            title: target.title,
-            content: target.content,
-            important: target.important === true,
-          });
+          // 중요 공지만 모아서 최신순 정렬
+          const importantNotices = noticeList
+            .filter((n: any) => n.important)
+            .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+          // 일반 공지만 모아서 최신순 정렬
+          const normalNotices = noticeList
+            .filter((n: any) => !n.important)
+            .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+          // 중요 공지가 있다면 제일 최신 1개, 없다면 일반 최신 1개를 타겟으로 선정
+          const target = importantNotices.length > 0 ? importantNotices[0] : normalNotices[0];
+
+          if (target) {
+            setNotice({
+              title: target.title,
+              content: target.content,
+              important: target.important === true,
+            });
+          }
         } else {
           setNotice({ title: '현재 등록된 공지가 없습니다.', content: '', important: false });
         }
-      } catch (error) { setNotice({ title: '공지사항을 불러올 수 없습니다.', content: '', important: false }); }
+      } catch (error) { 
+        console.error('공지사항 로드 실패:', error);
+        setNotice({ title: '공지사항을 불러올 수 없습니다.', content: '', important: false }); 
+      }
 
       try {
         const memResponse = await axios.get(`${API_BASE_URL}/memberships/me`, config);
@@ -232,7 +250,7 @@ export const HomeData = () => {
       if (nickname || memberId !== null) {
         try {
           const endRes = await axios.get(`${API_BASE_URL}/rankings/endurance/distance`, config);
-          const endList = endRes.data.data.content || [];
+          const endList = endRes.data.data || [];
           
           let myEndRank = 0, myEndMin = 0, myEndSec = 0;
           const myEndRecord = endList.find((item: any) => isMyRecord(item, memberId, nickname));
@@ -243,14 +261,13 @@ export const HomeData = () => {
             myEndSec = totalSec % 60;
           }
 
-          const [bestRes, historyRes, allRes] = await Promise.all([
+          const [bestRes, historyRes] = await Promise.all([
             axios.get(`${API_BASE_URL}/records/beginner/best`, config).catch(() => null),
             axios.get(`${API_BASE_URL}/records/beginner/history`, config).catch(() => null),
-            axios.get(`${API_BASE_URL}/records/beginner`, config).catch(() => null)
           ]);
           
           let myRealBestRecords: any[] = [];
-          [bestRes, historyRes, allRes].forEach(res => {
+          [bestRes, historyRes].forEach(res => {
             if (res) {
               const data = res.data.data.content || res.data.data || [];
               if (Array.isArray(data)) myRealBestRecords = [...myRealBestRecords, ...data];
