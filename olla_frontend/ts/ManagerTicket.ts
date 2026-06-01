@@ -47,7 +47,10 @@ export const calculateDDay = (targetDate: string) => {
   end.setHours(0, 0, 0, 0);
   const diff = end.getTime() - today.getTime();
   const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-  return days >= 0 ? `${days}일` : '만료';
+  
+  // 💡 [수정됨] 0일 남았을 경우 (오늘 만료) 'D-Day'로 표시
+  if (days === 0) return 'D-Day';
+  return days > 0 ? `${days}일` : '만료';
 };
 
 export const mergeByType = (memberships: any[]) => {
@@ -74,7 +77,7 @@ export const mergeByType = (memberships: any[]) => {
     if (latestEnd && earliestStart) {
       const today = new Date(); today.setHours(0, 0, 0, 0);
       const start = new Date(earliestStart); start.setHours(0, 0, 0, 0);
-      const end   = new Date(latestEnd);     end.setHours(0, 0, 0, 0);
+      const end   = new Date(latestEnd);      end.setHours(0, 0, 0, 0);
       const effectiveStart = today.getTime() > start.getTime() ? today : start;
       const diff = Math.ceil((end.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24));
       totalRemainingDays = diff >= 0 ? diff : 0;

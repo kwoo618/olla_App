@@ -121,9 +121,12 @@ const ManagerTicket = ({ navigation }: any) => {
                 <View style={styles.colDday}>
                   {displayMemberships.map((m: any, idx: number) => (
                     <Text key={`dday-${m._type}-${idx}`} style={[styles.rowTextDday, idx > 0 && { marginTop: 6 }]} numberOfLines={1}>
+                      {/* 💡 [수정] 0일 남았을 때 강제로 '0일'이 표시되는 것을 막고 'D-Day'가 출력되도록 수정 */}
                       {m._type === '일일권'
                         ? `${m.remainingCount ?? 0}회`
-                        : (m._totalRemainingDays !== undefined ? `${m._totalRemainingDays}일` : calculateDDay(m.endDate))
+                        : (m._totalRemainingDays !== undefined 
+                            ? (m._totalRemainingDays === 0 ? 'D-Day' : `${m._totalRemainingDays}일`) 
+                            : calculateDDay(m.endDate))
                       }
                     </Text>
                   ))}
@@ -221,9 +224,10 @@ const ManagerTicket = ({ navigation }: any) => {
                     <View style={styles.manageDetailContainer}>
                       {displayMemberships.map((m: any, idx: number) => (
                         <Text key={`merged-detail-${idx}`} style={styles.manageDetailText}>
+                          {/* 💡 [수정] 상세 내역에서도 0일이면 D-Day로 표시 */}
                           • {m._type === '일일권'
                             ? `[일일권] 총 잔여 ${m.remainingCount ?? 0}회`
-                            : `[회원권] 총 잔여 ${m._totalRemainingDays}일 (${m.startDate || '-'} ~ ${m.endDate || '-'})`
+                            : `[회원권] 총 잔여 ${m._totalRemainingDays === 0 ? 'D-Day' : `${m._totalRemainingDays}일`} (${m.startDate || '-'} ~ ${m.endDate || '-'})`
                           }
                         </Text>
                       ))}
