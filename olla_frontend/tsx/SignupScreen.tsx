@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Modal, ActivityIndicator, Keyboard } from 'react-native';
+import React, { useState } from 'react'; // useState 추가
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Modal, ActivityIndicator, Linking } from 'react-native'; // Linking 추가
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useSignup } from '../ts/Signup';
 
@@ -18,6 +18,9 @@ const SignupScreen = ({ navigation }: any) => {
     passwordRef, confirmRef, nameRef, birthRef, emailRef, emailCodeRef, phoneRef,
     resultModalVisible, resultModalConfig, closeResultModal, showResultModal
   } = useSignup(navigation);
+
+  // 약관 동의 체크박스 상태 추가
+  const [isTermsChecked, setIsTermsChecked] = useState(false);
 
   return (
     <>
@@ -221,10 +224,31 @@ const SignupScreen = ({ navigation }: any) => {
             </>
           )}
 
+          {/* 💡 새로 추가된 개인정보처리방침 동의 영역 */}
+          <View style={styles.termsContainer}>
+            <TouchableOpacity 
+              style={styles.checkboxWrapper} 
+              onPress={() => setIsTermsChecked(!isTermsChecked)}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.checkbox, isTermsChecked && styles.checkboxChecked]}>
+                {isTermsChecked && <Text style={styles.checkmark}>✓</Text>}
+              </View>
+              <Text style={styles.termsText}>(필수) 개인정보처리방침에 동의합니다.</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.termsLinkButton}
+              onPress={() => Linking.openURL('https://www.termsfeed.com/live/934afa2d-b905-435a-9800-be35ec29dff2')}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.termsArrow}>＞</Text>
+            </TouchableOpacity>
+          </View>
+
           <TouchableOpacity
             onPress={handleNextStep}
-            disabled={isCheckingNext}
-            style={[styles.button, (!isIdChecked || !isEmailVerified || isCheckingNext) && styles.buttonDisabled]}
+            disabled={isCheckingNext || !isTermsChecked || !isIdChecked || !isEmailVerified} // 약관 동의(isTermsChecked) 추가
+            style={[styles.button, (!isIdChecked || !isEmailVerified || !isTermsChecked || isCheckingNext) && styles.buttonDisabled]}
           >
             {isCheckingNext ? <ActivityIndicator color="#000000" size="small" /> : <Text style={styles.buttonText}>다음으로</Text>}
           </TouchableOpacity>
@@ -277,7 +301,7 @@ const styles = StyleSheet.create({
   genderBtnText: { color: '#999999', fontSize: 18, fontWeight: 'bold' }, 
   genderBtnTextActive: { color: '#A1BE44' },
 
-  button: { width: '100%', height: 60, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', borderRadius: 12, marginTop: 30 }, 
+  button: { width: '100%', height: 60, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', borderRadius: 12, marginTop: 15 }, 
   buttonDisabled: { backgroundColor: '#333333' },
   buttonText: { color: '#000000', fontSize: 20, fontWeight: 'bold' }, 
 
@@ -288,6 +312,16 @@ const styles = StyleSheet.create({
   resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, 
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
   spamGuideText: { color: '#888888', fontSize: 14, alignSelf: 'flex-start', marginLeft: 5, marginTop: 6, marginBottom: 4, textDecorationLine: 'underline' },
+
+  // 💡 약관 영역 관련 스타일
+  termsContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 25, paddingHorizontal: 5 },
+  checkboxWrapper: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  checkbox: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: '#666666', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  checkboxChecked: { backgroundColor: '#A1BE44', borderColor: '#A1BE44' },
+  checkmark: { color: '#000000', fontSize: 14, fontWeight: 'bold' },
+  termsText: { color: '#ffffff', fontSize: 16 },
+  termsLinkButton: { padding: 5 },
+  termsArrow: { color: '#999999', fontSize: 18, fontWeight: 'bold' },
 });
 
 export default SignupScreen;

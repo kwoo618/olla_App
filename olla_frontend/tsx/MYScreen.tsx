@@ -4,7 +4,7 @@ import {
   Image, Switch, Modal, Animated, TextInput, ActivityIndicator, Linking, RefreshControl,
   Platform, TouchableWithoutFeedback, KeyboardAvoidingView
 } from 'react-native';
-import { useMyPage, getFullImageUrl } from '../ts/MY'; 
+import { useMyPage, getFullImageUrl } from '../ts/MY';
 
 const MYScreen = ({ navigation }: any) => {
   const {
@@ -190,9 +190,13 @@ const MYScreen = ({ navigation }: any) => {
           <Image source={require('../assets/EXIT.png')} style={styles.logoutIcon} />
           <Text style={styles.logoutText}>로그아웃</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity style={styles.deleteAccountBtn} onPress={() => Linking.openURL('https://www.termsfeed.com/live/934afa2d-b905-435a-9800-be35ec29dff2')}>
+          <Text style={styles.deleteAccountText}>개인정보처리방침</Text>
+        </TouchableOpacity>
         
         <TouchableOpacity style={styles.deleteAccountBtn} onPress={() => setDeleteModalVisible(true)}>
-          <Text style={styles.deleteAccountText}>회원탈퇴</Text>
+          <Text style={styles.deleteAccountText}>계정 삭제</Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -327,9 +331,9 @@ const MYScreen = ({ navigation }: any) => {
       <Modal visible={isDeleteModalVisible} transparent animationType="fade" onRequestClose={() => setDeleteModalVisible(false)}>
         <View style={styles.centerModalOverlay}>
           <View style={styles.centerModalBox}>
-            <Text style={[styles.centerModalText, { textAlign: 'center' }]}>정말로 탈퇴하시겠습니까?{'\n'}모든 데이터가 삭제됩니다.</Text>
+            <Text style={[styles.centerModalText, { textAlign: 'center' }]}>정말로 삭제하시겠습니까?{'\n'}모든 데이터가 삭제됩니다.</Text>
             <View style={styles.centerBtnRow}>
-              <TouchableOpacity style={[styles.centerBtnYes, { backgroundColor: '#FF4D4D' }]} onPress={executeDeleteAccount}><Text style={styles.centerBtnYesText}>탈퇴하기</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.centerBtnYes, { backgroundColor: '#FF4D4D' }]} onPress={executeDeleteAccount}><Text style={styles.centerBtnYesText}>삭제하기</Text></TouchableOpacity>
               <TouchableOpacity style={styles.centerBtnNo} onPress={() => setDeleteModalVisible(false)}><Text style={styles.centerBtnNoText}>취소</Text></TouchableOpacity>
             </View>
           </View>
@@ -424,7 +428,7 @@ const styles = StyleSheet.create({
   logoutCard: { flexDirection: 'row', backgroundColor: '#212121', borderRadius: 16, paddingVertical: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 15 },
   logoutIcon: { width: 24, height: 24, tintColor: '#FF4D4D', marginRight: 8, resizeMode: 'contain' },
   logoutText: { color: '#FF4D4D', fontSize: 18, fontWeight: 'bold' },
-  deleteAccountBtn: { alignItems: 'center', paddingVertical: 10, marginBottom: 20 },
+  deleteAccountBtn: { alignItems: 'center', paddingVertical: 10, marginBottom: 0 },
   deleteAccountText: { color: '#666666', fontSize: 16, textDecorationLine: 'underline' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%', overflow: 'hidden' },
