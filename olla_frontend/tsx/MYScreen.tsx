@@ -196,11 +196,7 @@ const MYScreen = ({ navigation }: any) => {
         </TouchableOpacity>
         
         <TouchableOpacity style={styles.deleteAccountBtn} onPress={() => setDeleteModalVisible(true)}>
-<<<<<<< HEAD
-          <Text style={styles.deleteAccountText}>계정 삭제</Text>
-=======
           <Text style={styles.deleteAccountText}>계정삭제</Text>
->>>>>>> 519f86bf7d59dc776a954fc61421ae73c4c893de
         </TouchableOpacity>
       </ScrollView>
 
@@ -492,7 +488,7 @@ const styles = StyleSheet.create({
   inputModalTitle: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
   inputField: { backgroundColor: '#1A1A1A', color: '#FFF', borderRadius: 8, padding: 15, marginBottom: 12, fontSize: 16, borderWidth: 1, borderColor: '#444' },
   submitBtn: { backgroundColor: '#A1BE44', borderRadius: 8, paddingVertical: 15, alignItems: 'center', marginTop: 10 },
-  submitBtnText: { color: '#00', fontSize: 18, fontWeight: 'bold' },
+  submitBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
   errorText: { color: '#FF4D4D', fontSize: 14, marginBottom: 10, textAlign: 'center' }
 });
 
