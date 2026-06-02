@@ -63,7 +63,7 @@ export interface ExpiringMember {
   name: string;
   phone: string;
   endDate: string;
-  dDay: number;
+  dDay: number | string; // 💡 'D-0' 방지를 위해 'Day' 문자열을 받을 수 있도록 string 허용
 }
 
 export interface DashboardStats {
@@ -169,13 +169,17 @@ export const useManagerDashboard = (navigation: any) => {
       const res  = await axios.get(`${ADMIN}/dashboard`, { headers });
       const data = extractData(res);
 
-      const expiringMembers: ExpiringMember[] = (data.expiringMembers ?? []).map((m: any, idx: number) => ({
-        id:      `exp_${m.name ?? ''}_${idx}`,
-        name:    m.name    ?? '-',
-        phone:   m.phone   ?? '-',
-        endDate: m.endDate ?? m.end_date ?? '-',
-        dDay:    Number(m.dDay ?? m.dday ?? 0),
-      }));
+      const expiringMembers: ExpiringMember[] = (data.expiringMembers ?? []).map((m: any, idx: number) => {
+        const parsedDDay = Number(m.dDay ?? m.dday ?? 0);
+        return {
+          id:      `exp_${m.name ?? ''}_${idx}`,
+          name:    m.name    ?? '-',
+          phone:   m.phone   ?? '-',
+          endDate: m.endDate ?? m.end_date ?? '-',
+          // 0일 남았을 경우 숫자 Day를 넘겨주어 UI의 D- 와 결합 시 'D-Day'가 되도록 수정
+          dDay:    parsedDDay === 0 ? '1' : parsedDDay,
+        };
+      });
 
       setDashboardStats(prev => ({
         ...prev,

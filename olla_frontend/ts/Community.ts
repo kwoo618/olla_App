@@ -161,7 +161,10 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
       const url = `${urlMap[filterToUse] || POSTS}?page=0&size=100`;
       
       const { data } = await axios.get(url, { headers });
-      let list = data.data.content ?? [];
+      
+      // 💡 [수정] 백엔드 응답이 페이징(content)인지 단순 배열 형태인지 모두 안전하게 대응
+      const resData = data.data || {};
+      let list = Array.isArray(resData) ? resData : (resData.content || []);
 
       if (filterToUse === 'MY_APPLIED') {
         list = list.filter((item: any) => !checkIsMine(item.writerId, item.writerName || '', uId, uName, uNick));
@@ -177,26 +180,33 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
 
   const mapPosts = (list: any[], uName: string, uNick: string, uId: number | null) =>
     list.map(item => {
-      const md = new Date(item.meetDateTime);
-      const cd = new Date(item.createdAt);
+      // 💡 [수정] iOS 날짜 버그 방지를 위해 중간 공백을 'T'로 변환
+      const safeMeetDate = item.meetDateTime ? String(item.meetDateTime).replace(' ', 'T') : '';
+      const safeCreateDate = item.createdAt ? String(item.createdAt).replace(' ', 'T') : '';
+      
+      const md = new Date(safeMeetDate);
+      const cd = new Date(safeCreateDate);
       const author = item.writerName || '알 수 없음';
       const isMine = checkIsMine(item.writerId, author, uId, uName, uNick);
       const isClosedFlag = item.isClosed === true || item.closed === true || item.status === 'CLOSED';
       const isPastDate = !isNaN(md.getTime()) && md.getTime() < new Date().getTime();
       const isPast = isClosedFlag || isPastDate;
+      
+      // 💡 [수정] 명세서의 isDifferentGym 과 프론트의 differentGym 모두 대응
+      const isDiffGym = item.isDifferentGym === true || item.differentGym === true;
 
       return {
         id: item.id, writerId: item.writerId,
-        type: item.differentGym ? '아웃도어' : '센터',
+        type: isDiffGym ? '아웃도어' : '센터',
         title: item.title, desc: item.content, author, isMine, isPast,
-        location: item.differentGym ? (item.gymPlace || '장소 미정') : 'olla 클라이밍 센터',
+        location: isDiffGym ? (item.gymPlace || '장소 미정') : 'olla 클라이밍 센터',
         date: isNaN(md.getTime()) ? item.meetDateTime : `${md.getFullYear()}-${p(md.getMonth()+1)}-${p(md.getDate())} ${p(md.getHours())}:${p(md.getMinutes())}`,
         rawMeetDateTime: item.meetDateTime,
         people: `${item.memberCount||0}/${item.maxMember}명`, maxMember: item.maxMember,
         postDate: isNaN(cd.getTime()) ? item.createdAt : `${cd.getFullYear()}.${p(cd.getMonth()+1)}.${p(cd.getDate())}`,
         isJoined: item.applied === true || item.isApplied === true, 
         viewCount: item.viewCount||0, likeCount: item.likeCount||0, isLiked: item.liked === true || item.isLiked === true,
-        differentGym: item.differentGym, gymPlace: item.gymPlace,
+        differentGym: isDiffGym, gymPlace: item.gymPlace,
         profileImageUrl: item.writerProfileImageUrl || item.profileImageUrl || item.profileImage || null, 
       };
     });
@@ -210,11 +220,15 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
       let backendRes: any[] = [];
       try {
         const { data } = await axios.get(`${POSTS}/search?keyword=${encodeURIComponent(searchKeyword)}&page=0&size=100`, { headers });
-        backendRes = Array.isArray(data.data.content) ? data.data.content : [];
+        // 💡 [수정] 검색 시에도 배열/content 예외 처리
+        const resData1 = data.data || {};
+        backendRes = Array.isArray(resData1) ? resData1 : (resData1.content || []);
       } catch (e) {}
       
       const { data: allData } = await axios.get(`${POSTS}?page=0&size=100`, { headers });
-      const all: any[] = Array.isArray(allData?.data?.content) ? allData.data.content : [];
+      const resData2 = allData?.data || {};
+      const all: any[] = Array.isArray(resData2) ? resData2 : (resData2.content || []);
+      
       const filtered = all.filter(i => [i.title,i.content,i.writerName,i.gymPlace].some(v => (v||'').toLowerCase().includes(kw)));
       
       const map = new Map();
