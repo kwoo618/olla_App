@@ -48,7 +48,7 @@ const CHANNEL_ID = 'olla_default';
 const createNotificationChannel = async () => {
   if (Platform.OS !== 'android') return;
   try {
-    const notifeeModule = await import('@notifee/react-native');  // ← 한 번만 import
+    const notifeeModule = await import('@notifee/react-native');
     const notifee = notifeeModule.default;
     const { AndroidImportance } = notifeeModule;
     await notifee.requestPermission();
@@ -78,8 +78,8 @@ const requestIosPermission = async () => {
 
 const displayForegroundNotification = async (remoteMessage: any) => {
   try {
-    console.log('[FCM] 포그라운드 메시지 수신:', JSON.stringify(remoteMessage)); // ← 디버깅용
-    const notifeeModule = await import('@notifee/react-native');  // ← 한 번만 import
+    console.log('[FCM] 포그라운드 메시지 수신:', JSON.stringify(remoteMessage));
+    const notifeeModule = await import('@notifee/react-native');
     const notifee = notifeeModule.default;
     const { AndroidImportance } = notifeeModule;
 
@@ -126,7 +126,6 @@ const registerFcmToken = async () => {
       return;
     }
 
-    // ✅ 이전과 동일한 토큰이면 서버 재전송 생략 (중복 요청 → 500 에러 방지)
     const savedToken = await AsyncStorage.getItem('fcmToken');
     if (savedToken === fcmToken) {
       console.log('[FCM] 토큰 동일, 서버 전송 생략');
@@ -202,31 +201,39 @@ const AppContent = () => {
   const adminScreens = ['ManagerDashboard', 'ManagerUser', 'ManagerTicket', 'ManagerNotice', 'ManagerCommunity'];
   const isAdminMode = adminScreens.includes(routeName);
 
+  // ✅ 핵심 수정: setup + 리스너 등록을 하나의 async 함수로 통합
   useEffect(() => {
-    const setup = async () => {
-      await createNotificationChannel();  // ← await 추가
-      await requestIosPermission();       // ← await 추가
-      console.log('[FCM] 채널/권한 설정 완료, onMessage 등록 시작');
+    let unsubscribeForeground: (() => void) | null = null;
+    let unsubscribeTokenRefresh: (() => void) | null = null;
+
+    const init = async () => {
+      try {
+        await createNotificationChannel();
+        await requestIosPermission();
+        console.log('[FCM] 채널/권한 설정 완료, onMessage 등록 시작');
+
+        unsubscribeForeground = messaging().onMessage(async remoteMessage => {
+          console.log('[FCM] onMessage 진입!');
+          console.log('[FCM] 메시지 내용:', JSON.stringify(remoteMessage));
+          await displayForegroundNotification(remoteMessage);
+          setHasUnreadNotification(true);
+        });
+
+        unsubscribeTokenRefresh = messaging().onTokenRefresh(async () => {
+          await registerFcmToken();
+        });
+
+        await registerFcmToken();
+      } catch (e) {
+        console.log('[Init] 초기화 실패:', e);
+      }
     };
 
-    setup();
-
-    const unsubscribeForeground = messaging().onMessage(async remoteMessage => {
-      console.log('[FCM] onMessage 진입!');  // ← 이게 찍히는지 먼저 확인
-      console.log('[FCM] 메시지 내용:', JSON.stringify(remoteMessage));
-      await displayForegroundNotification(remoteMessage);
-      setHasUnreadNotification(true);
-    });
-
-    const unsubscribeTokenRefresh = messaging().onTokenRefresh(async () => {
-      await registerFcmToken();
-    });
-
-    registerFcmToken();
+    init();
 
     return () => {
-      unsubscribeForeground();
-      unsubscribeTokenRefresh();
+      unsubscribeForeground?.();
+      unsubscribeTokenRefresh?.();
     };
   }, []);
 
