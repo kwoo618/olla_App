@@ -114,6 +114,7 @@ public class MemberService {
         Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("회원 정보가 없습니다."));
         member.updateFcmToken(fcmToken);
+        memberRepository.save(member); // 더티체킹 의존 대신 명시적 저장
     }
 
     @Transactional(readOnly = true)
