@@ -108,15 +108,14 @@ const registerFcmToken = async () => {
     const userToken = await AsyncStorage.getItem('userToken');
     if (!userToken) return;
 
-    // APNs(.p8) 설정 전까지 아이폰(iOS)은 토큰 발급을 강제로 건너뛰게 설정 
-    // 이렇게 하면 에러가 발생하지 않고 다음 화면으로 정상 작동합니다.
-    if (Platform.OS === 'ios') {
-      console.log('APNs 미설정 상태: iOS FCM 토큰 발급을 임시로 건너뜁니다.');
-      return; 
+    // 🌟 APNs 설정이 완료되었으므로, 기존의 우회 코드를 삭제하고 iOS 기기 등록 로직 적용
+    if (Platform.OS === 'ios' && !messaging().isDeviceRegisteredForRemoteMessages) {
+      await messaging().registerDeviceForRemoteMessages();
     }
 
     const fcmToken = await messaging().getToken();
     if (!fcmToken) return;
+    
     await axios.post(
       `${API_BASE_URL}/members/me/fcm-token`,
       { token: fcmToken },

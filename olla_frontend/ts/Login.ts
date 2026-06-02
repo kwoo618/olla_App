@@ -134,12 +134,40 @@ export const useLogin = (navigation: any) => {
             authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
           if (enabled) {
+            if (Platform.OS === 'ios' && !messaging().isDeviceRegisteredForRemoteMessages) {
+              await messaging().registerDeviceForRemoteMessages();
+            }
             const fcmToken = await messaging().getToken();
             
-            await axios.post(`${API_BASE_URL}/members/me/fcm-token`, 
-              { token: fcmToken }, 
-              { headers: { Authorization: `Bearer ${token}` } }
-            );
+            // 🚨 디버깅용 화면 모달 (토큰이 잘 나오는지 눈으로 확인하는 용도)
+            // 발급받은 토큰 서버로 전송
+            if (fcmToken) {
+              try {
+                const fcmSendResponse = await axios.post(
+                  `${API_BASE_URL}/members/me/fcm-token`,
+                  { token: fcmToken },
+                  { headers: { Authorization: `Bearer ${token}` } }
+                );
+                showResultModal(
+                  'FCM 전송 성공 ✅',
+                  `status: ${fcmSendResponse.status}\n${JSON.stringify(fcmSendResponse.data)}`,
+                  'success',
+                  () => navigation.replace('Home')  // ← 확인 누르면 이동
+                );
+                return;
+              } catch (sendError: any) {
+                const status = sendError.response?.status;
+                const msg = sendError.response?.data?.message || sendError.message;
+                showResultModal(
+                  'FCM 서버 전송 실패 ❌',
+                  `status: ${status}\nmessage: ${msg}`,
+                  'error',
+                  () => navigation.replace('Home')
+                );
+                return;
+              }
+            }
+            navigation.replace('Home');
           }
         } catch (fcmError) {
           console.error('FCM 토큰 발급/전송 오류:', fcmError);
