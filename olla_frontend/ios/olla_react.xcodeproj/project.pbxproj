@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
-		4A72A95F2FB6D7280011B675 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 4A72A95E2FB6D7280011B675 /* GoogleService-Info.plist */; };
+		4AAB4BA52FCF3422001ABE79 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 4AAB4BA42FCF3422001ABE79 /* GoogleService-Info.plist */; };
 		4CD0AAD7396446D2B3317043 /* libPods-olla_react.a in Frameworks */ = {isa = PBXBuildFile; fileRef = D40614FB8C91DEF0DB00FC79 /* libPods-olla_react.a */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
@@ -20,7 +20,8 @@
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = olla_react/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = olla_react/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = olla_react/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		4A72A95E2FB6D7280011B675 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		4AAB4BA12FCEA533001ABE79 /* olla_react.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = olla_react.entitlements; path = olla_react/olla_react.entitlements; sourceTree = "<group>"; };
+		4AAB4BA42FCF3422001ABE79 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		55AE7807D1657E0E07641351 /* Pods-olla_react.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-olla_react.release.xcconfig"; path = "Target Support Files/Pods-olla_react/Pods-olla_react.release.xcconfig"; sourceTree = "<group>"; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = olla_react/AppDelegate.swift; sourceTree = "<group>"; };
 		7AD87BCA9A17B2CF69596876 /* Pods-olla_react.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-olla_react.debug.xcconfig"; path = "Target Support Files/Pods-olla_react/Pods-olla_react.debug.xcconfig"; sourceTree = "<group>"; };
@@ -44,6 +45,7 @@
 		13B07FAE1A68108700A75B9A /* olla_react */ = {
 			isa = PBXGroup;
 			children = (
+				4AAB4BA12FCEA533001ABE79 /* olla_react.entitlements */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				761780EC2CA45674006654EE /* AppDelegate.swift */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
@@ -72,7 +74,7 @@
 		83CBB9F61A601CBA00E9B192 = {
 			isa = PBXGroup;
 			children = (
-				4A72A95E2FB6D7280011B675 /* GoogleService-Info.plist */,
+				4AAB4BA42FCF3422001ABE79 /* GoogleService-Info.plist */,
 				13B07FAE1A68108700A75B9A /* olla_react */,
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
@@ -163,7 +165,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
-				4A72A95F2FB6D7280011B675 /* GoogleService-Info.plist in Resources */,
+				4AAB4BA52FCF3422001ABE79 /* GoogleService-Info.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				E19EA79AA04FE620CACB7CEE /* PrivacyInfo.xcprivacy in Resources */,
 			);
@@ -288,8 +290,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = olla_react/olla_react.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = Y8X6BD4ARV;
+				DEVELOPMENT_TEAM = G387N62Z7Z;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = olla_react/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -319,8 +322,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = olla_react/olla_react.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = Y8X6BD4ARV;
+				DEVELOPMENT_TEAM = G387N62Z7Z;
 				INFOPLIST_FILE = olla_react/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (

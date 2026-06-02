@@ -48,39 +48,48 @@ const CHANNEL_ID = 'olla_default';
 const createNotificationChannel = async () => {
   if (Platform.OS !== 'android') return;
   try {
-    const notifee = (await import('@notifee/react-native')).default;
-    const { AndroidImportance } = await import('@notifee/react-native');
+    const notifeeModule = await import('@notifee/react-native');
+    const notifee = notifeeModule.default;
+    const { AndroidImportance } = notifeeModule;
+    await notifee.requestPermission();
     await notifee.createChannel({
       id: CHANNEL_ID,
       name: 'Olla 알림',
       importance: AndroidImportance.HIGH,
       sound: 'default',
     });
+    console.log('[Notifee] Android 채널 생성 완료');
   } catch (e) {
-    console.log('Notifee 채널 생성 실패:', e);
+    console.log('[Notifee] 채널 생성 실패:', e);
   }
 };
 
-// iOS 알림 권한 요청
 const requestIosPermission = async () => {
   if (Platform.OS !== 'ios') return;
   try {
-    const notifee = (await import('@notifee/react-native')).default;
-    await notifee.requestPermission();
+    const notifeeModule = await import('@notifee/react-native');
+    const notifee = notifeeModule.default;
+    const result = await notifee.requestPermission();
+    console.log('[Notifee] iOS 권한 결과:', result);
   } catch (e) {
-    console.log('iOS 알림 권한 요청 실패:', e);
+    console.log('[Notifee] iOS 권한 요청 실패:', e);
   }
 };
 
-// FCM 수신 시 Notifee 배너 표시 (iOS/Android 분기)
 const displayForegroundNotification = async (remoteMessage: any) => {
   try {
-    const notifee = (await import('@notifee/react-native')).default;
+    console.log('[FCM] 포그라운드 메시지 수신:', JSON.stringify(remoteMessage));
+    const notifeeModule = await import('@notifee/react-native');
+    const notifee = notifeeModule.default;
+    const { AndroidImportance } = notifeeModule;
+
+    const title = remoteMessage.notification?.title ?? remoteMessage.data?.title ?? '알림';
+    const body = remoteMessage.notification?.body ?? remoteMessage.data?.body ?? '';
+
     if (Platform.OS === 'android') {
-      const { AndroidImportance } = await import('@notifee/react-native');
       await notifee.displayNotification({
-        title: remoteMessage.notification?.title ?? '알림',
-        body: remoteMessage.notification?.body ?? '',
+        title,
+        body,
         android: {
           channelId: CHANNEL_ID,
           importance: AndroidImportance.HIGH,
@@ -88,17 +97,15 @@ const displayForegroundNotification = async (remoteMessage: any) => {
         },
       });
     } else {
-      // iOS
       await notifee.displayNotification({
-        title: remoteMessage.notification?.title ?? '알림',
-        body: remoteMessage.notification?.body ?? '',
-        ios: {
-          sound: 'default',
-        },
+        title,
+        body,
+        ios: { sound: 'default' },
       });
     }
+    console.log('[Notifee] 배너 표시 완료');
   } catch (e) {
-    console.log('Notifee 알림 표시 실패:', e);
+    console.log('[Notifee] 배너 표시 실패:', e);
   }
 };
 
@@ -108,22 +115,33 @@ const registerFcmToken = async () => {
     const userToken = await AsyncStorage.getItem('userToken');
     if (!userToken) return;
 
-    // APNs(.p8) 설정 전까지 아이폰(iOS)은 토큰 발급을 강제로 건너뛰게 설정 
-    // 이렇게 하면 에러가 발생하지 않고 다음 화면으로 정상 작동합니다.
-    if (Platform.OS === 'ios') {
-      console.log('APNs 미설정 상태: iOS FCM 토큰 발급을 임시로 건너뜁니다.');
-      return; 
+    if (Platform.OS === 'ios' && !messaging().isDeviceRegisteredForRemoteMessages) {
+      await messaging().registerDeviceForRemoteMessages();
     }
 
     const fcmToken = await messaging().getToken();
-    if (!fcmToken) return;
+    console.log('[FCM] 내 토큰:', fcmToken);
+    if (!fcmToken) {
+      console.log('[FCM] 토큰 발급 실패');
+      return;
+    }
+
+    const savedToken = await AsyncStorage.getItem('fcmToken');
+    if (savedToken === fcmToken) {
+      console.log('[FCM] 토큰 동일, 서버 전송 생략');
+      return;
+    }
+
     await axios.post(
       `${API_BASE_URL}/members/me/fcm-token`,
-      { token: fcmToken },
+      { deviceToken: fcmToken },
       { headers: { Authorization: `Bearer ${userToken}` } },
     );
-  } catch (e) {
-    console.log('FCM 토큰 갱신 실패:', e);
+
+    await AsyncStorage.setItem('fcmToken', fcmToken);
+    console.log('[FCM] 토큰 서버 전송 완료');
+  } catch (e: any) {
+    console.log('[FCM] 토큰 갱신 실패:', e?.response?.data ?? e?.message);
   }
 };
 
@@ -183,24 +201,39 @@ const AppContent = () => {
   const adminScreens = ['ManagerDashboard', 'ManagerUser', 'ManagerTicket', 'ManagerNotice', 'ManagerCommunity'];
   const isAdminMode = adminScreens.includes(routeName);
 
+  // ✅ 핵심 수정: setup + 리스너 등록을 하나의 async 함수로 통합
   useEffect(() => {
-    createNotificationChannel();
-    requestIosPermission();
+    let unsubscribeForeground: (() => void) | null = null;
+    let unsubscribeTokenRefresh: (() => void) | null = null;
 
-    const unsubscribeForeground = messaging().onMessage(async remoteMessage => {
-      await displayForegroundNotification(remoteMessage);
-      setHasUnreadNotification(true);
-    });
+    const init = async () => {
+      try {
+        await createNotificationChannel();
+        await requestIosPermission();
+        console.log('[FCM] 채널/권한 설정 완료, onMessage 등록 시작');
 
-    const unsubscribeTokenRefresh = messaging().onTokenRefresh(async () => {
-      await registerFcmToken();
-    });
+        unsubscribeForeground = messaging().onMessage(async remoteMessage => {
+          console.log('[FCM] onMessage 진입!');
+          console.log('[FCM] 메시지 내용:', JSON.stringify(remoteMessage));
+          await displayForegroundNotification(remoteMessage);
+          setHasUnreadNotification(true);
+        });
 
-    registerFcmToken();
+        unsubscribeTokenRefresh = messaging().onTokenRefresh(async () => {
+          await registerFcmToken();
+        });
+
+        await registerFcmToken();
+      } catch (e) {
+        console.log('[Init] 초기화 실패:', e);
+      }
+    };
+
+    init();
 
     return () => {
-      unsubscribeForeground();
-      unsubscribeTokenRefresh();
+      unsubscribeForeground?.();
+      unsubscribeTokenRefresh?.();
     };
   }, []);
 
