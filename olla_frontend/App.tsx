@@ -1,31 +1,31 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, StatusBar, Modal, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, StatusBar, Modal, DeviceEventEmitter } from 'react-native';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import messaging from '@react-native-firebase/messaging'; // FCM 추가 
-import AsyncStorage from '@react-native-async-storage/async-storage'; // AsyncStorage 추가
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_BASE_URL } from './src/constants/Config';
+import messaging from '@react-native-firebase/messaging';
 
-// Notification 스크린 타입 추가
+// notifee 정적 import 제거 — 동적 import로만 사용
+
 type RootParamList = {
   Login: undefined; Signup: undefined; PersonalInfo: undefined; Loading: undefined;
   Home: undefined; Notice: undefined; Notification: undefined; Recode: undefined; Ranking: undefined;
-  Community: { filter?: 'ALL' | 'MY_WRITTEN' | 'MY_APPLIED' } | undefined; 
+  Community: { filter?: 'ALL' | 'MY_WRITTEN' | 'MY_APPLIED' } | undefined;
   MY: undefined; ManagerDashboard: undefined;
   ManagerUser: undefined; ManagerTicket: undefined; ManagerNotice: undefined; ManagerCommunity: undefined;
-  AdminNotification: undefined; // 추가: 관리자 알림함 타입 등록
+  AdminNotification: undefined;
 };
 
-// 스크린 임포트
 import LoginScreen from './tsx/LoginScreen';
 import SignupScreen from './tsx/SignupScreen';
 import PersonalScreen from './tsx/PersonalScreen';
 import LoadingScreen from './tsx/LoadingScreen';
 import HomeScreen from './tsx/HomeScreen';
 import NoticeScreen from './tsx/NoticeScreen';
-import NotificationScreen from './tsx/NotificationScreen'; // 스크린 임포트 추가
+import NotificationScreen from './tsx/NotificationScreen';
 import RecodeScreen from './tsx/RecodeScreen';
 import RankingScreen from './tsx/RankingScreen';
 import CommunityScreen from './tsx/CommunityScreen';
@@ -35,12 +35,97 @@ import ManagerUser from './tsx/ManagerUser';
 import ManagerTicket from './tsx/ManagerTicket';
 import ManagerNotice from './tsx/ManagerNotice';
 import ManagerCommunity from './tsx/ManagerCommunity';
-import AdminNotificationScreen from './tsx/AdminNotificationScreen'; // 추가: 관리자 알림함 스크린 임포트
+import AdminNotificationScreen from './tsx/AdminNotificationScreen';
 
 const Stack = createNativeStackNavigator<RootParamList>();
 
 const USER_TAB_ORDER = ['Home', 'Recode', 'Ranking', 'Community', 'MY'];
 const ADMIN_TAB_ORDER = ['ManagerDashboard', 'ManagerUser', 'ManagerTicket', 'ManagerNotice', 'ManagerCommunity'];
+
+const CHANNEL_ID = 'olla_default';
+
+// Android 전용 채널 생성
+const createNotificationChannel = async () => {
+  if (Platform.OS !== 'android') return;
+  try {
+    const notifee = (await import('@notifee/react-native')).default;
+    const { AndroidImportance } = await import('@notifee/react-native');
+    await notifee.createChannel({
+      id: CHANNEL_ID,
+      name: 'Olla 알림',
+      importance: AndroidImportance.HIGH,
+      sound: 'default',
+    });
+  } catch (e) {
+    console.log('Notifee 채널 생성 실패:', e);
+  }
+};
+
+// iOS 알림 권한 요청
+const requestIosPermission = async () => {
+  if (Platform.OS !== 'ios') return;
+  try {
+    const notifee = (await import('@notifee/react-native')).default;
+    await notifee.requestPermission();
+  } catch (e) {
+    console.log('iOS 알림 권한 요청 실패:', e);
+  }
+};
+
+// FCM 수신 시 Notifee 배너 표시 (iOS/Android 분기)
+const displayForegroundNotification = async (remoteMessage: any) => {
+  try {
+    const notifee = (await import('@notifee/react-native')).default;
+    if (Platform.OS === 'android') {
+      const { AndroidImportance } = await import('@notifee/react-native');
+      await notifee.displayNotification({
+        title: remoteMessage.notification?.title ?? '알림',
+        body: remoteMessage.notification?.body ?? '',
+        android: {
+          channelId: CHANNEL_ID,
+          importance: AndroidImportance.HIGH,
+          pressAction: { id: 'default' },
+        },
+      });
+    } else {
+      // iOS
+      await notifee.displayNotification({
+        title: remoteMessage.notification?.title ?? '알림',
+        body: remoteMessage.notification?.body ?? '',
+        ios: {
+          sound: 'default',
+        },
+      });
+    }
+  } catch (e) {
+    console.log('Notifee 알림 표시 실패:', e);
+  }
+};
+
+// FCM 토큰을 서버에 등록/갱신
+const registerFcmToken = async () => {
+  try {
+    const userToken = await AsyncStorage.getItem('userToken');
+    if (!userToken) return;
+
+    // APNs(.p8) 설정 전까지 아이폰(iOS)은 토큰 발급을 강제로 건너뛰게 설정 
+    // 이렇게 하면 에러가 발생하지 않고 다음 화면으로 정상 작동합니다.
+    if (Platform.OS === 'ios') {
+      console.log('APNs 미설정 상태: iOS FCM 토큰 발급을 임시로 건너뜁니다.');
+      return; 
+    }
+
+    const fcmToken = await messaging().getToken();
+    if (!fcmToken) return;
+    await axios.post(
+      `${API_BASE_URL}/members/me/fcm-token`,
+      { token: fcmToken },
+      { headers: { Authorization: `Bearer ${userToken}` } },
+    );
+  } catch (e) {
+    console.log('FCM 토큰 갱신 실패:', e);
+  }
+};
 
 interface BottomNavItemProps {
   name: keyof RootParamList;
@@ -55,12 +140,11 @@ const BottomNavItem = ({ name, label, icon, currentRoute, nav, isAdmin = false }
   const isActive = currentRoute === name;
   const activeColor = '#A1BE44';
   const inactiveColor = '#7D7D7D';
-
   return (
     <TouchableOpacity style={styles.bottomNavItem} onPress={() => nav.navigate(name)}>
-      <Image 
-        source={icon} 
-        style={[styles.navIcon, { tintColor: isActive ? activeColor : inactiveColor, opacity: isActive ? 1 : 0.6 }]} 
+      <Image
+        source={icon}
+        style={[styles.navIcon, { tintColor: isActive ? activeColor : inactiveColor, opacity: isActive ? 1 : 0.6 }]}
       />
       <Text style={[styles.bottomNavText, isActive && { color: activeColor, fontWeight: 'bold' }]}>{label}</Text>
     </TouchableOpacity>
@@ -68,39 +152,20 @@ const BottomNavItem = ({ name, label, icon, currentRoute, nav, isAdmin = false }
 };
 
 const AppContent = () => {
-  /* useEffect(() => { //임시 주석 처리 FCM 관련 
-
-  // 앱 켜져 있을 때 알림 받기 FCM 
-  const unsubscribe = messaging().onMessage(async remoteMessage => {
-
-    console.log('Foreground Message:', remoteMessage);
-
-    Alert.alert(
-      remoteMessage.notification?.title || '알림',
-      remoteMessage.notification?.body || ''
-    );
-  });
-
-  return unsubscribe;
-
-}, []); */ 
-
   const navigationRef = useNavigationContainerRef<RootParamList>();
-  const insets = useSafeAreaInsets(); 
-  
-  // 초기 라우트를 결정하기 위한 상태 추가
+  const insets = useSafeAreaInsets();
+
   const [initialRoute, setInitialRoute] = useState<keyof RootParamList | null>(null);
-  
   const [routeName, setRouteName] = useState<string>('');
   const [slideDirection, setSlideDirection] = useState<'slide_from_right' | 'slide_from_left'>('slide_from_right');
-  const prevRouteName = useRef<string>('Home'); 
+  const prevRouteName = useRef<string>('Home');
 
   const [isExitModalVisible, setExitModalVisible] = useState(false);
+  const [hasUnreadNotification, setHasUnreadNotification] = useState(false);
+  const lastAlertId = useRef<number | null>(null);
 
-  // --- 데이터 유지 ---
   const [profileData, setProfileData] = useState({ name: '권클라이밍', phone: '010-1234-5678', age: '25', height: '175', weight: '70', arm: '180', shoe: '260' });
   const [profileToggles, setProfileToggles] = useState({ showName: true, showPhone: false, showAge: true, showHeight: true, showWeight: true, showArm: true, showShoe: true });
-  
   const [difficultyData, setDifficultyData] = useState([
     { id: 1, color: '흰색', hex: '#EAEAEA', type: '왕복', current: 26, total: 26, status: '완료', score: 10 },
     { id: 2, color: '노랑', hex: '#F4D03F', type: '왕복', current: 33, total: 33, status: '완료', score: 20 },
@@ -115,33 +180,89 @@ const AppContent = () => {
   const [consecutiveData, setConsecutiveData] = useState([{ id: 1, colors: ['#EAEAEA', '#F4D03F', '#58D68D', '#5DADE2'] }]);
   const [users, setUsers] = useState([{ id: 1, name: '권클라이밍', phone: '010-1234-5678', status: '활동중', ticket: { type: '회원권', start: '2026-03-01', end: '2026-06-01' } }]);
 
-  // 앱 시작 시 로그인 상태 및 유저 정보 확인 로직
+  const adminScreens = ['ManagerDashboard', 'ManagerUser', 'ManagerTicket', 'ManagerNotice', 'ManagerCommunity'];
+  const isAdminMode = adminScreens.includes(routeName);
+
+  useEffect(() => {
+    createNotificationChannel();
+    requestIosPermission();
+
+    const unsubscribeForeground = messaging().onMessage(async remoteMessage => {
+      await displayForegroundNotification(remoteMessage);
+      setHasUnreadNotification(true);
+    });
+
+    const unsubscribeTokenRefresh = messaging().onTokenRefresh(async () => {
+      await registerFcmToken();
+    });
+
+    registerFcmToken();
+
+    return () => {
+      unsubscribeForeground();
+      unsubscribeTokenRefresh();
+    };
+  }, []);
+
+  useEffect(() => {
+    const fetchUnreadNotifications = async () => {
+      try {
+        const userToken = await AsyncStorage.getItem('userToken');
+        if (!userToken || initialRoute !== 'Home') return;
+
+        const endpoint = isAdminMode
+          ? `${API_BASE_URL}/admin/alerts?page=0&size=10`
+          : `${API_BASE_URL}/notifications?page=0&size=10`;
+
+        const response = await axios.get(endpoint, {
+          headers: { Authorization: `Bearer ${userToken}` },
+        });
+
+        const dataObj = response.data?.data?.data || response.data?.data || response.data;
+        const list = Array.isArray(dataObj) ? dataObj : (dataObj?.content || []);
+        const unreadItems = list.filter((item: any) => !(item.isRead === true || item.read === true));
+
+        if (unreadItems.length > 0) {
+          setHasUnreadNotification(true);
+          const latest = unreadItems[0];
+          if (lastAlertId.current !== latest.id) {
+            lastAlertId.current = latest.id;
+          }
+        } else {
+          setHasUnreadNotification(false);
+        }
+      } catch (error) {
+        // 무시
+      }
+    };
+
+    fetchUnreadNotifications();
+    const intervalId = setInterval(fetchUnreadNotifications, 30000);
+    const subscription = DeviceEventEmitter.addListener('notificationRead', () => {
+      fetchUnreadNotifications();
+    });
+    return () => {
+      clearInterval(intervalId);
+      subscription.remove();
+    };
+  }, [initialRoute, isAdminMode]);
+
   useEffect(() => {
     const checkLoginStatus = async () => {
       try {
         const userToken = await AsyncStorage.getItem('userToken');
-        
         if (userToken) {
           try {
-            // 🌟 1. 토큰이 있으면 서버에 유저 정보를 요청합니다. (백엔드 API 엔드포인트에 맞게 수정 필요)
-            const response = await axios.get(`${API_BASE_URL}/members/me`, {
-              headers: { Authorization: `Bearer ${userToken}` }
+            await axios.get(`${API_BASE_URL}/members/me`, {
+              headers: { Authorization: `Bearer ${userToken}` },
             });
-
-            // 🌟 2. 서버에서 유저 정보를 성공적으로 받아왔다면, App.tsx의 상태(State)에 저장합니다.
-            const userData = response.data.data;
-            
-            // 🌟 3. 데이터 세팅이 끝난 후 홈 화면으로 이동
             setInitialRoute('Home');
-
           } catch (apiError) {
             console.log('토큰이 만료되었거나 유효하지 않음:', apiError);
-            // 🌟 4. API 요청이 실패했다면 (토큰 만료 등) 기기에서 토큰을 지우고 로그인 화면으로 보냅니다.
             await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole']);
             setInitialRoute('Login');
           }
         } else {
-          // 토큰이 아예 없으면 로그인 화면으로
           setInitialRoute('Login');
         }
       } catch (error) {
@@ -149,39 +270,27 @@ const AppContent = () => {
         setInitialRoute('Login');
       }
     };
-
     checkLoginStatus();
   }, []);
 
-  // 관리자 알림함(AdminNotification)은 내부 헤더를 쓰므로 글로벌 네비바를 숨김 처리
   const hideNavScreens = ['Login', 'Signup', 'PersonalInfo', 'Loading', 'AdminNotification'];
   const shouldShowNav = routeName ? !hideNavScreens.includes(routeName) : false;
-  const adminScreens = ['ManagerDashboard', 'ManagerUser', 'ManagerTicket', 'ManagerNotice', 'ManagerCommunity'];
-  const isAdminMode = adminScreens.includes(routeName);
 
   const handleStateChange = () => {
     const currentRoute = navigationRef.getCurrentRoute()?.name;
     if (!currentRoute) return;
-
     const currentOrder = isAdminMode ? ADMIN_TAB_ORDER : USER_TAB_ORDER;
     const prevIndex = currentOrder.indexOf(prevRouteName.current);
     const currentIndex = currentOrder.indexOf(currentRoute);
-
     if (prevIndex !== -1 && currentIndex !== -1) {
-      if (currentIndex > prevIndex) {
-        setSlideDirection('slide_from_right'); 
-      } else if (currentIndex < prevIndex) {
-        setSlideDirection('slide_from_left');  
-      }
+      setSlideDirection(currentIndex > prevIndex ? 'slide_from_right' : 'slide_from_left');
     } else {
-       setSlideDirection('slide_from_right');
+      setSlideDirection('slide_from_right');
     }
-
     setRouteName(currentRoute);
-    prevRouteName.current = currentRoute; 
+    prevRouteName.current = currentRoute;
   };
 
-  // initialRoute가 설정될 때까지 렌더링을 멈추거나 검은 화면(로딩 화면) 렌더링
   if (initialRoute === null) {
     return <View style={styles.globalContainer} />;
   }
@@ -189,45 +298,41 @@ const AppContent = () => {
   return (
     <View style={styles.globalContainer}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-      
-      <NavigationContainer 
-        ref={navigationRef} 
+      <NavigationContainer
+        ref={navigationRef}
         onReady={() => {
           const initRoute = navigationRef.getCurrentRoute()?.name || initialRoute;
           setRouteName(initRoute);
           prevRouteName.current = initRoute;
-        }} 
-        onStateChange={handleStateChange} 
+        }}
+        onStateChange={handleStateChange}
       >
         {shouldShowNav && (
           <View style={[styles.topNav, { paddingTop: Math.max(insets.top, 10) }]}>
             <View style={styles.topNavInner}>
-              
-              {/* 🌟 1. 가운데 타이틀: 공지사항 또는 알림 화면일 때만 나타납니다. */}
               {(routeName === 'Notice' || routeName === 'Notification') && (
                 <Text style={styles.globalCenterTitle}>
                   {routeName === 'Notice' ? '공지사항' : '알림'}
                 </Text>
               )}
-
               {!isAdminMode ? (
                 <>
-                  {/* 🌟 2. 왼쪽 영역: 해당 화면에서는 뒤로가기 버튼, 아니면 로고 */}
                   {routeName === 'Notice' || routeName === 'Notification' ? (
-                    <TouchableOpacity style={styles.backBtn} onPress={() => navigationRef.goBack()} hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
+                    <TouchableOpacity style={styles.backBtn} onPress={() => navigationRef.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                       <Text style={styles.backBtnText}>←</Text>
                     </TouchableOpacity>
                   ) : (
                     <Text style={styles.logoText}>olla</Text>
                   )}
-
-                  {/* 🌟 3. 오른쪽 영역: 알림 버튼 (Notice나 Notification 화면에서는 숨김 처리) */}
                   {routeName !== 'Notice' && routeName !== 'Notification' ? (
-                    <TouchableOpacity onPress={() => navigationRef.navigate('Notification')} hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
-                      <Image source={require('./assets/Vector.png')} style={styles.topIcon} />
+                    <TouchableOpacity onPress={() => navigationRef.navigate('Notification')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                      <View>
+                        <Image source={require('./assets/Vector.png')} style={styles.topIcon} />
+                        {hasUnreadNotification && <View style={styles.bellBadge} />}
+                      </View>
                     </TouchableOpacity>
                   ) : (
-                    <View style={{ width: 20 }} /> // 좌우 균형을 맞추기 위한 빈 공간
+                    <View style={{ width: 20 }} />
                   )}
                 </>
               ) : (
@@ -236,18 +341,18 @@ const AppContent = () => {
                     <Text style={styles.logoText}>olla</Text>
                     <Text style={styles.adminSubText}>관리자</Text>
                   </View>
-                  
-                  {/* 💡 수정: 우측 영역 버튼 배치 그룹화 (알림함 버튼 추가) */}
                   <View style={styles.adminRightControls}>
-                    <TouchableOpacity 
-                      style={styles.adminAlertBtn} 
+                    <TouchableOpacity
+                      style={styles.adminAlertBtn}
                       onPress={() => navigationRef.navigate('AdminNotification')}
-                      hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
-                      <Image source={require('./assets/Vector.png')} style={styles.adminAlertIcon} />
+                      <View>
+                        <Image source={require('./assets/Vector.png')} style={styles.adminAlertIcon} />
+                        {hasUnreadNotification && <View style={styles.adminBellBadge} />}
+                      </View>
                       <Text style={styles.adminAlertText}>알림함</Text>
                     </TouchableOpacity>
-
                     <TouchableOpacity style={styles.adminExitBtn} onPress={() => setExitModalVisible(true)}>
                       <Image source={require('./assets/EXIT.png')} style={styles.adminExitIcon} />
                       <Text style={styles.adminExitText}>관리자 모드 종료</Text>
@@ -255,7 +360,7 @@ const AppContent = () => {
                   </View>
                 </>
               )}
-            </View> 
+            </View>
           </View>
         )}
 
@@ -267,9 +372,7 @@ const AppContent = () => {
             <Stack.Screen name="Loading" component={LoadingScreen} />
             <Stack.Screen name="Home" component={HomeScreen} />
             <Stack.Screen name="Notice" component={NoticeScreen} />
-            
             <Stack.Screen name="Notification" component={NotificationScreen} />
-
             <Stack.Screen name="Recode">{(props) => <RecodeScreen {...props} difficultyData={difficultyData} setDifficultyData={setDifficultyData} enduranceData={enduranceData} setEnduranceData={setEnduranceData} consecutiveData={consecutiveData} setConsecutiveData={setConsecutiveData} />}</Stack.Screen>
             <Stack.Screen name="Ranking">{(props) => <RankingScreen {...props} myProfile={profileData} difficultyData={difficultyData} enduranceData={enduranceData} consecutiveData={consecutiveData} />}</Stack.Screen>
             <Stack.Screen name="Community">{(props) => <CommunityScreen {...props} myProfile={profileData} myToggles={profileToggles} />}</Stack.Screen>
@@ -279,7 +382,6 @@ const AppContent = () => {
             <Stack.Screen name="ManagerTicket">{(props) => <ManagerTicket {...props} users={users} setUsers={setUsers} />}</Stack.Screen>
             <Stack.Screen name="ManagerNotice" component={ManagerNotice} />
             <Stack.Screen name="ManagerCommunity" component={ManagerCommunity} />
-            
             <Stack.Screen name="AdminNotification" component={AdminNotificationScreen} />
           </Stack.Navigator>
         </View>
@@ -322,7 +424,6 @@ const AppContent = () => {
           </View>
         </View>
       </Modal>
-
     </View>
   );
 };
@@ -340,22 +441,19 @@ const styles = StyleSheet.create({
   mainContent: { flex: 1 },
   topNav: { backgroundColor: '#1A1A1A', borderBottomWidth: 0.5, borderBottomColor: '#222' },
   topNavInner: { height: 50, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, position: 'relative' },
-  
   globalCenterTitle: { position: 'absolute', left: 0, right: 0, textAlign: 'center', color: '#ffffff', fontSize: 20, fontWeight: 'bold', zIndex: 1 },
   backBtn: { padding: 5, zIndex: 10, marginLeft: -5 },
   backBtnText: { color: '#ffffff', fontSize: 28 },
-
-  logoText: { fontSize: 24, fontWeight: '900', color: '#A1BE44' }, 
-  topIcon: { width: 20, height: 20, resizeMode: 'contain' }, 
+  logoText: { fontSize: 24, fontWeight: '900', color: '#A1BE44' },
+  topIcon: { width: 20, height: 20, resizeMode: 'contain' },
+  bellBadge: { position: 'absolute', top: -2, right: -2, width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF4D4D', borderWidth: 1, borderColor: '#1A1A1A' },
   adminLogoContainer: { flexDirection: 'column' },
   adminSubText: { color: '#999999', fontSize: 9, fontWeight: 'bold', marginTop: -3 },
-  
-  // 💡 추가된 스타일 객체들
   adminRightControls: { flexDirection: 'row', alignItems: 'center' },
   adminAlertBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2C2C2C', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, marginRight: 8, borderWidth: 0.5, borderColor: '#444' },
   adminAlertIcon: { width: 13, height: 13, tintColor: '#A1BE44', marginRight: 6, resizeMode: 'contain' },
+  adminBellBadge: { position: 'absolute', top: -3, right: 3, width: 6, height: 6, borderRadius: 3, backgroundColor: '#FF4D4D' },
   adminAlertText: { color: '#ffffff', fontSize: 13, fontWeight: 'bold' },
-
   adminExitBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#331111', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
   adminExitIcon: { width: 14, height: 14, tintColor: '#FF4D4D', marginRight: 6 },
   adminExitText: { color: '#FF4D4D', fontSize: 13, fontWeight: 'bold' },
