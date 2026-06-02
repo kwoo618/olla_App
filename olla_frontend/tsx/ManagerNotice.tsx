@@ -76,7 +76,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
         <Text style={styles.fabText}>+ 작성</Text>
       </TouchableOpacity>
 
-      {/* ─── 결과 알림 모달 ───────────────────────────────────────────────── */}
+      {/* ─── 💡 결과 알림 모달 (OLLA 표준 규격 적용) ───────────────────────────────────────────────── */}
       <Modal visible={n.resultModalVisible} animationType="fade" transparent onRequestClose={n.closeResultModal}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -271,7 +271,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 삭제 확인 모달 ───────────────────────────────────────────────── */}
+      {/* ─── 💡 삭제 확인 모달 (OLLA 표준 규격 적용) ───────────────────────────────────────────────── */}
       <Modal visible={n.isDeleteModalVisible} animationType="fade" transparent onRequestClose={n.cancelDelete}>
         <View style={styles.centerModalOverlay}>
           <View style={styles.deleteModalBox}>
@@ -363,21 +363,56 @@ const styles = StyleSheet.create({
   detailImage:    { width: '100%', height: 200, borderRadius: 12, marginBottom: 20, backgroundColor: '#2C2C2C' },
   detailContent:  { color: '#dddddd', fontSize: 16, lineHeight: 26, marginBottom: 30 },
 
-  centerModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
-  deleteModalBox:     { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
-  deleteTitle:        { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginBottom: 25, textAlign: 'center' },
-  deleteBtnRow:       { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  btnYes:             { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginRight: 5 },
-  btnNo:              { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
-  btnTextBlack:       { color: '#000000', fontSize: 18, fontWeight: 'bold' },
-  btnTextWhite:       { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
-
+  // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
+  // 1. 공통 시스템 결과 알림 모달
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox:     { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle:   { fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
-  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 },
-  resultModalBtn:     { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
+  resultModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
+    alignItems: 'center' 
+  },
+  resultModalTitle: { 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    marginBottom: 8 
+  },
+  resultModalMessage: { 
+    color: '#ffffff', 
+    fontSize: 18, 
+    fontWeight: 'bold',
+    marginBottom: 25, 
+    textAlign: 'center', 
+    lineHeight: 24 
+  },
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
+
+  // 2. 삭제 확인 모달
+  centerModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
+  deleteModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
+    alignItems: 'center' 
+  },
+  deleteTitle: { 
+    color: '#ffffff', 
+    fontSize: 18, 
+    fontWeight: 'bold',
+    marginBottom: 25, 
+    textAlign: 'center', 
+    lineHeight: 24 
+  },
+  deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  btnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 },
+  btnTextBlack: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
+  btnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 },
+  btnTextWhite: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
 });
 
 export default ManagerNotice;

@@ -200,7 +200,7 @@ const MYScreen = ({ navigation }: any) => {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* 프로필 수정 모달 */}
+      {/* 프로필 수정 바텀시트 */}
       <Modal visible={isProfileModalVisible} transparent animationType="fade" onRequestClose={() => closeProfileModal()}>
         <View style={styles.modalOverlay}>
           <TouchableWithoutFeedback onPress={() => closeProfileModal()}><View style={StyleSheet.absoluteFill} /></TouchableWithoutFeedback>
@@ -282,7 +282,7 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 비밀번호 변경 모달 */}
+      {/* ─── 💡 비밀번호 변경 폼 모달 (OLLA 표준 적용) ─── */}
       <Modal visible={isChangePwModalVisible} transparent animationType="fade" onRequestClose={() => setChangePwModalVisible(false)}>
         <View style={styles.centerModalOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', alignItems: 'center' }}>
@@ -303,7 +303,7 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 기타 모달 모음 (관리자, 로그아웃, 탈퇴, 결과, 문의하기 등) */}
+      {/* ─── 💡 관리자 모드 실행 확인 모달 (OLLA 표준 적용) ─── */}
       <Modal visible={isAdminModalVisible} transparent animationType="fade" onRequestClose={() => setAdminModalVisible(false)}>
         <View style={styles.centerModalOverlay}>
           <View style={styles.centerModalBox}>
@@ -316,6 +316,7 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
+      {/* ─── 💡 로그아웃 확인 모달 (OLLA 표준 적용) ─── */}
       <Modal visible={isLogoutModalVisible} transparent animationType="fade" onRequestClose={() => setLogoutModalVisible(false)}>
         <View style={styles.centerModalOverlay}>
           <View style={styles.centerModalBox}>
@@ -328,18 +329,20 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
+      {/* ─── 💡 계정 삭제 확인 모달 (OLLA 표준 적용) ─── */}
       <Modal visible={isDeleteModalVisible} transparent animationType="fade" onRequestClose={() => setDeleteModalVisible(false)}>
         <View style={styles.centerModalOverlay}>
           <View style={styles.centerModalBox}>
             <Text style={[styles.centerModalText, { textAlign: 'center' }]}>정말로 삭제하시겠습니까?{'\n'}모든 데이터가 삭제됩니다.</Text>
             <View style={styles.centerBtnRow}>
-              <TouchableOpacity style={[styles.centerBtnYes, { backgroundColor: '#FF4D4D' }]} onPress={executeDeleteAccount}><Text style={styles.centerBtnYesText}>삭제하기</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.centerBtnYes, { backgroundColor: '#FF4D4D' }]} onPress={executeDeleteAccount}><Text style={[styles.centerBtnYesText, { color: '#ffffff' }]}>삭제하기</Text></TouchableOpacity>
               <TouchableOpacity style={styles.centerBtnNo} onPress={() => setDeleteModalVisible(false)}><Text style={styles.centerBtnNoText}>취소</Text></TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
+      {/* ─── 💡 시스템 결과 알림 공통 모달 (OLLA 표준 적용) ─── */}
       <Modal visible={resultModalVisible} transparent animationType="fade" onRequestClose={() => setResultModalVisible(false)}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -350,6 +353,7 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
+      {/* 프론트 데스크 문의 바텀시트 */}
       <Modal visible={isPauseModalVisible} transparent animationType="fade" onRequestClose={closePauseModal}>
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={closePauseModal} />
@@ -389,7 +393,6 @@ const MYScreen = ({ navigation }: any) => {
   );
 };
 
-// StyleSheet은 기존과 완전히 동일하므로 그대로 사용하시면 됩니다.
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
   scrollContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 100 },
@@ -430,14 +433,18 @@ const styles = StyleSheet.create({
   logoutText: { color: '#FF4D4D', fontSize: 18, fontWeight: 'bold' },
   deleteAccountBtn: { alignItems: 'center', paddingVertical: 10, marginBottom: 0 },
   deleteAccountText: { color: '#666666', fontSize: 16, textDecorationLine: 'underline' },
+  
+  // 바텀시트 공통
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%', overflow: 'hidden' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   sheetTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold' },
   sheetTitleCenter: { color: '#ffffff', fontSize: 23, fontWeight: 'bold', textAlign: 'center', marginBottom: 15 },
-  closeBtn: { color: '#999999', fontSize: 28, paddingHorizontal: 10 },
+  closeBtn: { color: '#999999', fontSize: 28, paddingHorizontal: 10, marginBottom: 8 },
   horizontalDivider: { height: 1, backgroundColor: '#333333', width: '100%', marginBottom: 20 },
+  
+  // 프로필 편집
   profileEditContainer: { backgroundColor: '#262626', borderRadius: 16, padding: 20 },
   profileImageEditWrapper: { alignSelf: 'center', width: 90, height: 90, borderRadius: 45, backgroundColor: '#444444', marginBottom: 25, overflow: 'hidden' },
   profileImageLarge: { width: '100%', height: '100%' },
@@ -458,20 +465,8 @@ const styles = StyleSheet.create({
   genderBtnActive: { borderColor: '#A1BE44', backgroundColor: 'rgba(161, 190, 68, 0.1)' },
   genderBtnText: { color: '#999999', fontSize: 18, fontWeight: 'bold' },
   genderBtnTextActive: { color: '#A1BE44' },
-  centerModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  centerModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
-  centerModalText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25 },
-  centerBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  centerBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
-  centerBtnYesText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
-  centerBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
-  centerBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
-  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
-  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 },
-  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
+
+  // 문의하기/프론트데스크
   pauseInfoBox: { backgroundColor: '#2C2C2C', borderRadius: 12, padding: 18, marginBottom: 25 },
   pauseInfoText: { color: '#ffffff', fontSize: 16, lineHeight: 24, textAlign: 'center' },
   modalBtnRow: { flexDirection: 'row', justifyContent: 'space-between' },
@@ -483,13 +478,84 @@ const styles = StyleSheet.create({
   phoneIcon: { width: 80, height: 80, resizeMode: 'contain', marginBottom: 15 },
   contactNumber: { color: '#A1BE44', fontSize: 32, fontWeight: '900', marginBottom: 8 },
   contactTime: { color: '#999999', fontSize: 14, textAlign: 'center' },
-  inputModalBox: { width: 320, backgroundColor: '#2A2A2A', borderRadius: 16, padding: 20 },
-  inputModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  inputModalTitle: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
-  inputField: { backgroundColor: '#1A1A1A', color: '#FFF', borderRadius: 8, padding: 15, marginBottom: 12, fontSize: 16, borderWidth: 1, borderColor: '#444' },
-  submitBtn: { backgroundColor: '#A1BE44', borderRadius: 8, paddingVertical: 15, alignItems: 'center', marginTop: 10 },
+  errorText: { color: '#FF4D4D', fontSize: 14, marginBottom: 10, textAlign: 'center' },
+
+  // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
+  
+  // 1. 입력 모달 (비밀번호 변경)
+  inputModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35 
+  },
+  inputModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
+  inputModalTitle: { color: '#ffffff', fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
+  inputField: { 
+    width: '100%',
+    backgroundColor: '#1A1A1A', 
+    color: '#FFF', 
+    borderRadius: 12, 
+    padding: 15, 
+    marginBottom: 12, 
+    fontSize: 16, 
+    borderWidth: 1, 
+    borderColor: '#444' 
+  },
+  submitBtn: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 20 },
   submitBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
-  errorText: { color: '#FF4D4D', fontSize: 14, marginBottom: 10, textAlign: 'center' }
+
+  // 2. 투 버튼 확인 모달 (관리자 모드 실행 / 로그아웃 / 계정삭제)
+  centerModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  centerModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
+    alignItems: 'center' 
+  },
+  centerModalText: { 
+    color: '#ffffff', 
+    fontSize: 18, 
+    fontWeight: 'bold', 
+    marginBottom: 25,
+    lineHeight: 24,
+    textAlign: 'center'
+  },
+  centerBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  centerBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 },
+  centerBtnYesText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
+  centerBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 },
+  centerBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
+
+  // 3. 단일 버튼 시스템 안내 모달 (결과 알림)
+  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  resultModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
+    alignItems: 'center' 
+  },
+  resultModalTitle: { 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    marginBottom: 8 
+  },
+  resultModalMessage: { 
+    color: '#ffffff', 
+    fontSize: 18, 
+    fontWeight: 'bold',
+    marginBottom: 25, 
+    textAlign: 'center', 
+    lineHeight: 24 
+  },
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
+  // ───────────────────────────────────────────────────────────────────────────────────────────
 });
 
 export default MYScreen;

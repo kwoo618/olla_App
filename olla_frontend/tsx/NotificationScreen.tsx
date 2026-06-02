@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Modal, RefreshControl } from 'react-native';
 import { useNotification, NotificationItem } from '../ts/Notifications'; 
@@ -39,7 +38,7 @@ const NotificationScreen = ({ navigation }: any) => {
           </View>
         </View>
         
-        // 💡 여기에 MembershipType을 명시하여 TS7006 오류 해결
+        {/* 💡 여기에 MembershipType을 명시하여 TS7006 오류 해결 */}
         {myMemberships.map((m: MembershipType) => {
           const ddayColor = m.dDay <= 3 ? '#FF4D4D' : '#FF9800';
           const ddayLabel = m.dDay === 0 ? 'D-Day' : `D-${m.dDay}`;
@@ -126,6 +125,7 @@ const NotificationScreen = ({ navigation }: any) => {
         }}
       />
 
+      {/* ─── 💡 시스템 결과 알림 모달 (OLLA 표준 규격 적용) ─── */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -232,12 +232,41 @@ const styles = StyleSheet.create({
   },
   noticeContentText: { color: '#CCCCCC', fontSize: 16, lineHeight: 24 },
 
+  // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
-  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 },
-  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
-  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
+  resultModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
+    alignItems: 'center' 
+  },
+  resultModalTitle: { 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    marginBottom: 8 
+  },
+  resultModalMessage: { 
+    color: '#ffffff', 
+    fontSize: 18, 
+    fontWeight: 'bold',
+    marginBottom: 25, 
+    textAlign: 'center', 
+    lineHeight: 24 
+  },
+  resultModalBtn: { 
+    width: '100%', 
+    backgroundColor: '#A1BE44', 
+    paddingVertical: 16, 
+    borderRadius: 12, 
+    alignItems: 'center' 
+  },
+  resultModalBtnText: { 
+    color: '#000000', 
+    fontSize: 18, 
+    fontWeight: 'bold' 
+  },
 });
 
 export default NotificationScreen;

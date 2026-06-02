@@ -203,7 +203,8 @@ const ManagerCommunity = ({ route, navigation }: any) => {
           <Modal visible={deleteTarget !== null} animationType="fade" transparent={true} onRequestClose={() => setDeleteTarget(null)}>
             <View style={styles.deleteModalOverlay}>
               <View style={styles.deleteModalBox}>
-                <Text style={styles.deleteModalText}>삭제하시겠습니까?</Text>
+                <Text style={[styles.deleteModalTitle, { color: '#FF4D4D' }]}>삭제 확인</Text>
+                <Text style={styles.deleteModalMessage}>게시글을 정말로 삭제하시겠습니까?</Text>
                 <View style={styles.deleteBtnRow}>
                   <TouchableOpacity style={styles.deleteBtnYes} onPress={executeDelete}><Text style={styles.deleteBtnYesText}>예</Text></TouchableOpacity>
                   <TouchableOpacity style={styles.deleteBtnNo} onPress={() => setDeleteTarget(null)}><Text style={styles.deleteBtnNoText}>아니오</Text></TouchableOpacity>
@@ -358,7 +359,8 @@ const ManagerCommunity = ({ route, navigation }: any) => {
             <View style={[StyleSheet.absoluteFill, { zIndex: 999, elevation: 999 }]}>
               <View style={styles.deleteModalOverlay}>
                 <View style={styles.deleteModalBox}>
-                  <Text style={styles.deleteModalText}>해당 댓글을 삭제하시겠습니까?</Text>
+                  <Text style={[styles.deleteModalTitle, { color: '#FF4D4D' }]}>삭제 확인</Text>
+                  <Text style={styles.deleteModalMessage}>해당 댓글을 삭제하시겠습니까?</Text>
                   <View style={styles.deleteBtnRow}>
                     <TouchableOpacity style={styles.deleteBtnYes} onPress={executeCommentDelete}><Text style={styles.deleteBtnYesText}>예</Text></TouchableOpacity>
                     <TouchableOpacity style={styles.deleteBtnNo} onPress={() => setCommentDeleteTarget(null)}><Text style={styles.deleteBtnNoText}>아니오</Text></TouchableOpacity>
@@ -379,45 +381,6 @@ const ManagerCommunity = ({ route, navigation }: any) => {
               </View>
             </View>
           )}
-
-          {isDetailVisible && (
-            <View style={[StyleSheet.absoluteFill, { zIndex: 999, elevation: 999 }]}>
-              <View style={styles.modalOverlay}>
-                <TouchableWithoutFeedback onPress={closeDetailModal}><View style={StyleSheet.absoluteFill} /></TouchableWithoutFeedback>
-                <Animated.View style={[styles.bottomSheet, { height: detailHeightAnim, overflow: 'hidden' }]}>
-                  <View {...detailPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
-                    <View style={styles.dragHandle} />
-                    <View style={styles.sheetHeader}>
-                      <Text style={styles.sheetTitle}>회원 정보 확인</Text>
-                      <TouchableOpacity onPress={closeDetailModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity>
-                    </View>
-                    <View style={styles.horizontalDivider} />
-                  </View>
-                  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
-                    {selectedUser && (
-                      <View style={styles.detailContainer}>
-                        <View style={styles.detailProfileWrapper}>
-                          <Image source={getProfileImage(selectedUser.profileImageUrl)} style={styles.profileBig} /> 
-                          <Text style={styles.profileName}>{selectedUser.name}</Text>
-                        </View>
-                        <View style={styles.detailInfoBox}>
-                          {renderDetailRow('이름', selectedUser.name)}
-                          {renderDetailRow('전화번호', selectedUser.phone)}
-                          {renderDetailRow('성별', selectedUser.gender)}
-                          {renderDetailRow('나이', selectedUser.age, '세')}
-                          {renderDetailRow('키', selectedUser.height, 'cm')}
-                          {renderDetailRow('몸무게', selectedUser.weight, 'kg')}
-                          {renderDetailRow('팔길이', selectedUser.arm, 'cm')}
-                          {renderDetailRow('암벽화 사이즈', selectedUser.shoe, 'mm')}
-                        </View>
-                        <TouchableOpacity style={styles.closeFullBtn} onPress={closeDetailModal}><Text style={styles.closeFullBtnText}>닫기</Text></TouchableOpacity>
-                      </View>
-                    )}
-                  </ScrollView>
-                </Animated.View>
-              </View>
-            </View>
-          )}
         </View>
       </Modal>
 
@@ -425,7 +388,6 @@ const ManagerCommunity = ({ route, navigation }: any) => {
   );
 };
 
-// ... 아래의 스타일 객체는 그대로 유지 ...
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A', paddingHorizontal: 20, paddingTop: 10 },
   tabContainer: { flexDirection: 'row', backgroundColor: '#3A3A3A', borderRadius: 24, padding: 4, marginBottom: 20 },
@@ -467,14 +429,60 @@ const styles = StyleSheet.create({
   textProfileText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' }, 
   authorText: { color: '#cccccc', fontSize: 16, fontWeight: '600' }, 
 
+  // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
   deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  deleteModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' }, 
-  deleteModalText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center' }, 
+  deleteModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
+    alignItems: 'center' 
+  },
+  deleteModalTitle: { 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    marginBottom: 8 
+  }, 
+  deleteModalMessage: { 
+    color: '#ffffff', 
+    fontSize: 18, 
+    fontWeight: 'bold', 
+    marginBottom: 25, 
+    textAlign: 'center', 
+    lineHeight: 24 
+  }, 
   deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  deleteBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginRight: 5 }, 
-  deleteBtnYesText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
-  deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginLeft: 5 }, 
+  deleteBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 }, 
+  deleteBtnYesText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
+  deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 }, 
   deleteBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
+
+  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  resultModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
+    alignItems: 'center' 
+  }, 
+  resultModalTitle: { 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    marginBottom: 8 
+  }, 
+  resultModalMessage: { 
+    color: '#ffffff', 
+    fontSize: 18, 
+    fontWeight: 'bold', 
+    marginBottom: 25, 
+    textAlign: 'center', 
+    lineHeight: 24 
+  }, 
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, 
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
+  // ─────────────────────────────────────────────────────────────────────────────────────────
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%' },
@@ -494,13 +502,6 @@ const styles = StyleSheet.create({
   detailValue: { color: '#ffffff', fontSize: 17, fontWeight: 'bold' }, 
   closeFullBtn: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 18, alignItems: 'center' }, 
   closeFullBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
-
-  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, 
-  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, 
-  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, 
-  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, 
-  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
 
   commentSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: Platform.OS === 'ios' ? 30 : 20, width: '100%', overflow: 'hidden' },
   postDetailContainer: { paddingBottom: 10, paddingTop: 10 },

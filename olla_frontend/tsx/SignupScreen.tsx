@@ -218,13 +218,15 @@ const SignupScreen = ({ navigation }: any) => {
               </View>
               {emailCodeError !== '' && <Text style={styles.errorText}>{emailCodeError}</Text>}
               {emailCodeSuccess !== '' && focusedField === 'emailCode' && <Text style={styles.successText}>{emailCodeSuccess}</Text>}
-              <TouchableOpacity onPress={() => showResultModal('안내', '스팸함을 확인해 보십시오.\n\n인증 메일이 스팸 또는 프로모션 탭으로\n분류되었을 수 있습니다.', 'info')}>
+              
+              {/* 💡 문장 부호 디자인 표준 적용 (타이틀에 ! 추가) */}
+              <TouchableOpacity onPress={() => showResultModal('안내!', '스팸함을 확인해 보십시오.\n\n인증 메일이 스팸 또는 프로모션 탭으로\n분류되었을 수 있습니다.', 'info')}>
                 <Text style={styles.spamGuideText}>이메일이 안 왔나요?</Text>
               </TouchableOpacity>
             </>
           )}
 
-          {/* 💡 새로 추가된 개인정보처리방침 동의 영역 */}
+          {/* 개인정보처리방침 동의 영역 */}
           <View style={styles.termsContainer}>
             <TouchableOpacity 
               style={styles.checkboxWrapper} 
@@ -247,7 +249,7 @@ const SignupScreen = ({ navigation }: any) => {
 
           <TouchableOpacity
             onPress={handleNextStep}
-            disabled={isCheckingNext || !isTermsChecked || !isIdChecked || !isEmailVerified} // 약관 동의(isTermsChecked) 추가
+            disabled={isCheckingNext || !isTermsChecked || !isIdChecked || !isEmailVerified} 
             style={[styles.button, (!isIdChecked || !isEmailVerified || !isTermsChecked || isCheckingNext) && styles.buttonDisabled]}
           >
             {isCheckingNext ? <ActivityIndicator color="#000000" size="small" /> : <Text style={styles.buttonText}>다음으로</Text>}
@@ -255,7 +257,7 @@ const SignupScreen = ({ navigation }: any) => {
         </View>
       </KeyboardAwareScrollView>
 
-      {/* 커스텀 알림 결과 모달 */}
+      {/* 커스텀 알림 결과 모달 (OLLA 표준 디자인 레이아웃 반영) */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={closeResultModal}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -305,15 +307,33 @@ const styles = StyleSheet.create({
   buttonDisabled: { backgroundColor: '#333333' },
   buttonText: { color: '#000000', fontSize: 20, fontWeight: 'bold' }, 
 
+  // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 ───────────────────────────
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, 
-  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, 
-  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, 
+  resultModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25,          // 💡 표준 가이드 적용 (16 -> 25)
+    paddingVertical: 45,       // 💡 표준 가이드 적용 (20 -> 45)
+    paddingHorizontal: 35,     // 💡 표준 가이드 적용 (20 -> 35)
+    alignItems: 'center' 
+  }, 
+  resultModalTitle: { 
+    fontSize: 28,              // 💡 표준 가이드 적용 (20 -> 28)
+    fontWeight: 'bold', 
+    marginBottom: 8            // 💡 표준 가이드 적용 (5 -> 8)
+  }, 
+  resultModalMessage: { 
+    color: '#ffffff', 
+    fontSize: 18,              // 💡 표준 가이드 적용 (17 -> 18)
+    fontWeight: 'bold',        // 💡 표준 가이드 적용 (가독성 향상)
+    marginBottom: 25, 
+    textAlign: 'center', 
+    lineHeight: 24 
+  }, 
   resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, 
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
   spamGuideText: { color: '#888888', fontSize: 14, alignSelf: 'flex-start', marginLeft: 5, marginTop: 6, marginBottom: 4, textDecorationLine: 'underline' },
 
-  // 💡 약관 영역 관련 스타일
   termsContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 25, paddingHorizontal: 5 },
   checkboxWrapper: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   checkbox: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: '#666666', justifyContent: 'center', alignItems: 'center', marginRight: 10 },

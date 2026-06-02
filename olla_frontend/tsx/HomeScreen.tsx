@@ -71,8 +71,8 @@ const HomeScreen = ({ navigation }: any) => {
     if (title === '공지사항') navigation.navigate('Notice');
     else if (title === 'QR') {
       if (!hasMembership) {
-        if (membership.hasFuture) showResultModal('입장 불가', `${membership.futureStartDate}부터 이용 가능합니다`, 'info');
-        else showResultModal('입장 불가', '현재 활성화된 이용권이 없습니다. 이용권을 먼저 구매해주세요', 'info');
+        if (membership.hasFuture) showResultModal('입장 불가!', `${membership.futureStartDate}부터 이용 가능합니다.`, 'info');
+        else showResultModal('입장 불가!', '현재 활성화된 이용권이 없습니다. 이용권을 먼저 구매해주세요.', 'info');
         return;
       }
       openModal('QR');
@@ -186,7 +186,7 @@ const HomeScreen = ({ navigation }: any) => {
               <>
                 <Text style={styles.microValuecolor} numberOfLines={1} adjustsFontSizeToFit>{userStats.difficultyColor}</Text>
                 <Text style={styles.microUnit}>{userStats.difficultyType} <Text style={{ color: '#999999' }}>{userStats.difficultyStatus}</Text></Text>
-              </  >
+              </>
             )}
           </TouchableOpacity>
           <View style={styles.verticalDivider} />
@@ -232,10 +232,13 @@ const HomeScreen = ({ navigation }: any) => {
         </View>
       </ScrollView>
 
+      {/* ─── 💡 시스템 결과 알림 모달창 ─── */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={closeResultModal}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
-            <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>{resultModalConfig.title}</Text>
+            <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>
+              {resultModalConfig.title}
+            </Text>
             <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
             <TouchableOpacity style={styles.resultModalBtn} onPress={closeResultModal}>
               <Text style={styles.resultModalBtnText}>확인</Text>
@@ -385,12 +388,46 @@ const styles = StyleSheet.create({
   memHalfValueGreen: { color: '#A1BE44', fontSize: 28, fontWeight: 'bold' },
   memHalfValueWhite: { color: '#ffffff', fontSize: 28, fontWeight: 'bold' },
 
+  // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
-  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 },
-  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  
+  resultModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25,          // 💡 표준 모서리 곡률
+    paddingVertical: 45,       // 💡 표준 상하 패딩
+    paddingHorizontal: 35,     // 💡 표준 좌우 패딩
+    alignItems: 'center' 
+  },
+  
+  resultModalTitle: { 
+    fontSize: 28,              // 💡 표준 타이틀 크기
+    fontWeight: 'bold', 
+    marginBottom: 8            // 💡 타이틀 하단 여백 통일
+  },
+  
+  resultModalMessage: { 
+    color: '#ffffff', 
+    fontSize: 18,              // 💡 본문 크기 통일
+    fontWeight: 'bold',        // 💡 텍스트 굵기 통일
+    marginBottom: 25,          // 💡 버튼과의 여백 통일
+    textAlign: 'center', 
+    lineHeight: 24 
+  },
+  
+  resultModalBtn: { 
+    width: '100%', 
+    backgroundColor: '#A1BE44', 
+    paddingVertical: 16, 
+    borderRadius: 12, 
+    alignItems: 'center' 
+  },
+  
+  resultModalBtnText: { 
+    color: '#000000', 
+    fontSize: 18, 
+    fontWeight: 'bold' 
+  },
 });
 
 export default HomeScreen;

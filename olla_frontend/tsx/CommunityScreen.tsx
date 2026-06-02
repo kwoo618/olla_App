@@ -304,7 +304,8 @@ const CommunityScreen = ({ route, navigation }: any) => {
           <Modal visible={deleteTarget !== null} animationType="fade" transparent onRequestClose={() => setDeleteTarget(null)}>
             <View style={s.overlay}>
               <View style={s.alertBox}>
-                <Text style={s.alertTitle}>삭제하시겠습니까?</Text>
+                <Text style={[s.alertTitle, { color: '#FF4D4D' }]}>삭제 확인!</Text>
+                <Text style={s.alertMessage}>게시글을 정말로 삭제하시겠습니까.</Text>
                 <View style={s.alertBtns}>
                   <TouchableOpacity style={s.btnYes} onPress={executeDelete}><Text style={s.btnYesText}>예</Text></TouchableOpacity>
                   <TouchableOpacity style={s.btnNo} onPress={() => setDeleteTarget(null)}><Text style={s.btnNoText}>아니오</Text></TouchableOpacity>
@@ -316,7 +317,8 @@ const CommunityScreen = ({ route, navigation }: any) => {
           <Modal visible={closeTarget !== null} animationType="fade" transparent onRequestClose={() => setCloseTarget(null)}>
             <View style={s.overlay}>
               <View style={s.alertBox}>
-                <Text style={s.alertTitle}>모집을 마감하시겠습니까?</Text>
+                <Text style={[s.alertTitle, { color: '#A1BE44' }]}>마감 확인!</Text>
+                <Text style={s.alertMessage}>모집을 정말로 마감하시겠습니까.</Text>
                 <View style={s.alertBtns}>
                   <TouchableOpacity style={s.btnYes} onPress={executeClose}><Text style={s.btnYesText}>예</Text></TouchableOpacity>
                   <TouchableOpacity style={s.btnNo} onPress={() => setCloseTarget(null)}><Text style={s.btnNoText}>아니오</Text></TouchableOpacity>
@@ -483,7 +485,8 @@ const CommunityScreen = ({ route, navigation }: any) => {
           <Modal visible={commentDeleteTarget !== null} animationType="fade" transparent={true} onRequestClose={() => setCommentDeleteTarget(null)}>
             <View style={s.overlay}>
               <View style={s.alertBox}>
-                <Text style={s.alertTitle}>해당 댓글을 삭제하시겠습니까?</Text>
+                <Text style={[s.alertTitle, { color: '#FF4D4D' }]}>삭제 확인!</Text>
+                <Text style={s.alertMessage}>해당 댓글을 정말로 삭제하시겠습니까.</Text>
                 <View style={s.alertBtns}>
                   <TouchableOpacity style={s.btnYes} onPress={executeCommentDelete}><Text style={s.btnYesText}>예</Text></TouchableOpacity>
                   <TouchableOpacity style={s.btnNo} onPress={() => setCommentDeleteTarget(null)}><Text style={s.btnNoText}>아니오</Text></TouchableOpacity>
@@ -534,7 +537,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
                     />
                   </View>
 
-                  {/* 💡 날짜 및 시간 픽커 버튼 */}
+                  {/* 날짜 및 시간 픽커 버튼 */}
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 }}>
                     <View style={{ flex: 1, marginRight: 8 }}>
                       <Text style={s.label}>날짜</Text>
@@ -577,14 +580,14 @@ const CommunityScreen = ({ route, navigation }: any) => {
             </Animated.View>
           </KeyboardAvoidingView>
 
-          {/* 💡 [iOS 중첩 버그 방지 & 과거 날짜 막기] Calendar 오버레이 */}
+          {/* Calendar 오버레이 */}
           {isCalendarVisible && (
             <View style={[StyleSheet.absoluteFill, s.calendarOverlay, { zIndex: 1000, elevation: 10 }]}>
               <View style={s.calendarBox}>
                 <Text style={s.calendarTitle}>날짜 선택</Text>
                 <Calendar
                   current={form.date || getToday()}
-                  minDate={getToday()} // 💡 과거 날짜 클릭 원천 차단
+                  minDate={getToday()} 
                   onDayPress={(day: any) => { 
                     setForm(f => ({ ...f, date: day.dateString })); 
                     closeCalendar(); 
@@ -599,7 +602,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
             </View>
           )}
 
-          {/* 💡 [iOS 중첩 버그 방지 & 과거 시간 막기] 시간 선택기 오버레이 */}
+          {/* 시간 선택기 오버레이 */}
           {isTimePickerVisible && (
             <View style={[StyleSheet.absoluteFill, s.calendarOverlay, { zIndex: 1000, elevation: 10 }]}>
               <View style={s.timePickerBox}>
@@ -625,7 +628,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
                   {/* 분(Minute) 선택 스크롤 */}
                   <ScrollView style={s.timeScroll} showsVerticalScrollIndicator={false} nestedScrollEnabled>
                     {minutes.map(m => {
-                      const isMinDisabled = isTodaySelected && parseInt(tempHour) === currentHour && parseInt(m) < currentMinute;
+                      const isMinDisabled = isTodaySelected && parseInt(tempHour || String(currentHour)) === currentHour && parseInt(m) < currentMinute;
                       return (
                         <TouchableOpacity 
                           key={`min-${m}`} 
@@ -651,10 +654,11 @@ const CommunityScreen = ({ route, navigation }: any) => {
             </View>
           )}
 
+          {/* 5️⃣ 작성 폼 유효성 알림 모달 */}
           {createAlertVisible && (
             <View style={s.innerAlertOverlay}>
               <View style={s.resultModalBox}>
-                <Text style={[s.resultModalTitle, { color: '#FF4D4D' }]}>알림</Text>
+                <Text style={[s.resultModalTitle, { color: '#FF4D4D' }]}>알림!</Text>
                 <Text style={s.resultModalMessage}>{createAlertMessage}</Text>
                 <TouchableOpacity style={s.resultModalBtn} onPress={() => setCreateAlertVisible(false)}><Text style={s.resultModalBtnText}>확인</Text></TouchableOpacity>
               </View>
@@ -666,6 +670,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
   );
 };
 
+// ─────────────────────────── 💡 스타일 변경 사항 (모달 디자인 표준 적용 완료) ───────────────────────────
 const s = StyleSheet.create({
   bg:{flex:1,backgroundColor:'#1A1A1A',paddingHorizontal:20,paddingTop:10},
   searchRow:{flexDirection:'row',marginBottom:12,alignItems:'center'},
@@ -726,13 +731,63 @@ const s = StyleSheet.create({
   sheetTitle:{color:'#fff',fontSize:23,fontWeight:'bold'}, 
   closeBtn:{color:'#999',fontSize:28,paddingHorizontal:10}, 
   hr:{height:1,backgroundColor:'#333',marginBottom:20},
-  alertBox:{width:300,backgroundColor:'#212121',borderRadius:16,padding:25,alignItems:'center'},
-  alertTitle:{color:'#fff',fontSize:18,fontWeight:'bold',marginBottom:25}, 
-  alertBtns:{flexDirection:'row',width:'100%'},
-  btnYes:{flex:1,backgroundColor:'#A1BE44',paddingVertical:12,borderRadius:8,alignItems:'center',marginRight:5},
-  btnYesText:{color:'#fff',fontSize:18,fontWeight:'bold'}, 
-  btnNo:{flex:1,backgroundColor:'#262626',paddingVertical:12,borderRadius:8,alignItems:'center',marginLeft:5},
-  btnNoText:{color:'#fff',fontSize:18,fontWeight:'bold'}, 
+
+  // 💡 OLLA 모달창 표준 디자인 스타일 통일 적용
+  alertBox: {
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25,          // 💡 모서리 곡률 통일
+    paddingVertical: 45,       // 💡 패딩 상하 통일
+    paddingHorizontal: 35,     // 💡 패딩 좌우 통일
+    alignItems: 'center'
+  },
+  alertTitle: {
+    fontSize: 28,              // 💡 타이틀 크기 통일
+    fontWeight: 'bold', 
+    marginBottom: 8,           // 💡 타이틀 하단 여백 통일
+  }, 
+  alertMessage: {
+    color: '#ffffff', 
+    fontSize: 18,              // 💡 본문 크기 통일
+    fontWeight: 'bold',        // 💡 본문 굵기 통일
+    textAlign: 'center', 
+    lineHeight: 24,
+    marginBottom: 25           // 💡 버튼과의 여백 통일
+  },
+  alertBtns: { flexDirection: 'row', width: '100%' },
+  btnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 },
+  btnYesText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
+  btnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 },
+  btnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
+
+  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  innerAlertOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', zIndex: 9999, elevation: 9999 },
+  
+  resultModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25,          // 💡 모서리 곡률 통일
+    paddingVertical: 45,       // 💡 패딩 상하 통일
+    paddingHorizontal: 35,     // 💡 패딩 좌우 통일
+    alignItems: 'center' 
+  },
+  resultModalTitle: { 
+    fontSize: 28,              // 💡 타이틀 크기 통일
+    fontWeight: 'bold', 
+    marginBottom: 8            // 💡 타이틀 하단 여백 통일
+  }, 
+  resultModalMessage: { 
+    color: '#ffffff', 
+    fontSize: 18,              // 💡 본문 크기 통일
+    fontWeight: 'bold',        // 💡 본문 굵기 통일
+    marginBottom: 25, 
+    textAlign: 'center', 
+    lineHeight: 24 
+  }, 
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
+  // ───────────────────────────────────────────────────────────────────────────────────
+
   profileCenter:{alignSelf:'center',alignItems:'center',marginBottom:25},
   profileBig:{width:80,height:80,borderRadius:40,backgroundColor:'#444'},
   profileName:{color:'#fff',fontSize:18,fontWeight:'bold',marginTop:12}, 
@@ -759,13 +814,6 @@ const s = StyleSheet.create({
   counterUnit:{color:'#999',fontSize:18,fontWeight:'bold',marginLeft:2}, 
   submitBtn:{width:'100%',backgroundColor:'#A1BE44',borderRadius:12,paddingVertical:16,alignItems:'center',marginTop:20},
   submitText:{color:'#000',fontSize:18,fontWeight:'bold'}, 
-  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  innerAlertOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', zIndex: 9999, elevation: 9999 },
-  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, 
-  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, 
-  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
   commentSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: Platform.OS === 'ios' ? 30 : 20, width: '100%' },
   postDetailContainer: { paddingBottom: 10, paddingTop: 10 },
   commentSectionTitle: { color: '#A1BE44', fontSize: 16, fontWeight: 'bold', marginBottom: 10 },
@@ -790,7 +838,6 @@ const s = StyleSheet.create({
   commentSubmitBtn: { color: '#666666', fontSize: 16, fontWeight: 'bold', marginLeft: 12, paddingVertical: 10 },
   tabTextActive: { color: '#fff' },
 
-  // 달력 및 시간 선택기 추가 스타일
   pickerInputBox: { height: 50, backgroundColor: '#000', borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 15, paddingRight: 8, borderWidth: 1, borderColor: '#333' },
   pickerTextActive: { color: '#fff', fontSize: 16 },
   pickerTextPlaceholder: { color: '#666', fontSize: 16 },

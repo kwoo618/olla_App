@@ -228,7 +228,9 @@ const ManagerDashboard = ({ navigation }: any) => {
               <Text style={[styles.expiringCol, { width: 50, textAlign: 'center' }]}>상태</Text>
             </View>
             {list.map((m, idx) => {
-              const ddayColor   = m.dDay <= 3 ? '#FF4D4D' : m.dDay <= 7 ? '#FF9800' : '#A1BE44';
+              // 💡 해결 방법: m.dDay를 Number()로 감싸서 명시적 숫자로 변환 후 비교합니다.
+              const dDayNum     = Number(m.dDay); 
+              const ddayColor   = dDayNum <= 3 ? '#FF4D4D' : dDayNum <= 7 ? '#FF9800' : '#A1BE44';
               const maskedPhone = m.phone ? m.phone.replace(/(\d{3})-?(\d{4})-?(\d{4})/, '$1-****-$3') : '-';
               return (
                 <View key={m.id} style={[styles.expiringRow, idx % 2 === 1 && { backgroundColor: '#222222' }]}>
@@ -448,7 +450,7 @@ const ManagerDashboard = ({ navigation }: any) => {
         <Image source={require('../assets/Camera.png')} style={styles.fabIcon} />
       </TouchableOpacity>
 
-      {/* ─── 결과 모달 ─────────────────────────────────────────────────────── */}
+      {/* ─── 💡 결과 모달 (OLLA 표준 규격 적용) ─────────────────────────────────────────────────────── */}
       <Modal visible={dash.resultModalVisible} animationType="fade" transparent onRequestClose={dash.closeResultModal}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -463,14 +465,14 @@ const ManagerDashboard = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 삭제 확인 모달 ───────────────────────────────────────────────── */}
+      {/* ─── 💡 삭제 확인 모달 (OLLA 표준 규격 적용) ───────────────────────────────────────────────── */}
       <Modal visible={dash.isDeleteModalVisible} animationType="fade" transparent onRequestClose={() => dash.setDeleteModalVisible(false)}>
         <View style={styles.deleteModalOverlay}>
           <View style={styles.deleteModalBox}>
-            <Text style={[styles.resultModalTitle, { color: '#A1BE44' }]}>
-              해당 {dash.itemToDelete?.type === 'notice' ? '공지사항' : '게시글'} 삭제
+            <Text style={[styles.deleteModalTitle, { color: '#FF4D4D' }]}>
+              해당 {dash.itemToDelete?.type === 'notice' ? '공지사항' : '게시글'} 삭제!
             </Text>
-            <Text style={styles.resultModalMessage}>정말 삭제하시겠습니까?</Text>
+            <Text style={styles.deleteModalMessage}>정말 삭제하시겠습니까?</Text>
             <View style={styles.deleteBtnRow}>
               <TouchableOpacity style={styles.deleteBtnYes} onPress={dash.executeDelete}>
                 <Text style={styles.deleteBtnYesText}>삭제</Text>
@@ -587,7 +589,7 @@ const ManagerDashboard = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 알림 발송 모달 ───────────────────────────────────────────────── */}
+      {/* ─── 💡 알림 발송 모달 (OLLA 표준 규격 적용) ───────────────────────────────────────────────── */}
       <Modal visible={dash.isSendAlertModalVisible} animationType="fade" transparent onRequestClose={() => dash.setSendAlertModalVisible(false)}>
         <View style={styles.alertModalOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%', alignItems: 'center' }}>
@@ -737,28 +739,88 @@ const styles = StyleSheet.create({
   closeFullBtn:         { backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 10 },
   closeFullBtnText:     { color: '#000', fontWeight: 'bold', fontSize: 18 },
 
+  // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
+  // 1. 공통 시스템 결과 알림 모달
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox:     { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle:   { fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
-  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 },
-  resultModalBtn:     { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
+  resultModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
+    alignItems: 'center' 
+  },
+  resultModalTitle: { 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    marginBottom: 8 
+  },
+  resultModalMessage: { 
+    color: '#ffffff', 
+    fontSize: 18, 
+    fontWeight: 'bold',
+    marginBottom: 25, 
+    textAlign: 'center', 
+    lineHeight: 24 
+  },
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
-  deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
-  deleteModalBox:     { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
-  deleteBtnRow:       { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  deleteBtnYes:       { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
-  deleteBtnYesText:   { color: '#000000', fontSize: 18, fontWeight: 'bold' },
-  deleteBtnNo:        { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
-  deleteBtnNoText:    { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
 
+  // 2. 삭제 확인 모달
+  deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
+  deleteModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
+    alignItems: 'center' 
+  },
+  deleteModalTitle: { 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    marginBottom: 8 
+  },
+  deleteModalMessage: { 
+    color: '#ffffff', 
+    fontSize: 18, 
+    fontWeight: 'bold',
+    marginBottom: 25, 
+    textAlign: 'center', 
+    lineHeight: 24 
+  },
+  deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  deleteBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 },
+  deleteBtnYesText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
+  deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 },
+  deleteBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
+
+  // 3. 입력 폼 모달 (알림 발송)
   alertModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-  alertModalBox:     { width: 320, backgroundColor: '#2A2A2A', borderRadius: 16, padding: 20 },
-  alertModalHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  alertModalTitle:   { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
-  alertInputField:   { backgroundColor: '#1A1A1A', color: '#FFF', borderRadius: 8, padding: 15, marginBottom: 12, fontSize: 16, borderWidth: 1, borderColor: '#444' },
-  alertSubmitBtn:    { backgroundColor: '#A1BE44', borderRadius: 8, paddingVertical: 15, alignItems: 'center', marginTop: 10 },
-  alertSubmitBtnText:{ color: '#000', fontSize: 18, fontWeight: 'bold' },
-  alertCloseBtn:     { color: '#999999', fontSize: 24, paddingHorizontal: 5 },
+  alertModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
+  },
+  alertModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
+  alertModalTitle: { color: '#FFF', fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
+  alertCloseBtn: { color: '#999999', fontSize: 24, paddingHorizontal: 5, marginBottom: 8 },
+  alertInputField: { 
+    width: '100%',
+    backgroundColor: '#1A1A1A', 
+    color: '#FFF', 
+    borderRadius: 12, 
+    padding: 15, 
+    marginBottom: 12, 
+    fontSize: 16, 
+    borderWidth: 1, 
+    borderColor: '#444444' 
+  },
+  alertSubmitBtn: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 20 },
+  alertSubmitBtnText:{ color: '#000000', fontSize: 18, fontWeight: 'bold' },
+  // ───────────────────────────────────────────────────────────────────────────────────────────
 });
 
 export default ManagerDashboard;
