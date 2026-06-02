@@ -109,6 +109,7 @@ public class Member extends BaseTimeEntity {
 
     public void withdraw() {
         this.isDeleted = true;
+        this.fcmToken = null;
         String now = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         if (this.loginId != null && !this.loginId.startsWith("del_")) {
             this.loginId = "del_" + now + "_" + this.loginId + "_" + this.id;
