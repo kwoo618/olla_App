@@ -14,8 +14,6 @@ public class NotificationUpdateRequest {
     private Boolean isCrewNotificationOn;
     private Boolean isNoticeNotificationOn;
 
-    // is 접두사 필드는 Lombok @Setter 사용 시 Jackson이 setter 이름을 못 찾아
-    // 값이 null로 저장되는 버그 발생 → 수동 setter로 해결
     @JsonProperty("isGlobalNotificationOn")
     public void setIsGlobalNotificationOn(Boolean value) { this.isGlobalNotificationOn = value; }
 
