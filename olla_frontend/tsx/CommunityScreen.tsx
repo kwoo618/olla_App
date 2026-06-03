@@ -298,7 +298,9 @@ const CommunityScreen = ({ route, navigation }: any) => {
 
       <TouchableOpacity style={s.fab} onPress={openCreateModal}><Text style={s.fabText}>+</Text></TouchableOpacity>
 
-      {/* 메인 모달 관리 영역 */}
+      {/* ──────────────────────────────────────────────────────────
+          💡 수정된 부분: 게시물 삭제/마감 관련 하위 모달들만 조건문에 남깁니다.
+      ────────────────────────────────────────────────────────── */}
       {!isCreateVisible && !isCommentVisible && (
         <>
           <Modal visible={deleteTarget !== null} animationType="fade" transparent onRequestClose={() => setDeleteTarget(null)}>
@@ -324,53 +326,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
                   <TouchableOpacity style={s.btnNo} onPress={() => setCloseTarget(null)}><Text style={s.btnNoText}>아니오</Text></TouchableOpacity>
                 </View>
               </View>
-            </View>
-          </Modal>
-
-          <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={closeResultModal}>
-            <View style={s.resultModalOverlay}>
-              <View style={s.resultModalBox}>
-                <Text style={[s.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>{resultModalConfig.title}</Text>
-                <Text style={s.resultModalMessage}>{resultModalConfig.message}</Text>
-                <TouchableOpacity style={s.resultModalBtn} onPress={closeResultModal}><Text style={s.resultModalBtnText}>확인</Text></TouchableOpacity>
-              </View>
-            </View>
-          </Modal>
-
-          <Modal visible={isDetailVisible} transparent animationType="fade" onRequestClose={closeDetailModal}>
-            <View style={s.modalOverlay}>
-              <TouchableWithoutFeedback onPress={closeDetailModal}><View style={StyleSheet.absoluteFill} /></TouchableWithoutFeedback>
-              <Animated.View style={[s.sheet, { height: detailHeightAnim, overflow: 'hidden' }]}>
-                <View {...detailPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
-                  <View style={s.handle} />
-                  <View style={s.sheetHeader}>
-                    <Text style={s.sheetTitle}>{selectedUser?.isMe ? '내 정보' : '회원 정보'}</Text>
-                    <TouchableOpacity onPress={closeDetailModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}><Text style={s.closeBtn}>✕</Text></TouchableOpacity>
-                  </View>
-                  <View style={s.hr} />
-                </View>
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
-                  {selectedUser && (
-                    <View>
-                      <View style={s.profileCenter}>
-                        <Image source={getProfileImage(selectedUser.profileImageUrl)} style={s.profileBig} />
-                        <Text style={s.profileName}>{selectedUser.name}</Text>
-                      </View>
-                      <View style={s.infoBox}>
-                        {([['이름', selectedUser.name, selectedUser.toggles.showName, ''], ['성별', selectedUser.gender, true, ''], ['전화번호', selectedUser.phone, selectedUser.toggles.showPhone, ''], ['나이', selectedUser.age, selectedUser.toggles.showAge, '세'], ['키', selectedUser.height, selectedUser.toggles.showHeight, 'cm'], ['몸무게', selectedUser.weight, selectedUser.toggles.showWeight, 'kg'], ['팔길이', selectedUser.arm, selectedUser.toggles.showArm, 'cm'], ['암벽화 사이즈', selectedUser.shoe, selectedUser.toggles.showShoe, 'mm']] as [string, string, boolean, string][])
-                          .filter(([,, show]) => show)
-                          .map(([label, val,, unit]) => (
-                            <View key={label} style={s.infoRowDetail}>
-                              <Text style={s.infoLabel}>{label}</Text>
-                              <Text style={s.infoVal}>{val !== '-' ? val + unit : '-'}</Text>
-                            </View>
-                          ))}
-                      </View>
-                      <TouchableOpacity style={s.closeFullBtn} onPress={closeDetailModal}><Text style={s.closeFullText}>닫기</Text></TouchableOpacity>
-                    </View>
-                  )}
-                </ScrollView>
-              </Animated.View>
             </View>
           </Modal>
         </>
@@ -654,7 +609,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
             </View>
           )}
 
-          {/* 5️⃣ 작성 폼 유효성 알림 모달 */}
+          {/* 작성 폼 유효성 알림 모달 */}
           {createAlertVisible && (
             <View style={s.innerAlertOverlay}>
               <View style={s.resultModalBox}>
@@ -666,6 +621,58 @@ const CommunityScreen = ({ route, navigation }: any) => {
           )}
         </View>
       </Modal>
+
+      {/* ──────────────────────────────────────────────────────────
+          💡 수정된 부분: 공통 알림(resultModal)과 유저 프로필 조회(isDetailVisible) 모달을
+          조건문 밖의 가장 아래로 분리하여 댓글 창 등 다른 화면 위에서도 문제없이 뜨도록 수정
+      ────────────────────────────────────────────────────────── */}
+      <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={closeResultModal}>
+        <View style={s.resultModalOverlay}>
+          <View style={s.resultModalBox}>
+            <Text style={[s.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>{resultModalConfig.title}</Text>
+            <Text style={s.resultModalMessage}>{resultModalConfig.message}</Text>
+            <TouchableOpacity style={s.resultModalBtn} onPress={closeResultModal}><Text style={s.resultModalBtnText}>확인</Text></TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={isDetailVisible} transparent animationType="fade" onRequestClose={closeDetailModal}>
+        <View style={s.modalOverlay}>
+          <TouchableWithoutFeedback onPress={closeDetailModal}><View style={StyleSheet.absoluteFill} /></TouchableWithoutFeedback>
+          <Animated.View style={[s.sheet, { height: detailHeightAnim, overflow: 'hidden' }]}>
+            <View {...detailPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
+              <View style={s.handle} />
+              <View style={s.sheetHeader}>
+                <Text style={s.sheetTitle}>{selectedUser?.isMe ? '내 정보' : '회원 정보'}</Text>
+                <TouchableOpacity onPress={closeDetailModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}><Text style={s.closeBtn}>✕</Text></TouchableOpacity>
+              </View>
+              <View style={s.hr} />
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
+              {selectedUser && (
+                <View>
+                  <View style={s.profileCenter}>
+                    <Image source={getProfileImage(selectedUser.profileImageUrl)} style={s.profileBig} />
+                    <Text style={s.profileName}>{selectedUser.name}</Text>
+                  </View>
+                  <View style={s.infoBox}>
+                    {([['이름', selectedUser.name, selectedUser.toggles.showName, ''], ['성별', selectedUser.gender, true, ''], ['전화번호', selectedUser.phone, selectedUser.toggles.showPhone, ''], ['나이', selectedUser.age, selectedUser.toggles.showAge, '세'], ['키', selectedUser.height, selectedUser.toggles.showHeight, 'cm'], ['몸무게', selectedUser.weight, selectedUser.toggles.showWeight, 'kg'], ['팔길이', selectedUser.arm, selectedUser.toggles.showArm, 'cm'], ['암벽화 사이즈', selectedUser.shoe, selectedUser.toggles.showShoe, 'mm']] as [string, string, boolean, string][])
+                      .filter(([,, show]) => show)
+                      .map(([label, val,, unit]) => (
+                        <View key={label} style={s.infoRowDetail}>
+                          <Text style={s.infoLabel}>{label}</Text>
+                          <Text style={s.infoVal}>{val !== '-' ? val + unit : '-'}</Text>
+                        </View>
+                      ))}
+                  </View>
+                  <TouchableOpacity style={s.closeFullBtn} onPress={closeDetailModal}><Text style={s.closeFullText}>닫기</Text></TouchableOpacity>
+                </View>
+              )}
+            </ScrollView>
+          </Animated.View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 };

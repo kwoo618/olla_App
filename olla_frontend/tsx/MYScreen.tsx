@@ -254,7 +254,7 @@ const MYScreen = ({ navigation }: any) => {
 
                   <View style={styles.editFieldWrapper}>
                     <View style={styles.editFieldHeader}>
-                      <Text style={styles.editFieldTitle}>나이</Text>
+                      <Text style={styles.editFieldTitle}>나이(만)</Text>
                       <View style={styles.toggleWrapper}>
                         <Text style={styles.toggleLabel}>{profileToggles.showAge ? '공개' : '비공개'}</Text>
                         <Switch trackColor={{ false: '#333333', true: '#A1BE44' }} thumbColor={'#ffffff'} onValueChange={() => setProfileToggles({ ...profileToggles, showAge: !profileToggles.showAge })} value={profileToggles.showAge} />

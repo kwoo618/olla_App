@@ -6,6 +6,7 @@ import {
   TouchableWithoutFeedback, TextInput, KeyboardAvoidingView,
 } from 'react-native';
 import { Camera } from 'react-native-camera-kit';
+import { useIsFocused } from '@react-navigation/native'; // 💡 1. useIsFocused 추가
 import {
   useManagerDashboard,
   DAY_LABELS, DAY_SELECT_OPTIONS, getHourRange,
@@ -31,6 +32,7 @@ const requestCameraPermission = async () => {
 // ─── 컴포넌트 ───────────────────────────────────────────────────────────────
 const ManagerDashboard = ({ navigation }: any) => {
   const dash = useManagerDashboard(navigation);
+  const isFocused = useIsFocused(); // 💡 2. 현재 화면이 켜져 있는지 확인하는 훅
 
   // ─── 상세 모달 애니메이션 ────────────────────────────────────────────────
   const detailHeightAnim = useRef(new Animated.Value(0)).current;
@@ -82,6 +84,30 @@ const ManagerDashboard = ({ navigation }: any) => {
   useEffect(() => {
     dash.checkAdminAndFetchData();
   }, [dash.checkAdminAndFetchData]);
+
+  // ─── 💡 3. 화면이 포커스(켜질) 때마다 오늘의 요일로 설정 ─────────────────
+  useEffect(() => {
+    if (isFocused) {
+      const today = new Date().getDay(); // 0(일요일) ~ 6(토요일)
+      const mappedDay = today === 0 ? 7 : today; // OLLA 규격: 1(월) ~ 7(일) 로 매핑
+      dash.handleDaySelect(mappedDay);
+    }
+  }, [isFocused]);
+
+  // ─── 💡 4. 새로고침 핸들러: 새로고침 시에도 오늘 요일로 초기화 ───────────
+  const handleRefreshData = () => {
+    const today = new Date().getDay();
+    const mappedDay = today === 0 ? 7 : today;
+    dash.handleDaySelect(mappedDay);
+    dash.refreshDashboardData();
+  };
+
+  const handlePullToRefresh = () => {
+    const today = new Date().getDay();
+    const mappedDay = today === 0 ? 7 : today;
+    dash.handleDaySelect(mappedDay);
+    dash.onRefresh();
+  };
 
   // ─── 차트: 요일별 막대 ──────────────────────────────────────────────────
   const renderWeeklyBar = () => {
@@ -228,7 +254,6 @@ const ManagerDashboard = ({ navigation }: any) => {
               <Text style={[styles.expiringCol, { width: 50, textAlign: 'center' }]}>상태</Text>
             </View>
             {list.map((m, idx) => {
-              // 💡 해결 방법: m.dDay를 Number()로 감싸서 명시적 숫자로 변환 후 비교합니다.
               const dDayNum     = Number(m.dDay); 
               const ddayColor   = dDayNum <= 3 ? '#FF4D4D' : dDayNum <= 7 ? '#FF9800' : '#A1BE44';
               const maskedPhone = m.phone ? m.phone.replace(/(\d{3})-?(\d{4})-?(\d{4})/, '$1-****-$3') : '-';
@@ -284,7 +309,7 @@ const ManagerDashboard = ({ navigation }: any) => {
             )}
           </View>
         </View>
-        <TouchableOpacity style={styles.refreshBtn} activeOpacity={0.8} onPress={dash.refreshDashboardData}>
+        <TouchableOpacity style={styles.refreshBtn} activeOpacity={0.8} onPress={handleRefreshData}>
           <Text style={styles.refreshBtnText}>데이터 새로고침</Text>
         </TouchableOpacity>
       </View>
@@ -306,7 +331,8 @@ const ManagerDashboard = ({ navigation }: any) => {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={dash.refreshing} onRefresh={dash.onRefresh} tintColor="#A1BE44" />}
+        // 💡 5. 당겨서 새로고침 할 때도 요일을 초기화하는 핸들러 연결
+        refreshControl={<RefreshControl refreshing={dash.refreshing} onRefresh={handlePullToRefresh} tintColor="#A1BE44" />}
       >
         {/* 헤더 카드 */}
         <View style={styles.headerCard}>
@@ -501,7 +527,6 @@ const ManagerDashboard = ({ navigation }: any) => {
                 </TouchableOpacity>
               </View>
             </View>
-            {/* [수정] ScrollView에 flex: 1을 추가하여 남은 공간을 꽉 채우고, 버튼들이 잘리지 않도록 함 */}
             <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }}>
               {dash.selectedUser && (
                 <View style={styles.detailContainer}>
@@ -820,7 +845,6 @@ const styles = StyleSheet.create({
   },
   alertSubmitBtn: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 20 },
   alertSubmitBtnText:{ color: '#000000', fontSize: 18, fontWeight: 'bold' },
-  // ───────────────────────────────────────────────────────────────────────────────────────────
 });
 
 export default ManagerDashboard;

@@ -110,7 +110,11 @@ const ManagerNotice = ({ route, navigation }: any) => {
               <View style={styles.horizontalDivider} />
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
+            <ScrollView 
+              style={{ flex: 1, width: '100%' }} // 💡 추가: 상세 페이지도 레이아웃 안정성을 위해 플렉스 부여
+              showsVerticalScrollIndicator={false} 
+              contentContainerStyle={{ paddingBottom: 60 }}
+            >
               {n.detailNotice?.important && (
                 <View style={styles.detailBadgeRow}>
                   <View style={styles.noticeBadge}>
@@ -171,7 +175,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
           </TouchableWithoutFeedback>
 
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'} // 💡 수정: 안드로이드에서 undefined 일때 발생하는 모달 튕김 현상 방지
             style={{ width: '100%', flex: 1, justifyContent: 'flex-end' }}
             pointerEvents="box-none"
           >
@@ -190,6 +194,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
               </View>
 
               <ScrollView
+                style={{ flex: 1, width: '100%' }} // 💡 수정: ScrollView에 flex 영역을 명시적으로 할당하여 하단 고정 버그 완전 해결
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={{ paddingBottom: 60 }}
                 keyboardShouldPersistTaps="handled"
