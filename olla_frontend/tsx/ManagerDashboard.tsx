@@ -6,7 +6,7 @@ import {
   TouchableWithoutFeedback, TextInput, KeyboardAvoidingView,
 } from 'react-native';
 import { Camera } from 'react-native-camera-kit';
-import { useIsFocused } from '@react-navigation/native'; // 💡 1. useIsFocused 추가
+import { useIsFocused } from '@react-navigation/native';
 import {
   useManagerDashboard,
   DAY_LABELS, DAY_SELECT_OPTIONS, getHourRange,
@@ -32,7 +32,7 @@ const requestCameraPermission = async () => {
 // ─── 컴포넌트 ───────────────────────────────────────────────────────────────
 const ManagerDashboard = ({ navigation }: any) => {
   const dash = useManagerDashboard(navigation);
-  const isFocused = useIsFocused(); // 💡 2. 현재 화면이 켜져 있는지 확인하는 훅
+  const isFocused = useIsFocused(); 
 
   // ─── 상세 모달 애니메이션 ────────────────────────────────────────────────
   const detailHeightAnim = useRef(new Animated.Value(0)).current;
@@ -85,26 +85,27 @@ const ManagerDashboard = ({ navigation }: any) => {
     dash.checkAdminAndFetchData();
   }, [dash.checkAdminAndFetchData]);
 
-  // ─── 💡 3. 화면이 포커스(켜질) 때마다 오늘의 요일로 설정 ─────────────────
+  // ─── 💡 3. 화면이 포커스(켜질) 때마다 오늘의 요일로 설정 (일요일이면 월요일로) ─────────────────
   useEffect(() => {
     if (isFocused) {
       const today = new Date().getDay(); // 0(일요일) ~ 6(토요일)
-      const mappedDay = today === 0 ? 7 : today; // OLLA 규격: 1(월) ~ 7(일) 로 매핑
+      // 💡 수정: 오늘이 일요일(0)이면 월요일(1)을 보여줌, 그 외엔 오늘 요일 유지
+      const mappedDay = today === 0 ? 1 : today; 
       dash.handleDaySelect(mappedDay);
     }
   }, [isFocused]);
 
-  // ─── 💡 4. 새로고침 핸들러: 새로고침 시에도 오늘 요일로 초기화 ───────────
+  // ─── 💡 4. 새로고침 핸들러: 새로고침 시에도 오늘 요일로 초기화 (일요일이면 월요일로) ───────────
   const handleRefreshData = () => {
     const today = new Date().getDay();
-    const mappedDay = today === 0 ? 7 : today;
+    const mappedDay = today === 0 ? 1 : today; // 💡 수정됨
     dash.handleDaySelect(mappedDay);
     dash.refreshDashboardData();
   };
 
   const handlePullToRefresh = () => {
     const today = new Date().getDay();
-    const mappedDay = today === 0 ? 7 : today;
+    const mappedDay = today === 0 ? 1 : today; // 💡 수정됨
     dash.handleDaySelect(mappedDay);
     dash.onRefresh();
   };
@@ -169,7 +170,6 @@ const ManagerDashboard = ({ navigation }: any) => {
     const maxVal      = Math.max(...displayData, 1);
     const count       = displayData.length;
     
-    // 차트 영역을 화면 안에 맞추기 위한 정확한 넓이 계산
     const lineW       = CARD_INNER_W - 90; 
     
     const points      = displayData.map((val, i) => ({
@@ -190,7 +190,6 @@ const ManagerDashboard = ({ navigation }: any) => {
               <View key={i} style={{ position: 'absolute', top: CHART_H * (1 - r), left: 0, right: 0, height: 1, backgroundColor: '#383838' }} />
             ))}
             
-            {/* 데이터 표시선 및 점 (점들이 잘리지 않도록 좌측 10px 만큼 offset) */}
             <View style={{ position: 'absolute', top: 0, left: 10, width: lineW, height: CHART_H }}>
               {points.slice(0, -1).map((p, i) => {
                 const next  = points[i + 1];
@@ -215,7 +214,6 @@ const ManagerDashboard = ({ navigation }: any) => {
               ))}
             </View>
             
-            {/* 시간대 모든 라벨 1시간 간격으로 출력 */}
             <View style={{ position: 'absolute', top: CHART_H + 8, left: 10, width: lineW }}>
               {hourRange.map((hour, i) => {
                 const pointX = count > 1 ? (i / (count - 1)) * lineW : 0;
@@ -331,7 +329,6 @@ const ManagerDashboard = ({ navigation }: any) => {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        // 💡 5. 당겨서 새로고침 할 때도 요일을 초기화하는 핸들러 연결
         refreshControl={<RefreshControl refreshing={dash.refreshing} onRefresh={handlePullToRefresh} tintColor="#A1BE44" />}
       >
         {/* 헤더 카드 */}

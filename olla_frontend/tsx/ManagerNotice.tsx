@@ -111,7 +111,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
             </View>
 
             <ScrollView 
-              style={{ flex: 1, width: '100%' }} // 💡 추가: 상세 페이지도 레이아웃 안정성을 위해 플렉스 부여
+              style={{ flex: 1, width: '100%' }}
               showsVerticalScrollIndicator={false} 
               contentContainerStyle={{ paddingBottom: 60 }}
             >
@@ -175,11 +175,12 @@ const ManagerNotice = ({ route, navigation }: any) => {
           </TouchableWithoutFeedback>
 
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'} // 💡 수정: 안드로이드에서 undefined 일때 발생하는 모달 튕김 현상 방지
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={{ width: '100%', flex: 1, justifyContent: 'flex-end' }}
             pointerEvents="box-none"
           >
-            <Animated.View style={[styles.bottomSheet, { height: n.writeHeightAnim, overflow: 'hidden' }]}>
+            {/* 💡 핵심 해결: maxHeight를 '100%'로 주어 키보드가 올라올 때 바텀시트가 화면을 뚫고 위로 밀려나가는 것을 막고 유연하게 높이가 줄어들게 처리 */}
+            <Animated.View style={[styles.bottomSheet, { height: n.writeHeightAnim, maxHeight: '100%', overflow: 'hidden' }]}>
               <View {...n.writePanResponder.panHandlers} style={{ width: '100%' }}>
                 <View style={styles.dragHandle} />
                 <View style={styles.sheetHeader}>
@@ -194,7 +195,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
               </View>
 
               <ScrollView
-                style={{ flex: 1, width: '100%' }} // 💡 수정: ScrollView에 flex 영역을 명시적으로 할당하여 하단 고정 버그 완전 해결
+                style={{ flex: 1, width: '100%' }}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={{ paddingBottom: 60 }}
                 keyboardShouldPersistTaps="handled"
