@@ -1,10 +1,8 @@
 package com.olla.olla_climbing.global.infra.fcm;
 
 import com.google.firebase.messaging.AndroidConfig;
-import com.google.firebase.messaging.AndroidNotification;
 import com.google.firebase.messaging.ApnsConfig;
 import com.google.firebase.messaging.Aps;
-import com.google.firebase.messaging.ApsAlert;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.Message;
 import lombok.extern.slf4j.Slf4j;
@@ -25,35 +23,21 @@ public class FcmService {
         }
 
         try {
+            // data-only 메시지: Notifee가 포그라운드/백그라운드 모두 완전 제어
+            // AndroidNotification, ApsAlert 제거 → OS 자동 배너 차단
             Message message = Message.builder()
                     .setToken(fcmToken)
-                    // data: 앱에서 타입/ID 기반 딥링크 처리용
                     .putData("title", title != null ? title : "")
                     .putData("body", content != null ? content : "")
                     .putData("type", type != null ? type : "")
                     .putData("targetId", targetId != null ? targetId : "")
-
-                    // Android: 포그라운드는 앱이 처리, 백그라운드/종료 시 OS 자동 표시
                     .setAndroidConfig(AndroidConfig.builder()
                             .setPriority(AndroidConfig.Priority.HIGH)
-                            .setNotification(AndroidNotification.builder()
-                                    .setTitle(title)
-                                    .setBody(content)
-                                    .setChannelId("olla_default_channel")
-                                    .build())
                             .build())
-
-                    // iOS: content_available=true로 백그라운드/종료 상태에서도 수신 가능
-                    // 포그라운드는 앱(Notifee)이 처리, 백그라운드/종료는 APS alert로 OS 자동 표시
                     .setApnsConfig(ApnsConfig.builder()
                             .putHeader("apns-priority", "10")
                             .setAps(Aps.builder()
-                                    .setAlert(ApsAlert.builder()
-                                            .setTitle(title)
-                                            .setBody(content)
-                                            .build())
-                                    .setSound("default")
-                                    .setContentAvailable(true) // 종료 상태에서도 백그라운드 핸들러 실행
+                                    .setContentAvailable(true)
                                     .build())
                             .build())
                     .build();

@@ -29,48 +29,41 @@ public class NotificationService {
     @Transactional
     public void sendCommentNotification(Member receiver, Member sender, Post post) {
         if (receiver.getId().equals(sender.getId())) return;
-        if (isNotificationDisabled(receiver, "ACTIVITY")) return;
-
         String title = "새로운 댓글";
         String content = sender.getName() + "님이 [" + post.getTitle() + "] 글에 댓글을 남겼습니다.";
-        saveAndSendPush(receiver, title, content, "COMMENT", String.valueOf(post.getId()));
+        saveAndSendPush(receiver, title, content, "ACTIVITY", "COMMENT", String.valueOf(post.getId()));
     }
 
     @Async
     @Transactional
     public void sendParticipantNotification(Long receiverId, String senderName, String postTitle, Long postId, boolean isJoin) {
         Member receiver = memberRepository.findById(receiverId).orElse(null);
-        if (receiver == null || isNotificationDisabled(receiver, "CREW")) return;
-
+        if (receiver == null) return;
         String title = isJoin ? "새로운 참여자" : "참여 취소 알림";
         String content = senderName + "님이 [" + postTitle + "] 모임에 " + (isJoin ? "참여 신청했습니다." : "참여를 취소했습니다.");
-        saveAndSendPush(receiver, title, content, "CREW", String.valueOf(postId));
+        saveAndSendPush(receiver, title, content, "CREW", "CREW", String.valueOf(postId));
     }
 
     @Async
     @Transactional
     public void sendMembershipNotification(Member receiver, String title, String content) {
-        if (isNotificationDisabled(receiver, "MEMBERSHIP")) return;
-        saveAndSendPush(receiver, title, content, "MEMBERSHIP", "");
+        saveAndSendPush(receiver, title, content, "MEMBERSHIP", "MEMBERSHIP", "");
     }
 
     @Async
     @Transactional
     public void sendCrewReminderNotification(Member receiver, Post post) {
-        if (isNotificationDisabled(receiver, "CREW")) return;
         String title = "모임 리마인드";
         String content = "내일 [" + post.getTitle() + "] 모임이 예정되어 있습니다! 잊지 말고 준비물 챙겨주세요!";
-        saveAndSendPush(receiver, title, content, "CREW", String.valueOf(post.getId()));
+        saveAndSendPush(receiver, title, content, "CREW", "CREW", String.valueOf(post.getId()));
     }
 
     @Async
     @Transactional
     public void sendAdminDirectNotification(Member receiver, String title, String content) {
-        saveAndSendPush(receiver, title, content, "NOTICE", "");
+        saveAndSendPush(receiver, title, content, "NOTICE", "NOTICE", "");
     }
 
-    // [수정] 반환 타입 Page<MemberNotification> → Page<MemberNotificationResponse>
-    // 엔티티 직접 노출 시 순환 참조 위험 차단
     @Transactional(readOnly = true)
     public Page<MemberNotificationResponse> getMyNotifications(Long memberId, Pageable pageable) {
         return notificationRepository.findByMemberIdOrderByCreatedAtDesc(memberId, pageable)
@@ -89,10 +82,9 @@ public class NotificationService {
 
     // ── private 헬퍼 ─────────────────────────────────────────────
 
-    private boolean isNotificationDisabled(Member member, String type) {
+    private boolean isPushDisabled(Member member, String type) {
         NotificationSetting s = member.getNotificationSetting();
         if (s == null || !s.isGlobalNotificationOn()) return true;
-
         return switch (type) {
             case "MEMBERSHIP" -> !s.isMembershipNotificationOn();
             case "ACTIVITY"   -> !s.isActivityNotificationOn();
@@ -102,13 +94,19 @@ public class NotificationService {
         };
     }
 
-    private void saveAndSendPush(Member receiver, String title, String content, String type, String targetId) {
+    private void saveAndSendPush(Member receiver, String title, String content,
+                                 String notiType, String pushType, String targetId) {
         MemberNotification noti = MemberNotification.builder()
                 .member(receiver)
                 .title(title)
                 .content(content)
                 .build();
         notificationRepository.save(noti);
-        fcmService.sendPushNotification(receiver.getFcmToken(), title, content, type, targetId);
+
+        if (isPushDisabled(receiver, pushType)) {
+            log.debug("알림 설정 OFF - FCM 전송 생략 (회원: {}, 타입: {})", receiver.getId(), pushType);
+            return;
+        }
+        fcmService.sendPushNotification(receiver.getFcmToken(), title, content, notiType, targetId);
     }
 }
