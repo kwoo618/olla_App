@@ -35,7 +35,6 @@ export const translateGender = (gender: string | null | undefined): string => {
   }
 };
 
-// ✅ useMyPage의 getFullImageUrl과 동일한 방식으로 통일
 export const resolveImageUrl = (url: string | null | undefined): string | null => {
   if (!url || url === 'null' || url === 'undefined') return null;
   if (url.startsWith('http') || url.startsWith('file:') || url.startsWith('content:')) return url;
@@ -203,10 +202,7 @@ export const useManagerDashboard = (navigation: any) => {
           if (day !== 7) normalized[day] = Array.isArray(v) ? (v as unknown[]).map(Number) : [];
         });
         setHourlyCongestionByDay(normalized);
-        const defaultData = normalized[6];
-        setHourlyData(defaultData?.length > 0 ? defaultData : [10, 20, 35, 60, 80, 55, 30]);
-      } else {
-        setHourlyData(prev => (prev.length > 0 ? prev : [10, 20, 30, 50, 70, 90, 100, 80, 60, 40]));
+        // hourlyData는 fetchHourlyByDay에서만 관리
       }
 
       if (data.totalMembers != null) setMetrics(prev => ({ ...prev, totalMembers: Number(data.totalMembers) }));
@@ -235,18 +231,16 @@ export const useManagerDashboard = (navigation: any) => {
   const fetchHourlyByDay = useCallback(async (dayOfWeek: number) => {
     if (dayOfWeek === 7) return;
 
+    // 캐시 있으면 먼저 보여주고, API도 항상 호출
     setHourlyCongestionByDay(prev => {
-      if (prev[dayOfWeek]?.length > 0) {
-        setHourlyData(prev[dayOfWeek]);
-        return prev;
-      }
+      if (prev[dayOfWeek]?.length > 0) setHourlyData(prev[dayOfWeek]);
       return prev;
     });
 
     try {
       const headers = await authHeader();
-      const res     = await axios.get(`${ADMIN}/dashboard/hourly`, { headers, params: { dayOfWeek } });
-      const list    = (extractData(res) ?? []).map(Number) as number[];
+      const res = await axios.get(`${ADMIN}/dashboard/hourly`, { headers, params: { dayOfWeek } });
+      const list = (extractData(res) ?? []).map(Number) as number[];
       setHourlyCongestionByDay(prev => ({ ...prev, [dayOfWeek]: list }));
       const fallback = dayOfWeek === 6 ? [10, 20, 35, 60, 80, 55, 30] : [10, 20, 30, 50, 70, 90, 100, 80, 60, 40];
       setHourlyData(list.length > 0 ? list : fallback);
@@ -298,7 +292,6 @@ export const useManagerDashboard = (navigation: any) => {
         return !(user.deleted === true || m.isDeleted === true || m.status === 'DELETED');
       });
 
-      // ✅ recentMembers에 담기 전에 이미지 URL 변환 적용
       setRecentMembers(validMembers.slice(0, 2).map((user: any) => ({
         ...user,
         profileImageUrl: resolveImageUrl(user.profileImageUrl ?? user.member?.profileImageUrl ?? user.profileImage),
@@ -402,9 +395,10 @@ export const useManagerDashboard = (navigation: any) => {
     await Promise.all([
       fetchDashboardMain(), 
       fetchDashboardSummary(),
-      fetchActiveMemberships()
+      fetchActiveMemberships(),
+      fetchHourlyByDay(dashboardStats.selectedDay)
     ]);
-  }, [fetchDashboardMain, fetchDashboardSummary, fetchActiveMemberships]);
+  }, [fetchDashboardMain, fetchDashboardSummary, fetchActiveMemberships, fetchHourlyByDay, dashboardStats.selectedDay]);
 
   // 공지 / 게시글 삭제
   const executeDelete = useCallback(async () => {
@@ -444,7 +438,6 @@ export const useManagerDashboard = (navigation: any) => {
         memberId,
         name:            d.name    ?? fallbackName,
         phone:           d.phone   ?? fallbackPhone ?? '-',
-        // ✅ 프로필 이미지 URL 변환 적용
         profileImageUrl: resolveImageUrl(d.profileImageUrl ?? d.profileImage),
         gender:          translateGender(detail.gender ?? d.gender),
         age:             String(detail.age      ?? d.age      ?? '-'),
@@ -510,10 +503,22 @@ export const useManagerDashboard = (navigation: any) => {
     setTimeout(() => { scannedRef.current = false; }, 800);
   }, []);
 
+  // 🔧 수정: ALREADY 케이스에서 확인 버튼 누르면 스캐너 재오픈
   const handleBarCodeScanned = useCallback(async (qrData: string) => {
     if (scannedRef.current || isProcessing) return;
     scannedRef.current = true;
     setIsProcessing(true);
+
+    // 스캐너 재오픈 헬퍼 (모달 닫힌 후 호출)
+    const reopenScanner = () => {
+      setTimeout(() => {
+        scannedRef.current = false;
+        setIsProcessing(false);
+        setScannerVisible(true);
+        setTimeout(() => setCameraReady(true), 500);
+      }, 300);
+    };
+
     try {
       const headers = await authHeader();
       const res    = await axios.post(`${ADMIN}/visits/scan`, { qrToken: qrData, deductionCount: 1 }, { headers });
@@ -523,29 +528,30 @@ export const useManagerDashboard = (navigation: any) => {
       closeScanner();
       setTimeout(() => {
         if (statusCode === 'ALREADY' || message.includes('이미 출석')) {
-          showResultModal('금일 출석 완료', `${memberName}님은\n오늘 이미 출석하셨습니다.`, 'info');
+          // 🔧 수정: 확인 누르면 스캐너 재오픈
+          showResultModal(
+            '금일 출석 완료',
+            `${memberName}님은\n오늘 이미 출석하셨습니다.`,
+            'info',
+            reopenScanner,
+          );
         } else if (statusCode === 'ERROR') {
           showResultModal('출석 실패', message || '출석 처리에 실패했습니다.', 'error', () => {
-            setTimeout(() => {
-              scannedRef.current = false;
-              setIsProcessing(false);
-              setScannerVisible(true);
-            }, 300);
+            reopenScanner();
           });
         } else {
           fetchVisits();
           fetchMembers();
-          showResultModal('출석 완료!', [memberName ? `${memberName}님 환영합니다!` : '', remainingInfo, message].filter(Boolean).join('\n\n'));
+          showResultModal(
+            '출석 완료!',
+            [memberName ? `${memberName}님 환영합니다!` : '', remainingInfo, message].filter(Boolean).join('\n\n'),
+          );
         }
       }, 300);
     } catch (e: any) {
       closeScanner();
       setTimeout(() => showResultModal('출석 실패', e.response?.data?.message ?? '출석 처리에 실패했습니다.', 'error', () => {
-        setTimeout(() => {
-          scannedRef.current = false;
-          setIsProcessing(false);
-          setScannerVisible(true);
-        }, 300);
+        reopenScanner();
       }), 300);
     } finally {
       setIsProcessing(false);

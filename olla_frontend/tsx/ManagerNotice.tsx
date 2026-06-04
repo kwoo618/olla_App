@@ -19,200 +19,98 @@ const ManagerNotice = ({ route, navigation }: any) => {
     );
   }
 
+  const isImageViewerOpen = n.imageViewerVisible;
+
   return (
-    <SafeAreaView style={styles.background} edges={[]}>
+    <>
+      <SafeAreaView style={styles.background} edges={[]}>
 
-      {/* 공지 목록 */}
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={n.refreshing} onRefresh={n.onRefresh} tintColor="#A1BE44" />}
-      >
-        {n.sortedNotices.length === 0 ? (
-          <Text style={styles.emptyText}>등록된 공지사항이 없습니다.</Text>
-        ) : (
-          n.sortedNotices.map((notice) => (
-            <TouchableOpacity
-              key={notice.id}
-              style={styles.noticeCard}
-              activeOpacity={0.75}
-              onPress={() => n.openDetailModal(notice)}
-            >
-              <View style={styles.noticeContent}>
-                <View style={styles.noticeHeaderRow}>
-                  {notice.important && (
-                    <View style={styles.noticeBadge}>
-                      <Text style={styles.noticeBadgeText}>중요</Text>
-                    </View>
-                  )}
-                  <Text style={styles.noticeTitle} numberOfLines={1}>{notice.title}</Text>
-                </View>
-                <Text style={styles.noticeDate}>{formatDate(notice.createdAt)}</Text>
-                {notice.authorName ? <Text style={styles.noticeAuthor}>{notice.authorName}</Text> : null}
-              </View>
-
-              <View style={styles.noticeActions}>
-                <TouchableOpacity
-                  style={styles.actionBtn}
-                  onPress={(e) => { e.stopPropagation(); n.openEditModal(notice); }}
-                >
-                  <Image source={require('../assets/fix.png')} style={[styles.actionIcon, { tintColor: '#A1BE44' }]} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.deleteBtn]}
-                  onPress={(e) => { e.stopPropagation(); n.confirmDelete(notice.id); }}
-                >
-                  <Image source={require('../assets/trash.png')} style={[styles.actionIcon, { tintColor: '#FF0000' }]} />
-                </TouchableOpacity>
-              </View>
-            </TouchableOpacity>
-          ))
-        )}
-      </ScrollView>
-
-      {/* FAB */}
-      <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={n.openWriteModal}>
-        <Text style={styles.fabText}>+ 작성</Text>
-      </TouchableOpacity>
-
-      {/* 결과 알림 모달 */}
-      <Modal visible={n.resultModalVisible} animationType="fade" transparent onRequestClose={n.closeResultModal}>
-        <View style={styles.resultModalOverlay}>
-          <View style={styles.resultModalBox}>
-            <Text style={[styles.resultModalTitle, { color: n.resultModalConfig.type === 'error' ? '#FF4D4D' : '#A1BE44' }]}>
-              {n.resultModalConfig.title}
-            </Text>
-            <Text style={styles.resultModalMessage}>{n.resultModalConfig.message}</Text>
-            <TouchableOpacity style={styles.resultModalBtn} onPress={n.closeResultModal}>
-              <Text style={styles.resultModalBtnText}>확인</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* 공지 상세 바텀시트 — 이미지 뷰어를 이 Modal 안에서 absolute로 덮음 */}
-      <Modal visible={n.isDetailModalVisible} animationType="fade" transparent onRequestClose={() => n.closeDetailModal()}>
-        <View style={styles.modalOverlay}>
-          <TouchableWithoutFeedback onPress={() => n.closeDetailModal()}>
-            <View style={StyleSheet.absoluteFill} />
-          </TouchableWithoutFeedback>
-
-          <Animated.View style={[styles.detailBottomSheet, { height: n.detailHeightAnim, overflow: 'hidden' }]}>
-            <View {...n.detailPanResponder.panHandlers} style={{ width: '100%' }}>
-              <View style={styles.dragHandle} />
-              <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle} numberOfLines={1}>공지 상세</Text>
-                <TouchableOpacity onPress={() => n.closeDetailModal()} hitSlop={{ top:10, bottom:10, left:10, right:10 }}>
-                  <Text style={styles.closeIcon}>✕</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.horizontalDivider} />
-            </View>
-
-            <ScrollView
-              style={{ flex: 1, width: '100%' }}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 60 }}
-            >
-              {n.detailNotice?.important && (
-                <View style={styles.detailBadgeRow}>
-                  <View style={styles.noticeBadge}>
-                    <Text style={styles.noticeBadgeText}>중요</Text>
-                  </View>
-                </View>
-              )}
-
-              <Text style={styles.detailTitle}>{n.detailNotice?.title}</Text>
-
-              <View style={styles.detailMetaRow}>
-                <Text style={styles.detailMeta}>{formatDate(n.detailNotice?.createdAt ?? '')}</Text>
-                {n.detailNotice?.authorName ? (
-                  <Text style={styles.detailMeta}> · {n.detailNotice.authorName}</Text>
-                ) : null}
-              </View>
-
-              <View style={styles.horizontalDivider} />
-
-              {!!n.detailNotice?.imageUrl && (
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  onPress={() => n.openImageViewer(n.detailNotice!.imageUrl!)}
-                >
-                  <FastImage
-                    source={{ uri: resolveImageUrl(n.detailNotice.imageUrl), priority: FastImage.priority.high }}
-                    style={styles.detailImage}
-                    resizeMode={FastImage.resizeMode.cover}
-                  />
-                </TouchableOpacity>
-              )}
-
-              <Text style={styles.detailContent}>{n.detailNotice?.content}</Text>
-
-              <View style={styles.btnRow}>
-                <TouchableOpacity
-                  style={styles.cancelBtn}
-                  onPress={() => n.closeDetailModal(() => {
-                    setTimeout(() => n.detailNotice && n.openEditModal(n.detailNotice), 100);
-                  })}
-                >
-                  <Text style={styles.cancelBtnText}>수정</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.registerBtn, { backgroundColor: '#FF4D4D' }]}
-                  onPress={() => n.closeDetailModal(() => {
-                    setTimeout(() => n.detailNotice && n.confirmDelete(n.detailNotice.id), 100);
-                  })}
-                >
-                  <Text style={styles.registerBtnText}>삭제</Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-
-            {/* ─── 이미지 뷰어: 바텀시트 Modal 안에서 absolute로 전체 덮기 ─── */}
-            {n.imageViewerVisible && (
+        {/* 공지 목록 */}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={<RefreshControl refreshing={n.refreshing} onRefresh={n.onRefresh} tintColor="#A1BE44" />}
+        >
+          {n.sortedNotices.length === 0 ? (
+            <Text style={styles.emptyText}>등록된 공지사항이 없습니다.</Text>
+          ) : (
+            n.sortedNotices.map((notice) => (
               <TouchableOpacity
-                style={styles.imageViewerOverlay}
-                activeOpacity={1}
-                onPress={n.closeImageViewer}
+                key={notice.id}
+                style={styles.noticeCard}
+                activeOpacity={0.75}
+                onPress={() => n.openDetailModal(notice)}
               >
-                <FastImage
-                  source={{ uri: n.imageViewerUrl, priority: FastImage.priority.high }}
-                  style={styles.imageViewerImage}
-                  resizeMode={FastImage.resizeMode.contain}
-                />
-                <TouchableOpacity
-                  style={styles.imageViewerCloseBtn}
-                  onPress={n.closeImageViewer}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <Text style={styles.imageViewerCloseText}>✕</Text>
-                </TouchableOpacity>
+                <View style={styles.noticeContent}>
+                  <View style={styles.noticeHeaderRow}>
+                    {notice.important && (
+                      <View style={styles.noticeBadge}>
+                        <Text style={styles.noticeBadgeText}>중요</Text>
+                      </View>
+                    )}
+                    <Text style={styles.noticeTitle} numberOfLines={1}>{notice.title}</Text>
+                  </View>
+                  <Text style={styles.noticeDate}>{formatDate(notice.createdAt)}</Text>
+                  {notice.authorName ? <Text style={styles.noticeAuthor}>{notice.authorName}</Text> : null}
+                </View>
+
+                <View style={styles.noticeActions}>
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={(e) => { e.stopPropagation(); n.openEditModal(notice); }}
+                  >
+                    <Image source={require('../assets/fix.png')} style={[styles.actionIcon, { tintColor: '#A1BE44' }]} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.deleteBtn]}
+                    onPress={(e) => { e.stopPropagation(); n.confirmDelete(notice.id); }}
+                  >
+                    <Image source={require('../assets/trash.png')} style={[styles.actionIcon, { tintColor: '#FF0000' }]} />
+                  </TouchableOpacity>
+                </View>
               </TouchableOpacity>
-            )}
-          </Animated.View>
-        </View>
-      </Modal>
+            ))
+          )}
+        </ScrollView>
 
-      {/* 작성 / 수정 바텀시트 */}
-      <Modal visible={n.isWriteModalVisible} animationType="fade" transparent onRequestClose={() => n.closeWriteModal()}>
-        <View style={styles.modalOverlay}>
-          <TouchableWithoutFeedback onPress={() => n.closeWriteModal()}>
-            <View style={StyleSheet.absoluteFill} />
-          </TouchableWithoutFeedback>
+        {/* FAB */}
+        <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={n.openWriteModal}>
+          <Text style={styles.fabText}>+ 작성</Text>
+        </TouchableOpacity>
 
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={{ width: '100%', flex: 1, justifyContent: 'flex-end' }}
-            pointerEvents="box-none"
-          >
-            <Animated.View style={[styles.bottomSheet, { height: n.writeHeightAnim, maxHeight: '100%', overflow: 'hidden' }]}>
-              <View {...n.writePanResponder.panHandlers} style={{ width: '100%' }}>
+        {/* 결과 알림 모달 */}
+        <Modal visible={n.resultModalVisible} animationType="fade" transparent onRequestClose={n.closeResultModal}>
+          <View style={styles.resultModalOverlay}>
+            <View style={styles.resultModalBox}>
+              <Text style={[styles.resultModalTitle, { color: n.resultModalConfig.type === 'error' ? '#FF4D4D' : '#A1BE44' }]}>
+                {n.resultModalConfig.title}
+              </Text>
+              <Text style={styles.resultModalMessage}>{n.resultModalConfig.message}</Text>
+              <TouchableOpacity style={styles.resultModalBtn} onPress={n.closeResultModal}>
+                <Text style={styles.resultModalBtnText}>확인</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        {/* ✅ 공지 상세 바텀시트 — 이미지 뷰어가 열릴 때 visible=false로 숨겨서 iOS 중첩 버그 방지 */}
+        <Modal
+          visible={n.isDetailModalVisible && !isImageViewerOpen}
+          animationType="fade"
+          transparent
+          onRequestClose={() => n.closeDetailModal()}
+        >
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback onPress={() => n.closeDetailModal()}>
+              <View style={StyleSheet.absoluteFill} />
+            </TouchableWithoutFeedback>
+
+            <Animated.View style={[styles.detailBottomSheet, { height: n.detailHeightAnim, overflow: 'hidden' }]}>
+              <View {...n.detailPanResponder.panHandlers} style={{ width: '100%' }}>
                 <View style={styles.dragHandle} />
                 <View style={styles.sheetHeader}>
-                  <Text style={styles.sheetTitle}>
-                    {n.modalMode === 'create' ? '새 공지 작성' : '공지 수정'}
-                  </Text>
-                  <TouchableOpacity onPress={() => n.closeWriteModal()} hitSlop={{ top:10, bottom:10, left:10, right:10 }}>
+                  <Text style={styles.sheetTitle} numberOfLines={1}>공지 상세</Text>
+                  <TouchableOpacity onPress={() => n.closeDetailModal()} hitSlop={{ top:10, bottom:10, left:10, right:10 }}>
                     <Text style={styles.closeIcon}>✕</Text>
                   </TouchableOpacity>
                 </View>
@@ -223,103 +121,225 @@ const ManagerNotice = ({ route, navigation }: any) => {
                 style={{ flex: 1, width: '100%' }}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={{ paddingBottom: 60 }}
-                keyboardShouldPersistTaps="handled"
               >
-                <Text style={styles.inputLabel}>공지 제목</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="공지 제목을 입력해주세요."
-                  placeholderTextColor="#666666"
-                  value={n.newTitle}
-                  onChangeText={n.setNewTitle}
-                />
-
-                <Text style={styles.inputLabel}>공지 내용</Text>
-                <TextInput
-                  style={[styles.textInput, styles.contentInput]}
-                  placeholder="공지 내용을 입력해 주세요."
-                  placeholderTextColor="#666666"
-                  multiline
-                  textAlignVertical="top"
-                  value={n.newContent}
-                  onChangeText={n.setNewContent}
-                />
-
-                <Text style={styles.inputLabel}>이미지 첨부 (선택)</Text>
-                <TouchableOpacity
-                  style={styles.imagePickerWrapper}
-                  activeOpacity={0.7}
-                  onPress={n.handleSelectImage}
-                  disabled={n.isImageUploading}
-                >
-                  {n.selectedImageUri ? (
-                    <FastImage source={{ uri: n.selectedImageUri, priority: FastImage.priority.normal }} style={styles.imagePreview} resizeMode={FastImage.resizeMode.cover} />
-                  ) : (
-                    <View style={styles.imagePlaceholder}>
-                      <Text style={styles.imagePlaceholderText}>탭하여 이미지 선택</Text>
+                {n.detailNotice?.important && (
+                  <View style={styles.detailBadgeRow}>
+                    <View style={styles.noticeBadge}>
+                      <Text style={styles.noticeBadgeText}>중요</Text>
                     </View>
-                  )}
-                  {n.isImageUploading && (
-                    <View style={[styles.imageEditOverlay, { height: '100%', justifyContent: 'center' }]}>
-                      <ActivityIndicator size="small" color="#ffffff" />
-                      <Text style={[styles.imageEditOverlayText, { marginTop: 8 }]}>업로드 중...</Text>
-                    </View>
-                  )}
-                  {n.selectedImageUri && !n.isImageUploading && (
-                    <View style={styles.imageEditOverlay}>
-                      <Text style={styles.imageEditOverlayText}>수정</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-
-                <View style={{ height: 20 }} />
-
-                <TouchableOpacity style={styles.checkboxRow} activeOpacity={0.8} onPress={() => n.setIsImportant(!n.isImportant)}>
-                  <View style={[styles.checkbox, n.isImportant && styles.checkboxChecked]}>
-                    {n.isImportant && <Text style={styles.checkmark}>✓</Text>}
                   </View>
-                  <Text style={styles.checkboxLabel}>중요 공지로 설정</Text>
-                </TouchableOpacity>
+                )}
+
+                <Text style={styles.detailTitle}>{n.detailNotice?.title}</Text>
+
+                <View style={styles.detailMetaRow}>
+                  <Text style={styles.detailMeta}>{formatDate(n.detailNotice?.createdAt ?? '')}</Text>
+                  {n.detailNotice?.authorName ? (
+                    <Text style={styles.detailMeta}> · {n.detailNotice.authorName}</Text>
+                  ) : null}
+                </View>
+
+                <View style={styles.horizontalDivider} />
+
+                {!!n.detailNotice?.imageUrl && (
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => n.openImageViewer(n.detailNotice!.imageUrl!)}
+                  >
+                    <FastImage
+                      source={{ uri: resolveImageUrl(n.detailNotice.imageUrl), priority: FastImage.priority.high }}
+                      style={styles.detailImage}
+                      resizeMode={FastImage.resizeMode.cover}
+                    />
+                  </TouchableOpacity>
+                )}
+
+                <Text style={styles.detailContent}>{n.detailNotice?.content}</Text>
 
                 <View style={styles.btnRow}>
-                  <TouchableOpacity style={styles.cancelBtn} onPress={() => n.closeWriteModal()} disabled={n.saving}>
-                    <Text style={styles.cancelBtnText}>취소</Text>
+                  <TouchableOpacity
+                    style={styles.cancelBtn}
+                    onPress={() => n.closeDetailModal(() => {
+                      setTimeout(() => n.detailNotice && n.openEditModal(n.detailNotice), 100);
+                    })}
+                  >
+                    <Text style={styles.cancelBtnText}>수정</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.registerBtn, (!n.newTitle || !n.newContent || n.saving) && { opacity: 0.5 }]}
-                    onPress={n.handleSaveNotice}
-                    disabled={!n.newTitle || !n.newContent || n.saving}
+                    style={[styles.registerBtn, { backgroundColor: '#FF4D4D' }]}
+                    onPress={() => n.closeDetailModal(() => {
+                      setTimeout(() => n.detailNotice && n.confirmDelete(n.detailNotice.id), 100);
+                    })}
                   >
-                    {n.saving
-                      ? <ActivityIndicator size="small" color="#000" />
-                      : <Text style={styles.registerBtnText}>{n.modalMode === 'create' ? '등록하기' : '수정하기'}</Text>
-                    }
+                    <Text style={styles.registerBtnText}>삭제</Text>
                   </TouchableOpacity>
                 </View>
               </ScrollView>
             </Animated.View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
+          </View>
+        </Modal>
 
-      {/* 삭제 확인 모달 */}
-      <Modal visible={n.isDeleteModalVisible} animationType="fade" transparent onRequestClose={n.cancelDelete}>
-        <View style={styles.centerModalOverlay}>
-          <View style={styles.deleteModalBox}>
-            <Text style={styles.deleteTitle}>공지사항을 삭제하시겠습니까?</Text>
-            <View style={styles.deleteBtnRow}>
-              <TouchableOpacity style={styles.btnYes} onPress={n.executeDelete}>
-                <Text style={styles.btnTextBlack}>예</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.btnNo} onPress={n.cancelDelete}>
-                <Text style={styles.btnTextWhite}>아니오</Text>
-              </TouchableOpacity>
+        {/* 작성 / 수정 바텀시트 */}
+        <Modal visible={n.isWriteModalVisible} animationType="fade" transparent onRequestClose={() => n.closeWriteModal()}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback onPress={() => n.closeWriteModal()}>
+              <View style={StyleSheet.absoluteFill} />
+            </TouchableWithoutFeedback>
+
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              style={{ width: '100%', flex: 1, justifyContent: 'flex-end' }}
+              pointerEvents="box-none"
+            >
+              <Animated.View style={[styles.bottomSheet, { height: n.writeHeightAnim, maxHeight: '100%', overflow: 'hidden' }]}>
+                <View {...n.writePanResponder.panHandlers} style={{ width: '100%' }}>
+                  <View style={styles.dragHandle} />
+                  <View style={styles.sheetHeader}>
+                    <Text style={styles.sheetTitle}>
+                      {n.modalMode === 'create' ? '새 공지 작성' : '공지 수정'}
+                    </Text>
+                    <TouchableOpacity onPress={() => n.closeWriteModal()} hitSlop={{ top:10, bottom:10, left:10, right:10 }}>
+                      <Text style={styles.closeIcon}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.horizontalDivider} />
+                </View>
+
+                <ScrollView
+                  style={{ flex: 1, width: '100%' }}
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={{ paddingBottom: 60 }}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  <Text style={styles.inputLabel}>공지 제목</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="공지 제목을 입력해주세요."
+                    placeholderTextColor="#666666"
+                    value={n.newTitle}
+                    onChangeText={n.setNewTitle}
+                  />
+
+                  <Text style={styles.inputLabel}>공지 내용</Text>
+                  <TextInput
+                    style={[styles.textInput, styles.contentInput]}
+                    placeholder="공지 내용을 입력해 주세요."
+                    placeholderTextColor="#666666"
+                    multiline
+                    textAlignVertical="top"
+                    value={n.newContent}
+                    onChangeText={n.setNewContent}
+                  />
+
+                  <Text style={styles.inputLabel}>이미지 첨부 (선택)</Text>
+                  <TouchableOpacity
+                    style={styles.imagePickerWrapper}
+                    activeOpacity={0.7}
+                    onPress={n.handleSelectImage}
+                    disabled={n.isImageUploading}
+                  >
+                    {n.selectedImageUri ? (
+                      <FastImage source={{ uri: n.selectedImageUri, priority: FastImage.priority.normal }} style={styles.imagePreview} resizeMode={FastImage.resizeMode.cover} />
+                    ) : (
+                      <View style={styles.imagePlaceholder}>
+                        <Text style={styles.imagePlaceholderText}>탭하여 이미지 선택</Text>
+                      </View>
+                    )}
+                    {n.isImageUploading && (
+                      <View style={[styles.imageEditOverlay, { height: '100%', justifyContent: 'center' }]}>
+                        <ActivityIndicator size="small" color="#ffffff" />
+                        <Text style={[styles.imageEditOverlayText, { marginTop: 8 }]}>업로드 중...</Text>
+                      </View>
+                    )}
+                    {n.selectedImageUri && !n.isImageUploading && (
+                      <View style={styles.imageEditOverlay}>
+                        <Text style={styles.imageEditOverlayText}>수정</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+
+                  <View style={{ height: 20 }} />
+
+                  <TouchableOpacity style={styles.checkboxRow} activeOpacity={0.8} onPress={() => n.setIsImportant(!n.isImportant)}>
+                    <View style={[styles.checkbox, n.isImportant && styles.checkboxChecked]}>
+                      {n.isImportant && <Text style={styles.checkmark}>✓</Text>}
+                    </View>
+                    <Text style={styles.checkboxLabel}>중요 공지로 설정</Text>
+                  </TouchableOpacity>
+
+                  <View style={styles.btnRow}>
+                    <TouchableOpacity style={styles.cancelBtn} onPress={() => n.closeWriteModal()} disabled={n.saving}>
+                      <Text style={styles.cancelBtnText}>취소</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.registerBtn, (!n.newTitle || !n.newContent || n.saving) && { opacity: 0.5 }]}
+                      onPress={n.handleSaveNotice}
+                      disabled={!n.newTitle || !n.newContent || n.saving}
+                    >
+                      {n.saving
+                        ? <ActivityIndicator size="small" color="#000" />
+                        : <Text style={styles.registerBtnText}>{n.modalMode === 'create' ? '등록하기' : '수정하기'}</Text>
+                      }
+                    </TouchableOpacity>
+                  </View>
+                </ScrollView>
+              </Animated.View>
+            </KeyboardAvoidingView>
+          </View>
+        </Modal>
+
+        {/* 삭제 확인 모달 */}
+        <Modal visible={n.isDeleteModalVisible} animationType="fade" transparent onRequestClose={n.cancelDelete}>
+          <View style={styles.centerModalOverlay}>
+            <View style={styles.deleteModalBox}>
+              <Text style={styles.deleteTitle}>공지사항을 삭제하시겠습니까?</Text>
+              <View style={styles.deleteBtnRow}>
+                <TouchableOpacity style={styles.btnYes} onPress={n.executeDelete}>
+                  <Text style={styles.btnTextBlack}>예</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.btnNo} onPress={n.cancelDelete}>
+                  <Text style={styles.btnTextWhite}>아니오</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
 
-    </SafeAreaView>
+      </SafeAreaView>
+
+      {/* ✅ 이미지 뷰어 Modal — fragment 최상단에 단독 렌더링
+           iOS 중첩 버그 해결책:
+           1. 이미지 뷰어가 열릴 때 공지 상세 Modal을 visible=false로 숨김 (위 참고)
+           2. 이미지 뷰어 Modal은 SafeAreaView 밖 fragment 최상위에 위치
+           3. 이미지 뷰어를 닫으면 공지 상세 Modal이 다시 visible=true로 복원됨
+      */}
+      <Modal
+        visible={isImageViewerOpen}
+        animationType="fade"
+        transparent
+        statusBarTranslucent
+        onRequestClose={n.closeImageViewer}
+      >
+        <TouchableOpacity
+          style={styles.imageViewerOverlay}
+          activeOpacity={1}
+          onPress={n.closeImageViewer}
+        >
+          <FastImage
+            source={{ uri: resolveImageUrl(n.imageViewerUrl), priority: FastImage.priority.high }}
+            style={styles.imageViewerImage}
+            resizeMode={FastImage.resizeMode.contain}
+          />
+          <TouchableOpacity
+            style={styles.imageViewerCloseBtn}
+            onPress={n.closeImageViewer}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Text style={styles.imageViewerCloseText}>✕</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+    </>
   );
 };
 
@@ -411,15 +431,9 @@ const styles = StyleSheet.create({
   btnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 },
   btnTextWhite: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
 
-  // 이미지 뷰어 — 바텀시트 Animated.View 안에서 absolute로 전체 덮기
-  imageViewerOverlay: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.95)',
-    justifyContent: 'center', alignItems: 'center',
-    zIndex: 10, elevation: 10,
-  },
-  imageViewerImage:     { width, height: height * 0.6 },
-  imageViewerCloseBtn:  { position: 'absolute', top: 16, right: 16, padding: 10 },
+  imageViewerOverlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' },
+  imageViewerImage:     { width, height: height * 0.8 },
+  imageViewerCloseBtn:  { position: 'absolute', top: 60, right: 20, padding: 10 },
   imageViewerCloseText: { color: '#ffffff', fontSize: 28, fontWeight: 'bold' },
 });
 

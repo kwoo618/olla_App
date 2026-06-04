@@ -43,6 +43,7 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
 
   const notifeeModule = await import('@notifee/react-native');
   const notifee = notifeeModule.default;
+  console.log('[DEBUG] notifee import 성공:', !!notifeeModule);
   const { AndroidImportance } = notifeeModule;
 
   const title = remoteMessage.data?.title ?? '알림';
@@ -54,12 +55,6 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
       title,
       body,
       android: { channelId: CHANNEL_ID, importance: AndroidImportance.HIGH, pressAction: { id: 'default' } },
-    });
-  } else {
-    await notifee.displayNotification({
-      title,
-      body,
-      ios: { sound: 'default' },
     });
   }
 });
