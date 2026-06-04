@@ -159,6 +159,8 @@ export const useMyPage = (navigation: any) => {
 
       const userRes = await axios.get(`${API_BASE_URL}/members/me`, { headers });
       const data = userRes.data.data;
+      console.log('이미지 URL 원본:', data.profileImageUrl);
+      console.log('변환 후:', getFullImageUrl(data.profileImageUrl)); 
 
       if (data) {
         setIsAdmin(String(data.role || '').toUpperCase().includes('ADMIN'));
