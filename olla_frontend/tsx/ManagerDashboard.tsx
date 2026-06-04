@@ -86,17 +86,14 @@ const ManagerDashboard = ({ navigation }: any) => {
     dash.checkAdminAndFetchData();
   }, [dash.checkAdminAndFetchData]);
 
-  // ─── 💡 3. 화면이 포커스(켜질) 때마다 오늘의 요일로 설정 (일요일이면 월요일로) ─────────────────
   useEffect(() => {
     if (isFocused) {
-      const today = new Date().getDay(); // 0(일요일) ~ 6(토요일)
-      // 💡 수정: 오늘이 일요일(0)이면 월요일(1)을 보여줌, 그 외엔 오늘 요일 유지
+      const today = new Date().getDay();
       const mappedDay = today === 0 ? 1 : today; 
       dash.handleDaySelect(mappedDay);
     }
   }, [isFocused]);
 
-  // ─── 💡 4. 새로고침 핸들러: 새로고침 시에도 오늘 요일로 초기화 (일요일이면 월요일로) ───────────
   const handleRefreshData = () => {
     dash.refreshDashboardData();
   };
@@ -157,6 +154,7 @@ const ManagerDashboard = ({ navigation }: any) => {
   };
 
   // ─── 차트: 시간대별 꺾은선 ─────────────────────────────────────────────
+  // 🔧 수정: lineW 기준 통일 + 포인트 컨테이너 left:0 고정 + x축 라벨 컨테이너 height 명시
   const renderHourlyLine = () => {
     const selectedDay = dash.dashboardStats.selectedDay;
     const hourRange   = getHourRange(selectedDay);
@@ -164,11 +162,12 @@ const ManagerDashboard = ({ navigation }: any) => {
     const displayData = dash.hourlyData.slice(0, hourRange.length);
     const maxVal      = Math.max(...displayData, 1);
     const count       = displayData.length;
-    
-    const lineW       = CARD_INNER_W - 90; 
-    
-    const points      = displayData.map((val, i) => ({
-      x: count > 1 ? (i / (count - 1)) * lineW : 0,
+
+    // y축(30px) + paddingRight(10px) 제외한 실제 선 그리는 너비
+    const lineW = CARD_INNER_W - 40 - 30 - 10; // card padding(20*2) - yAxis(30) - paddingRight(10)
+
+    const points = displayData.map((val, i) => ({
+      x: count > 1 ? (i / (count - 1)) * lineW : lineW / 2,
       y: CHART_H - (val / maxVal) * CHART_H,
     }));
 
@@ -177,15 +176,21 @@ const ManagerDashboard = ({ navigation }: any) => {
         <Text style={styles.chartTitle}>{DAY_LABELS[selectedDay]}요일 시간대별 상세 분포</Text>
         <Text style={styles.chartSubTitle}>운영시간: {selectedDay === 6 ? '13:00 ~ 19:00' : '13:00 ~ 22:00'}</Text>
         <View style={{ flexDirection: 'row', height: CHART_H + 32, marginTop: 15 }}>
+          {/* Y축 레이블 */}
           <View style={{ width: 30, height: CHART_H, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 6 }}>
             {['Max', 'Mid', '0'].map(l => <Text key={l} style={styles.yAxisText}>{l}</Text>)}
           </View>
-          <View style={{ flex: 1, height: CHART_H + 32 }}>
+
+          {/* 차트 본체 */}
+          <View style={{ flex: 1, height: CHART_H + 32, position: 'relative' }}>
+            {/* 수평 가이드라인 */}
             {[0, 0.5, 1].map((r, i) => (
               <View key={i} style={{ position: 'absolute', top: CHART_H * (1 - r), left: 0, right: 0, height: 1, backgroundColor: '#383838' }} />
             ))}
-            
-            <View style={{ position: 'absolute', top: 0, left: 10, width: lineW, height: CHART_H }}>
+
+            {/* 선 + 점: left:0 기준으로 그림 */}
+            <View style={{ position: 'absolute', top: 0, left: 0, width: lineW, height: CHART_H }}>
+              {/* 선분 */}
               {points.slice(0, -1).map((p, i) => {
                 const next  = points[i + 1];
                 const dx    = next.x - p.x;
@@ -194,29 +199,40 @@ const ManagerDashboard = ({ navigation }: any) => {
                 const angle = Math.atan2(dy, dx) * (180 / Math.PI);
                 return (
                   <View key={i} style={{
-                    position: 'absolute', width: len, height: 2, backgroundColor: '#A1BE44',
-                    left: p.x + dx / 2 - len / 2, top: p.y + dy / 2 - 1,
+                    position: 'absolute',
+                    width: len,
+                    height: 2,
+                    backgroundColor: '#A1BE44',
+                    left: p.x + dx / 2 - len / 2,
+                    top:  p.y + dy / 2 - 1,
                     transform: [{ rotate: `${angle}deg` }],
                   }} />
                 );
               })}
+              {/* 점 */}
               {points.map((p, i) => (
                 <View key={i} style={{
-                  position: 'absolute', left: p.x - 4, top: p.y - 4,
+                  position: 'absolute',
+                  left: p.x - 4,
+                  top:  p.y - 4,
                   width: 8, height: 8, borderRadius: 4,
-                  backgroundColor: '#A1BE44', borderWidth: 2, borderColor: '#2C2C2C',
+                  backgroundColor: '#A1BE44',
+                  borderWidth: 2, borderColor: '#2C2C2C',
                 }} />
               ))}
             </View>
-            
-            <View style={{ position: 'absolute', top: CHART_H + 8, left: 10, width: lineW }}>
+
+            {/* X축 레이블: position relative + height 명시해서 잘리지 않게 */}
+            <View style={{ position: 'absolute', top: CHART_H + 8, left: 0, width: lineW, height: 24 }}>
               {hourRange.map((hour, i) => {
-                const pointX = count > 1 ? (i / (count - 1)) * lineW : 0;
-                
+                const pointX = count > 1 ? (i / (count - 1)) * lineW : lineW / 2;
                 return (
-                  <Text 
-                    key={i} 
-                    style={[styles.xAxisText, { position: 'absolute', left: pointX - 15, width: 30, textAlign: 'center' }]}
+                  <Text
+                    key={i}
+                    style={[
+                      styles.xAxisText,
+                      { position: 'absolute', left: pointX - 15, width: 30, textAlign: 'center' },
+                    ]}
                   >
                     {hour}시
                   </Text>
@@ -468,7 +484,7 @@ const ManagerDashboard = ({ navigation }: any) => {
         <Image source={require('../assets/Camera.png')} style={styles.fabIcon} />
       </TouchableOpacity>
 
-      {/* ─── 💡 결과 모달 (OLLA 표준 규격 적용) ─────────────────────────────────────────────────────── */}
+      {/* ─── 결과 모달 ─────────────────────────────────────────────────────── */}
       <Modal visible={dash.resultModalVisible} animationType="fade" transparent onRequestClose={dash.closeResultModal}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -483,7 +499,7 @@ const ManagerDashboard = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 💡 삭제 확인 모달 (OLLA 표준 규격 적용) ───────────────────────────────────────────────── */}
+      {/* ─── 삭제 확인 모달 ─────────────────────────────────────────────────── */}
       <Modal visible={dash.isDeleteModalVisible} animationType="fade" transparent onRequestClose={() => dash.setDeleteModalVisible(false)}>
         <View style={styles.deleteModalOverlay}>
           <View style={styles.deleteModalBox}>
@@ -606,7 +622,7 @@ const ManagerDashboard = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 💡 알림 발송 모달 (OLLA 표준 규격 적용) ───────────────────────────────────────────────── */}
+      {/* ─── 알림 발송 모달 ─────────────────────────────────────────────────── */}
       <Modal visible={dash.isSendAlertModalVisible} animationType="fade" transparent onRequestClose={() => dash.setSendAlertModalVisible(false)}>
         <View style={styles.alertModalOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%', alignItems: 'center' }}>
@@ -670,10 +686,7 @@ const styles = StyleSheet.create({
   chartTitle:     { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 2 },
   chartSubTitle:  { color: '#A1BE44', fontSize: 12, marginBottom: 5 },
   yAxisText:      { color: '#888888', fontSize: 10 },
-  
-  // 폰트 사이즈를 9로 줄여 1시간 간격 표시 시 겹침 방지
-  xAxisText:      { color: '#888888', fontSize: 9 }, 
-  
+  xAxisText:      { color: '#888888', fontSize: 9 },
   bar:            { borderRadius: 6 },
   barValText:     { color: '#cccccc', fontSize: 10, fontWeight: 'bold', marginBottom: 4 },
   barDayLabel:    { color: '#999999', fontSize: 11, textAlign: 'center' },
@@ -756,87 +769,31 @@ const styles = StyleSheet.create({
   closeFullBtn:         { backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 10 },
   closeFullBtnText:     { color: '#000', fontWeight: 'bold', fontSize: 18 },
 
-  // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
-  // 1. 공통 시스템 결과 알림 모달
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { 
-    width: '90%', 
-    backgroundColor: '#212121', 
-    borderRadius: 25, 
-    paddingVertical: 45, 
-    paddingHorizontal: 35, 
-    alignItems: 'center' 
-  },
-  resultModalTitle: { 
-    fontSize: 28, 
-    fontWeight: 'bold', 
-    marginBottom: 8 
-  },
-  resultModalMessage: { 
-    color: '#ffffff', 
-    fontSize: 18, 
-    fontWeight: 'bold',
-    marginBottom: 25, 
-    textAlign: 'center', 
-    lineHeight: 24 
-  },
-  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
+  resultModalBox:     { width: '90%', backgroundColor: '#212121', borderRadius: 25, paddingVertical: 45, paddingHorizontal: 35, alignItems: 'center' },
+  resultModalTitle:   { fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
+  resultModalMessage: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center', lineHeight: 24 },
+  resultModalBtn:     { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
 
-  // 2. 삭제 확인 모달
   deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
-  deleteModalBox: { 
-    width: '90%', 
-    backgroundColor: '#212121', 
-    borderRadius: 25, 
-    paddingVertical: 45, 
-    paddingHorizontal: 35, 
-    alignItems: 'center' 
-  },
-  deleteModalTitle: { 
-    fontSize: 28, 
-    fontWeight: 'bold', 
-    marginBottom: 8 
-  },
-  deleteModalMessage: { 
-    color: '#ffffff', 
-    fontSize: 18, 
-    fontWeight: 'bold',
-    marginBottom: 25, 
-    textAlign: 'center', 
-    lineHeight: 24 
-  },
-  deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  deleteBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 },
-  deleteBtnYesText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
-  deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 },
-  deleteBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
+  deleteModalBox:     { width: '90%', backgroundColor: '#212121', borderRadius: 25, paddingVertical: 45, paddingHorizontal: 35, alignItems: 'center' },
+  deleteModalTitle:   { fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
+  deleteModalMessage: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center', lineHeight: 24 },
+  deleteBtnRow:       { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  deleteBtnYes:       { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 },
+  deleteBtnYesText:   { color: '#000000', fontSize: 18, fontWeight: 'bold' },
+  deleteBtnNo:        { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 },
+  deleteBtnNoText:    { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
 
-  // 3. 입력 폼 모달 (알림 발송)
-  alertModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-  alertModalBox: { 
-    width: '90%', 
-    backgroundColor: '#212121', 
-    borderRadius: 25, 
-    paddingVertical: 45, 
-    paddingHorizontal: 35, 
-  },
-  alertModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
-  alertModalTitle: { color: '#FFF', fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
-  alertCloseBtn: { color: '#999999', fontSize: 24, paddingHorizontal: 5, marginBottom: 8 },
-  alertInputField: { 
-    width: '100%',
-    backgroundColor: '#1A1A1A', 
-    color: '#FFF', 
-    borderRadius: 12, 
-    padding: 15, 
-    marginBottom: 12, 
-    fontSize: 16, 
-    borderWidth: 1, 
-    borderColor: '#444444' 
-  },
-  alertSubmitBtn: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 20 },
-  alertSubmitBtnText:{ color: '#000000', fontSize: 18, fontWeight: 'bold' },
+  alertModalOverlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  alertModalBox:      { width: '90%', backgroundColor: '#212121', borderRadius: 25, paddingVertical: 45, paddingHorizontal: 35 },
+  alertModalHeader:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
+  alertModalTitle:    { color: '#FFF', fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
+  alertCloseBtn:      { color: '#999999', fontSize: 24, paddingHorizontal: 5, marginBottom: 8 },
+  alertInputField:    { width: '100%', backgroundColor: '#1A1A1A', color: '#FFF', borderRadius: 12, padding: 15, marginBottom: 12, fontSize: 16, borderWidth: 1, borderColor: '#444444' },
+  alertSubmitBtn:     { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 20 },
+  alertSubmitBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
 });
 
 export default ManagerDashboard;
