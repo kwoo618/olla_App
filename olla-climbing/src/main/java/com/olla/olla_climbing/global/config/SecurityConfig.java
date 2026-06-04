@@ -56,6 +56,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // 인증 없이 허용
                         .requestMatchers("/api/v1/auth/**").permitAll()
+                        .requestMatchers("/images/**").permitAll()
 
                         // Swagger: 운영(prod) 환경에서는 차단, 나머지는 허용
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**")
@@ -89,8 +90,7 @@ public class SecurityConfig {
                 "http://localhost:3000",
                 "http://localhost:8081",
                 "http://localhost",
-                "https://ollagaja.com",
-                "http://api.ollagaja.com:8080"
+                "https://ollagaja.com"
         ));
 
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
