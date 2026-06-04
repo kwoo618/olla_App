@@ -4,7 +4,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../src/constants/Config';
 
-// ─────────────────────────── API URLs ───────────────────────────
+// API 주소 모음
 const RANKING_BEGINNER_URL  = `${API_BASE_URL}/rankings/beginner`;
 const RANKING_ENDURANCE_URL = `${API_BASE_URL}/rankings/endurance/distance`;
 const RANKING_SERIES_URL    = `${API_BASE_URL}/rankings/series`;
@@ -12,12 +12,13 @@ const MY_PROFILE_URL        = `${API_BASE_URL}/members/me`;
 const MY_BEGINNER_BEST_URL  = `${API_BASE_URL}/records/beginner/best`;
 const PROFILE_API_URL       = `${API_BASE_URL}/members`;
 
-// ─────────────────────────── 헬퍼 / 상수 ───────────────────────────
-export const getFullImageUrl = (path?: string | null) => {
-  if (!path) return null;
+// 이미지 불러오기
+export const getFullImageUrl = (path?: string | null): string | null => {
+  if (!path || path === 'null' || path === 'undefined') return null;
   if (path.startsWith('http') || path.startsWith('file:') || path.startsWith('content:')) return path;
   const domain = API_BASE_URL.replace('/api/v1', '');
-  return `${domain}${path}`;
+  const formattedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${domain}${formattedPath}`;
 };
 
 export const colors = [

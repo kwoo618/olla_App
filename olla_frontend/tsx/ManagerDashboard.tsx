@@ -12,6 +12,7 @@ import {
   DAY_LABELS, DAY_SELECT_OPTIONS, getHourRange,
   isValidImageUrl,
 } from '../ts/ManagerDashboard';
+import FastImage from 'react-native-fast-image';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CARD_INNER_W   = SCREEN_WIDTH - 40;
@@ -97,16 +98,10 @@ const ManagerDashboard = ({ navigation }: any) => {
 
   // ─── 💡 4. 새로고침 핸들러: 새로고침 시에도 오늘 요일로 초기화 (일요일이면 월요일로) ───────────
   const handleRefreshData = () => {
-    const today = new Date().getDay();
-    const mappedDay = today === 0 ? 1 : today; // 💡 수정됨
-    dash.handleDaySelect(mappedDay);
     dash.refreshDashboardData();
   };
 
   const handlePullToRefresh = () => {
-    const today = new Date().getDay();
-    const mappedDay = today === 0 ? 1 : today; // 💡 수정됨
-    dash.handleDaySelect(mappedDay);
     dash.onRefresh();
   };
 
@@ -410,10 +405,10 @@ const ManagerDashboard = ({ navigation }: any) => {
                   activeOpacity={0.7}
                   onPress={() => openDetailModal(memberId, userName, userPhone)}
                 >
-                  <Image
-                    source={isValidImageUrl(member.profileImageUrl) ? { uri: member.profileImageUrl } : require('../assets/profile.png')}
-                    style={styles.profileImg}
-                  />
+                  {isValidImageUrl(member.profileImageUrl)
+                    ? <FastImage source={{ uri: member.profileImageUrl!, priority: FastImage.priority.normal }} style={styles.profileImg} />
+                    : <Image source={require('../assets/profile.png')} style={styles.profileImg} />
+                  }
                   <View style={styles.infoCol}>
                     <Text style={styles.nameText}>{userName}</Text>
                     <Text style={styles.subText}>{userPhone}</Text>
@@ -528,10 +523,10 @@ const ManagerDashboard = ({ navigation }: any) => {
               {dash.selectedUser && (
                 <View style={styles.detailContainer}>
                   <View style={styles.detailProfileWrapper}>
-                    <Image
-                      source={isValidImageUrl(dash.selectedUser.profileImageUrl) ? { uri: dash.selectedUser.profileImageUrl } : require('../assets/profile.png')}
-                      style={styles.profileBig}
-                    />
+                    {isValidImageUrl(dash.selectedUser.profileImageUrl)
+                      ? <FastImage source={{ uri: dash.selectedUser.profileImageUrl!, priority: FastImage.priority.normal }} style={styles.profileBig} />
+                      : <Image source={require('../assets/profile.png')} style={styles.profileBig} />
+                    }
                     <Text style={styles.profileName}>{dash.selectedUser.name}</Text>
                   </View>
                   <View style={styles.infoBox}>

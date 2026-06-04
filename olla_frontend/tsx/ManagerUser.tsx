@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useManagerUser, resolveMembershipType, getFullImageUrl } from '../ts/ManagerUser';
+import FastImage from 'react-native-fast-image';
 
 const ManagerUser = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
@@ -79,15 +80,13 @@ const ManagerUser = ({ navigation }: any) => {
               }
             }
 
-            // 💡 프로필 이미지 경로 변환 적용
-            const avatarSource = memberInfo.profileImageUrl 
-              ? { uri: getFullImageUrl(memberInfo.profileImageUrl) } 
-              : require('../assets/profile.png');
-
             return (
               <View key={`u-${memberId || index}`} style={styles.tableRow}>
                 <TouchableOpacity style={[styles.colName, styles.profileNameContainer]} onPress={() => openDetailModal(memberId, targetName, targetPhone)}>
-                  <Image source={avatarSource} style={styles.listProfileImg} />
+                  {getFullImageUrl(memberInfo.profileImageUrl)
+                    ? <FastImage source={{ uri: getFullImageUrl(memberInfo.profileImageUrl)!, priority: FastImage.priority.normal }} style={styles.listProfileImg} />
+                    : <Image source={require('../assets/profile.png')} style={styles.listProfileImg} />
+                  }
                   <Text style={styles.rowTextBold} numberOfLines={1}>{targetName}</Text>
                 </TouchableOpacity>
                 

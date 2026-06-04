@@ -12,6 +12,7 @@ axios.interceptors.request.use(
   async (config) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
+      console.log('토큰:', token);
       if (token) config.headers.Authorization = `Bearer ${token}`;
     } catch (e) {
       console.error('토큰 가져오기 실패:', e);
@@ -21,7 +22,7 @@ axios.interceptors.request.use(
   (error) => Promise.reject(error),
 );
 
-// 타입 
+// 타입
 export interface Notice {
   id:         number;
   authorName: string;
@@ -42,14 +43,21 @@ export interface NoticeBody {
   isTopFixed:  boolean;
 }
 
-// 유틸 
+// 유틸
 export const formatDate = (isoString: string) => isoString?.split('T')[0] ?? '-';
 
-// 이미지 상대경로 
-export const resolveImageUrl = (url: string | null): string => {
-  if (!url) return '';
-  if (url.startsWith('http')) return url;          // 이미 절대경로면 그대로
-  return `${API_BASE_URL}${url}`;                  // 상대경로면 BaseURL 붙이기
+// 이미지 URL 변환 (MyPage의 getFullImageUrl 패턴과 동일하게 통일)
+export const resolveImageUrl = (path: string | null | undefined): string => {
+  if (!path || path === 'null' || path === 'undefined') return '';
+  if (
+    path.startsWith('http') ||
+    path.startsWith('file:') ||
+    path.startsWith('content:')
+  ) return path;
+  // 상대경로인 경우: API_BASE_URL에서 /api/v1 제거 후 도메인만 붙이기
+  const domain = API_BASE_URL.replace('/api/v1', '');
+  const formattedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${domain}${formattedPath}`;
 };
 
 export const useManagerNotice = (navigation: any, route: any) => {
@@ -83,7 +91,7 @@ export const useManagerNotice = (navigation: any, route: any) => {
     setResultModalConfig(prev => { prev.onConfirm?.(); return prev; });
   }, []);
 
-  // 상세 모달 
+  // 상세 모달
   const [isDetailModalVisible, setDetailModalVisible] = useState(false);
   const [detailNotice, setDetailNotice]               = useState<Notice | null>(null);
 
@@ -113,7 +121,7 @@ export const useManagerNotice = (navigation: any, route: any) => {
     }),
   ).current;
 
-  // 작성/수정 모달 
+  // 작성/수정 모달
   const [isWriteModalVisible, setWriteModalVisible] = useState(false);
   const [modalMode, setModalMode]                   = useState<'create' | 'edit'>('create');
   const [selectedNoticeId, setSelectedNoticeId]     = useState<number | null>(null);
@@ -151,11 +159,27 @@ export const useManagerNotice = (navigation: any, route: any) => {
     }),
   ).current;
 
-  // 삭제 모달 
+  // 삭제 모달
   const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
   const [noticeToDelete, setNoticeToDelete]           = useState<number | null>(null);
 
-  // 정렬된 목록 
+  // 이미지 뷰어
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
+  const [imageViewerUrl, setImageViewerUrl]         = useState('');
+
+  const openImageViewer = useCallback((url: string) => {
+    const resolved = resolveImageUrl(url);
+    if (!resolved) return;
+    setImageViewerUrl(resolved);
+    setImageViewerVisible(true);
+  }, []);
+
+  const closeImageViewer = useCallback(() => {
+    setImageViewerVisible(false);
+    setImageViewerUrl('');
+  }, []);
+
+  // 정렬된 목록
   const sortedNotices = useMemo(() =>
     [...notices].sort((a, b) => {
       if (a.important !== b.important) return a.important ? -1 : 1;
@@ -164,7 +188,7 @@ export const useManagerNotice = (navigation: any, route: any) => {
     [notices],
   );
 
-  // API 
+  // ─── API ─────────────────────────────────────────────────────────────────
   const fetchNotices = useCallback(async (isRefresh = false) => {
     try {
       if (!isRefresh) setLoading(true);
@@ -196,7 +220,7 @@ export const useManagerNotice = (navigation: any, route: any) => {
     setRefreshing(false);
   }, [fetchNotices]);
 
-  // 초기 로드 및 외부 편집 진입 
+  // 초기 로드 및 외부 편집 진입
   useEffect(() => {
     fetchNotices();
   }, [fetchNotices]);
@@ -209,7 +233,7 @@ export const useManagerNotice = (navigation: any, route: any) => {
     }
   }, [route?.params?.editNoticeId]);
 
-  // 상세 모달 제어 
+  // ─── 상세 모달 제어 ───────────────────────────────────────────────────────
   const openDetailModal = useCallback(async (notice: Notice) => {
     const detail = await fetchNoticeDetail(notice.id);
     if (!detail) return;
@@ -230,7 +254,7 @@ export const useManagerNotice = (navigation: any, route: any) => {
     });
   }, [detailHeightAnim]);
 
-  // 작성/수정 모달 제어 
+  // ─── 작성/수정 모달 제어 ──────────────────────────────────────────────────
   const _openWriteSheetAnimation = useCallback(() => {
     currentWriteSnap.current = WRITE_MODAL_HEIGHT;
     writeHeightAnim.setValue(0);
@@ -259,7 +283,8 @@ export const useManagerNotice = (navigation: any, route: any) => {
     setNewTitle(detail.title);
     setNewContent(detail.content);
     setIsImportant(detail.important);
-    setSelectedImageUri(detail.imageUrl ?? '');
+    const resolvedUrl = resolveImageUrl(detail.imageUrl);
+    setSelectedImageUri(resolvedUrl);
     setUploadedImageUrl(detail.imageUrl ?? '');
     setWriteModalVisible(true);
     _openWriteSheetAnimation();
@@ -273,7 +298,8 @@ export const useManagerNotice = (navigation: any, route: any) => {
     setNewTitle(detail.title);
     setNewContent(detail.content);
     setIsImportant(detail.important);
-    setSelectedImageUri(detail.imageUrl ?? '');
+    const resolvedUrl = resolveImageUrl(detail.imageUrl);
+    setSelectedImageUri(resolvedUrl);
     setUploadedImageUrl(detail.imageUrl ?? '');
     setWriteModalVisible(true);
     _openWriteSheetAnimation();
@@ -286,7 +312,7 @@ export const useManagerNotice = (navigation: any, route: any) => {
     });
   }, [writeHeightAnim]);
 
-  // 이미지 선택 및 업로드 
+  // ─── 이미지 선택 및 업로드 ────────────────────────────────────────────────
   const handleSelectImage = useCallback(() => {
     launchImageLibrary({ mediaType: 'photo', quality: 0.5, maxWidth: 1024, maxHeight: 1024 }, async (response) => {
       if (response.didCancel || response.errorCode) return;
@@ -294,37 +320,44 @@ export const useManagerNotice = (navigation: any, route: any) => {
       if (!asset) return;
 
       setSelectedImageUri(asset.uri ?? '');
+
       try {
         setIsImageUploading(true);
-        const userToken = await AsyncStorage.getItem('userToken');
-        const formData  = new FormData();
+
+        const formData = new FormData();
         formData.append('file', {
           uri:  Platform.OS === 'ios' ? asset.uri?.replace('file://', '') : asset.uri,
           type: asset.type || 'image/jpeg',
           name: asset.fileName || `notice_${Date.now()}.jpg`,
         } as any);
 
-        showResultModal('파일 확인', `uri: ${asset.uri}\ntype: ${asset.type}\nname: ${asset.fileName}`, 'info');
-
         const uploadRes = await axios.post(`${API_BASE_URL}/images`, formData, {
           timeout: 30000,
         });
 
-        const dataObj    = uploadRes.data.data;
-        const uploadedUrl = dataObj && typeof dataObj === 'object'
-          ? Object.values(dataObj)[0] as string
-          : typeof dataObj === 'string' ? dataObj : null;
+        const dataObj = uploadRes.data?.data;
+        let uploadedUrl: string | null = null;
 
-        if (uploadedUrl) {
-          setSelectedImageUri(uploadedUrl);
-          setUploadedImageUrl(uploadedUrl);
-        } else {
-          throw new Error('URL 반환 없음');
+        if (typeof dataObj === 'string' && dataObj.length > 0) {
+          uploadedUrl = dataObj;
+        } else if (dataObj && typeof dataObj === 'object') {
+          uploadedUrl =
+            dataObj.imageUrl ||
+            dataObj.url ||
+            dataObj.noticeImageUrl ||
+            (Object.values(dataObj)[0] as string) ||
+            null;
         }
+
+        if (!uploadedUrl) throw new Error('서버에서 URL을 반환하지 않았습니다.');
+
+        setSelectedImageUri(resolveImageUrl(uploadedUrl));
+        setUploadedImageUrl(uploadedUrl);
+
       } catch (e: any) {
         showResultModal(
           '업로드 실패',
-          e.response?.data?.message ?? e.response?.status?.toString() ?? e.message ?? '알 수 없는 오류',
+          e.response?.data?.message ?? e.message ?? '알 수 없는 오류',
           'error',
         );
         setSelectedImageUri('');
@@ -335,61 +368,72 @@ export const useManagerNotice = (navigation: any, route: any) => {
     });
   }, [showResultModal]);
 
-  // 공지 저장 
+  // ─── 공지 저장 ────────────────────────────────────────────────────────────
   const handleSaveNotice = useCallback(async () => {
-  if (!newTitle.trim() || !newContent.trim()) return;
-  setSaving(true);
+    if (!newTitle.trim() || !newContent.trim()) return;
+    if (isImageUploading) {
+      showResultModal('안내', '이미지 업로드 완료 후 저장해주세요.', 'info');
+      return;
+    }
+    setSaving(true);
 
-  try {
-    if (modalMode === 'create') {
-      // POST: multipart/form-data
-      const formData = new FormData();
-      formData.append('request', {
-        string: JSON.stringify({
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+
+      if (modalMode === 'create') {
+        const formData = new FormData();
+
+        // ✅ 핵심 수정: React Native에서 @RequestPart가 인식하도록
+        // type: 'application/json' 명시 → 백엔드 @RequestPart("request") 역직렬화 성공
+        formData.append('request', {
+          string: JSON.stringify({
+            title:       newTitle.trim(),
+            content:     newContent.trim(),
+            imageUrl:    uploadedImageUrl,
+            isImportant: isImportant,
+          }),
+          type: 'application/json',
+          name: 'request',
+        } as any);
+
+        await axios.post(NOTICE_API, formData, {
+          headers: {
+            Authorization:  `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+
+      } else {
+        // PUT은 JSON 그대로
+        await axios.put(`${NOTICE_API}/${selectedNoticeId}`, {
           title:       newTitle.trim(),
           content:     newContent.trim(),
           imageUrl:    uploadedImageUrl,
           isImportant: isImportant,
-          isTopFixed:  isImportant,
-        }),
-        type: 'application/json',
-        name: 'request',
-      } as any);
-      // 이미지는 이미 업로드 후 URL만 쓰므로 file은 안 보내도 됨
-      await axios.post(NOTICE_API, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        }, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+
+      await fetchNotices(true);
+      closeWriteModal(() => {
+        setTimeout(() => {
+          showResultModal('성공', modalMode === 'create' ? '새 공지가 등록되었습니다.' : '공지가 수정되었습니다.', 'success');
+        }, 300);
       });
 
-    } else {
-      // PUT: application/json
-      await axios.put(`${NOTICE_API}/${selectedNoticeId}`, {
-        title:       newTitle.trim(),
-        content:     newContent.trim(),
-        imageUrl:    uploadedImageUrl,
-        isImportant: isImportant,
-        isTopFixed:  isImportant,
-      });
+    } catch (error: any) {
+      console.log('에러:', JSON.stringify(error?.response?.data));
+      showResultModal('저장 실패', error?.response?.data?.message ?? `에러코드: ${error?.response?.status}`, 'error');
+    } finally {
+      setSaving(false);
     }
+  }, [newTitle, newContent, uploadedImageUrl,
+    isImportant, isImageUploading, modalMode,
+    selectedNoticeId, closeWriteModal, showResultModal,
+    fetchNotices]);
 
-    closeWriteModal(() => {
-      setTimeout(() => {
-        showResultModal('성공', modalMode === 'create' ? '새 공지가 등록되었습니다.' : '공지가 수정되었습니다.', 'success');
-      }, 300);
-    });
-    await fetchNotices(true);
-
-  } catch (error: any) {
-    closeWriteModal(() => {
-      setTimeout(() => {
-        showResultModal('오류', error?.response?.data?.message ?? '저장에 실패했습니다.', 'error');
-      }, 300);
-    });
-  } finally {
-    setSaving(false);
-  }
-}, [newTitle, newContent, uploadedImageUrl, isImportant, modalMode, selectedNoticeId, closeWriteModal, showResultModal, fetchNotices]);
-
-  // 공지 삭제 
+  // ─── 공지 삭제 ────────────────────────────────────────────────────────────
   const confirmDelete = useCallback((id: number) => {
     setNoticeToDelete(id);
     setDeleteModalVisible(true);
@@ -405,8 +449,8 @@ export const useManagerNotice = (navigation: any, route: any) => {
     try {
       await axios.delete(`${NOTICE_API}/${noticeToDelete}`);
       cancelDelete();
-      setTimeout(() => showResultModal('성공', '공지사항이 삭제되었습니다.', 'success'), 300);
       await fetchNotices(true);
+      setTimeout(() => showResultModal('성공', '공지사항이 삭제되었습니다.', 'success'), 300);
     } catch (error: any) {
       cancelDelete();
       setTimeout(() => showResultModal('오류', error.response?.data?.message ?? '삭제에 실패했습니다.', 'error'), 300);
@@ -435,5 +479,8 @@ export const useManagerNotice = (navigation: any, route: any) => {
     // 삭제 모달
     isDeleteModalVisible, noticeToDelete,
     confirmDelete, cancelDelete, executeDelete,
+    // 이미지 뷰어
+    imageViewerVisible, imageViewerUrl,
+    openImageViewer, closeImageViewer,
   };
 };

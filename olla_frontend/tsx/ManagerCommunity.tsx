@@ -1,8 +1,10 @@
+
 import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, TextInput, RefreshControl, KeyboardAvoidingView, Platform, Dimensions, PanResponder, TouchableWithoutFeedback, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
-import { useManagerCommunityData, getProfileImage, formatCommentDate } from '../ts/ManagerCommunity';
+import FastImage from 'react-native-fast-image';
+import { useManagerCommunityData, getProfileImage, getFullImageUrl, formatCommentDate } from '../ts/ManagerCommunity';
 
 const ManagerCommunity = ({ route, navigation }: any) => {
   const isFocused = useIsFocused();
@@ -110,6 +112,44 @@ const ManagerCommunity = ({ route, navigation }: any) => {
     </View>
   );
 
+  // 💡 프로필 상세 시트 공통 렌더 함수 (댓글 모달 안/밖 양쪽에서 재사용)
+  const renderDetailSheet = () => (
+    <Animated.View style={[styles.bottomSheet, { height: detailHeightAnim, overflow: 'hidden' }]}>
+      <View {...detailPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
+        <View style={styles.dragHandle} />
+        <View style={styles.sheetHeader}>
+          <Text style={styles.sheetTitle}>회원 정보 확인</Text>
+          <TouchableOpacity onPress={closeDetailModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity>
+        </View>
+        <View style={styles.horizontalDivider} />
+      </View>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
+        {selectedUser && (
+          <View style={styles.detailContainer}>
+            <View style={styles.detailProfileWrapper}>
+              {getFullImageUrl(selectedUser.profileImageUrl)
+                ? <FastImage source={{ uri: getFullImageUrl(selectedUser.profileImageUrl)!, priority: FastImage.priority.normal }} style={styles.profileBig} />
+                : <Image source={require('../assets/profile.png')} style={styles.profileBig} />
+              }
+              <Text style={styles.profileName}>{selectedUser.name}</Text>
+            </View>
+            <View style={styles.detailInfoBox}>
+              {renderDetailRow('이름', selectedUser.name)}
+              {renderDetailRow('전화번호', selectedUser.phone)}
+              {renderDetailRow('성별', selectedUser.gender)}
+              {renderDetailRow('나이', selectedUser.age, '세')}
+              {renderDetailRow('키', selectedUser.height, 'cm')}
+              {renderDetailRow('몸무게', selectedUser.weight, 'kg')}
+              {renderDetailRow('팔길이', selectedUser.arm, 'cm')}
+              {renderDetailRow('암벽화 사이즈', selectedUser.shoe, 'mm')}
+            </View>
+            <TouchableOpacity style={styles.closeFullBtn} onPress={closeDetailModal}><Text style={styles.closeFullBtnText}>닫기</Text></TouchableOpacity>
+          </View>
+        )}
+      </ScrollView>
+    </Animated.View>
+  );
+
   const filteredPosts = posts.filter((post: any) => selectedTab === '전체' || post.type === selectedTab);
 
   if (loading) {
@@ -171,7 +211,10 @@ const ManagerCommunity = ({ route, navigation }: any) => {
               
               <View style={styles.cardFooter}>
                 <TouchableOpacity style={styles.profileRow} onPress={() => openDetailModal(post.writerId, post.author)}>
-                  <Image source={getProfileImage(post.profileImageUrl)} style={[styles.profileImg, isPast && { opacity: 0.5 }]} />
+                  {getFullImageUrl(post.profileImageUrl)
+                    ? <FastImage source={{ uri: getFullImageUrl(post.profileImageUrl)!, priority: FastImage.priority.normal }} style={[styles.profileImg, isPast && { opacity: 0.5 }]} />
+                    : <Image source={require('../assets/profile.png')} style={[styles.profileImg, isPast && { opacity: 0.5 }]} />
+                  }
                   <Text style={[styles.authorText, isPast && { color: '#666666' }]}>{post.author}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={{ marginRight: 10 }} onPress={() => openPostDetail(post)}>
@@ -187,7 +230,7 @@ const ManagerCommunity = ({ route, navigation }: any) => {
         {filteredPosts.length === 0 && <Text style={{ color: '#999', textAlign: 'center', marginTop: 30, fontSize: 16 }}>등록된 커뮤니티 글이 없습니다.</Text>}
       </ScrollView>
 
-      {/* 기본 모달 영역 */}
+      {/* 기본 모달 영역 (댓글 모달 닫힌 상태에서만) */}
       {!isCommentVisible && (
         <>
           <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={closeResultModal}>
@@ -213,40 +256,11 @@ const ManagerCommunity = ({ route, navigation }: any) => {
             </View>
           </Modal>
 
+          {/* 💡 게시글 목록에서 프로필 클릭 시 뜨는 프로필 상세 모달 (댓글 모달 밖) */}
           <Modal visible={isDetailVisible} transparent={true} animationType="fade" onRequestClose={closeDetailModal}>
             <View style={styles.modalOverlay}>
               <TouchableWithoutFeedback onPress={closeDetailModal}><View style={StyleSheet.absoluteFill} /></TouchableWithoutFeedback>
-              <Animated.View style={[styles.bottomSheet, { height: detailHeightAnim, overflow: 'hidden' }]}>
-                <View {...detailPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
-                  <View style={styles.dragHandle} />
-                  <View style={styles.sheetHeader}>
-                    <Text style={styles.sheetTitle}>회원 정보 확인</Text>
-                    <TouchableOpacity onPress={closeDetailModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity>
-                  </View>
-                  <View style={styles.horizontalDivider} />
-                </View>
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
-                  {selectedUser && (
-                    <View style={styles.detailContainer}>
-                      <View style={styles.detailProfileWrapper}>
-                        <Image source={getProfileImage(selectedUser.profileImageUrl)} style={styles.profileBig} /> 
-                        <Text style={styles.profileName}>{selectedUser.name}</Text>
-                      </View>
-                      <View style={styles.detailInfoBox}>
-                        {renderDetailRow('이름', selectedUser.name)}
-                        {renderDetailRow('전화번호', selectedUser.phone)}
-                        {renderDetailRow('성별', selectedUser.gender)}
-                        {renderDetailRow('나이', selectedUser.age, '세')}
-                        {renderDetailRow('키', selectedUser.height, 'cm')}
-                        {renderDetailRow('몸무게', selectedUser.weight, 'kg')}
-                        {renderDetailRow('팔길이', selectedUser.arm, 'cm')}
-                        {renderDetailRow('암벽화 사이즈', selectedUser.shoe, 'mm')}
-                      </View>
-                      <TouchableOpacity style={styles.closeFullBtn} onPress={closeDetailModal}><Text style={styles.closeFullBtnText}>닫기</Text></TouchableOpacity>
-                    </View>
-                  )}
-                </ScrollView>
-              </Animated.View>
+              {renderDetailSheet()}
             </View>
           </Modal>
         </>
@@ -300,7 +314,10 @@ const ManagerCommunity = ({ route, navigation }: any) => {
                   return (
                     <View key={`comment-${parent.id}`}>
                       <View style={styles.commentItem}>
-                        <TouchableOpacity onPress={() => openDetailModal(parent.writerId, parent.writerName)}><Image source={getProfileImage(parent.profileImageUrl)} style={styles.commentAvatar} /></TouchableOpacity>
+                        <TouchableOpacity onPress={() => openDetailModal(parent.writerId, parent.writerName)}>{getFullImageUrl(parent.profileImageUrl)
+                          ? <FastImage source={{ uri: getFullImageUrl(parent.profileImageUrl)!, priority: FastImage.priority.normal }} style={styles.commentAvatar} />
+                          : <Image source={require('../assets/profile.png')} style={styles.commentAvatar} />
+                        }</TouchableOpacity>
                         <View style={styles.commentContentArea}>
                           <View style={styles.commentHeaderLine}>
                             <TouchableOpacity onPress={() => openDetailModal(parent.writerId, parent.writerName)}><Text style={styles.commentAuthorName}>{parent.writerName}</Text></TouchableOpacity>
@@ -318,7 +335,10 @@ const ManagerCommunity = ({ route, navigation }: any) => {
                         const isChildDeleted = child.content === "삭제된 댓글입니다.";
                         return (
                           <View key={`reply-${child.id}`} style={[styles.commentItem, styles.childCommentItem]}>
-                            <TouchableOpacity onPress={() => openDetailModal(child.writerId, child.writerName)}><Image source={getProfileImage(child.profileImageUrl)} style={styles.commentAvatar} /></TouchableOpacity>
+                            <TouchableOpacity onPress={() => openDetailModal(child.writerId, child.writerName)}>{getFullImageUrl(child.profileImageUrl)
+                              ? <FastImage source={{ uri: getFullImageUrl(child.profileImageUrl)!, priority: FastImage.priority.normal }} style={styles.commentAvatar} />
+                              : <Image source={require('../assets/profile.png')} style={styles.commentAvatar} />
+                            }</TouchableOpacity>
                             <View style={styles.commentContentArea}>
                               <View style={styles.commentHeaderLine}>
                                 <TouchableOpacity onPress={() => openDetailModal(child.writerId, child.writerName)}><Text style={styles.commentAuthorName}>{child.writerName}</Text></TouchableOpacity>
@@ -346,7 +366,10 @@ const ManagerCommunity = ({ route, navigation }: any) => {
                   </View>
                 )}
                 <View style={styles.commentInputRow}>
-                  <Image source={getProfileImage(myProfileImageUrl)} style={styles.commentInputAvatar} />
+                  {getFullImageUrl(myProfileImageUrl)
+                    ? <FastImage source={{ uri: getFullImageUrl(myProfileImageUrl)!, priority: FastImage.priority.normal }} style={styles.commentInputAvatar} />
+                    : <Image source={require('../assets/profile.png')} style={styles.commentInputAvatar} />
+                  }
                   <TextInput style={styles.commentTextInput} placeholder="댓글을 작성해주세요." placeholderTextColor="#666" value={commentInput} onChangeText={setCommentInput} multiline />
                   <TouchableOpacity onPress={submitComment}><Text style={[styles.commentSubmitBtn, commentInput.trim() ? { color: '#A1BE44' } : undefined]}>등록</Text></TouchableOpacity>
                 </View>
@@ -378,6 +401,21 @@ const ManagerCommunity = ({ route, navigation }: any) => {
                   <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
                   <TouchableOpacity style={styles.resultModalBtn} onPress={closeResultModal}><Text style={styles.resultModalBtnText}>확인</Text></TouchableOpacity>
                 </View>
+              </View>
+            </View>
+          )}
+
+          {/* 💡 수정된 부분: 댓글 모달 내부에서 프로필 클릭 시 프로필 상세 시트 띄우기
+              댓글 모달(isCommentVisible) 안에서 openDetailModal 호출 시
+              Modal 레이어 구조상 바깥 Modal이 안 뜨는 문제를 해결하기 위해
+              댓글 모달 내부에 absoluteFill View로 프로필 시트를 직접 렌더링 */}
+          {isDetailVisible && (
+            <View style={[StyleSheet.absoluteFill, { zIndex: 998, elevation: 998 }]}>
+              <View style={styles.modalOverlay}>
+                <TouchableWithoutFeedback onPress={closeDetailModal}>
+                  <View style={StyleSheet.absoluteFill} />
+                </TouchableWithoutFeedback>
+                {renderDetailSheet()}
               </View>
             </View>
           )}

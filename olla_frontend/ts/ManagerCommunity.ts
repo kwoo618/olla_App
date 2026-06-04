@@ -15,11 +15,18 @@ export const authHeader = async () => {
 
 export const p = (n: number) => String(n).padStart(2, '0');
 
+// ✅ useMyPage의 getFullImageUrl과 동일한 방식으로 통일
+export const getFullImageUrl = (path: string | null | undefined): string | null => {
+  if (!path || path === 'null' || path === 'undefined') return null;
+  if (path.startsWith('http') || path.startsWith('file:') || path.startsWith('content:')) return path;
+  const domain = API_BASE_URL.replace('/api/v1', '');
+  const formattedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${domain}${formattedPath}`;
+};
+
 export const getProfileImage = (url: string | null | undefined) => {
-  if (url && typeof url === 'string' && url.trim() !== '' && url !== 'null' && url !== 'undefined') {
-    if (url.startsWith('/')) return { uri: `${API_BASE_URL}${url}` };
-    return { uri: url };
-  }
+  const resolved = getFullImageUrl(url);
+  if (resolved) return { uri: resolved };
   return require('../assets/profile.png');
 };
 
@@ -92,9 +99,7 @@ export const useManagerCommunityData = (currentFilter: string, isFocused: boolea
       return b.id - a.id;
     });
 
-  // ────────────────────────────────────────────
   // 내 정보 조회
-  // ────────────────────────────────────────────
   const fetchMyInfo = async () => {
     try {
       const headers = await authHeader();
@@ -102,16 +107,15 @@ export const useManagerCommunityData = (currentFilter: string, isFocused: boolea
       const d = extractData(res);
       if (d) {
         setMyUserId(d.id ?? d.memberId ?? null);
-        setMyProfileImageUrl(d.profileImageUrl ?? d.profileImage ?? null);
+        // ✅ 내 프로필 이미지 URL 변환 적용
+        setMyProfileImageUrl(getFullImageUrl(d.profileImageUrl ?? d.profileImage));
       }
     } catch (e: any) {
       console.log('내 정보 로드 실패:', e.response?.data?.message ?? e.message);
     }
   };
 
-  // ────────────────────────────────────────────
   // 게시글 목록 조회
-  // ────────────────────────────────────────────
   const fetchPosts = async () => {
     try {
       setLoading(true);
@@ -146,11 +150,11 @@ export const useManagerCommunityData = (currentFilter: string, isFocused: boolea
             ? item.createdAt
             : `${cd.getFullYear()}.${p(cd.getMonth() + 1)}.${p(cd.getDate())}`,
           isPast,
-          viewCount:        item.viewCount  ?? 0,
-          likeCount:        item.likeCount  ?? 0,
-          // ✅ Boolean 직렬화 주의: isLiked → liked (Lombok)
-          isLiked:          item.liked === true || item.isLiked === true,
-          profileImageUrl:  item.writerProfileImageUrl ?? item.profileImageUrl ?? item.profileImage ?? null,
+          viewCount:  item.viewCount  ?? 0,
+          likeCount:  item.likeCount  ?? 0,
+          isLiked:    item.liked === true || item.isLiked === true,
+          // ✅ 프로필 이미지 URL 변환 적용
+          profileImageUrl: getFullImageUrl(item.writerProfileImageUrl ?? item.profileImageUrl ?? item.profileImage),
         };
       });
 
@@ -162,9 +166,6 @@ export const useManagerCommunityData = (currentFilter: string, isFocused: boolea
     }
   };
 
-  // ────────────────────────────────────────────
-  // 초기화
-  // ────────────────────────────────────────────
   const initData = async () => {
     await Promise.all([fetchMyInfo(), fetchPosts()]);
   };
@@ -179,9 +180,7 @@ export const useManagerCommunityData = (currentFilter: string, isFocused: boolea
     setRefreshing(false);
   }, [currentFilter]);
 
-  // ────────────────────────────────────────────
   // 게시글 삭제
-  // ────────────────────────────────────────────
   const executeDelete = async () => {
     if (deleteTarget === null) return;
     try {
@@ -196,9 +195,7 @@ export const useManagerCommunityData = (currentFilter: string, isFocused: boolea
     }
   };
 
-  // ────────────────────────────────────────────
   // 회원 상세 조회
-  // ────────────────────────────────────────────
   const loadUserDetail = async (authorId: number, authorName: string) => {
     try {
       const headers = await authHeader();
@@ -210,12 +207,12 @@ export const useManagerCommunityData = (currentFilter: string, isFocused: boolea
         return false;
       }
 
-      // detail 하위 객체가 있으면 우선 사용, 없으면 d 자체에서 폴백
       const detail = d.detail ?? d;
       setSelectedUser({
         name:  d.name         ?? authorName,
         phone: d.phone        ?? '-',
-        profileImageUrl: d.profileImageUrl ?? d.profileImage ?? null,
+        // ✅ 프로필 이미지 URL 변환 적용
+        profileImageUrl: getFullImageUrl(d.profileImageUrl ?? d.profileImage),
         gender: translateGender(detail.gender  ?? d.gender),
         age:    String(detail.age      ?? d.age      ?? '-'),
         height: String(detail.height   ?? d.height   ?? '-'),

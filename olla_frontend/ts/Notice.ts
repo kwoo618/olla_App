@@ -3,13 +3,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_BASE_URL } from '../src/constants/Config';
 
-export const getFullImageUrl = (path?: string) => {
-  if (!path) return undefined;
-  if (path.startsWith('http')) return path;
-  
-  // API_BASE_URL이 '/api/v1'을 포함한다면 제거하고 도메인만 추출
+export const getFullImageUrl = (path?: string | null): string | null => {
+  if (!path || path === 'null' || path === 'undefined') return null;
+  if (path.startsWith('http') || path.startsWith('file:') || path.startsWith('content:')) return path;
   const domain = API_BASE_URL.replace('/api/v1', '');
-  return `${domain}${path}`;
+  const formattedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${domain}${formattedPath}`;
 };
 
 export interface Notice {
@@ -27,26 +26,41 @@ export const useNotice = (navigation: any) => {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  // --- 모달 상태 관리 ---
+  // 모달 상태
   const [resultModalVisible, setResultModalVisible] = useState(false);
-  const [resultModalConfig, setResultModalConfig] = useState({ 
-    title: '', 
-    message: '', 
-    type: 'info' as 'info' | 'success' | 'error', 
-    onConfirm: () => {} 
+  const [resultModalConfig, setResultModalConfig] = useState({
+    title: '',
+    message: '',
+    type: 'info' as 'info' | 'success' | 'error',
+    onConfirm: () => {},
   });
 
+  // 이미지 뷰어 상태
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
+  const [imageViewerUrl, setImageViewerUrl] = useState('');
+
   const showResultModal = useCallback((
-    title: string, 
-    message: string, 
-    type: 'info' | 'success' | 'error' = 'info', 
-    onConfirm: () => void = () => {}
+    title: string,
+    message: string,
+    type: 'info' | 'success' | 'error' = 'info',
+    onConfirm: () => void = () => {},
   ) => {
     setResultModalConfig({ title, message, type, onConfirm });
     setResultModalVisible(true);
   }, []);
 
-  // --- API 통신 로직 ---
+  const openImageViewer = useCallback((url?: string | null) => {
+    const resolved = getFullImageUrl(url);
+    if (!resolved) return;
+    setImageViewerUrl(resolved);
+    setImageViewerVisible(true);
+  }, []);
+
+  const closeImageViewer = useCallback(() => {
+    setImageViewerVisible(false);
+    setImageViewerUrl('');
+  }, []);
+
   const fetchNotices = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem('userToken');
@@ -57,16 +71,13 @@ export const useNotice = (navigation: any) => {
         return;
       }
 
-      // 관리자가 작성한 공지사항 목록 조회
       const response = await axios.get(`${API_BASE_URL}/admin/notices`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
-      
       const raw = response.data.data.content || [];
       const list: Notice[] = Array.isArray(raw) ? raw : [];
 
-      // 정렬: 중요 공지가 위로, 그 다음 최신순 정렬
       list.sort((a, b) => {
         if (a.important !== b.important) return a.important ? -1 : 1;
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
@@ -104,6 +115,11 @@ export const useNotice = (navigation: any) => {
     onRefresh,
     resultModalVisible,
     setResultModalVisible,
-    resultModalConfig
+    resultModalConfig,
+    // 이미지 뷰어
+    imageViewerVisible,
+    imageViewerUrl,
+    openImageViewer,
+    closeImageViewer,
   };
 };

@@ -5,6 +5,7 @@ import {
   Platform, TouchableWithoutFeedback, KeyboardAvoidingView
 } from 'react-native';
 import { useMyPage, getFullImageUrl } from '../ts/MY';
+import FastImage from 'react-native-fast-image';
 
 const MYScreen = ({ navigation }: any) => {
   const {
@@ -66,10 +67,10 @@ const MYScreen = ({ navigation }: any) => {
           <View style={styles.profileLeft}>
             <View style={styles.profileImagePlaceholder}>
               {/* 💡 getFullImageUrl을 통해 로컬/서버 이미지를 모두 올바르게 렌더링합니다 */}
-              <Image
-                source={profileData.profileImageUrl ? { uri: getFullImageUrl(profileData.profileImageUrl) } : require('../assets/profile.png')}
-                style={styles.profileImage}
-              />
+              {getFullImageUrl(profileData.profileImageUrl)
+                ? <FastImage source={{ uri: getFullImageUrl(profileData.profileImageUrl)!, priority: FastImage.priority.high }} style={styles.profileImage} />
+                : <Image source={require('../assets/profile.png')} style={styles.profileImage} />
+              }
             </View>
             <View style={styles.profileTextContainer}>
               <Text style={styles.profileName}>{profileData.name || '사용자'}</Text>
@@ -220,7 +221,10 @@ const MYScreen = ({ navigation }: any) => {
                 <View style={styles.profileEditContainer}>
                   <TouchableOpacity style={styles.profileImageEditWrapper} activeOpacity={0.7} onPress={handleSelectImage} disabled={isImageUploading}>
                     {/* 💡 모달 안에서도 getFullImageUrl 적용 */}
-                    <Image source={profileData.profileImageUrl ? { uri: getFullImageUrl(profileData.profileImageUrl) } : require('../assets/profile.png')} style={styles.profileImageLarge} />
+                    {getFullImageUrl(profileData.profileImageUrl)
+                      ? <FastImage source={{ uri: getFullImageUrl(profileData.profileImageUrl)!, priority: FastImage.priority.high }} style={styles.profileImageLarge} />
+                      : <Image source={require('../assets/profile.png')} style={styles.profileImageLarge} />
+                    }
                     <View style={styles.profileImageEditOverlay}>
                       {isImageUploading ? <ActivityIndicator size="small" color="#ffffff" /> : <Text style={styles.profileImageEditText}>수정</Text>}
                     </View>

@@ -35,12 +35,13 @@ export const translateGender = (gender: string | null | undefined): string => {
   }
 };
 
+// ✅ useMyPage의 getFullImageUrl과 동일한 방식으로 통일
 export const resolveImageUrl = (url: string | null | undefined): string | null => {
   if (!url || url === 'null' || url === 'undefined') return null;
-  if (url.startsWith('http')) return url;
-  // 상대경로일 경우 API_BASE_URL에서 /api/v1을 제거하고 도메인만 붙여줍니다.
+  if (url.startsWith('http') || url.startsWith('file:') || url.startsWith('content:')) return url;
   const domain = BASE.replace('/api/v1', '');
-  return `${domain}${url}`;
+  const formattedPath = url.startsWith('/') ? url : `/${url}`;
+  return `${domain}${formattedPath}`;
 };
 
 export const isValidImageUrl = (url: string | null | undefined): url is string =>
@@ -63,7 +64,7 @@ export interface ExpiringMember {
   name: string;
   phone: string;
   endDate: string;
-  dDay: number | string; // 💡 'D-0' 방지를 위해 'Day' 문자열을 받을 수 있도록 string 허용
+  dDay: number | string;
 }
 
 export interface DashboardStats {
@@ -141,7 +142,7 @@ export const useManagerDashboard = (navigation: any) => {
   const [cameraReady, setCameraReady]         = useState(false);
   const scannedRef                            = useRef(false);
 
-  // ─── 모달 헬퍼 ────────────────────────────────────────────────────────────
+  // 모달 헬퍼
   const showResultModal = useCallback((
     title: string,
     message: string,
@@ -162,7 +163,7 @@ export const useManagerDashboard = (navigation: any) => {
     setDeleteModalVisible(true);
   }, []);
 
-  // API 호출 
+  // API 호출
   const fetchDashboardMain = useCallback(async () => {
     try {
       const headers = await authHeader();
@@ -176,7 +177,6 @@ export const useManagerDashboard = (navigation: any) => {
           name:    m.name    ?? '-',
           phone:   m.phone   ?? '-',
           endDate: m.endDate ?? m.end_date ?? '-',
-          // 0일 남았을 경우 숫자 Day를 넘겨주어 UI의 D- 와 결합 시 'D-Day'가 되도록 수정
           dDay:    parsedDDay === 0 ? '1' : parsedDDay,
         };
       });
@@ -209,7 +209,7 @@ export const useManagerDashboard = (navigation: any) => {
         setHourlyData(prev => (prev.length > 0 ? prev : [10, 20, 30, 50, 70, 90, 100, 80, 60, 40]));
       }
 
-      if (data.totalMembers      != null) setMetrics(prev => ({ ...prev, totalMembers:      Number(data.totalMembers) }));
+      if (data.totalMembers != null) setMetrics(prev => ({ ...prev, totalMembers: Number(data.totalMembers) }));
     } catch (e: any) {
       console.log('대시보드 통계 로드 실패:', e.response?.data?.message ?? e.message);
     }
@@ -235,7 +235,6 @@ export const useManagerDashboard = (navigation: any) => {
   const fetchHourlyByDay = useCallback(async (dayOfWeek: number) => {
     if (dayOfWeek === 7) return;
 
-    // 이미 캐시된 데이터가 있으면 바로 사용
     setHourlyCongestionByDay(prev => {
       if (prev[dayOfWeek]?.length > 0) {
         setHourlyData(prev[dayOfWeek]);
@@ -299,7 +298,11 @@ export const useManagerDashboard = (navigation: any) => {
         return !(user.deleted === true || m.isDeleted === true || m.status === 'DELETED');
       });
 
-      setRecentMembers(validMembers.slice(0, 2));
+      // ✅ recentMembers에 담기 전에 이미지 URL 변환 적용
+      setRecentMembers(validMembers.slice(0, 2).map((user: any) => ({
+        ...user,
+        profileImageUrl: resolveImageUrl(user.profileImageUrl ?? user.member?.profileImageUrl ?? user.profileImage),
+      })));
       setMetrics(prev => ({ ...prev, totalMembers: validMembers.length }));
     } catch (e: any) {
       console.log('회원 로드 실패:', e.response?.data?.message ?? e.message);
@@ -322,31 +325,25 @@ export const useManagerDashboard = (navigation: any) => {
     }
   }, []);
 
-  // 💡 핵심 변경: 전체 회원/이용권 목록에서 ACTIVE 상태인 이용권만 추출하여 개수 집계
   const fetchActiveMemberships = useCallback(async () => {
     try {
       const headers = await authHeader();
-      // 전체 이용권 목록을 가져옵니다. (페이징 없이 충분히 큰 사이즈 지정)
       const res = await axios.get(`${ADMIN}/memberships/members`, { headers, params: { page: 0, size: 2000 } });
       const usersList = extractList(res);
 
       let activeCount = 0;
 
       usersList.forEach((user: any) => {
-        // 회원이 삭제되었는지 확인
         const m = user.member ?? user;
         if (user.deleted === true || m.isDeleted === true || m.status === 'DELETED') return;
 
-        // 회원이 보유한 여러 개의 이용권(memberships 배열)을 각각 검사
         if (Array.isArray(user.memberships)) {
           user.memberships.forEach((membership: any) => {
             if (String(membership.membershipStatus || membership.status).toUpperCase() === 'ACTIVE') {
               activeCount += 1;
             }
           });
-        } 
-        // 만약 단일 객체(activeMembership)로 내려올 경우를 대비한 방어 코드
-        else if (user.activeMembership && String(user.activeMembership.status).toUpperCase() === 'ACTIVE') {
+        } else if (user.activeMembership && String(user.activeMembership.status).toUpperCase() === 'ACTIVE') {
           activeCount += 1;
         }
       });
@@ -357,7 +354,6 @@ export const useManagerDashboard = (navigation: any) => {
     }
   }, []);
 
-  // ─── 전체 데이터 로드 ─────────────────────────────────────────────────────
   const checkAdminAndFetchData = useCallback(async () => {
     try {
       const [role, token] = await Promise.all([AsyncStorage.getItem('userRole'), getToken()]);
@@ -372,7 +368,7 @@ export const useManagerDashboard = (navigation: any) => {
         fetchPosts(),
         fetchMembers(),
         fetchVisits(),
-        fetchActiveMemberships(), // 변경된 집계 로직 호출
+        fetchActiveMemberships(),
       ]);
     } catch (e: any) {
       console.log('데이터 로딩 실패:', e.response?.data?.message ?? e.message);
@@ -406,11 +402,11 @@ export const useManagerDashboard = (navigation: any) => {
     await Promise.all([
       fetchDashboardMain(), 
       fetchDashboardSummary(),
-      fetchActiveMemberships() // 새로고침 시 활성 이용권도 다시 계산
+      fetchActiveMemberships()
     ]);
   }, [fetchDashboardMain, fetchDashboardSummary, fetchActiveMemberships]);
 
-  // ─── 공지 / 게시글 삭제 ───────────────────────────────────────────────────
+  // 공지 / 게시글 삭제
   const executeDelete = useCallback(async () => {
     if (!itemToDelete) return;
     try {
@@ -432,7 +428,7 @@ export const useManagerDashboard = (navigation: any) => {
     }
   }, [itemToDelete, showResultModal, fetchNotices, fetchPosts]);
 
-  // ─── 회원 상세 조회 ───────────────────────────────────────────────────────
+  // 회원 상세 조회
   const loadUserDetail = useCallback(async (memberId: number, fallbackName: string, fallbackPhone: string) => {
     try {
       const headers = await authHeader();
@@ -448,6 +444,7 @@ export const useManagerDashboard = (navigation: any) => {
         memberId,
         name:            d.name    ?? fallbackName,
         phone:           d.phone   ?? fallbackPhone ?? '-',
+        // ✅ 프로필 이미지 URL 변환 적용
         profileImageUrl: resolveImageUrl(d.profileImageUrl ?? d.profileImage),
         gender:          translateGender(detail.gender ?? d.gender),
         age:             String(detail.age      ?? d.age      ?? '-'),
@@ -498,7 +495,7 @@ export const useManagerDashboard = (navigation: any) => {
     }
   }, [alertTitle, alertContent, selectedUser, showResultModal]);
 
-  // QR 스캐너 
+  // QR 스캐너
   const openScanner = useCallback(() => {
     scannedRef.current = false;
     setIsProcessing(false);

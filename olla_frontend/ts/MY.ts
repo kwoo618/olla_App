@@ -7,9 +7,9 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import { API_BASE_URL } from '../src/constants/Config';
 import messaging from '@react-native-firebase/messaging';
 
-// 이미지 절대경로 변환
-export const getFullImageUrl = (path: string) => {
-  if (!path) return null;
+// 이미지 경로 
+export const getFullImageUrl = (path: string | null | undefined): string | null => {
+  if (!path || path === 'null' || path === 'undefined') return null;
   if (path.startsWith('http') || path.startsWith('file:') || path.startsWith('content:')) return path;
   const domain = API_BASE_URL.replace('/api/v1', '');
   const formattedPath = path.startsWith('/') ? path : `/${path}`;
@@ -144,6 +144,8 @@ export const useMyPage = (navigation: any) => {
       const notiRes = await axios.get(`${API_BASE_URL}/members/me/notifications/settings`, { headers: { Authorization: `Bearer ${userToken}` } });
       if (notiRes.data.data) {
         setNotiState(notiRes.data.data);
+        // App.tsx에 정보 뿌려줌 푸쉬알람 온/오프 설정을
+        await AsyncStorage.setItem('notiSettings', JSON.stringify(notiRes.data.data));
       }
     } catch (e) {
       console.log('알림 설정 로드 실패');
@@ -269,32 +271,35 @@ export const useMyPage = (navigation: any) => {
 
   // 알림 토글 백엔드 전송 (Spring Boot is 누락 방어)
   const handleNotiToggle = async (field: keyof NotiState) => {
-    const currentValue = notiState[field];
-    const optimisticState = { ...notiState, [field]: !currentValue };
-    setNotiState(optimisticState); // 화면 즉시 변경
+  const currentValue = notiState[field];
+  const optimisticState = { ...notiState, [field]: !currentValue };
+  setNotiState(optimisticState);
 
-    try {
-      const userToken = await AsyncStorage.getItem('userToken');
-      
-      const requestBody = {
-        ...optimisticState,
-        globalNotificationOn: optimisticState.isGlobalNotificationOn,
-        membershipNotificationOn: optimisticState.isMembershipNotificationOn,
-        activityNotificationOn: optimisticState.isActivityNotificationOn,
-        crewNotificationOn: optimisticState.isCrewNotificationOn,
-        noticeNotificationOn: optimisticState.isNoticeNotificationOn,
-      };
+  try {
+    const userToken = await AsyncStorage.getItem('userToken');
+    
+    const requestBody = {
+      ...optimisticState,
+      globalNotificationOn: optimisticState.isGlobalNotificationOn,
+      membershipNotificationOn: optimisticState.isMembershipNotificationOn,
+      activityNotificationOn: optimisticState.isActivityNotificationOn,
+      crewNotificationOn: optimisticState.isCrewNotificationOn,
+      noticeNotificationOn: optimisticState.isNoticeNotificationOn,
+    };
 
-      const res = await axios.patch(`${API_BASE_URL}/members/me/notifications/settings`, requestBody, { 
-        headers: { Authorization: `Bearer ${userToken}` } 
-      });
-      
-      if (res.data.data) setNotiState({ ...optimisticState, ...res.data.data });
-    } catch (e) {
-      setNotiState(prev => ({ ...prev, [field]: currentValue })); // 롤백
-      showResultModal('오류', '알림 설정 변경에 실패했습니다.', 'error');
-    }
-  };
+    const res = await axios.patch(`${API_BASE_URL}/members/me/notifications/settings`, requestBody, { 
+      headers: { Authorization: `Bearer ${userToken}` } 
+    });
+    
+    const finalState = res.data.data ? { ...optimisticState, ...res.data.data } : optimisticState;
+    setNotiState(finalState);
+    // 푸쉬 알람 변경된 설정을 로컬에도 저장
+    await AsyncStorage.setItem('notiSettings', JSON.stringify(finalState));
+  } catch (e) {
+    setNotiState(prev => ({ ...prev, [field]: currentValue }));
+    showResultModal('오류', '알림 설정 변경에 실패했습니다.', 'error');
+  }
+};
 
   const handleSelectImage = () => {
     launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, (response) => {
@@ -435,7 +440,7 @@ export const useMyPage = (navigation: any) => {
         await axios.post(`${API_BASE_URL}/auth/logout`, { refreshToken }, { headers: { Authorization: `Bearer ${token}` }, timeout: 3000 });
       }
     } catch (e) {} finally {
-      await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole']);
+      await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole', 'fcmToken']);
       setLogoutModalVisible(false);
       setTimeout(() => navigation.reset({ index: 0, routes: [{ name: 'Login' }] }), Platform.OS === 'ios' ? 400 : 100);
     }

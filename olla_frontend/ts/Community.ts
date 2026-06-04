@@ -3,7 +3,6 @@ import { Keyboard, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_BASE_URL } from '../src/constants/Config';
-
 const BASE = `${API_BASE_URL}`;
 const POSTS = `${API_BASE_URL}/posts`;
 const MEMBERS = `${BASE}/members`;
@@ -15,11 +14,12 @@ export const authHeader = async () => {
 
 export const p = (n: number) => String(n).padStart(2, '0');
 
-export const getProfileImage = (url: string | null | undefined) => {
-  if (url && typeof url === 'string' && url.trim() !== '' && url !== 'null' && url !== 'undefined') {
-    return { uri: url };
-  }
-  return require('../assets/profile.png');
+export const getFullImageUrl = (path: string | null | undefined): string | null => {
+  if (!path || path === 'null' || path === 'undefined') return null;
+  if (path.startsWith('http') || path.startsWith('file:') || path.startsWith('content:')) return path;
+  const domain = API_BASE_URL.replace('/api/v1', '');
+  const formattedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${domain}${formattedPath}`;
 };
 
 export const formatCommentDate = (dateStr: string) => {
@@ -95,6 +95,7 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
   const [commentInput, setCommentInput] = useState('');
   const [replyingTo, setReplyingTo] = useState<{id: number, name: string} | null>(null);
   const [commentDeleteTarget, setCommentDeleteTarget] = useState<number | null>(null);
+  const [isPostLoading, setIsPostLoading] = useState(false);
 
   const showResultModal = (title: string, message: string, type: 'info' | 'success' | 'error' = 'info', onConfirm: () => void = () => {}) => {
     Keyboard.dismiss();
@@ -118,14 +119,15 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
     try {
       const headers = await authHeader();
       const { data } = await axios.get(`${MEMBERS}/me`, { headers });
-      const d = data.data
+      const d = data.data;
       if (d) {
         uName = d.name || ''; 
         uNick = d.nickname || d.name || ''; 
         uId = d.id || d.memberId || null;
         setMyNickname(uNick || uName); 
         setMyUserId(uId);
-        setMyProfileImageUrl(d.profileImageUrl || d.profileImage || null); 
+        // ✅ 내 프로필 이미지도 동일하게 변환
+        setMyProfileImageUrl(getFullImageUrl(d.profileImageUrl || d.profileImage)); 
       }
     } catch (e: any) {}
     await fetchPosts(uName, uNick, uId, filterToUse);
@@ -162,7 +164,6 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
       
       const { data } = await axios.get(url, { headers });
       
-      // 💡 [수정] 백엔드 응답이 페이징(content)인지 단순 배열 형태인지 모두 안전하게 대응
       const resData = data.data || {};
       let list = Array.isArray(resData) ? resData : (resData.content || []);
 
@@ -180,7 +181,6 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
 
   const mapPosts = (list: any[], uName: string, uNick: string, uId: number | null) =>
     list.map(item => {
-      // 💡 [수정] iOS 날짜 버그 방지를 위해 중간 공백을 'T'로 변환
       const safeMeetDate = item.meetDateTime ? String(item.meetDateTime).replace(' ', 'T') : '';
       const safeCreateDate = item.createdAt ? String(item.createdAt).replace(' ', 'T') : '';
       
@@ -191,8 +191,6 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
       const isClosedFlag = item.isClosed === true || item.closed === true || item.status === 'CLOSED';
       const isPastDate = !isNaN(md.getTime()) && md.getTime() < new Date().getTime();
       const isPast = isClosedFlag || isPastDate;
-      
-      // 💡 [수정] 명세서의 isDifferentGym 과 프론트의 differentGym 모두 대응
       const isDiffGym = item.isDifferentGym === true || item.differentGym === true;
 
       return {
@@ -207,7 +205,8 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
         isJoined: item.applied === true || item.isApplied === true, 
         viewCount: item.viewCount||0, likeCount: item.likeCount||0, isLiked: item.liked === true || item.isLiked === true,
         differentGym: isDiffGym, gymPlace: item.gymPlace,
-        profileImageUrl: item.writerProfileImageUrl || item.profileImageUrl || item.profileImage || null, 
+        // ✅ 프로필 이미지 URL 변환 적용
+        profileImageUrl: getFullImageUrl(item.writerProfileImageUrl || item.profileImageUrl || item.profileImage),
       };
     });
 
@@ -220,7 +219,6 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
       let backendRes: any[] = [];
       try {
         const { data } = await axios.get(`${POSTS}/search?keyword=${encodeURIComponent(searchKeyword)}&page=0&size=100`, { headers });
-        // 💡 [수정] 검색 시에도 배열/content 예외 처리
         const resData1 = data.data || {};
         backendRes = Array.isArray(resData1) ? resData1 : (resData1.content || []);
       } catch (e) {}
@@ -332,7 +330,8 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
         gender: translateGender(detail.gender || d.gender || '-'),
         height: detail.height || d.height || '-', weight: detail.weight || d.weight || '-',
         arm: detail.armSpan || d.armSpan || '-', shoe: detail.footSize || d.footSize || '-',
-        profileImageUrl: d.profileImageUrl || d.profileImage || null, 
+        // ✅ 프로필 이미지 URL 변환 적용
+        profileImageUrl: getFullImageUrl(d.profileImageUrl || d.profileImage),
         toggles: {
           showName: true, showPhone: isMine || privacy.isPublicPhone || privacy.phonePublic,
           showAge: true, showHeight: isMine || privacy.isHeightPublic || privacy.heightPublic,
@@ -350,6 +349,9 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
   };
 
   const loadPostDetail = async (post: any) => {
+    if (isPostLoading) return false; // 💡 중복 호출 차단
+    setIsPostLoading(true);
+    
     setSelectedPost({ ...post, viewCount: post.viewCount + 1 });
     try {
       const headers = await authHeader();
@@ -358,17 +360,32 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
       const { data } = await axios.get(`${POSTS}/${post.id}/comments?page=0&size=100`, { headers });
       setComments(data.data.content ?? []);
       return true;
-    } catch (e) { return false; }
+    } catch (e) {
+      return false;
+    } finally {
+      setIsPostLoading(false); // 💡 성공/실패 무관하게 항상 해제
+    }
   };
 
   const submitComment = async () => {
-    if (!commentInput.trim() || !selectedPost) return;
+    const trimmed = commentInput.trim();
+      if (!trimmed || !selectedPost) return;
+
+      const postId = selectedPost.id; 
+      const parentId = replyingTo ? replyingTo.id : null;
+
     try {
       const headers = await authHeader();
-      const payload = { content: commentInput.trim(), parentId: replyingTo ? replyingTo.id : null };
-      await axios.post(`${POSTS}/${selectedPost.id}/comments`, payload, { headers });
-      setCommentInput(''); setReplyingTo(null); Keyboard.dismiss();
-      const { data } = await axios.get(`${POSTS}/${selectedPost.id}/comments?page=0&size=100`, { headers });
+      const payload = { content: trimmed, parentId };
+
+      setCommentInput('');   
+      setReplyingTo(null);
+      Keyboard.dismiss();
+
+      await axios.post(`${POSTS}/${postId}/comments`, payload, { headers });
+
+      // 💡 selectedPost 대신 추출해둔 postId 사용
+      const { data } = await axios.get(`${POSTS}/${postId}/comments?page=0&size=100`, { headers });
       setComments(data.data.content ?? []);
     } catch (e: any) {
       showResultModal('오류', e.response?.data?.message || '댓글을 작성할 수 없습니다.', 'error');
@@ -390,11 +407,9 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
     }
   };
 
-  // 💡 달력 모달 제어
   const openCalendar = () => { Keyboard.dismiss(); setCalendarVisible(true); };
   const closeCalendar = () => setCalendarVisible(false);
 
-  // 💡 시간 선택기 모달 제어 (오늘 날짜면 과거 시간 차단 로직 포함)
   const openTimePicker = () => {
     Keyboard.dismiss();
     if (form.time) {
@@ -406,7 +421,6 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
       const isToday = !form.date || form.date === getToday();
       
       if (isToday) {
-        // 오늘 날짜인 경우 가장 가까운 미래 10분 단위로 세팅
         let h = now.getHours();
         let m = Math.ceil(now.getMinutes() / 10) * 10;
         if (m >= 60) {
@@ -424,7 +438,6 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
   };
   const closeTimePicker = () => setTimePickerVisible(false);
 
-  // 💡 확인 버튼 클릭 시 이중 검증
   const confirmTimeSelection = () => {
     const isToday = !form.date || form.date === getToday();
     if (isToday) {
@@ -468,7 +481,6 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
 
     if (errorMsg) return showCreateAlert(errorMsg);
     
-    // 달력에서 넘어온 YYYY-MM-DD 파싱
     const [yr, mo, dy] = date.split('-').map(Number);
     const [hr, mn] = time.split(':').map(Number);
     
@@ -502,7 +514,7 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
     deleteTarget, setDeleteTarget, closeTarget, setCloseTarget, commentDeleteTarget, setCommentDeleteTarget,
     isCalendarVisible, openCalendar, closeCalendar,
     isTimePickerVisible, tempHour, setTempHour, tempMinute, setTempMinute, openTimePicker, closeTimePicker, confirmTimeSelection,
-    onRefresh, searchPosts, clearSearch, toggleLike, toggleJoin, executeDelete, executeClose,
+    onRefresh, searchPosts, clearSearch, toggleLike, toggleJoin, executeDelete, executeClose, isPostLoading,
     submitPost, submitComment, executeCommentDelete, loadUserDetail, loadPostDetail, setupCreateForm, setupEditForm, closeResultModal
   };
 };

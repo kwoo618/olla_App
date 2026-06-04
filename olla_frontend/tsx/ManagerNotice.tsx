@@ -2,16 +2,15 @@ import React from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, Modal, TextInput, KeyboardAvoidingView, Platform,
-  ActivityIndicator, Animated, RefreshControl, TouchableWithoutFeedback,
+  ActivityIndicator, Animated, RefreshControl, TouchableWithoutFeedback, Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useManagerNotice, formatDate, resolveImageUrl } from '../ts/ManagerNotice';
+import FastImage from 'react-native-fast-image';
 
-// ─── 컴포넌트 ────────────────────────────────────────────────────────────────
 const ManagerNotice = ({ route, navigation }: any) => {
   const n = useManagerNotice(navigation, route);
 
-  // ─── 로딩 ────────────────────────────────────────────────────────────────
   if (n.loading) {
     return (
       <View style={[styles.background, styles.center]}>
@@ -23,7 +22,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
   return (
     <SafeAreaView style={styles.background} edges={[]}>
 
-      {/* ─── 공지 목록 ────────────────────────────────────────────────────── */}
+      {/* 공지 목록 */}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -71,12 +70,12 @@ const ManagerNotice = ({ route, navigation }: any) => {
         )}
       </ScrollView>
 
-      {/* ─── FAB ─────────────────────────────────────────────────────────── */}
+      {/* FAB */}
       <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={n.openWriteModal}>
         <Text style={styles.fabText}>+ 작성</Text>
       </TouchableOpacity>
 
-      {/* ─── 💡 결과 알림 모달 (OLLA 표준 규격 적용) ───────────────────────────────────────────────── */}
+      {/* 결과 알림 모달 */}
       <Modal visible={n.resultModalVisible} animationType="fade" transparent onRequestClose={n.closeResultModal}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -91,7 +90,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 공지 상세 바텀시트 ───────────────────────────────────────────── */}
+      {/* 공지 상세 바텀시트 — 이미지 뷰어를 이 Modal 안에서 absolute로 덮음 */}
       <Modal visible={n.isDetailModalVisible} animationType="fade" transparent onRequestClose={() => n.closeDetailModal()}>
         <View style={styles.modalOverlay}>
           <TouchableWithoutFeedback onPress={() => n.closeDetailModal()}>
@@ -110,9 +109,9 @@ const ManagerNotice = ({ route, navigation }: any) => {
               <View style={styles.horizontalDivider} />
             </View>
 
-            <ScrollView 
+            <ScrollView
               style={{ flex: 1, width: '100%' }}
-              showsVerticalScrollIndicator={false} 
+              showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: 60 }}
             >
               {n.detailNotice?.important && (
@@ -135,11 +134,16 @@ const ManagerNotice = ({ route, navigation }: any) => {
               <View style={styles.horizontalDivider} />
 
               {!!n.detailNotice?.imageUrl && (
-                <Image
-                  source={{ uri: resolveImageUrl(n.detailNotice.imageUrl) }}
-                  style={styles.detailImage}
-                  resizeMode="cover"
-                />
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={() => n.openImageViewer(n.detailNotice!.imageUrl!)}
+                >
+                  <FastImage
+                    source={{ uri: resolveImageUrl(n.detailNotice.imageUrl), priority: FastImage.priority.high }}
+                    style={styles.detailImage}
+                    resizeMode={FastImage.resizeMode.cover}
+                  />
+                </TouchableOpacity>
               )}
 
               <Text style={styles.detailContent}>{n.detailNotice?.content}</Text>
@@ -163,11 +167,33 @@ const ManagerNotice = ({ route, navigation }: any) => {
                 </TouchableOpacity>
               </View>
             </ScrollView>
+
+            {/* ─── 이미지 뷰어: 바텀시트 Modal 안에서 absolute로 전체 덮기 ─── */}
+            {n.imageViewerVisible && (
+              <TouchableOpacity
+                style={styles.imageViewerOverlay}
+                activeOpacity={1}
+                onPress={n.closeImageViewer}
+              >
+                <FastImage
+                  source={{ uri: n.imageViewerUrl, priority: FastImage.priority.high }}
+                  style={styles.imageViewerImage}
+                  resizeMode={FastImage.resizeMode.contain}
+                />
+                <TouchableOpacity
+                  style={styles.imageViewerCloseBtn}
+                  onPress={n.closeImageViewer}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Text style={styles.imageViewerCloseText}>✕</Text>
+                </TouchableOpacity>
+              </TouchableOpacity>
+            )}
           </Animated.View>
         </View>
       </Modal>
 
-      {/* ─── 작성 / 수정 바텀시트 ─────────────────────────────────────────── */}
+      {/* 작성 / 수정 바텀시트 */}
       <Modal visible={n.isWriteModalVisible} animationType="fade" transparent onRequestClose={() => n.closeWriteModal()}>
         <View style={styles.modalOverlay}>
           <TouchableWithoutFeedback onPress={() => n.closeWriteModal()}>
@@ -179,7 +205,6 @@ const ManagerNotice = ({ route, navigation }: any) => {
             style={{ width: '100%', flex: 1, justifyContent: 'flex-end' }}
             pointerEvents="box-none"
           >
-            {/* 💡 핵심 해결: maxHeight를 '100%'로 주어 키보드가 올라올 때 바텀시트가 화면을 뚫고 위로 밀려나가는 것을 막고 유연하게 높이가 줄어들게 처리 */}
             <Animated.View style={[styles.bottomSheet, { height: n.writeHeightAnim, maxHeight: '100%', overflow: 'hidden' }]}>
               <View {...n.writePanResponder.panHandlers} style={{ width: '100%' }}>
                 <View style={styles.dragHandle} />
@@ -228,7 +253,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
                   disabled={n.isImageUploading}
                 >
                   {n.selectedImageUri ? (
-                    <Image source={{ uri: n.selectedImageUri }} style={styles.imagePreview} resizeMode="cover" />
+                    <FastImage source={{ uri: n.selectedImageUri, priority: FastImage.priority.normal }} style={styles.imagePreview} resizeMode={FastImage.resizeMode.cover} />
                   ) : (
                     <View style={styles.imagePlaceholder}>
                       <Text style={styles.imagePlaceholderText}>탭하여 이미지 선택</Text>
@@ -277,7 +302,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 💡 삭제 확인 모달 (OLLA 표준 규격 적용) ───────────────────────────────────────────────── */}
+      {/* 삭제 확인 모달 */}
       <Modal visible={n.isDeleteModalVisible} animationType="fade" transparent onRequestClose={n.cancelDelete}>
         <View style={styles.centerModalOverlay}>
           <View style={styles.deleteModalBox}>
@@ -298,7 +323,8 @@ const ManagerNotice = ({ route, navigation }: any) => {
   );
 };
 
-// ─── 스타일 ──────────────────────────────────────────────────────────────────
+const { width, height } = Dimensions.get('window');
+
 const styles = StyleSheet.create({
   background:    { flex: 1, backgroundColor: '#1A1A1A', paddingHorizontal: 20, paddingTop: 20 },
   center:        { justifyContent: 'center', alignItems: 'center' },
@@ -369,56 +395,32 @@ const styles = StyleSheet.create({
   detailImage:    { width: '100%', height: 200, borderRadius: 12, marginBottom: 20, backgroundColor: '#2C2C2C' },
   detailContent:  { color: '#dddddd', fontSize: 16, lineHeight: 26, marginBottom: 30 },
 
-  // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
-  // 1. 공통 시스템 결과 알림 모달
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { 
-    width: '90%', 
-    backgroundColor: '#212121', 
-    borderRadius: 25, 
-    paddingVertical: 45, 
-    paddingHorizontal: 35, 
-    alignItems: 'center' 
-  },
-  resultModalTitle: { 
-    fontSize: 28, 
-    fontWeight: 'bold', 
-    marginBottom: 8 
-  },
-  resultModalMessage: { 
-    color: '#ffffff', 
-    fontSize: 18, 
-    fontWeight: 'bold',
-    marginBottom: 25, 
-    textAlign: 'center', 
-    lineHeight: 24 
-  },
+  resultModalBox: { width: '90%', backgroundColor: '#212121', borderRadius: 25, paddingVertical: 45, paddingHorizontal: 35, alignItems: 'center' },
+  resultModalTitle: { fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
+  resultModalMessage: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center', lineHeight: 24 },
   resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
 
-  // 2. 삭제 확인 모달
   centerModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
-  deleteModalBox: { 
-    width: '90%', 
-    backgroundColor: '#212121', 
-    borderRadius: 25, 
-    paddingVertical: 45, 
-    paddingHorizontal: 35, 
-    alignItems: 'center' 
-  },
-  deleteTitle: { 
-    color: '#ffffff', 
-    fontSize: 18, 
-    fontWeight: 'bold',
-    marginBottom: 25, 
-    textAlign: 'center', 
-    lineHeight: 24 
-  },
+  deleteModalBox: { width: '90%', backgroundColor: '#212121', borderRadius: 25, paddingVertical: 45, paddingHorizontal: 35, alignItems: 'center' },
+  deleteTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center', lineHeight: 24 },
   deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
   btnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 },
   btnTextBlack: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
   btnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 },
   btnTextWhite: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
+
+  // 이미지 뷰어 — 바텀시트 Animated.View 안에서 absolute로 전체 덮기
+  imageViewerOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+    justifyContent: 'center', alignItems: 'center',
+    zIndex: 10, elevation: 10,
+  },
+  imageViewerImage:     { width, height: height * 0.6 },
+  imageViewerCloseBtn:  { position: 'absolute', top: 16, right: 16, padding: 10 },
+  imageViewerCloseText: { color: '#ffffff', fontSize: 28, fontWeight: 'bold' },
 });
 
 export default ManagerNotice;

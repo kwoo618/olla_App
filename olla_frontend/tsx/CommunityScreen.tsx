@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Ani
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
-import { useCommunityData, getProfileImage, formatCommentDate, getToday, p } from '../ts/Community';
+import { useCommunityData, getFullImageUrl, formatCommentDate, getToday, p } from '../ts/Community';
+import FastImage from 'react-native-fast-image';
 
 // 달력 한글화 설정
 LocaleConfig.locales['kr'] = {
@@ -31,7 +32,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
     posts, loading, refreshing, myUserId, myProfileImageUrl,
     selectedTab, setSelectedTab, searchKeyword, setSearchKeyword, isSearching, form, setForm,
     comments, commentInput, setCommentInput, replyingTo, setReplyingTo,
-    selectedUser, selectedPost, setSelectedPost, isEditMode,
+    selectedUser, selectedPost, setSelectedPost, isEditMode, isPostLoading,
     resultModalVisible, resultModalConfig, createAlertVisible, setCreateAlertVisible, createAlertMessage,
     deleteTarget, setDeleteTarget, closeTarget, setCloseTarget, commentDeleteTarget, setCommentDeleteTarget,
     isCalendarVisible, openCalendar, closeCalendar,
@@ -135,6 +136,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
   };
 
   const openPostDetail = async (post: any) => {
+    if (isPostLoading) return;
     if (await loadPostDetail(post)) {
       setCommentVisible(true);
       currentSnap.current = HALF_SCREEN; 
@@ -224,7 +226,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
           const isOut = post.type === '아웃도어';
           const isPast = post.isPast;
           return (
-            <TouchableOpacity key={post.id} style={[s.card, isPast && s.cardPast]} activeOpacity={0.95} onPress={() => openPostDetail(post)}>
+            <TouchableOpacity key={post.id} style={[s.card, isPast && s.cardPast]} activeOpacity={0.95} disabled={isPostLoading} onPress={() => openPostDetail(post)}>
               <View style={s.cardHeader}>
                 <View style={[s.badge, { backgroundColor: isPast ? '#333' : (isOut ? '#00810F' : '#0072B9') }]}>
                   <Text style={[s.badgeText, { color: isPast ? '#888' : (isOut ? '#2CDE00' : '#009DFF') }]}>{post.type}</Text>
@@ -267,12 +269,15 @@ const CommunityScreen = ({ route, navigation }: any) => {
               <View style={s.divider} />
               <View style={s.footer}>
                 <TouchableOpacity style={s.profileRow} onPress={() => openDetailModal(post.writerId, post.author, post.isMine)}>
-                  <Image source={getProfileImage(post.profileImageUrl)} style={[s.avatar, isPast && { opacity: 0.5 }]} />
+                  {getFullImageUrl(post.profileImageUrl)
+                    ? <FastImage source={{ uri: getFullImageUrl(post.profileImageUrl)!, priority: FastImage.priority.normal }} style={[s.avatar, isPast && { opacity: 0.5 }]} />
+                    : <Image source={require('../assets/profile.png')} style={[s.avatar, isPast && { opacity: 0.5 }]} />
+                  }
                   <Text style={[s.author, isPast && { color: '#666' }]}>{post.author}</Text>
                 </TouchableOpacity>
                 
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <TouchableOpacity style={{ marginRight: post.isMine ? 11 : 15 }} onPress={() => openPostDetail(post)}>
+                  <TouchableOpacity style={{ marginRight: post.isMine ? 11 : 15 }} disabled={isPostLoading} onPress={() => openPostDetail(post)}>
                     <Image source={require('../assets/ChatText.png')} style={{ width: 22, height: 22, tintColor: '#ffffff' }} />
                   </TouchableOpacity>
 
@@ -381,7 +386,10 @@ const CommunityScreen = ({ route, navigation }: any) => {
                   return (
                     <View key={`comment-${parent.id}`}>
                       <View style={s.commentItem}>
-                        <TouchableOpacity onPress={() => openDetailModal(parent.writerId, parent.writerName, myUserId === parent.writerId)}><Image source={getProfileImage(parent.profileImageUrl)} style={s.commentAvatar} /></TouchableOpacity>
+                        <TouchableOpacity onPress={() => openDetailModal(parent.writerId, parent.writerName, myUserId === parent.writerId)}>{getFullImageUrl(parent.profileImageUrl)
+                          ? <FastImage source={{ uri: getFullImageUrl(parent.profileImageUrl)!, priority: FastImage.priority.normal }} style={s.commentAvatar} />
+                          : <Image source={require('../assets/profile.png')} style={s.commentAvatar} />
+                        }</TouchableOpacity>
                         <View style={s.commentContentArea}>
                           <View style={s.commentHeaderLine}>
                             <TouchableOpacity onPress={() => openDetailModal(parent.writerId, parent.writerName, myUserId === parent.writerId)}><Text style={s.commentAuthorName}>{parent.writerName}</Text></TouchableOpacity>
@@ -400,7 +408,10 @@ const CommunityScreen = ({ route, navigation }: any) => {
                         const isChildDeleted = child.content === "삭제된 댓글입니다.";
                         return (
                           <View key={`reply-${child.id}`} style={[s.commentItem, s.childCommentItem]}>
-                            <TouchableOpacity onPress={() => openDetailModal(child.writerId, child.writerName, myUserId === child.writerId)}><Image source={getProfileImage(child.profileImageUrl)} style={s.commentAvatar} /></TouchableOpacity>
+                            <TouchableOpacity onPress={() => openDetailModal(child.writerId, child.writerName, myUserId === child.writerId)}>{getFullImageUrl(child.profileImageUrl)
+                              ? <FastImage source={{ uri: getFullImageUrl(child.profileImageUrl)!, priority: FastImage.priority.normal }} style={s.commentAvatar} />
+                              : <Image source={require('../assets/profile.png')} style={s.commentAvatar} />
+                            }</TouchableOpacity>
                             <View style={s.commentContentArea}>
                               <View style={s.commentHeaderLine}>
                                 <TouchableOpacity onPress={() => openDetailModal(child.writerId, child.writerName, myUserId === child.writerId)}><Text style={s.commentAuthorName}>{child.writerName}</Text></TouchableOpacity>
@@ -429,7 +440,10 @@ const CommunityScreen = ({ route, navigation }: any) => {
                   </View>
                 )}
                 <View style={s.commentInputRow}>
-                  <Image source={getProfileImage(myProfileImageUrl)} style={s.commentInputAvatar} />
+                  {getFullImageUrl(myProfileImageUrl)
+                    ? <FastImage source={{ uri: getFullImageUrl(myProfileImageUrl)!, priority: FastImage.priority.normal }} style={s.commentInputAvatar} />
+                    : <Image source={require('../assets/profile.png')} style={s.commentInputAvatar} />
+                  }
                   <TextInput style={s.commentTextInput} placeholder="댓글을 작성해주세요." placeholderTextColor="#666" value={commentInput} onChangeText={setCommentInput} multiline />
                   <TouchableOpacity onPress={submitComment}><Text style={[s.commentSubmitBtn, commentInput.trim() && { color: '#A1BE44' }]}>등록</Text></TouchableOpacity>
                 </View>
@@ -449,6 +463,58 @@ const CommunityScreen = ({ route, navigation }: any) => {
               </View>
             </View>
           </Modal>
+
+          {/* 💡 수정된 부분: 댓글 모달 내부에서 프로필 모달 띄우기
+              댓글 모달(isCommentVisible) 안에서 openDetailModal 호출 시
+              Modal 레이어 구조상 바깥 Modal이 안 뜨는 문제를 해결하기 위해
+              댓글 모달 내부에 absoluteFill View로 프로필 시트를 직접 렌더링 */}
+          {isDetailVisible && (
+            <View style={[StyleSheet.absoluteFill, { zIndex: 999, elevation: 999 }]}>
+              <View style={s.modalOverlay}>
+                <TouchableWithoutFeedback onPress={closeDetailModal}>
+                  <View style={StyleSheet.absoluteFill} />
+                </TouchableWithoutFeedback>
+                <Animated.View style={[s.sheet, { height: detailHeightAnim, overflow: 'hidden' }]}>
+                  <View {...detailPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
+                    <View style={s.handle} />
+                    <View style={s.sheetHeader}>
+                      <Text style={s.sheetTitle}>{selectedUser?.isMe ? '내 정보' : '회원 정보'}</Text>
+                      <TouchableOpacity onPress={closeDetailModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                        <Text style={s.closeBtn}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <View style={s.hr} />
+                  </View>
+                  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
+                    {selectedUser && (
+                      <View>
+                        <View style={s.profileCenter}>
+                          {getFullImageUrl(selectedUser.profileImageUrl)
+                            ? <FastImage source={{ uri: getFullImageUrl(selectedUser.profileImageUrl)!, priority: FastImage.priority.normal }} style={s.profileBig} />
+                            : <Image source={require('../assets/profile.png')} style={s.profileBig} />
+                          }
+                          <Text style={s.profileName}>{selectedUser.name}</Text>
+                        </View>
+                        <View style={s.infoBox}>
+                          {([['이름', selectedUser.name, selectedUser.toggles.showName, ''], ['성별', selectedUser.gender, true, ''], ['전화번호', selectedUser.phone, selectedUser.toggles.showPhone, ''], ['나이', selectedUser.age, selectedUser.toggles.showAge, '세'], ['키', selectedUser.height, selectedUser.toggles.showHeight, 'cm'], ['몸무게', selectedUser.weight, selectedUser.toggles.showWeight, 'kg'], ['팔길이', selectedUser.arm, selectedUser.toggles.showArm, 'cm'], ['암벽화 사이즈', selectedUser.shoe, selectedUser.toggles.showShoe, 'mm']] as [string, string, boolean, string][])
+                            .filter(([,, show]) => show)
+                            .map(([label, val,, unit]) => (
+                              <View key={label} style={s.infoRowDetail}>
+                                <Text style={s.infoLabel}>{label}</Text>
+                                <Text style={s.infoVal}>{val !== '-' ? val + unit : '-'}</Text>
+                              </View>
+                            ))}
+                        </View>
+                        <TouchableOpacity style={s.closeFullBtn} onPress={closeDetailModal}>
+                          <Text style={s.closeFullText}>닫기</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </ScrollView>
+                </Animated.View>
+              </View>
+            </View>
+          )}
         </View>
       </Modal>
 
@@ -636,42 +702,48 @@ const CommunityScreen = ({ route, navigation }: any) => {
         </View>
       </Modal>
 
-      <Modal visible={isDetailVisible} transparent animationType="fade" onRequestClose={closeDetailModal}>
-        <View style={s.modalOverlay}>
-          <TouchableWithoutFeedback onPress={closeDetailModal}><View style={StyleSheet.absoluteFill} /></TouchableWithoutFeedback>
-          <Animated.View style={[s.sheet, { height: detailHeightAnim, overflow: 'hidden' }]}>
-            <View {...detailPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
-              <View style={s.handle} />
-              <View style={s.sheetHeader}>
-                <Text style={s.sheetTitle}>{selectedUser?.isMe ? '내 정보' : '회원 정보'}</Text>
-                <TouchableOpacity onPress={closeDetailModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}><Text style={s.closeBtn}>✕</Text></TouchableOpacity>
-              </View>
-              <View style={s.hr} />
-            </View>
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
-              {selectedUser && (
-                <View>
-                  <View style={s.profileCenter}>
-                    <Image source={getProfileImage(selectedUser.profileImageUrl)} style={s.profileBig} />
-                    <Text style={s.profileName}>{selectedUser.name}</Text>
-                  </View>
-                  <View style={s.infoBox}>
-                    {([['이름', selectedUser.name, selectedUser.toggles.showName, ''], ['성별', selectedUser.gender, true, ''], ['전화번호', selectedUser.phone, selectedUser.toggles.showPhone, ''], ['나이', selectedUser.age, selectedUser.toggles.showAge, '세'], ['키', selectedUser.height, selectedUser.toggles.showHeight, 'cm'], ['몸무게', selectedUser.weight, selectedUser.toggles.showWeight, 'kg'], ['팔길이', selectedUser.arm, selectedUser.toggles.showArm, 'cm'], ['암벽화 사이즈', selectedUser.shoe, selectedUser.toggles.showShoe, 'mm']] as [string, string, boolean, string][])
-                      .filter(([,, show]) => show)
-                      .map(([label, val,, unit]) => (
-                        <View key={label} style={s.infoRowDetail}>
-                          <Text style={s.infoLabel}>{label}</Text>
-                          <Text style={s.infoVal}>{val !== '-' ? val + unit : '-'}</Text>
-                        </View>
-                      ))}
-                  </View>
-                  <TouchableOpacity style={s.closeFullBtn} onPress={closeDetailModal}><Text style={s.closeFullText}>닫기</Text></TouchableOpacity>
+      {/* 💡 게시글 목록에서 프로필 클릭 시 (댓글 모달 밖에서) 뜨는 프로필 상세 모달 */}
+      {!isCommentVisible && (
+        <Modal visible={isDetailVisible} transparent animationType="fade" onRequestClose={closeDetailModal}>
+          <View style={s.modalOverlay}>
+            <TouchableWithoutFeedback onPress={closeDetailModal}><View style={StyleSheet.absoluteFill} /></TouchableWithoutFeedback>
+            <Animated.View style={[s.sheet, { height: detailHeightAnim, overflow: 'hidden' }]}>
+              <View {...detailPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
+                <View style={s.handle} />
+                <View style={s.sheetHeader}>
+                  <Text style={s.sheetTitle}>{selectedUser?.isMe ? '내 정보' : '회원 정보'}</Text>
+                  <TouchableOpacity onPress={closeDetailModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}><Text style={s.closeBtn}>✕</Text></TouchableOpacity>
                 </View>
-              )}
-            </ScrollView>
-          </Animated.View>
-        </View>
-      </Modal>
+                <View style={s.hr} />
+              </View>
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
+                {selectedUser && (
+                  <View>
+                    <View style={s.profileCenter}>
+                      {getFullImageUrl(selectedUser.profileImageUrl)
+                        ? <FastImage source={{ uri: getFullImageUrl(selectedUser.profileImageUrl)!, priority: FastImage.priority.normal }} style={s.profileBig} />
+                        : <Image source={require('../assets/profile.png')} style={s.profileBig} />
+                      }
+                      <Text style={s.profileName}>{selectedUser.name}</Text>
+                    </View>
+                    <View style={s.infoBox}>
+                      {([['이름', selectedUser.name, selectedUser.toggles.showName, ''], ['성별', selectedUser.gender, true, ''], ['전화번호', selectedUser.phone, selectedUser.toggles.showPhone, ''], ['나이', selectedUser.age, selectedUser.toggles.showAge, '세'], ['키', selectedUser.height, selectedUser.toggles.showHeight, 'cm'], ['몸무게', selectedUser.weight, selectedUser.toggles.showWeight, 'kg'], ['팔길이', selectedUser.arm, selectedUser.toggles.showArm, 'cm'], ['암벽화 사이즈', selectedUser.shoe, selectedUser.toggles.showShoe, 'mm']] as [string, string, boolean, string][])
+                        .filter(([,, show]) => show)
+                        .map(([label, val,, unit]) => (
+                          <View key={label} style={s.infoRowDetail}>
+                            <Text style={s.infoLabel}>{label}</Text>
+                            <Text style={s.infoVal}>{val !== '-' ? val + unit : '-'}</Text>
+                          </View>
+                        ))}
+                    </View>
+                    <TouchableOpacity style={s.closeFullBtn} onPress={closeDetailModal}><Text style={s.closeFullText}>닫기</Text></TouchableOpacity>
+                  </View>
+                )}
+              </ScrollView>
+            </Animated.View>
+          </View>
+        </Modal>
+      )}
 
     </SafeAreaView>
   );

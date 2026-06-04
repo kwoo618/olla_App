@@ -4,12 +4,13 @@ import {
   Modal, Animated, TouchableWithoutFeedback 
 } from 'react-native';
 import { useRanking, getFullImageUrl, getSectionColor, getRankColor, colors } from '../ts/Ranking';
+import FastImage from 'react-native-fast-image';
 
 // ─────────────────────────── 프로필 이미지 컴포넌트 ───────────────────────────
 const ProfileImage = ({ uri, style }: { uri?: string | null; style: any }) => {
   const fullUri = getFullImageUrl(uri);
   if (fullUri) {
-    return <Image source={{ uri: fullUri }} style={style} />;
+    return <FastImage source={{ uri: fullUri, priority: FastImage.priority.normal }} style={style} />;
   }
   return <Image source={require('../assets/profile.png')} style={style} />;
 };
