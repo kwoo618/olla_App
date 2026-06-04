@@ -90,8 +90,7 @@ public class SecurityConfig {
                 "http://localhost:3000",
                 "http://localhost:8081",
                 "http://localhost",
-                "https://ollagaja.com",
-                "http://api.ollagaja.com:8080"
+                "https://ollagaja.com"
         ));
 
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
