@@ -155,7 +155,7 @@ const RecodeScreen = ({ route, navigation }: any) => {
                   <View key={item.id} style={styles.rowCardWithTrash}>
                     <View style={styles.enduranceCol}><Text style={styles.enduranceTopText}>{item.type}</Text><Text style={styles.enduranceBottomText}>{item.arrow}</Text></View>
                     <View style={styles.verticalDivider} />
-                    <View style={styles.enduranceCol}><Text style={styles.enduranceTopText}>{item.laps}</Text><Text style={styles.enduranceBottomText}>바퀴</Text></View>
+                    <View style={styles.enduranceCol}><Text style={styles.enduranceTopText}>{item.laps}</Text><Text style={styles.enduranceBottomText}>회</Text></View>
                     <View style={styles.verticalDivider} />
                     <View style={styles.enduranceCol}><Text style={styles.enduranceTopText}>{item.time}</Text><Text style={styles.enduranceBottomText}>시간</Text></View>
                     <View style={styles.verticalDivider} />

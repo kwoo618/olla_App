@@ -142,7 +142,8 @@ const ManagerTicket = ({ navigation }: any) => {
         )}
       </ScrollView>
 
-      <TouchableOpacity style={[styles.fab, { bottom: Math.max(insets.bottom + 5, 20) }]} activeOpacity={0.8} onPress={t.openEditModal}>
+      {/* 💡 수정된 부분: Dashboard와 동일하게 인라인 스타일(bottom: Math.max...) 제거 */}
+      <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={t.openEditModal}>
         <Text style={styles.fabText}>+ 이용권 등록</Text>
       </TouchableOpacity>
 
@@ -385,7 +386,7 @@ const ManagerTicket = ({ navigation }: any) => {
                       {/* 개월 수 or 횟수 입력 */}
                       <View style={styles.dateBlock}>
                         <Text style={styles.inputLabel}>
-                          {t.editType === 'PERIOD' ? '개월 수 (기본 1개월)' : '횟수 (기본 1회)'}
+                          {t.editType === 'PERIOD' ? '개월 수' : '횟수 (기본 1회)'}
                         </Text>
                         <TextInput
                           style={styles.amountInput}
@@ -485,7 +486,21 @@ const styles = StyleSheet.create({
   badgeTextHolding:  { color: '#FF9900',  fontSize: 13, fontWeight: 'bold' },
   badgeTextPartial:  { color: '#4DA6FF',  fontSize: 13, fontWeight: 'bold' },
 
-  fab:     { position: 'absolute', right: 20, backgroundColor: '#A1BE44', paddingHorizontal: 25, paddingVertical: 18, borderRadius: 30, elevation: 5 },
+  // 💡 수정된 부분: Dashboard와 위치(bottom 15, right 20)를 동일하게 맞춤
+  fab: { 
+    position: 'absolute', 
+    bottom: 15, 
+    right: 20, 
+    backgroundColor: '#A1BE44', 
+    paddingHorizontal: 25, 
+    paddingVertical: 15, 
+    borderRadius: 30, 
+    elevation: 5,
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.3, 
+    shadowRadius: 4.65 
+  },
   fabText: { color: '#000', fontSize: 18, fontWeight: 'bold' },
 
   modalOverlay:      { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
