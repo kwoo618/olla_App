@@ -223,7 +223,7 @@ const HomeScreen = ({ navigation }: any) => {
               const isAttended = day !== null && attendedDates.includes(day);
 
               return (
-                <TouchableOpacity key={index} style={styles.dayCell} disabled={!day} onPress={() => day && onDateClick(day)}>
+                <TouchableOpacity key={index} style={styles.dayCell} disabled={!day} onPress={() => day && onDateClick(day)} activeOpacity={0.6}>
                   {day ? (
                     <View style={[styles.dayCircle, isToday && styles.todayCircle, isSelected && !isToday && styles.selectedCircle, isAttended && !isToday && !isSelected && styles.attendedCircle]}>
                       <Text style={[styles.dayText, isToday && styles.todayText, isSelected && !isToday && styles.selectedText, isAttended && !isToday && !isSelected && styles.attendedText, index % 7 === 0 && !isToday && !isSelected && !isAttended && styles.sundayText]}>
@@ -363,14 +363,16 @@ const styles = StyleSheet.create({
   weekDayText: { color: '#999999', fontSize: 15, width: '14.28%', textAlign: 'center', fontWeight: '600' },
   daysGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start' },
   dayCell: { width: '14.28%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center', marginBottom: 5 },
-  dayCircle: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  
+  // 💡 수정된 부분: 네모나게 보이는 현상을 막고 완벽한 원형으로 강제 고정
+  dayCircle: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   dayText: { color: '#ffffff', fontSize: 16, fontWeight: '500' },
   sundayText: { color: '#FF6B6B' },
-  todayCircle: { backgroundColor: '#A1BE44' },
+  todayCircle: { backgroundColor: '#A1BE44', borderRadius: 17, overflow: 'hidden' },
   todayText: { color: '#1A1A1A', fontWeight: 'bold' },
-  selectedCircle: { backgroundColor: '#5DADE2' },
+  selectedCircle: { backgroundColor: '#5DADE2', borderRadius: 17, overflow: 'hidden' }, // 선택된 날짜 원형 강제
   selectedText: { color: '#000000', fontWeight: 'bold' },
-  attendedCircle: { backgroundColor: '#3A3A3A', borderWidth: 1.5, borderColor: '#A1BE44' },
+  attendedCircle: { backgroundColor: '#3A3A3A', borderWidth: 1.5, borderColor: '#A1BE44', borderRadius: 17, overflow: 'hidden' },
   attendedText: { color: '#A1BE44', fontWeight: 'bold' },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)', justifyContent: 'flex-end' },

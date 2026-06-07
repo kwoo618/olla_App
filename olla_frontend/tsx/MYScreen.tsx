@@ -12,7 +12,7 @@ const MYScreen = ({ navigation }: any) => {
     loading, refreshing, onRefresh, isAdmin, calcAgeFromBirth,
     memInfo, hasMembership, memSummaryText, isMembershipExpanded, setIsMembershipExpanded,
     profileData, setProfileData, profileToggles, setProfileToggles,
-    notiState, handleNotiToggle,
+    notiState, updateMultipleNotiSettings, // 💡 수정됨
     resultModalVisible, setResultModalVisible, resultModalConfig,
     isProfileModalVisible, openProfileModal, closeProfileModal, profileHeightAnim, profilePanResponder,
     isImageUploading, handleSelectImage, handleSaveProfile,
@@ -23,6 +23,28 @@ const MYScreen = ({ navigation }: any) => {
     isDeleteModalVisible, setDeleteModalVisible, executeDeleteAccount,
     isAdminModalVisible, setAdminModalVisible
   } = useMyPage(navigation);
+
+  // ─── 💡 동기화 컨트롤러: 모든 스위치를 한 번에 변경 ───
+  const handleNotificationSwitch = (key: string) => {
+    if (key === 'isGlobalNotificationOn') {
+      const targetState = !notiState.isGlobalNotificationOn;
+      
+      const batchUpdate = {
+        isGlobalNotificationOn: targetState,
+        isMembershipNotificationOn: targetState,
+        isActivityNotificationOn: targetState,
+        isCrewNotificationOn: targetState,
+        isNoticeNotificationOn: targetState,
+      };
+
+      // 딜레이 없이 5개의 설정을 한 번에 요청 및 UI 반영
+      updateMultipleNotiSettings(batchUpdate);
+    } else {
+      // 일반 하위 알림들은 개별적으로 토글
+      const targetState = !(notiState as any)[key];
+      updateMultipleNotiSettings({ [key]: targetState });
+    }
+  };
 
   const renderEditField = (title: string, fieldKey: string, unit: string) => {
     const toggleKey = `show${fieldKey.charAt(0).toUpperCase() + fieldKey.slice(1)}`;
@@ -66,7 +88,7 @@ const MYScreen = ({ navigation }: any) => {
         <TouchableOpacity style={styles.profileCard} activeOpacity={0.8} onPress={openProfileModal}>
           <View style={styles.profileLeft}>
             <View style={styles.profileImagePlaceholder}>
-              {/* 💡 getFullImageUrl을 통해 로컬/서버 이미지를 모두 올바르게 렌더링합니다 */}
+              {/* 로컬/서버 이미지 렌더링 */}
               {getFullImageUrl(profileData.profileImageUrl)
                 ? <FastImage source={{ uri: getFullImageUrl(profileData.profileImageUrl)!, priority: FastImage.priority.high }} style={styles.profileImage} />
                 : <Image source={require('../assets/profile.png')} style={styles.profileImage} />
@@ -165,7 +187,7 @@ const MYScreen = ({ navigation }: any) => {
                 <Switch
                   trackColor={{ false: '#333333', true: '#A1BE44' }}
                   thumbColor={'#ffffff'}
-                  onValueChange={() => handleNotiToggle(item.key as any)}
+                  onValueChange={() => handleNotificationSwitch(item.key)}
                   value={(notiState as any)[item.key]}
                 />
               </View>
@@ -220,7 +242,6 @@ const MYScreen = ({ navigation }: any) => {
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }} keyboardShouldPersistTaps="handled">
                 <View style={styles.profileEditContainer}>
                   <TouchableOpacity style={styles.profileImageEditWrapper} activeOpacity={0.7} onPress={handleSelectImage} disabled={isImageUploading}>
-                    {/* 💡 모달 안에서도 getFullImageUrl 적용 */}
                     {getFullImageUrl(profileData.profileImageUrl)
                       ? <FastImage source={{ uri: getFullImageUrl(profileData.profileImageUrl)!, priority: FastImage.priority.high }} style={styles.profileImageLarge} />
                       : <Image source={require('../assets/profile.png')} style={styles.profileImageLarge} />
@@ -286,7 +307,7 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 💡 비밀번호 변경 폼 모달 (OLLA 표준 적용) ─── */}
+      {/* 비밀번호 변경 폼 모달 */}
       <Modal visible={isChangePwModalVisible} transparent animationType="fade" onRequestClose={() => setChangePwModalVisible(false)}>
         <View style={styles.centerModalOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', alignItems: 'center' }}>
@@ -307,7 +328,7 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 💡 관리자 모드 실행 확인 모달 (OLLA 표준 적용) ─── */}
+      {/* 관리자 모드 실행 확인 모달 */}
       <Modal visible={isAdminModalVisible} transparent animationType="fade" onRequestClose={() => setAdminModalVisible(false)}>
         <View style={styles.centerModalOverlay}>
           <View style={styles.centerModalBox}>
@@ -320,7 +341,7 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 💡 로그아웃 확인 모달 (OLLA 표준 적용) ─── */}
+      {/* 로그아웃 확인 모달 */}
       <Modal visible={isLogoutModalVisible} transparent animationType="fade" onRequestClose={() => setLogoutModalVisible(false)}>
         <View style={styles.centerModalOverlay}>
           <View style={styles.centerModalBox}>
@@ -333,7 +354,7 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 💡 계정 삭제 확인 모달 (OLLA 표준 적용) ─── */}
+      {/* 계정 삭제 확인 모달 */}
       <Modal visible={isDeleteModalVisible} transparent animationType="fade" onRequestClose={() => setDeleteModalVisible(false)}>
         <View style={styles.centerModalOverlay}>
           <View style={styles.centerModalBox}>
@@ -346,7 +367,7 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 💡 시스템 결과 알림 공통 모달 (OLLA 표준 적용) ─── */}
+      {/* 시스템 결과 알림 공통 모달 */}
       <Modal visible={resultModalVisible} transparent animationType="fade" onRequestClose={() => setResultModalVisible(false)}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -484,8 +505,6 @@ const styles = StyleSheet.create({
   contactTime: { color: '#999999', fontSize: 14, textAlign: 'center' },
   errorText: { color: '#FF4D4D', fontSize: 14, marginBottom: 10, textAlign: 'center' },
 
-  // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
-  
   // 1. 입력 모달 (비밀번호 변경)
   inputModalBox: { 
     width: '90%', 
@@ -559,7 +578,6 @@ const styles = StyleSheet.create({
   },
   resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
-  // ───────────────────────────────────────────────────────────────────────────────────────────
 });
 
 export default MYScreen;
