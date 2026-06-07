@@ -1,814 +1,44 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, 
-  Modal, Animated, RefreshControl, Dimensions, PanResponder, TouchableWithoutFeedback, TextInput 
+  Modal, Animated, RefreshControl, TouchableWithoutFeedback, TextInput 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL } from '../src/constants/Config';
-
-// ─────────────────────────── API URLs ───────────────────────────
-const ENDURANCE_BASE_URL = `${API_BASE_URL}/records/endurance`;
-const SERIES_BASE_URL    = `${API_BASE_URL}/records/series`;
-const MEMBERSHIP_URL     = `${API_BASE_URL}/memberships/me`;
-
-// ─────────────────────────── Axios 인터셉터 ───────────────────────────
-axios.interceptors.request.use(
-  async (config) => {
-    try {
-      const token = await AsyncStorage.getItem('userToken');
-      if (token) config.headers.Authorization = `Bearer ${token}`;
-    } catch (error) {
-      console.error('토큰 가져오기 실패:', error);
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-// ─────────────────────────── 상수 ───────────────────────────
-
-const MAX_HOLDS: Record<string, number> = {
-  '흰색': 26, '노랑': 33, '초록': 28, '파랑': 26,
-  '빨강': 26, '보라': 25, '주황': 28, '검정': 30,
-};
-
-// 난이도별 기본 점수 (연속 완등 점수 화면 표시용 - 실제 저장은 서버에서 계산)
-const BASE_SCORES: Record<string, number> = {
-  '흰색': 10, '노랑': 20, '주황': 30, '초록': 40,
-  '파랑': 50, '빨강': 60, '보라': 70, '검정': 80,
-};
-
-const KR_TO_ENUM: Record<string, string> = {
-  '흰색': 'WHITE', '노랑': 'YELLOW', '주황': 'ORANGE', '초록': 'GREEN',
-  '파랑': 'BLUE',  '빨강': 'RED',    '보라': 'PURPLE', '검정': 'BLACK',
-};
-
-const ENUM_TO_KR: Record<string, string> = {
-  WHITE: '흰색', YELLOW: '노랑', ORANGE: '주황', GREEN: '초록',
-  BLUE: '파랑',  RED: '빨강',   PURPLE: '보라', BLACK: '검정',
-};
-
-const BOX_SEQUENCE = [
-  '1-1','1-2','1-3','1-4','1-5','1-6',
-  '2-1','2-2','2-3','2-4','2-5','2-6','2-7','2-8','2-9','2-10','2-11','2-12',
-  '3-1','3-2','3-3','3-4','3-5','3-6',
-  '4-1','4-2',
-];
-
-// ─────────────────────────── 타입 ───────────────────────────
-interface BeginnerRecord {
-  id: number;
-  difficulty: string;
-  attemptType: string;
-  maxHoldNo?: number;
-  score?: number;
-  recordDate: string;
-  success: boolean;
-  isSuccess?: boolean;
-}
-
-interface EnduranceRecord {
-  id: number;
-  oneWayCount: number;
-  additionalBlocks: number;
-  timeSeconds: number;
-  recordDate: string;
-}
-
-interface SeriesRecord {
-  id: number;
-  sequenceLog: string[];
-  totalScore: number;
-  recordDate: string;
-}
-
-// ─────────────────────────── 헬퍼 ───────────────────────────
-const formatTime = (totalSecs: number): string => {
-  const m = Math.floor(totalSecs / 60).toString().padStart(2, '0');
-  const s = (totalSecs % 60).toString().padStart(2, '0');
-  return `${m}:${s}`;
-};
-
-const getSectionLabel = (oneWayCount: number, additionalBlocks: number): string => {
-  if (oneWayCount === 0 && additionalBlocks === 0) return '0';
-  if (additionalBlocks > 0 && additionalBlocks <= BOX_SEQUENCE.length)
-    return BOX_SEQUENCE[additionalBlocks - 1];
-  return '4-2'; 
-};
-
-const getLocalDateStr = (): string => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-// ─────────────────────────── 컴포넌트 ───────────────────────────
-
-const RecodeScreen = ({
-  route, navigation,
-  difficultyData, setDifficultyData,
-  enduranceData,  setEnduranceData,
-  consecutiveData, setConsecutiveData,
-}: any) => {
-
-  const [refreshing, setRefreshing] = useState(false);
-  const [showTimerFinishConfirm, setShowTimerFinishConfirm] = useState(false); // 타이머 확인 모달 
-  
-  // 초보벽 전체 히스토리 관리 상태
-  const [beginnerHistoryData, setBeginnerHistoryData] = useState<any[]>([]);
-
-  const loadAllData = async () => {
-    setEnduranceData([]);
-    setConsecutiveData([]);
-    setBeginnerHistoryData([]); // 초기화
-    await Promise.all([
-      checkMembership(),
-      fetchBestRecords(),
-      fetchBeginnerHistoryRecords(), 
-      fetchEnduranceRecords(),
-      fetchSeriesRecords()
-    ]);
-  };
-
-  const [expandedSection, setExpandedSection] = useState<string | null>(
-    route?.params?.openSection ?? null
-  );
-  const [hasValidMembership, setHasValidMembership] = useState(false);
-
-  // ─── 커스텀 알림 모달 상태 ───
-  const [resultModalVisible, setResultModalVisible] = useState(false);
-  const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info' });
-
-  const showResultModal = (title: string, message: string, type: 'info' | 'success' | 'error' = 'info') => {
-    setResultModalConfig({ title, message, type });
-    setResultModalVisible(true);
-  };
-
-  useEffect(() => {
-    loadAllData();
-    if (route?.params?.openSection) setExpandedSection(route.params.openSection);
-  }, [route?.params?.openSection]);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadAllData();
-    setRefreshing(false);
-  }, []);
-
-  const checkMembership = async () => {
-    try {
-      const res = await axios.get(MEMBERSHIP_URL);
-      const rawData = res.data?.data?.data ?? res.data?.data; 
-      
-      if (rawData) {
-        const memberships = Array.isArray(rawData) ? rawData : [rawData];
-        let isValid = false;
-
-        for (const m of memberships) {
-          if (!m) continue;
-          const status = String(m.membershipStatus || '').toUpperCase();
-          if (status === 'DELETED') continue;
-          const typeStr = String(m.membershipType ?? '').toUpperCase();
-          
-          if (typeStr.includes('COUNT') || typeStr.includes('횟수')) {
-            if ((m.remainingCount ?? 0) > 0) {
-              isValid = true;
-              break; 
-            }
-          } 
-          else if (typeStr.includes('PERIOD') || typeStr.includes('기간') || m.endDate) {
-            if (m.endDate) {
-              const end = new Date(m.endDate);
-              end.setHours(23, 59, 59, 999);
-              if (end.getTime() >= Date.now()) {
-                isValid = true;
-                break; 
-              }
-            }
-          }
-        }
-        
-        setHasValidMembership(isValid);
-      } else {
-        setHasValidMembership(false);
-      }
-    } catch (error) {
-      console.error('멤버십 확인 실패:', error);
-      setHasValidMembership(false);
-    }
-  };
-
-  const requireMembership = (action: () => void) => {
-    if (!hasValidMembership) {
-      showResultModal('알림', '이용권을 먼저 구매해주세요.', 'info');
-      return;
-    }
-    action();
-  };
-
-  // ── 초보벽 최고기록 조회 ──
-  const fetchBestRecords = async () => {
-    try {
-      const res = await axios.get(`${API_BASE_URL}/records/beginner/best`);
-      const raw = res.data?.data?.data ?? [];
-      const list: BeginnerRecord[] = Array.isArray(raw) ? raw : Array.isArray(raw?.list) ? raw.list : [];
-
-      setDifficultyData((prevData: any[]) =>
-        prevData.map((item: any) => {
-          const enumColor = KR_TO_ENUM[item.color];
-          const maxHold   = MAX_HOLDS[item.color] ?? item.total ?? 0;
-
-          const recordsForColor = list.filter(r => r.difficulty === enumColor);
-          let bestRecord: BeginnerRecord | null = null;
-          let highestScore = -1;
-
-          recordsForColor.forEach(r => {
-            const isSuccess = r.success !== undefined ? r.success : r.isSuccess;
-            const holdCount = isSuccess ? maxHold : (r.maxHoldNo ?? 0);
-            const score = r.score ?? holdCount; 
-
-            if (score > highestScore) {
-              highestScore = score;
-              bestRecord   = r;
-            }
-          });
-
-          if (bestRecord) {
-            const b         = bestRecord as BeginnerRecord;
-            const isRT      = String(b.attemptType ?? '').toUpperCase() === 'ROUND_TRIP';
-            const isSuccess = b.success !== undefined ? b.success : b.isSuccess;
-            const rawHold   = b.maxHoldNo !== undefined ? b.maxHoldNo : b.score;
-            const holdCount = isSuccess ? maxHold : (rawHold ?? 0);
-            return {
-              ...item,
-              id:      b.id,
-              type:    isRT ? '왕복' : '편도',
-              current: holdCount,
-              status:  isSuccess ? '완료' : '진행중',
-            };
-          }
-          return { ...item, type: null, current: 0, status: '미기록' };
-        })
-      );
-    } catch (error: any) {
-      console.error('최고 기록 로드 실패:', error.response?.data?.message || error.message);
-    }
-  };
-
-  // ── 초보벽 시간순(전체) 최근 기록 조회 로직 ──
-  const fetchBeginnerHistoryRecords = async () => {
-    try {
-      const res = await axios.get(`${API_BASE_URL}/records/beginner/history`);
-      const raw = res.data?.data?.data ?? [];
-      const list: BeginnerRecord[] = Array.isArray(raw) ? raw : Array.isArray(raw?.list) ? raw.list : [];
-
-      // 가장 최근 기록이 위로 가도록 id(또는 recordDate) 기준으로 내림차순 정렬
-      const sortedList = list.sort((a, b) => b.id - a.id);
-
-      const mapped = sortedList.map((item) => {
-        const krColor = ENUM_TO_KR[item.difficulty] ?? '흰색';
-        // Props로 받은 difficultyData에서 hex 색상을 가져옴
-        const foundDiff = difficultyData?.find((d: any) => d.color === krColor);
-        const maxHold = MAX_HOLDS[krColor] ?? 0;
-        const isRT = String(item.attemptType ?? '').toUpperCase() === 'ROUND_TRIP';
-        const isSuccess = item.success !== undefined ? item.success : item.isSuccess;
-        const holdCount = isSuccess ? maxHold : (item.maxHoldNo ?? item.score ?? 0);
-
-        return {
-          id: item.id,
-          color: krColor,
-          hex: foundDiff?.hex ?? '#999999',
-          type: isRT ? '왕복' : '편도',
-          current: holdCount,
-          max: maxHold,
-          status: isSuccess ? '완등' : '실패',
-        };
-      });
-
-      setBeginnerHistoryData(mapped);
-    } catch (error: any) {
-      console.error('초보벽 최근 기록 로드 실패:', error.response?.data?.message || error.message);
-    }
-  };
-
-  const fetchEnduranceRecords = async () => {
-    try {
-      const res = await axios.get(`${ENDURANCE_BASE_URL}/history`);
-      const raw = res.data?.data?.data ?? [];
-      const list: EnduranceRecord[] = Array.isArray(raw) ? raw : [];
-
-      const mapped = list.map((item: EnduranceRecord) => ({
-        id:      item.id,
-        type:    '편도',
-        arrow:   item.oneWayCount % 2 !== 0 ? '<-' : '->', 
-        laps:    String(item.oneWayCount),
-        time:    formatTime(item.timeSeconds),
-        section: getSectionLabel(item.oneWayCount, item.additionalBlocks),
-      }));
-
-      setEnduranceData(mapped);
-    } catch (error: any) {
-      console.error('지구력 기록 로드 실패:', error.response?.data?.message || error.message);
-    }
-  };
-
-  const fetchSeriesRecords = async () => {
-    try {
-      const res = await axios.get(`${SERIES_BASE_URL}/history`);
-      const raw = res.data?.data?.data ?? [];
-      const list: SeriesRecord[] = Array.isArray(raw) ? raw : [];
-
-      const mapped = list.map((item: SeriesRecord) => ({
-        id:    item.id,
-        score: item.totalScore ?? 0,
-        colors: (item.sequenceLog ?? []).map(diffEnum => {
-          const krName = ENUM_TO_KR[diffEnum] ?? '흰색';
-          const found  = difficultyData.find((d: any) => d.color === krName);
-          return found?.hex ?? '#999999';
-        }),
-      }));
-
-      setConsecutiveData(mapped);
-    } catch (error: any) {
-      console.error('연속 완등 기록 로드 실패:', error.response?.data?.message || error.message);
-    }
-  };
-
-  const toggleSection = (section: string) =>
-    setExpandedSection(expandedSection === section ? null : section);
-
-  // ─── 삭제 모달 및 삭제 로직 ───
-  const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState<{
-    id: number; type: 'endurance' | 'consecutive' | 'difficulty';
-  } | null>(null);
-
-  const confirmDelete = (type: any, id: number) => {
-    requireMembership(() => {
-      setItemToDelete({ id, type });
-      setDeleteModalVisible(true);
-    });
-  };
-
-  const executeDelete = async () => {
-    if (!itemToDelete) return;
-    try {
-      const id = Number(itemToDelete.id);
-      if      (itemToDelete.type === 'difficulty')  { 
-        await axios.delete(`${API_BASE_URL}/records/beginner/${id}`);       
-        await fetchBestRecords();       
-        await fetchBeginnerHistoryRecords(); // 초보벽 삭제 시 최근 기록도 함께 새로고침
-      }
-      else if (itemToDelete.type === 'endurance')   { 
-        await axios.delete(`${ENDURANCE_BASE_URL}/${id}`); 
-        await fetchEnduranceRecords();  
-      }
-      else if (itemToDelete.type === 'consecutive') { 
-        await axios.delete(`${SERIES_BASE_URL}/${id}`);    
-        await fetchSeriesRecords();     
-      }
-      
-      setDeleteModalVisible(false);
-      setItemToDelete(null);
-
-      setTimeout(() => {
-        showResultModal('성공', '기록이 삭제되었습니다.', 'success');
-      }, 500);
-
-    } catch (error: any) {
-      setDeleteModalVisible(false);
-      setItemToDelete(null);
-      
-      setTimeout(() => {
-        const errorMessage = error.response?.data?.message || '기록 삭제에 실패했습니다.';
-        showResultModal('오류', errorMessage, 'error');
-      }, 500);
-    }
-  };
-
-  const cancelDelete = () => { setDeleteModalVisible(false); setItemToDelete(null); };
-
-  // ─────────────────────────── 팝업창 드래그 애니메이션 상태 설정 ───────────────────────────
-  const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-  
-  const BEGINNER_MODAL_HEIGHT = SCREEN_HEIGHT * 0.70;       
-  const ENDURANCE_HALF_HEIGHT = SCREEN_HEIGHT * 0.55;       
-  const ENDURANCE_FULL_HEIGHT = SCREEN_HEIGHT * 0.95;       
-  const CONSECUTIVE_MODAL_HEIGHT = SCREEN_HEIGHT * 0.77;    
-
-  const beginnerHeightAnim = useRef(new Animated.Value(0)).current;
-  const enduranceHeightAnim = useRef(new Animated.Value(0)).current;
-  const consecutiveHeightAnim = useRef(new Animated.Value(0)).current;
-
-  const beginnerSnap = useRef(BEGINNER_MODAL_HEIGHT);
-  const enduranceSnap = useRef(ENDURANCE_HALF_HEIGHT);
-  const consecutiveSnap = useRef(CONSECUTIVE_MODAL_HEIGHT);
-
-  const beginnerPanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
-      onPanResponderGrant: () => {
-        beginnerHeightAnim.setOffset(beginnerSnap.current);
-        beginnerHeightAnim.setValue(0);
-      },
-      onPanResponderMove: (_, gestureState) => {
-        beginnerHeightAnim.setValue(Math.min(0, -gestureState.dy));
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        beginnerHeightAnim.flattenOffset();
-        const finalHeight = beginnerSnap.current - gestureState.dy;
-        const CLOSE_THRESHOLD = beginnerSnap.current * 0.7; 
-
-        if (finalHeight < CLOSE_THRESHOLD) {
-          closeRecordModal();
-        } else {
-          Animated.spring(beginnerHeightAnim, { toValue: beginnerSnap.current, useNativeDriver: false }).start();
-        }
-      }
-    })
-  ).current;
-
-  const endurancePanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
-      onPanResponderGrant: () => {
-        enduranceHeightAnim.setOffset(enduranceSnap.current);
-        enduranceHeightAnim.setValue(0);
-      },
-      onPanResponderMove: (_, gestureState) => {
-        enduranceHeightAnim.setValue(-gestureState.dy);
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        enduranceHeightAnim.flattenOffset();
-        const finalHeight = enduranceSnap.current - gestureState.dy;
-        const THRESHOLD = (ENDURANCE_HALF_HEIGHT + ENDURANCE_FULL_HEIGHT) / 2;
-        const CLOSE_THRESHOLD = ENDURANCE_HALF_HEIGHT * 0.7;
-
-        if (finalHeight > THRESHOLD) {
-          enduranceSnap.current = ENDURANCE_FULL_HEIGHT;
-          Animated.spring(enduranceHeightAnim, { toValue: ENDURANCE_FULL_HEIGHT, useNativeDriver: false }).start();
-        } else if (finalHeight < CLOSE_THRESHOLD) {
-          closeEnduranceModal();
-        } else {
-          enduranceSnap.current = ENDURANCE_HALF_HEIGHT;
-          Animated.spring(enduranceHeightAnim, { toValue: ENDURANCE_HALF_HEIGHT, useNativeDriver: false }).start();
-        }
-      }
-    })
-  ).current;
-
-  const consecutivePanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
-      onPanResponderGrant: () => {
-        consecutiveHeightAnim.setOffset(consecutiveSnap.current);
-        consecutiveHeightAnim.setValue(0);
-      },
-      onPanResponderMove: (_, gestureState) => {
-        consecutiveHeightAnim.setValue(Math.min(0, -gestureState.dy));
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        consecutiveHeightAnim.flattenOffset();
-        const finalHeight = consecutiveSnap.current - gestureState.dy;
-        const CLOSE_THRESHOLD = consecutiveSnap.current * 0.7;
-
-        if (finalHeight < CLOSE_THRESHOLD) {
-          closeConsecutiveModal();
-        } else {
-          Animated.spring(consecutiveHeightAnim, { toValue: consecutiveSnap.current, useNativeDriver: false }).start();
-        }
-      }
-    })
-  ).current;
-
-  // ─── 초보벽 모달 및 로직 ───
-  const [isRecordModalVisible,  setRecordModalVisible]  = useState(false);
-  const [selectedDifficulty, setSelectedDifficulty] = useState<string>('흰색');
-  const [selectedType,   setSelectedType]   = useState<string | null>(null);
-  const [selectedResult, setSelectedResult] = useState<string | null>(null);
-  const [holdCount,      setHoldCount]      = useState(0);
-
-  useEffect(() => { setHoldCount(0); }, [selectedDifficulty]);
-
-  const openRecordModal = () => {
-    requireMembership(() => {
-      setRecordModalVisible(true);
-      beginnerSnap.current = BEGINNER_MODAL_HEIGHT;
-      beginnerHeightAnim.setValue(0);
-      Animated.timing(beginnerHeightAnim, { toValue: BEGINNER_MODAL_HEIGHT, duration: 300, useNativeDriver: false }).start();
-    });
-  };
-
-  const closeRecordModal = () => {
-    Animated.timing(beginnerHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
-      setRecordModalVisible(false);
-      setSelectedType(null);
-      setSelectedResult(null);
-      setHoldCount(0);
-    });
-  };
-
-  const currentMaxHolds = useMemo(() => {
-    return MAX_HOLDS[selectedDifficulty] ?? 0;
-  }, [selectedDifficulty]);
-
-  const handleSaveBeginnerRecord = async () => {
-    if (!selectedType || !selectedResult) {
-      showResultModal('알림', '모든 항목을 선택해주세요.', 'info'); 
-      return;
-    }
+import { useRecode, MAX_HOLDS, BASE_SCORES, rainbowColors, formatTime } from '../ts/Recode'; 
+
+const RecodeScreen = ({ route, navigation }: any) => {
+
+  const {
+    difficultyData, enduranceData, consecutiveData, 
+    refreshing, onRefresh, expandedSection, toggleSection, beginnerHistoryData,
+    resultModalVisible, resultModalConfig, closeResultModal,
+    isDeleteModalVisible, confirmDelete, executeDelete, cancelDelete,
     
-    const isSuccess    = selectedResult === '완등';
-    const finalHold    = isSuccess ? currentMaxHolds : holdCount;
-    const enumDifficulty = KR_TO_ENUM[selectedDifficulty] ?? 'WHITE';
-
-    const payload = {
-      difficulty:  enumDifficulty,
-      attemptType: selectedType === '편도' ? 'ONE_WAY' : 'ROUND_TRIP',
-      maxHoldNo:   Number(finalHold),
-      isSuccess:   Boolean(isSuccess), 
-      recordDate:  getLocalDateStr(),
-    };
-
-    try {
-      await axios.post(`${API_BASE_URL}/records/beginner`, payload);
-      await fetchBestRecords();
-      await fetchBeginnerHistoryRecords(); // 새로운 기록 저장 시 전체 최근 기록도 업데이트
-      closeRecordModal();
-      
-      setTimeout(() => {
-        showResultModal('성공', '등반 기록이 저장되었습니다.', 'success');
-      }, 500);
-
-    } catch (error: any) {
-      closeRecordModal();
-      setTimeout(() => {
-        const errorMessage = error.response?.data?.message || '데이터 저장에 실패했습니다.';
-        showResultModal('오류', errorMessage, 'error');
-      }, 500);
-    }
-  };
-
-  // ─── 지구력 모달 ───
-  const [isEnduranceModalVisible, setEnduranceModalVisible] = useState(false);
-  const [enduranceLaps,    setEnduranceLaps]    = useState(0);
-  const [selectedMapNode,  setSelectedMapNode]  = useState<string | null>(null);
-  const [enduranceMin,     setEnduranceMin]     = useState('');
-  const [enduranceSec,     setEnduranceSec]     = useState('');
-  
-  const [isTimerActive,    setIsTimerActive]    = useState(false);
-  const [timerRunning,  setTimerRunning]  = useState(false);
-  const [timerSeconds,  setTimerSeconds]  = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  
-  const openEnduranceModal = () => {
-    requireMembership(() => {
-      setEnduranceModalVisible(true);
-      enduranceSnap.current = ENDURANCE_HALF_HEIGHT;
-      enduranceHeightAnim.setValue(0);
-      Animated.timing(enduranceHeightAnim, { toValue: ENDURANCE_HALF_HEIGHT, duration: 300, useNativeDriver: false }).start();
-    });
-  };
-
-  const closeEnduranceModal = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    setTimerRunning(false);
-
-    Animated.timing(enduranceHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
-      setEnduranceModalVisible(false);
-      setEnduranceLaps(0);
-      setSelectedMapNode(null);
-      setEnduranceMin('');
-      setEnduranceSec('');
-      setIsTimerActive(false);
-    });
-  };
-
-  const SPACING = 24; const GAP = 10; const BASE_X = 30; const BASE_Y = 40; const TEXT_OFFSET = 24;
-  const mapElements: any[] = useMemo(() => {
-    const elements: any[] = [];
-    for (let i = 0; i <= 12; i++) { const x = BASE_X + i * SPACING; const y = BASE_Y; elements.push({ type: 'text', id: `T2-${i}`, val: `2-${i}`, x, y: y - TEXT_OFFSET }); if (i > 0) elements.push({ type: 'box', id: `2-${i}`, color: i <= 4 ? '#58CCFF' : i <= 8 ? '#3A4CA8' : '#692498', x: x - SPACING / 2, y }); }
-    for (let i = 0; i <= 6; i++) { const x = BASE_X - GAP; const y = BASE_Y + GAP + (6 - i) * SPACING; elements.push({ type: 'text', id: `T1-${i}`, val: `1-${i}`, x: x - TEXT_OFFSET, y }); if (i > 0) elements.push({ type: 'box', id: `1-${i}`, color: i === 6 ? '#B96BC6' : '#FFFFFF', x, y: y + SPACING / 2 }); }
-    for (let i = 0; i <= 6; i++) { const x = BASE_X + 12 * SPACING + GAP; const y = BASE_Y + GAP + i * SPACING; elements.push({ type: 'text', id: `T3-${i}`, val: `3-${i}`, x: x + TEXT_OFFSET, y }); if (i > 0) elements.push({ type: 'box', id: `3-${i}`, color: '#666666', x, y: y - SPACING / 2 }); }
-    for (let i = 0; i <= 2; i++) { const x = BASE_X + 12 * SPACING + GAP - i * SPACING; const y = BASE_Y + GAP + 6 * SPACING + GAP; elements.push({ type: 'text', id: `T4-${i}`, val: `4-${i}`, x, y: y + TEXT_OFFSET }); if (i > 0) elements.push({ type: 'box', id: `4-${i}`, color: '#343434', x: x + SPACING / 2, y }); }
-    return elements;
-  }, []);
-
-  const effectiveSection = useMemo(() => {
-    if (!selectedMapNode) return null;
-    const [A, B] = selectedMapNode.split('-');
-    return enduranceLaps % 2 !== 0 ? `${A}-${parseInt(B, 10) - 1}` : selectedMapNode;
-  }, [selectedMapNode, enduranceLaps]);
-
-  const getBoxCoord = (id: string) => {
-    const node = mapElements.find(m => m.id === id);
-    return node ? { x: node.x, y: node.y } : { x: 0, y: 0 };
-  };
-
-  const rainbowColors = ['#FF0000','#FF7F00','#FFFF00','#00FF00','#0080FF','#4B0082','#9400D3'];
-
-  const pathSegments = useMemo(() => {
-    const segments: any[] = [];
-    const maxIdx = BOX_SEQUENCE.length - 1;
-    for (let l = 0; l <= enduranceLaps; l++) {
-      const color = rainbowColors[l % 7]; const offset = l * 2; const isEven = l % 2 === 0;
-      let startIdx: number, endIdx: number;
-      if (l === enduranceLaps) {
-        if (!selectedMapNode) break;
-        const targetIdx = BOX_SEQUENCE.indexOf(selectedMapNode);
-        if (targetIdx === -1) break;
-        startIdx = isEven ? 0 : maxIdx; endIdx = targetIdx;
-      } else {
-        startIdx = isEven ? 0 : maxIdx; endIdx = isEven ? maxIdx : 0;
-      }
-      const step = isEven ? 1 : -1;
-      for (let i = startIdx; i !== endIdx; i += step) {
-        const nextI = i + step;
-        const p1 = getBoxCoord(BOX_SEQUENCE[i]); const p2 = getBoxCoord(BOX_SEQUENCE[nextI]);
-        const length = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-        const angle  = (Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180) / Math.PI;
-        const cx = (p1.x + p2.x) / 2; const cy = (p1.y + p2.y) / 2;
-        segments.push(
-          <View key={`line-${l}-${i}`} style={{ position: 'absolute', left: cx - length / 2 + offset, top: cy - 2 + offset, width: length, height: 4, backgroundColor: color, transform: [{ rotate: `${angle}deg` }], zIndex: 5 + l, borderRadius: 2 }} />
-        );
-      }
-    }
-    return segments;
-  }, [enduranceLaps, selectedMapNode, mapElements]);
-
-  const handleSaveEnduranceRecord = async () => {
-    if (!effectiveSection && enduranceLaps === 0) {
-      showResultModal('알림', '기록할 바퀴 수나 지도 구간을 선택해주세요.', 'info');
-      return;
-    }
-    const additionalBlocks = effectiveSection
-      ? Math.max(0, BOX_SEQUENCE.indexOf(effectiveSection) + 1)
-      : 0;
-    const timeSeconds = ((parseInt(enduranceMin, 10) || 0) * 60) + (parseInt(enduranceSec, 10) || 0);
-
-    const payload = {
-      oneWayCount:      Number(enduranceLaps),
-      additionalBlocks: Number(additionalBlocks),
-      timeSeconds:      Number(timeSeconds),
-      recordDate:       getLocalDateStr(),
-    };
-
-    try {
-      await axios.post(ENDURANCE_BASE_URL, payload);
-      await fetchEnduranceRecords();
-      closeEnduranceModal();
-      
-      setTimeout(() => {
-        showResultModal('성공', '지구력 기록이 저장되었습니다.', 'success');
-      }, 500);
-
-    } catch (error: any) {
-      closeEnduranceModal();
-      setTimeout(() => {
-        const errorMessage = error.response?.data?.message || '지구력 기록 저장에 실패했습니다.';
-        showResultModal('오류', errorMessage, 'error');
-      }, 500);
-    }
-  };
-
-  // ─── 스톱워치 기능 ───
-  const toggleTimer = () => {
-    if (timerRunning) {
-      setTimerRunning(false);
-      if (timerRef.current) clearInterval(timerRef.current);
-    } else {
-      setTimerRunning(true);
-      if (timerRef.current) clearInterval(timerRef.current);
-      timerRef.current = setInterval(() => {
-        setTimerSeconds(prev => prev + 1);
-      }, 1000);
-    }
-  };
-
-  const confirmStopTimer = () => {
-    if (timerRunning) {
-      setTimerRunning(false);
-      if (timerRef.current) clearInterval(timerRef.current);
-    }
-    setShowTimerFinishConfirm(true);
-  };
-
-  const stopTimerAndSave = () => {
-    setShowTimerFinishConfirm(false); 
-    setIsTimerActive(false);
+    isRecordModalVisible, openRecordModal, closeRecordModal, beginnerHeightAnim, beginnerPanResponder,
+    selectedDifficulty, setSelectedDifficulty, selectedType, setSelectedType, selectedResult, setSelectedResult, holdCount, setHoldCount, currentMaxHolds, handleSaveBeginnerRecord,
     
-    if (timerRef.current) clearInterval(timerRef.current);
-    setTimerRunning(false);
-
-    let elapsed = timerSeconds; 
-    const [m, s] = formatTime(elapsed).split(':');
-    setEnduranceMin(m);
-    setEnduranceSec(s);
-  };
-
-  const openTimerModal = () => { 
-    setTimerSeconds(0); 
-    setTimerRunning(false); 
-    setIsTimerActive(true); 
-  };
-  
-  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
+    isEnduranceModalVisible, openEnduranceModal, closeEnduranceModal, enduranceHeightAnim, endurancePanResponder,
+    enduranceLaps, setEnduranceLaps, selectedMapNode, setSelectedMapNode, enduranceMin, setEnduranceMin, enduranceSec, setEnduranceSec, effectiveSection,
+    mapElements, getBoxCoord, pathSegmentsData, handleSaveEnduranceRecord,
+    isTimerActive, setIsTimerActive, timerRunning, timerSeconds, showTimerFinishConfirm, setShowTimerFinishConfirm, toggleTimer, confirmStopTimer, stopTimerAndSave, openTimerModal,
+    
+    isConsecutiveModalVisible, openConsecutiveModal, closeConsecutiveModal, consecutiveHeightAnim, consecutivePanResponder,
+    selectedConsecutiveList, setSelectedConsecutiveList, removeConsecutiveItem, showDetails, setShowDetails, displayTotalScore, handleSaveConsecutiveRecord,
+  } = useRecode({ route, navigation });
 
   const renderMapNode = (item: any) => {
-    if (item.type === 'text')
-      return <Text key={item.id} style={[styles.mapAbsText, { left: item.x - 15, top: item.y - 8 }]}>{item.val}</Text>;
+    if (item.type === 'text') return <Text key={item.id} style={[styles.mapAbsText, { left: item.x - 15, top: item.y - 8 }]}>{item.val}</Text>;
     return (
       <TouchableOpacity key={item.id} onPress={() => setSelectedMapNode(item.id)}
         style={[styles.mapAbsBox, { backgroundColor: item.color, left: item.x - 10, top: item.y - 10 }]} />
     );
   };
 
-  // ─── 연속 완등 모달 ───
-  const [isConsecutiveModalVisible, setConsecutiveModalVisible] = useState(false);
-  const [selectedConsecutiveList, setSelectedConsecutiveList] = useState<any[]>([]);
-  const [showDetails, setShowDetails] = useState(false);
-
-  const openConsecutiveModal = () => {
-    requireMembership(() => {
-      setConsecutiveModalVisible(true);
-      consecutiveSnap.current = CONSECUTIVE_MODAL_HEIGHT;
-      consecutiveHeightAnim.setValue(0);
-      Animated.timing(consecutiveHeightAnim, { toValue: CONSECUTIVE_MODAL_HEIGHT, duration: 300, useNativeDriver: false }).start();
-    });
-  };
-
-  const closeConsecutiveModal = () => {
-    Animated.timing(consecutiveHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
-      setConsecutiveModalVisible(false);
-      setSelectedConsecutiveList([]);
-      setShowDetails(false);
-    });
-  };
-
-  const removeConsecutiveItem = (indexToRemove: number) =>
-    setSelectedConsecutiveList(prev => prev.filter((_, i) => i !== indexToRemove));
-
-  const totalConsecutiveScore = selectedConsecutiveList.reduce(
-    (acc: number, curr: any, index: number) => {
-      const baseScore = BASE_SCORES[curr.color] ?? 10;
-      const multiplier = 1.0 + (index * 0.1);
-      return acc + (baseScore * multiplier);
-    }, 0
-  );
-  
-  const displayTotalScore = Math.round(totalConsecutiveScore * 10) / 10;
-
-  const handleSaveConsecutiveRecord = async () => {
-    if (selectedConsecutiveList.length === 0) {
-      showResultModal('알림', '연속으로 완등한 난이도를 1개 이상 입력해주세요.', 'info');
-      return;
-    }
-    const payload = {
-      sequenceLog: selectedConsecutiveList.map(item => KR_TO_ENUM[item.color] ?? 'WHITE'),
-      recordDate:  getLocalDateStr(),
-    };
-
-    try {
-      await axios.post(SERIES_BASE_URL, payload);
-      await fetchSeriesRecords();
-      closeConsecutiveModal();
-      
-      setTimeout(() => {
-        showResultModal('성공', '연속 완등 기록이 저장되었습니다.', 'success');
-      }, 500);
-
-    } catch (error: any) {
-      closeConsecutiveModal();
-      setTimeout(() => {
-        const errorMessage = error.response?.data?.message || '연속 완등 기록 저장에 실패했습니다.';
-        showResultModal('오류', errorMessage, 'error');
-      }, 500);
-    }
-  };
-
-  // ─────────────────────────── 렌더 ───────────────────────────
   return (
     <View style={styles.background}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#A1BE44"
-            colors={['#A1BE44']}
-          />
-        }
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" colors={['#A1BE44']} />}
       >
-
         {/* 요약 카드 영역 */}
         <View style={styles.summaryContainer}>
           <TouchableOpacity style={styles.summaryItemVertical} onPress={openRecordModal} activeOpacity={0.8}>
@@ -859,51 +89,35 @@ const RecodeScreen = ({
                   <View style={styles.colorAndTypeColumn}>
                     <Text style={[styles.colorNameText, { color: item.hex }]}>{item.color}</Text>
                     <View style={item.type === '왕복' ? styles.typeBadgeRoundTrip : styles.typeBadgeOneWay}>
-                      <Text style={item.type === '왕복' ? styles.typeTextRoundTrip : styles.typeTextOneWay}>
-                        {item.type || '미기록'}
-                      </Text>
+                      <Text style={item.type === '왕복' ? styles.typeTextRoundTrip : styles.typeTextOneWay}>{item.type || '미기록'}</Text>
                     </View>
                   </View>
-                  <Text style={styles.recordHoldsLeft}>
-                    {item.current ?? 0} / {MAX_HOLDS[item.color] ?? item.total}번
-                  </Text>
-                  <Text style={[styles.recordStatus, item.status === '완료' ? styles.statusSuccess : styles.statusIng]}>
-                    {item.status || '-'}
-                  </Text>
+                  <Text style={styles.recordHoldsLeft}>{item.current ?? 0} / {MAX_HOLDS[item.color] ?? item.total}번</Text>
+                  <Text style={[styles.recordStatus, item.status === '완료' ? styles.statusSuccess : styles.statusIng]}>{item.status || '-'}</Text>
                 </View>
               ))}
             </View>
           )}
         </View>
 
-        {/* 🌟 초보벽 최근 기록 (시간순) 아코디언 */}
+        {/* 오늘의 초보벽 기록 아코디언 */}
         <View style={styles.simpleAccordionWrapper}>
           <TouchableOpacity style={styles.simpleAccordionHeader} onPress={() => toggleSection('beginnerHistory')} activeOpacity={0.8}>
-            <Text style={styles.simpleAccordionTitle}>초보벽 최근 기록</Text>
+            <Text style={styles.simpleAccordionTitle}>오늘의 초보벽 기록</Text>
             <Text style={styles.chevronIcon}>{expandedSection === 'beginnerHistory' ? '∨' : '＞'}</Text>
           </TouchableOpacity>
           {expandedSection === 'beginnerHistory' && (
             <View style={styles.outerContainer}>
               {beginnerHistoryData.length === 0 ? (
-                <View style={styles.recordItemCard}>
-                  <Text style={styles.emptyText}>최근 등록된 초보벽 기록이 없습니다.</Text>
-                </View>
+                <View style={styles.recordItemCard}><Text style={styles.emptyText}>오늘 등록된 기록이 없습니다.</Text></View>
               ) : (
                 beginnerHistoryData.map((item: any, index: number) => (
                   <View key={item.id} style={styles.rowCardWithTrash}>
-                    {/* 순번 표시 추가 */}
                     <Text style={styles.recordIdLarge}>{index + 1}</Text>
-                    
                     <View style={styles.enduranceCol}>
-                      {/* 글씨를 가운데 정렬하고, 배지도 중앙 아래로 위치 조정 */}
                       <Text style={[styles.colorNameText, { color: item.hex, textAlign: 'center', marginBottom: 4 }]}>{item.color}</Text>
-                      <View style={[
-                        item.type === '왕복' ? styles.typeBadgeRoundTrip : styles.typeBadgeOneWay,
-                        { alignSelf: 'center' } 
-                      ]}>
-                        <Text style={item.type === '왕복' ? styles.typeTextRoundTrip : styles.typeTextOneWay}>
-                          {item.type}
-                        </Text>
+                      <View style={[item.type === '왕복' ? styles.typeBadgeRoundTrip : styles.typeBadgeOneWay, { alignSelf: 'center' }]}>
+                        <Text style={item.type === '왕복' ? styles.typeTextRoundTrip : styles.typeTextOneWay}>{item.type}</Text>
                       </View>
                     </View>
                     <View style={styles.verticalDivider} />
@@ -914,9 +128,7 @@ const RecodeScreen = ({
                     <View style={styles.verticalDivider} />
                     <View style={styles.enduranceCol}>
                       <Text style={[styles.enduranceBottomText, { marginBottom: 4 }]}>결과</Text>
-                      <Text style={[styles.enduranceTopText, { marginBottom: 0 }, item.status === '완등' ? styles.statusSuccess : styles.statusIng]}>
-                        {item.status}
-                      </Text>
+                      <Text style={[styles.enduranceTopText, { marginBottom: 0 }, item.status === '완등' ? styles.statusSuccess : styles.statusIng]}>{item.status}</Text>
                     </View>
                     <TouchableOpacity style={styles.trashButton} onPress={() => confirmDelete('difficulty', item.id)}>
                       <Image source={require('../assets/trash.png')} style={styles.trashIcon} />
@@ -937,31 +149,17 @@ const RecodeScreen = ({
           {expandedSection === 'endurance' && (
             <View style={styles.outerContainer}>
               {enduranceData.length === 0 ? (
-                <View style={styles.recordItemCard}>
-                  <Text style={styles.emptyText}>오늘의 지구력 기록이 없습니다.</Text>
-                </View>
+                <View style={styles.recordItemCard}><Text style={styles.emptyText}>오늘 등록된 지구력 기록이 없습니다.</Text></View>
               ) : (
                 enduranceData.map((item: any) => (
                   <View key={item.id} style={styles.rowCardWithTrash}>
-                    <View style={styles.enduranceCol}>
-                      <Text style={styles.enduranceTopText}>{item.type}</Text>
-                      <Text style={styles.enduranceBottomText}>{item.arrow}</Text>
-                    </View>
+                    <View style={styles.enduranceCol}><Text style={styles.enduranceTopText}>{item.type}</Text><Text style={styles.enduranceBottomText}>{item.arrow}</Text></View>
                     <View style={styles.verticalDivider} />
-                    <View style={styles.enduranceCol}>
-                      <Text style={styles.enduranceTopText}>{item.laps}</Text>
-                      <Text style={styles.enduranceBottomText}>바퀴</Text>
-                    </View>
+                    <View style={styles.enduranceCol}><Text style={styles.enduranceTopText}>{item.laps}</Text><Text style={styles.enduranceBottomText}>회</Text></View>
                     <View style={styles.verticalDivider} />
-                    <View style={styles.enduranceCol}>
-                      <Text style={styles.enduranceTopText}>{item.time}</Text>
-                      <Text style={styles.enduranceBottomText}>시간</Text>
-                    </View>
+                    <View style={styles.enduranceCol}><Text style={styles.enduranceTopText}>{item.time}</Text><Text style={styles.enduranceBottomText}>시간</Text></View>
                     <View style={styles.verticalDivider} />
-                    <View style={styles.enduranceCol}>
-                      <Text style={styles.enduranceTopText}>{item.section}</Text>
-                      <Text style={styles.enduranceBottomText}>구간</Text>
-                    </View>
+                    <View style={styles.enduranceCol}><Text style={styles.enduranceTopText}>{item.section}</Text><Text style={styles.enduranceBottomText}>구간</Text></View>
                     <TouchableOpacity style={styles.trashButton} onPress={() => confirmDelete('endurance', item.id)}>
                       <Image source={require('../assets/trash.png')} style={styles.trashIcon} />
                     </TouchableOpacity>
@@ -981,16 +179,12 @@ const RecodeScreen = ({
           {expandedSection === 'consecutive' && (
             <View style={styles.outerContainer}>
               {consecutiveData.length === 0 ? (
-                <View style={styles.recordItemCard}>
-                  <Text style={styles.emptyText}>오늘의 초보벽 연속 기록이 없습니다.</Text>
-                </View>
+                <View style={styles.recordItemCard}><Text style={styles.emptyText}>오늘 등록된 연속 기록이 없습니다.</Text></View>
               ) : (
                 consecutiveData.map((item: any, index: number) => (
                   <View key={item.id ?? index} style={styles.rowCardWithTrash}>
                     <View style={styles.circleContainer}>
-                      {item.colors?.map((color: string, idx: number) => (
-                        <View key={idx} style={[styles.colorCircle, { backgroundColor: color }]} />
-                      ))}
+                      {item.colors?.map((color: string, idx: number) => <View key={idx} style={[styles.colorCircle, { backgroundColor: color }]} />)}
                     </View>
                     <TouchableOpacity style={styles.trashButton} onPress={() => confirmDelete('consecutive', item.id)}>
                       <Image source={require('../assets/trash.png')} style={styles.trashIcon} />
@@ -1004,13 +198,10 @@ const RecodeScreen = ({
 
       </ScrollView>
 
-      {/* ─── 초보벽 기록 모달 (위로 확장 방지 + 드래그 지원) ─── */}
+      {/* 초보벽 기록 모달 */}
       <Modal visible={isRecordModalVisible} animationType="fade" transparent onRequestClose={closeRecordModal}>
         <View style={styles.modalOverlay}>
-          <TouchableWithoutFeedback onPress={closeRecordModal}>
-            <View style={StyleSheet.absoluteFill} />
-          </TouchableWithoutFeedback>
-
+          <TouchableWithoutFeedback onPress={closeRecordModal}><View style={StyleSheet.absoluteFill} /></TouchableWithoutFeedback>
           <Animated.View style={[styles.bottomSheet, { height: beginnerHeightAnim }]}>
             <View {...beginnerPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
               <View style={styles.dragHandle} />
@@ -1023,7 +214,6 @@ const RecodeScreen = ({
             </View>
             <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%' }}>
               <TouchableOpacity activeOpacity={1} style={{ width: '100%', paddingBottom: 20 }}>
-                
                 <Text style={styles.sectionTitle}>난이도 선택</Text>
                 <View style={styles.colorButtonContainer}>
                   <View style={styles.colorButtonRow}>
@@ -1031,21 +221,8 @@ const RecodeScreen = ({
                       const isSelected = selectedDifficulty === item.color;
                       return (
                         <TouchableOpacity key={item.color} onPress={() => setSelectedDifficulty(item.color)}
-                          style={[
-                            styles.diffButton, 
-                            { borderColor: item.hex }, 
-                            isSelected && { backgroundColor: item.hex, borderWidth: 2 } 
-                          ]}>
-                          <Text style={[
-                            styles.diffButtonText, 
-                            isSelected && { 
-                              fontWeight: 'bold', 
-                              color: '#ffffff', 
-                              textShadowColor: 'rgba(0, 0, 0, 0.7)', 
-                              textShadowOffset: { width: 0, height: 1 }, 
-                              textShadowRadius: 2 
-                            }
-                          ]}>
+                          style={[styles.diffButton, { borderColor: item.hex }, isSelected && { backgroundColor: item.hex, borderWidth: 2 }]}>
+                          <Text style={[styles.diffButtonText, isSelected && { fontWeight: 'bold', color: '#ffffff', textShadowColor: 'rgba(0,0,0,0.7)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }]}>
                             {item.color}
                           </Text>
                         </TouchableOpacity>
@@ -1057,8 +234,7 @@ const RecodeScreen = ({
                 <Text style={styles.sectionTitle}>등반 유형</Text>
                 <View style={styles.choiceRow}>
                   {['편도', '왕복'].map(type => (
-                    <TouchableOpacity key={type} onPress={() => setSelectedType(type)}
-                      style={[styles.choiceButton, { borderColor: selectedType === type ? '#A1BE44' : '#555555' }]}>
+                    <TouchableOpacity key={type} onPress={() => setSelectedType(type)} style={[styles.choiceButton, { borderColor: selectedType === type ? '#A1BE44' : '#555555' }]}>
                       <Text style={styles.choiceButtonText}>{type}</Text>
                     </TouchableOpacity>
                   ))}
@@ -1066,40 +242,30 @@ const RecodeScreen = ({
 
                 <Text style={styles.sectionTitle}>결과</Text>
                 <View style={styles.choiceRow}>
-                  <TouchableOpacity onPress={() => setSelectedResult('완등')}
-                    style={[styles.choiceButton, { borderColor: selectedResult === '완등' ? '#A1BE44' : '#555555' }]}>
+                  <TouchableOpacity onPress={() => setSelectedResult('완등')} style={[styles.choiceButton, { borderColor: selectedResult === '완등' ? '#A1BE44' : '#555555' }]}>
                     <Text style={styles.choiceButtonText}>완등</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => setSelectedResult('실패')}
-                    style={[styles.choiceButton, { borderColor: selectedResult === '실패' ? '#FF4D4D' : '#555555' }]}>
+                  <TouchableOpacity onPress={() => setSelectedResult('실패')} style={[styles.choiceButton, { borderColor: selectedResult === '실패' ? '#FF4D4D' : '#555555' }]}>
                     <Text style={styles.choiceButtonText}>실패</Text>
                   </TouchableOpacity>
                 </View>
 
                 {selectedResult === '완등' && (
-                  <TouchableOpacity style={styles.saveRecordButton} onPress={handleSaveBeginnerRecord}>
-                    <Text style={styles.saveRecordButtonText}>기록 저장하기</Text>
-                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.saveRecordButton} onPress={handleSaveBeginnerRecord}><Text style={styles.saveRecordButtonText}>기록 저장하기</Text></TouchableOpacity>
                 )}
 
                 {selectedResult === '실패' && (
                   <View style={styles.failContainer}>
                     <Text style={styles.failLabel}>진행한 홀드 수를 입력하세요</Text>
                     <View style={styles.counterRow}>
-                      <TouchableOpacity onPress={() => setHoldCount(Math.max(0, holdCount - 1))} style={styles.counterBtn}>
-                        <Text style={styles.counterBtnText}>-</Text>
-                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => setHoldCount(Math.max(0, holdCount - 1))} style={styles.counterBtn}><Text style={styles.counterBtnText}>-</Text></TouchableOpacity>
                       <View style={styles.inputWrapper}>
                         <Text style={styles.holdInput}>{holdCount}</Text>
                         <Text style={styles.holdMaxText}>/ {currentMaxHolds}</Text>
                       </View>
-                      <TouchableOpacity onPress={() => setHoldCount(Math.min(currentMaxHolds, holdCount + 1))} style={styles.counterBtn}>
-                        <Text style={styles.counterBtnText}>+</Text>
-                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => setHoldCount(Math.min(currentMaxHolds, holdCount + 1))} style={styles.counterBtn}><Text style={styles.counterBtnText}>+</Text></TouchableOpacity>
                     </View>
-                    <TouchableOpacity style={styles.saveRecordButton} onPress={handleSaveBeginnerRecord}>
-                      <Text style={styles.saveRecordButtonText}>기록 저장하기</Text>
-                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.saveRecordButton} onPress={handleSaveBeginnerRecord}><Text style={styles.saveRecordButtonText}>기록 저장하기</Text></TouchableOpacity>
                   </View>
                 )}
               </TouchableOpacity>
@@ -1108,21 +274,15 @@ const RecodeScreen = ({
         </View>
       </Modal>
 
-      {/* ─── 지구력 스톱워치 / 모달 ─── */}
+      {/* 지구력 스톱워치 / 모달 */}
       <Modal visible={isEnduranceModalVisible} animationType="fade" transparent onRequestClose={closeEnduranceModal}>
         {isTimerActive ? (
           <SafeAreaView style={styles.timerModalBackground}>
             <View style={styles.timerHeader}>
               <Text style={styles.timerHeaderTitle}>지구력 측정</Text>
-              <TouchableOpacity onPress={() => { if (timerRef.current) clearInterval(timerRef.current); setTimerRunning(false); setIsTimerActive(false); }}>
-                <Text style={styles.closeBtn}>✕</Text>
-              </TouchableOpacity>
+              <TouchableOpacity onPress={() => { toggleTimer(); setIsTimerActive(false); }}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity>
             </View>
-
-            <View style={styles.timerCenterArea}>
-              <Text style={styles.hugeTimerText}>{formatTime(timerSeconds)}</Text>
-            </View>
-
+            <View style={styles.timerCenterArea}><Text style={styles.hugeTimerText}>{formatTime(timerSeconds)}</Text></View>
             <View style={styles.timerControlRow}>
               <TouchableOpacity style={[styles.timerCircleBtn, { backgroundColor: timerRunning ? '#FFB74D' : '#A1BE44' }]} onPress={toggleTimer}>
                 <Text style={styles.timerCircleBtnText}>{timerRunning ? '일시정지' : '시작'}</Text>
@@ -1131,27 +291,15 @@ const RecodeScreen = ({
                 <Text style={styles.timerCircleBtnText}>완료</Text>
               </TouchableOpacity>
             </View>
-
             {showTimerFinishConfirm && (
-              <View style={{
-                position: 'absolute',
-                top: 0, left: 0, right: 0, bottom: 0,
-                backgroundColor: 'rgba(0,0,0,0.85)',
-                justifyContent: 'center',
-                alignItems: 'center',
-                zIndex: 999
-              }}>
+              <View style={styles.confirmTimerOverlay}>
+                {/* 💡 타이머 완료 확인 모달 - OLLA 표준 적용 */}
                 <View style={styles.deleteModalBox}>
-                  <Text style={styles.deleteModalText}>
-                    {formatTime(timerSeconds)} 기록으로 저장됩니다
-                  </Text>
+                  <Text style={[styles.deleteModalText, { color: '#A1BE44' }]}>기록 확인</Text>
+                  <Text style={styles.deleteModalMessage}>{formatTime(timerSeconds)} 기록으로 저장됩니다.</Text>
                   <View style={styles.deleteBtnRow}>
-                    <TouchableOpacity style={styles.deleteBtnYes} onPress={stopTimerAndSave}>
-                      <Text style={styles.deleteBtnYesText}>저장</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.deleteBtnNo} onPress={() => setShowTimerFinishConfirm(false)}>
-                      <Text style={styles.deleteBtnNoText}>취소</Text>
-                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.deleteBtnYes} onPress={stopTimerAndSave}><Text style={styles.deleteBtnYesText}>저장</Text></TouchableOpacity>
+                    <TouchableOpacity style={styles.deleteBtnNo} onPress={() => setShowTimerFinishConfirm(false)}><Text style={styles.deleteBtnNoText}>취소</Text></TouchableOpacity>
                   </View>
                 </View>
               </View>
@@ -1159,33 +307,22 @@ const RecodeScreen = ({
           </SafeAreaView>
         ) : (
           <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback onPress={closeEnduranceModal}>
-              <View style={StyleSheet.absoluteFill} />
-            </TouchableWithoutFeedback>
-            
+            <TouchableWithoutFeedback onPress={closeEnduranceModal}><View style={StyleSheet.absoluteFill} /></TouchableWithoutFeedback>
             <Animated.View style={[styles.bottomSheet, { height: enduranceHeightAnim }]}>
               <View {...endurancePanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
                 <View style={styles.dragHandle} />
                 <View style={styles.sheetHeader}>
                   <Text style={styles.sheetTitle}>지구력 기록 저장</Text>
-                  <TouchableOpacity onPress={closeEnduranceModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                    <Text style={styles.closeBtn}>✕</Text>
-                  </TouchableOpacity>
+                  <TouchableOpacity onPress={closeEnduranceModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity>
                 </View>
               </View>
               <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%' }}>
                 <TouchableOpacity activeOpacity={1} style={{ width: '100%', paddingBottom: 20 }}>
                   <Text style={styles.sectionTitle}>편도 횟수</Text>
                   <View style={styles.enduranceCounterRow}>
-                    <TouchableOpacity onPress={() => setEnduranceLaps(Math.max(0, enduranceLaps - 1))} style={styles.counterBtn}>
-                      <Text style={styles.counterBtnText}>-</Text>
-                    </TouchableOpacity>
-                    <View style={styles.inputWrapperSmall}>
-                      <Text style={styles.lapsInputText}>{enduranceLaps}</Text>
-                    </View>
-                    <TouchableOpacity onPress={() => setEnduranceLaps(enduranceLaps + 1)} style={styles.counterBtn}>
-                      <Text style={styles.counterBtnText}>+</Text>
-                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setEnduranceLaps(Math.max(0, enduranceLaps - 1))} style={styles.counterBtn}><Text style={styles.counterBtnText}>-</Text></TouchableOpacity>
+                    <View style={styles.inputWrapperSmall}><Text style={styles.lapsInputText}>{enduranceLaps}</Text></View>
+                    <TouchableOpacity onPress={() => setEnduranceLaps(enduranceLaps + 1)} style={styles.counterBtn}><Text style={styles.counterBtnText}>+</Text></TouchableOpacity>
                   </View>
 
                   <Text style={styles.sectionTitle}>지도에서 선택</Text>
@@ -1194,13 +331,13 @@ const RecodeScreen = ({
                       <View style={styles.mapInnerWrapper}>
                         <View style={{ width: 350, height: 235 }}>
                           {mapElements.map(renderMapNode)}
-                          {pathSegments}
+                          
+                          {pathSegmentsData.map((seg: any) => (
+                            <View key={seg.key} style={{ position: 'absolute', left: seg.left, top: seg.top, width: seg.width, height: 4, backgroundColor: seg.color, transform: [{ rotate: `${seg.angle}deg` }], zIndex: seg.zIndex, borderRadius: 2 }} />
+                          ))}
+
                           {selectedMapNode && (
-                            <View style={[styles.headMarker, {
-                              backgroundColor: rainbowColors[enduranceLaps % 7],
-                              left: getBoxCoord(selectedMapNode).x - 10,
-                              top:  getBoxCoord(selectedMapNode).y - 10,
-                            }]} />
+                            <View style={[styles.headMarker, { backgroundColor: rainbowColors[enduranceLaps % 7], left: getBoxCoord(selectedMapNode).x - 10, top: getBoxCoord(selectedMapNode).y - 10 }]} />
                           )}
                         </View>
                       </View>
@@ -1209,44 +346,21 @@ const RecodeScreen = ({
 
                   <Text style={styles.sectionTitle}>선택한 구간 (자동계산)</Text>
                   <View style={styles.selectedSectionBox}>
-                    <Text style={styles.selectedSectionText}>
-                      {effectiveSection ? `${effectiveSection} 구간` : '지도에서 컬러 블록을 선택해주세요'}
-                    </Text>
+                    <Text style={styles.selectedSectionText}>{effectiveSection ? `${effectiveSection} 구간` : '지도에서 컬러 블록을 선택해주세요'}</Text>
                   </View>
 
                   <Text style={styles.sectionTitle}>시간 기록 (수동 기입 가능 / 타이머 연동)</Text>
                   <View style={styles.timerInputRow}>
-                    <TouchableOpacity onPress={openTimerModal} style={styles.timerPlayBtn}>
-                      <Text style={styles.timerPlayIcon}>▶</Text>
-                    </TouchableOpacity>
+                    <TouchableOpacity onPress={openTimerModal} style={styles.timerPlayBtn}><Text style={styles.timerPlayIcon}>▶</Text></TouchableOpacity>
                     <View style={styles.timerDisplayWrapper}>
-                      {/* 수동 기입 가능하도록 TextInput으로 교체 */}
-                      <TextInput
-                        style={[styles.timerDisplayText, { padding: 0 }]}
-                        value={enduranceMin}
-                        onChangeText={setEnduranceMin}
-                        keyboardType="number-pad"
-                        maxLength={3}
-                        placeholder="00"
-                        placeholderTextColor="#555"
-                      />
+                      <TextInput style={[styles.timerDisplayText, { padding: 0 }]} value={enduranceMin} onChangeText={setEnduranceMin} keyboardType="number-pad" maxLength={3} placeholder="00" placeholderTextColor="#555" />
                       <Text style={styles.timerLabel}>분</Text>
-                      <TextInput
-                        style={[styles.timerDisplayText, { padding: 0 }]}
-                        value={enduranceSec}
-                        onChangeText={setEnduranceSec}
-                        keyboardType="number-pad"
-                        maxLength={2}
-                        placeholder="00"
-                        placeholderTextColor="#555"
-                      />
+                      <TextInput style={[styles.timerDisplayText, { padding: 0 }]} value={enduranceSec} onChangeText={setEnduranceSec} keyboardType="number-pad" maxLength={2} placeholder="00" placeholderTextColor="#555" />
                       <Text style={styles.timerLabel}>초</Text>
                     </View>
                   </View>
 
-                  <TouchableOpacity style={styles.saveRecordButton} onPress={handleSaveEnduranceRecord}>
-                    <Text style={styles.saveRecordButtonText}>기록 저장하기</Text>
-                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.saveRecordButton} onPress={handleSaveEnduranceRecord}><Text style={styles.saveRecordButtonText}>기록 저장하기</Text></TouchableOpacity>
                 </TouchableOpacity>
               </ScrollView>
             </Animated.View>
@@ -1254,21 +368,16 @@ const RecodeScreen = ({
         )}
       </Modal>
 
-      {/* ─── 연속 완등 모달 (위로 확장 방지 + 드래그 지원) ─── */}
+      {/* 연속 완등 모달 */}
       <Modal visible={isConsecutiveModalVisible} animationType="fade" transparent onRequestClose={closeConsecutiveModal}>
         <View style={styles.modalOverlay}>
-          <TouchableWithoutFeedback onPress={closeConsecutiveModal}>
-            <View style={StyleSheet.absoluteFill} />
-          </TouchableWithoutFeedback>
-
+          <TouchableWithoutFeedback onPress={closeConsecutiveModal}><View style={StyleSheet.absoluteFill} /></TouchableWithoutFeedback>
           <Animated.View style={[styles.bottomSheet, { height: consecutiveHeightAnim }]}>
             <View {...consecutivePanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
               <View style={styles.dragHandle} />
               <View style={styles.sheetHeader}>
                 <Text style={styles.sheetTitle}>연속 기록 저장</Text>
-                <TouchableOpacity onPress={closeConsecutiveModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                  <Text style={styles.closeBtn}>✕</Text>
-                </TouchableOpacity>
+                <TouchableOpacity onPress={closeConsecutiveModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity>
               </View>
             </View>
             <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%' }}>
@@ -1276,22 +385,17 @@ const RecodeScreen = ({
                 <Text style={styles.sectionTitle}>난이도 입력</Text>
                 <View style={styles.consecutiveInputBox}>
                   {selectedConsecutiveList.map((item: any, index: number) => (
-                    <TouchableOpacity key={index} onPress={() => removeConsecutiveItem(index)}
-                      style={[styles.filledDiffBox, { backgroundColor: item.hex }]}>
+                    <TouchableOpacity key={index} onPress={() => removeConsecutiveItem(index)} style={[styles.filledDiffBox, { backgroundColor: item.hex }]}>
                       <Text style={styles.filledDiffText}>{item.color}</Text>
                     </TouchableOpacity>
                   ))}
-                  {selectedConsecutiveList.length === 0 && (
-                    <Text style={styles.consecutiveEmptyText}>아래에서 난이도를 순서대로 탭해주세요.{"\n"}입력창의 난이도를 터치시 삭제됩니다.</Text>
-                  )}
+                  {selectedConsecutiveList.length === 0 && <Text style={styles.consecutiveEmptyText}>아래에서 난이도를 순서대로 탭해주세요.{"\n"}입력창의 난이도를 터치시 삭제됩니다.</Text>}
                 </View>
 
                 <View style={styles.colorButtonContainer}>
                   <View style={styles.colorButtonRow}>
                     {difficultyData.map((item: any) => (
-                      <TouchableOpacity key={item.color}
-                        onPress={() => setSelectedConsecutiveList([...selectedConsecutiveList, item])}
-                        style={[styles.diffButton, { borderColor: item.hex }]}>
+                      <TouchableOpacity key={item.color} onPress={() => setSelectedConsecutiveList([...selectedConsecutiveList, item])} style={[styles.diffButton, { borderColor: item.hex }]}>
                         <Text style={styles.diffButtonText}>{item.color}</Text>
                       </TouchableOpacity>
                     ))}
@@ -1310,57 +414,45 @@ const RecodeScreen = ({
                 {showDetails && (
                   <View style={[styles.consecutiveInputBox, { marginTop: 15 }]}>
                     {selectedConsecutiveList.map((item: any, index: number) => {
-                      const baseScore = BASE_SCORES[item.color] ?? 10;
-                      const multiplier = 1.0 + (index * 0.1);
-                      const stepScore = Math.round((baseScore * multiplier) * 10) / 10;
+                      const stepScore = Math.round((BASE_SCORES[item.color] ?? 10) * (1.0 + (index * 0.1)) * 10) / 10;
                       return (
-                        <View key={index} style={[styles.filledDiffBox, { backgroundColor: item.hex }]}>
-                          <Text style={styles.filledDiffText}>{stepScore}</Text>
-                        </View>
+                        <View key={index} style={[styles.filledDiffBox, { backgroundColor: item.hex }]}><Text style={styles.filledDiffText}>{stepScore}</Text></View>
                       );
                     })}
-                    {selectedConsecutiveList.length === 0 && (
-                      <Text style={styles.consecutiveEmptyText}>입력된 기록이 없습니다</Text>
-                    )}
+                    {selectedConsecutiveList.length === 0 && <Text style={styles.consecutiveEmptyText}>입력된 기록이 없습니다</Text>}
                   </View>
                 )}
 
-                <TouchableOpacity style={styles.saveRecordButton} onPress={handleSaveConsecutiveRecord}>
-                  <Text style={styles.saveRecordButtonText}>기록 저장하기</Text>
-                </TouchableOpacity>
+                <TouchableOpacity style={styles.saveRecordButton} onPress={handleSaveConsecutiveRecord}><Text style={styles.saveRecordButtonText}>기록 저장하기</Text></TouchableOpacity>
               </TouchableOpacity>
             </ScrollView>
           </Animated.View>
         </View>
       </Modal>
 
-      {/* ─── 커스텀 알림 모달 ─── */}
-      <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
+      {/* ─── 💡 결과 & 삭제 확인 모달 (OLLA 표준 규격 적용) ─── */}
+      <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={closeResultModal}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
             <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>
               {resultModalConfig.title}
             </Text>
             <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
-            <TouchableOpacity style={styles.resultModalBtn} onPress={() => setResultModalVisible(false)}>
+            <TouchableOpacity style={styles.resultModalBtn} onPress={closeResultModal}>
               <Text style={styles.resultModalBtnText}>확인</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* ─── 삭제 확인 모달 ─── */}
       <Modal visible={isDeleteModalVisible} animationType="fade" transparent onRequestClose={cancelDelete}>
         <View style={styles.deleteModalOverlay}>
           <View style={styles.deleteModalBox}>
-            <Text style={styles.deleteModalText}>삭제하시겠습니까?</Text>
+            <Text style={[styles.deleteModalText, { color: '#FF4D4D' }]}>기록 삭제!</Text>
+            <Text style={styles.deleteModalMessage}>해당 기록을 정말 삭제하시겠습니까?</Text>
             <View style={styles.deleteBtnRow}>
-              <TouchableOpacity style={styles.deleteBtnYes} onPress={executeDelete}>
-                <Text style={styles.deleteBtnYesText}>예</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.deleteBtnNo} onPress={cancelDelete}>
-                <Text style={styles.deleteBtnNoText}>아니오</Text>
-              </TouchableOpacity>
+              <TouchableOpacity style={styles.deleteBtnYes} onPress={executeDelete}><Text style={styles.deleteBtnYesText}>삭제</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.deleteBtnNo} onPress={cancelDelete}><Text style={styles.deleteBtnNoText}>취소</Text></TouchableOpacity>
             </View>
           </View>
         </View>
@@ -1411,7 +503,7 @@ const styles = StyleSheet.create({
   circleContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingLeft: 10, flexWrap: 'wrap' },
   colorCircle: { width: 30, height: 30, borderRadius: 15, marginRight: 10, marginBottom: 5 },
   trashButton: { padding: 10, marginLeft: 5 },
-  trashIcon: { width: 24, height: 24, tintColor: '#A1BE44', resizeMode: 'contain' }, 
+  trashIcon: { width: 24, height: 24, tintColor: '#FF4D4D', resizeMode: 'contain' }, 
   emptyText: { color: '#999999', fontSize: 16, textAlign: 'center', width: '100%' }, 
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)', justifyContent: 'flex-end' },
@@ -1482,21 +574,64 @@ const styles = StyleSheet.create({
   detailButtonText: { color: '#999999', fontSize: 15, fontWeight: '600' }, 
   totalScoreText: { color: '#A1BE44', fontSize: 40, fontWeight: 'bold', marginBottom: 10 }, 
 
+  confirmTimerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', zIndex: 999 },
+
+  // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
+  // 1. 공통 시스템 결과 알림 모달
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, 
-  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, 
-  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  resultModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
+    alignItems: 'center' 
+  },
+  resultModalTitle: { 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    marginBottom: 8 
+  }, 
+  resultModalMessage: { 
+    color: '#ffffff', 
+    fontSize: 18, 
+    fontWeight: 'bold',
+    marginBottom: 25, 
+    textAlign: 'center', 
+    lineHeight: 24 
+  }, 
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
 
+  // 2. 삭제/완료 투 버튼 확인 모달 (deleteModalBox 공유)
   deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  deleteModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
-  deleteModalText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center' }, 
+  deleteModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
+    alignItems: 'center' 
+  },
+  deleteModalText: { 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    marginBottom: 8 
+  }, 
+  deleteModalMessage: { 
+    color: '#ffffff', 
+    fontSize: 18, 
+    fontWeight: 'bold',
+    marginBottom: 25, 
+    textAlign: 'center', 
+    lineHeight: 24 
+  }, 
   deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  deleteBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
-  deleteBtnYesText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
-  deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
+  deleteBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 },
+  deleteBtnYesText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
+  deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 },
   deleteBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
+  // ───────────────────────────────────────────────────────────────────────────────────────────
 });
 
 export default RecodeScreen;

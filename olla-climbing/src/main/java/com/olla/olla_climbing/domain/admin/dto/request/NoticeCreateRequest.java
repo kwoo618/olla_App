@@ -15,10 +15,6 @@ public class NoticeCreateRequest {
 
     private String imageUrl;
 
-    // 필드 위에 @JsonProperty를 달아서 JSON 매핑 이름을 강제 고정해 줍니다!
     @JsonProperty("isImportant")
     private boolean isImportant;
-
-    @JsonProperty("isTopFixed")
-    private boolean isTopFixed;
 }

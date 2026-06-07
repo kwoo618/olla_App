@@ -1,5 +1,6 @@
 package com.olla.olla_climbing.domain.member.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.olla.olla_climbing.domain.member.entity.MemberNotification;
 import lombok.Builder;
 import lombok.Getter;
@@ -13,7 +14,10 @@ public class MemberNotificationResponse {
     private Long id;
     private String title;
     private String content;
+
+    @JsonProperty("isRead")
     private boolean isRead;
+
     private LocalDateTime createdAt;
 
     public static MemberNotificationResponse from(MemberNotification notification) {

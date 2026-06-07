@@ -109,6 +109,10 @@ bin/
 **/.xcode.env.local
 **/vendor/bundle/
 
+#ios API key 포함 정보 
+ios/olla_react/GoogleService-Info.plist
+ios/olla_react/olla_react.entitlements
+
 # Fastlane (배포 자동화 로그)
 **/fastlane/report.xml
 **/fastlane/Preview.html
@@ -130,3 +134,8 @@ bin/
 **/.DS_Store
 Thumbs.db
 **/Thumbs.db
+
+# Android 빌드 결과물
+olla_frontend/android/build/
+olla_frontend/android/app/build/
+olla_frontend/android/.gradle/

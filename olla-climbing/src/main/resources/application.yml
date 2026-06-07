@@ -3,6 +3,10 @@
 spring:
   application:
     name: olla-climbing
+  servlet: # 이미지 크기 제한 
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
   profiles:
     group:
       local:
@@ -11,3 +15,5 @@ spring:
       prod:
         - prod
         - secret
+
+      

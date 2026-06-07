@@ -148,7 +148,7 @@ public class AuthService {
 
         String accessToken = jwtTokenProvider.createAccessToken(member.getLoginId(), member.getRole().name());
         String refreshToken = jwtTokenProvider.createRefreshToken(member.getLoginId());
-        // [수정] member.updateRefreshToken() 제거 - RefreshTokenRepository로 단일 관리
+        // member.updateRefreshToken() 제거 - RefreshTokenRepository로 단일 관리
 
         refreshTokenRepository.findByLoginId(member.getLoginId())
                 .ifPresentOrElse(
@@ -168,7 +168,12 @@ public class AuthService {
     @Transactional
     public void logout(LogoutRequest request) {
         refreshTokenRepository.findByToken(request.getRefreshToken())
-                .ifPresent(refreshTokenRepository::delete);
+                .ifPresent(token -> {
+                    // 로그아웃 시 FCM 토큰 초기화 → 로그아웃 후 알림 수신 방지
+                    memberRepository.findByLoginId(token.getLoginId())
+                            .ifPresent(member -> member.updateFcmToken(null));
+                    refreshTokenRepository.delete(token);
+                });
     }
 
     // ── 아이디/비밀번호 찾기 ──────────────────────────────────────

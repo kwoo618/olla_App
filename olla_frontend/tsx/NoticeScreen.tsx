@@ -1,79 +1,25 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Modal, Image, RefreshControl } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
-import { API_BASE_URL } from '../src/constants/Config';
-
-interface Notice {
-  id: number;
-  important: boolean;
-  title: string;
-  content: string;
-  imageUrl?: string;
-  createdAt: string;
-}
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Modal, Image, RefreshControl, Dimensions } from 'react-native';
+import { useNotice, getFullImageUrl } from '../ts/Notice';
+import FastImage from 'react-native-fast-image';
 
 const NoticeScreen = ({ navigation }: any) => {
-  const [refreshing, setRefreshing] = useState(false);
-
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [notices, setNotices] = useState<Notice[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const [resultModalVisible, setResultModalVisible] = useState(false);
-  const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info', onConfirm: () => {} });
-
-  const showResultModal = (title: string, message: string, type: 'info' | 'success' | 'error' = 'info', onConfirm: () => void = () => {}) => {
-    setResultModalConfig({ title, message, type, onConfirm });
-    setResultModalVisible(true);
-  };
-
-  const fetchNotices = async () => {
-    try {
-      const token = await AsyncStorage.getItem('userToken');
-      if (!token) {
-        showResultModal('인증 오류', '로그인 정보가 없습니다.', 'error', () => {
-          navigation.navigate('Login');
-        });
-        return;
-      }
-
-      const response = await axios.get(`${API_BASE_URL}/admin/notices`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      const raw = response.data?.data?.data?.content ?? response.data?.data?.data ?? [];
-      const list: Notice[] = Array.isArray(raw) ? raw : [];
-
-      list.sort((a, b) => {
-        if (a.important !== b.important) return a.important ? -1 : 1;
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      });
-
-      setNotices(list);
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.message || '네트워크 연결을 확인해주세요.';
-      showResultModal('오류', errorMessage, 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchNotices();
-  }, []);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await fetchNotices();
-    setRefreshing(false);
-  }, []);
-
-  const toggleExpand = (id: number) => {
-    setExpandedId(expandedId === id ? null : id);
-  };
+  const {
+    loading,
+    refreshing,
+    notices,
+    expandedId,
+    toggleExpand,
+    onRefresh,
+    resultModalVisible,
+    setResultModalVisible,
+    resultModalConfig,
+    // 이미지 뷰어
+    imageViewerVisible,
+    imageViewerUrl,
+    openImageViewer,
+    closeImageViewer,
+  } = useNotice(navigation);
 
   if (loading) {
     return (
@@ -98,6 +44,7 @@ const NoticeScreen = ({ navigation }: any) => {
         }
         renderItem={({ item }) => {
           const isExpanded = expandedId === item.id;
+          const imageUrl = getFullImageUrl(item.imageUrl);
 
           return (
             <View style={styles.noticeWrapper}>
@@ -125,13 +72,16 @@ const NoticeScreen = ({ navigation }: any) => {
               {isExpanded && (
                 <View style={styles.noticeContent}>
                   <Text style={styles.noticeContentText}>{item.content}</Text>
-                  {/* ── 이미지가 있을 때만 토글 영역 내 표시 ── */}
-                  {!!item.imageUrl && (
-                    <Image
-                      source={{ uri: item.imageUrl }}
-                      style={styles.noticeImage}
-                      resizeMode="cover"
-                    />
+
+                  {/* 이미지 탭하면 전체화면 뷰어 */}
+                  {!!imageUrl && (
+                    <TouchableOpacity activeOpacity={0.9} onPress={() => openImageViewer(item.imageUrl)}>
+                      <FastImage
+                        source={{ uri: imageUrl, priority: FastImage.priority.high }}
+                        style={styles.noticeImage}
+                        resizeMode={FastImage.resizeMode.cover}
+                      />
+                    </TouchableOpacity>
                   )}
                 </View>
               )}
@@ -140,7 +90,7 @@ const NoticeScreen = ({ navigation }: any) => {
         }}
       />
 
-      {/* ─── 커스텀 알림 결과 모달 ─── */}
+      {/* 결과 모달 */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={() => setResultModalVisible(false)}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -148,46 +98,43 @@ const NoticeScreen = ({ navigation }: any) => {
               {resultModalConfig.title}
             </Text>
             <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
-            <TouchableOpacity style={styles.resultModalBtn} onPress={() => {
-              setResultModalVisible(false);
-              if (typeof resultModalConfig.onConfirm === 'function') {
-                resultModalConfig.onConfirm();
-              }
-            }}>
+            <TouchableOpacity
+              style={styles.resultModalBtn}
+              onPress={() => {
+                setResultModalVisible(false);
+                if (typeof resultModalConfig.onConfirm === 'function') {
+                  resultModalConfig.onConfirm();
+                }
+              }}
+            >
               <Text style={styles.resultModalBtnText}>확인</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
+
+      {/* 이미지 전체화면 뷰어 */}
+      <Modal visible={imageViewerVisible} animationType="fade" transparent onRequestClose={closeImageViewer}>
+        <TouchableOpacity style={styles.imageViewerOverlay} activeOpacity={1} onPress={closeImageViewer}>
+          <FastImage
+            source={{ uri: imageViewerUrl, priority: FastImage.priority.high }}
+            style={styles.imageViewerImage}
+            resizeMode={FastImage.resizeMode.contain}
+          />
+          <TouchableOpacity style={styles.imageViewerCloseBtn} onPress={closeImageViewer}>
+            <Text style={styles.imageViewerCloseText}>✕</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 };
 
+const { width, height } = Dimensions.get('window');
+
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A' },
   center: { justifyContent: 'center', alignItems: 'center' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    height: 50,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#2A2A2A',
-    position: 'relative',
-  },
-  backBtn: { padding: 5, zIndex: 10 },
-  backBtnText: { color: '#ffffff', fontSize: 28 },
-  headerTitle: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    textAlign: 'center',
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: 'bold',
-    zIndex: 1
-  },
   listContent: { padding: 20, paddingBottom: 30 },
   emptyText: { color: '#999999', textAlign: 'center', marginTop: 50, fontSize: 16 },
 
@@ -204,12 +151,10 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   noticeInfo: { flex: 1 },
-
   noticeHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   noticeBadge: { backgroundColor: '#A1BE44', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, marginRight: 8 },
   noticeBadgeText: { color: '#1A1A1A', fontSize: 12, fontWeight: 'bold' },
   noticeTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', flex: 1 },
-
   noticeDate: { color: '#999999', fontSize: 14 },
   expandIcon: { color: '#999999', fontSize: 18, marginLeft: 10, fontWeight: 'bold' },
 
@@ -221,15 +166,21 @@ const styles = StyleSheet.create({
     paddingTop: 15,
   },
   noticeContentText: { color: '#CCCCCC', fontSize: 16, lineHeight: 24 },
-  // ── 토글 내 이미지 스타일 추가 ──
   noticeImage: { width: '100%', height: 200, borderRadius: 10, marginTop: 16 },
 
-  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
-  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 },
+  // 결과 모달
+  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
+  resultModalBox: { width: '90%', backgroundColor: '#212121', borderRadius: 25, paddingVertical: 45, paddingHorizontal: 35, alignItems: 'center' },
+  resultModalTitle: { fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
+  resultModalMessage: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center', lineHeight: 24 },
   resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
+
+  // 이미지 뷰어
+  imageViewerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' },
+  imageViewerImage: { width, height: height * 0.8 },
+  imageViewerCloseBtn: { position: 'absolute', top: 50, right: 20, padding: 10 },
+  imageViewerCloseText: { color: '#ffffff', fontSize: 28, fontWeight: 'bold' },
 });
 
 export default NoticeScreen;

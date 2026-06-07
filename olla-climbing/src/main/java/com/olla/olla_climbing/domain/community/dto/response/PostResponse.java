@@ -16,7 +16,6 @@ public class PostResponse {
     private String profileImageUrl;
     private String title;
     private String content;
-    private boolean isDifferentGym;
     private String gymPlace;
     private LocalDateTime meetDateTime;
     private int maxMember;
@@ -24,7 +23,15 @@ public class PostResponse {
     private LocalDateTime createdAt;
     private int viewCount;
     private long likeCount;
+
+    // Lombok @Builder + boolean is 필드 조합 시 JSON 키가 is 없이 직렬화되는 버그 방지
+    @JsonProperty("isDifferentGym")
+    private boolean isDifferentGym;
+
+    @JsonProperty("isApplied")
     private boolean isApplied;
+
+    @JsonProperty("isLiked")
     private boolean isLiked;
 
     @JsonProperty("isClosed")

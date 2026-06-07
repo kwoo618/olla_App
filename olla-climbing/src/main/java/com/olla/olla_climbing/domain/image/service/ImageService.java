@@ -17,18 +17,23 @@ public class ImageService {
     private String uploadDir;
 
     public String uploadImage(MultipartFile file) {
-        if (file == null || file.isEmpty() || file.getOriginalFilename() == null) {
-            throw new IllegalArgumentException("업로드할 파일이 비어있습니다.");
+        if (file == null || file.isEmpty()) {
+            return null;
         }
 
-        File directory = new File(uploadDir);
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null) {
+            return null;
+        }
+
+        // 상대경로 사용 시 Tomcat 임시폴더로 저장되는 버그 방지
+        File directory = new File(uploadDir).getAbsoluteFile();
+
         if (!directory.exists()) {
             directory.mkdirs();
         }
 
-        String originalFilename = file.getOriginalFilename();
         String extension = originalFilename.substring(originalFilename.lastIndexOf("."));
-        // UUID + timestamp 조합으로 파일명 중복 방지
         String savedFileName = UUID.randomUUID().toString().substring(0, 8)
                 + "_" + System.currentTimeMillis() + extension;
 

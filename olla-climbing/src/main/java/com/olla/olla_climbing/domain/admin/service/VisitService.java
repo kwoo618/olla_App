@@ -73,8 +73,9 @@ public class VisitService {
         String statusCode = "SUCCESS";
         String message = "";
 
+        // 기간권 우선 탐색 (durationMonth != null이면 기간권)
         for (Membership m : activeMemberships) {
-            if ("PERIOD".equals(m.getMembershipTypeName()) && !LocalDate.now().isAfter(m.getEndDate())) {
+            if (m.getDurationMonth() != null && !LocalDate.now().isAfter(m.getEndDate())) {
                 targetMembership = m;
                 remainingInfo = m.getEndDate() + " 까지";
                 message = member.getName() + " 회원님(기간권) 반갑습니다!";
@@ -83,9 +84,10 @@ public class VisitService {
             }
         }
 
+        // 기간권 없으면 횟수권 탐색 (remainingCount != null이면 횟수권)
         if (targetMembership == null) {
             for (Membership m : activeMemberships) {
-                if ("COUNT".equals(m.getMembershipTypeName()) && m.getRemainingCount() >= deductionCount) {
+                if (m.getRemainingCount() != null && m.getRemainingCount() >= deductionCount) {
                     targetMembership = m;
                     m.useCount(deductionCount);
                     remainingInfo = "잔여 " + m.getRemainingCount() + "회";
@@ -152,8 +154,6 @@ public class VisitService {
                 .sorted()
                 .collect(Collectors.toList());
     }
-
-    // ── private 헬퍼 ─────────────────────────────────────────────
 
     private VisitScanResponse errorResponse(String message) {
         return VisitScanResponse.builder().statusCode("ERROR").message(message).build();
