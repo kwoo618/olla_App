@@ -134,3 +134,8 @@ ios/olla_react/olla_react.entitlements
 **/.DS_Store
 Thumbs.db
 **/Thumbs.db
+
+# Android 빌드 결과물
+olla_frontend/android/build/
+olla_frontend/android/app/build/
+olla_frontend/android/.gradle/
