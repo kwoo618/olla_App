@@ -1,5 +1,5 @@
-import React, { useState } from 'react'; // useState 추가
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Modal, ActivityIndicator, Linking } from 'react-native'; // Linking 추가
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Modal, ActivityIndicator, Linking } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useSignup } from '../ts/Signup';
 
@@ -19,7 +19,6 @@ const SignupScreen = ({ navigation }: any) => {
     resultModalVisible, resultModalConfig, closeResultModal, showResultModal
   } = useSignup(navigation);
 
-  // 약관 동의 체크박스 상태 추가
   const [isTermsChecked, setIsTermsChecked] = useState(false);
 
   return (
@@ -64,7 +63,7 @@ const SignupScreen = ({ navigation }: any) => {
           <TextInput
             ref={passwordRef}
             style={[styles.input, focusedField === 'password' && styles.focusedInput, passwordError ? styles.inputError : null]}
-            placeholder="영문, 숫자, 특수문자 포함 6자 이상"
+            placeholder="영문, 숫자, 특수문자(@$!%*?&) 포함 6자 이상"
             placeholderTextColor="#ffffff80"
             secureTextEntry
             autoCapitalize="none"
@@ -219,7 +218,6 @@ const SignupScreen = ({ navigation }: any) => {
               {emailCodeError !== '' && <Text style={styles.errorText}>{emailCodeError}</Text>}
               {emailCodeSuccess !== '' && focusedField === 'emailCode' && <Text style={styles.successText}>{emailCodeSuccess}</Text>}
               
-              {/* 💡 문장 부호 디자인 표준 적용 (타이틀에 ! 추가) */}
               <TouchableOpacity onPress={() => showResultModal('안내!', '스팸함을 확인해 보십시오.\n\n인증 메일이 스팸 또는 프로모션 탭으로\n분류되었을 수 있습니다.', 'info')}>
                 <Text style={styles.spamGuideText}>이메일이 안 왔나요?</Text>
               </TouchableOpacity>
@@ -257,7 +255,7 @@ const SignupScreen = ({ navigation }: any) => {
         </View>
       </KeyboardAwareScrollView>
 
-      {/* 커스텀 알림 결과 모달 (OLLA 표준 디자인 레이아웃 반영) */}
+      {/* 커스텀 알림 결과 모달 */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={closeResultModal}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -307,25 +305,24 @@ const styles = StyleSheet.create({
   buttonDisabled: { backgroundColor: '#333333' },
   buttonText: { color: '#000000', fontSize: 20, fontWeight: 'bold' }, 
 
-  // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 ───────────────────────────
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   resultModalBox: { 
     width: '90%', 
     backgroundColor: '#212121', 
-    borderRadius: 25,          // 💡 표준 가이드 적용 (16 -> 25)
-    paddingVertical: 45,       // 💡 표준 가이드 적용 (20 -> 45)
-    paddingHorizontal: 35,     // 💡 표준 가이드 적용 (20 -> 35)
+    borderRadius: 25,
+    paddingVertical: 45,
+    paddingHorizontal: 35,
     alignItems: 'center' 
   }, 
   resultModalTitle: { 
-    fontSize: 28,              // 💡 표준 가이드 적용 (20 -> 28)
+    fontSize: 28,
     fontWeight: 'bold', 
-    marginBottom: 8            // 💡 표준 가이드 적용 (5 -> 8)
+    marginBottom: 8
   }, 
   resultModalMessage: { 
     color: '#ffffff', 
-    fontSize: 18,              // 💡 표준 가이드 적용 (17 -> 18)
-    fontWeight: 'bold',        // 💡 표준 가이드 적용 (가독성 향상)
+    fontSize: 18,
+    fontWeight: 'bold',
     marginBottom: 25, 
     textAlign: 'center', 
     lineHeight: 24 

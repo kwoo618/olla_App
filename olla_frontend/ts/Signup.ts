@@ -88,13 +88,17 @@ export const useSignup = (navigation: any) => {
   };
 
   // 비밀번호 입력 및 정규식 검사
+  // 허용 특수문자: @$!%*?& 만 허용
   const validatePassword = (pw: string) => {
     setPassword(pw);
-    const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9\s])\S{6,}$/;
+    const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{6,}$/;
+    const disallowedSpecialRegex = /[^A-Za-z\d@$!%*?&]/; // 허용 외 문자 감지
     if (!pw) {
       setPasswordError('비밀번호를 입력해주세요.');
+    } else if (disallowedSpecialRegex.test(pw)) {
+      setPasswordError('사용 불가한 문자가 포함되어 있습니다. 특수문자는 @$!%*?& 만 사용 가능합니다.');
     } else if (!passwordRegex.test(pw)) {
-      setPasswordError('영문, 숫자, 특수문자 포함 6자 이상이어야 합니다.');
+      setPasswordError('영문, 숫자, 특수문자(@$!%*?&) 포함 6자 이상이어야 합니다.');
     } else {
       setPasswordError('');
     }
@@ -187,20 +191,17 @@ export const useSignup = (navigation: any) => {
         setIdError(''); setIdSuccess('사용 가능한 아이디입니다.'); setIsIdChecked(true);
       }
     } catch (error: any) {
-      // 서버가 꺼져있거나 네트워크 연결 실패
       if (!error.response) {
         showResultModal('네트워크 오류', '서버와 통신할 수 없습니다.', 'error');
         return;
       }
 
       const status = error.response.status;
-      // 백엔드에서 약속된 message를 안 보냈을 경우를 대비한 대체 텍스트
       const errorMessage = error.response.data?.message || '서버 오류가 발생했습니다.';
 
       if (status === 409 || status === 400) {
         setIdError(errorMessage); setIdSuccess(''); setIsIdChecked(false);
       } else {
-        // 모달에 상태 코드까지 함께 출력
         showResultModal('오류', `에러코드: ${status}\n${errorMessage}`, 'error');
       }
     }
@@ -249,9 +250,8 @@ export const useSignup = (navigation: any) => {
 
   // 폼 전체 유효성 검사 및 다음 단계(개인정보 입력 화면)로 데이터 전달
   const handleNextStep = async () => {
-    if (isCheckingNext) return; // 중복 클릭 방지
+    if (isCheckingNext) return;
 
-    // 필수 항목 및 인증 상태 검증
     if (!isIdChecked) { showResultModal('알림', '아이디 중복 확인을 해주세요.', 'info'); return; }
     if (!password || passwordError) { showResultModal('알림', '비밀번호를 올바르게 입력해주세요.', 'info'); return; }
     if (password !== passwordConfirm || passwordConfirmError) { showResultModal('알림', '비밀번호가 일치하지 않습니다.', 'info'); return; }
@@ -264,7 +264,6 @@ export const useSignup = (navigation: any) => {
 
     setIsCheckingNext(true);
 
-    // 전화번호 중복 가입 여부 최종 확인
     try {
       const phoneRes = await axios.get(`${API_BASE_URL}/auth/check-phone`, { params: { phone } });
       const isPhoneDup = phoneRes.data.data.isDuplicate;
@@ -290,7 +289,6 @@ export const useSignup = (navigation: any) => {
 
     setIsCheckingNext(false);
 
-    // 개인정보 화면으로 데이터 넘기며 화면 이동
     navigation.navigate('PersonalInfo', {
       accountData: {
         loginId: id,
@@ -305,7 +303,6 @@ export const useSignup = (navigation: any) => {
     });
   };
 
-  // View 컴포넌트에서 사용할 수 있도록 상태와 함수 내보내기
   return {
     id, handleIdChange, idError, idSuccess, isIdChecked, checkDuplicateId,
     password, validatePassword, passwordError,
