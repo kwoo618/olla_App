@@ -37,10 +37,10 @@ export const translateGender = (gender: string | null | undefined): string => {
 
 export const resolveImageUrl = (url: string | null | undefined): string | null => {
   if (!url || url === 'null' || url === 'undefined') return null;
-  if (url.startsWith('http')) return url;
-  // 상대경로일 경우 API_BASE_URL에서 /api/v1을 제거하고 도메인만 붙여줍니다.
+  if (url.startsWith('http') || url.startsWith('file:') || url.startsWith('content:')) return url;
   const domain = BASE.replace('/api/v1', '');
-  return `${domain}${url}`;
+  const formattedPath = url.startsWith('/') ? url : `/${url}`;
+  return `${domain}${formattedPath}`;
 };
 
 export const isValidImageUrl = (url: string | null | undefined): url is string =>
@@ -63,7 +63,7 @@ export interface ExpiringMember {
   name: string;
   phone: string;
   endDate: string;
-  dDay: number | string; // 💡 'D-0' 방지를 위해 'Day' 문자열을 받을 수 있도록 string 허용
+  dDay: number | string;
 }
 
 export interface DashboardStats {
@@ -141,7 +141,7 @@ export const useManagerDashboard = (navigation: any) => {
   const [cameraReady, setCameraReady]         = useState(false);
   const scannedRef                            = useRef(false);
 
-  // ─── 모달 헬퍼 ────────────────────────────────────────────────────────────
+  // 모달 헬퍼
   const showResultModal = useCallback((
     title: string,
     message: string,
@@ -162,7 +162,7 @@ export const useManagerDashboard = (navigation: any) => {
     setDeleteModalVisible(true);
   }, []);
 
-  // API 호출 
+  // API 호출
   const fetchDashboardMain = useCallback(async () => {
     try {
       const headers = await authHeader();
@@ -176,7 +176,6 @@ export const useManagerDashboard = (navigation: any) => {
           name:    m.name    ?? '-',
           phone:   m.phone   ?? '-',
           endDate: m.endDate ?? m.end_date ?? '-',
-          // 0일 남았을 경우 숫자 Day를 넘겨주어 UI의 D- 와 결합 시 'D-Day'가 되도록 수정
           dDay:    parsedDDay === 0 ? '1' : parsedDDay,
         };
       });
@@ -203,13 +202,10 @@ export const useManagerDashboard = (navigation: any) => {
           if (day !== 7) normalized[day] = Array.isArray(v) ? (v as unknown[]).map(Number) : [];
         });
         setHourlyCongestionByDay(normalized);
-        const defaultData = normalized[6];
-        setHourlyData(defaultData?.length > 0 ? defaultData : [10, 20, 35, 60, 80, 55, 30]);
-      } else {
-        setHourlyData(prev => (prev.length > 0 ? prev : [10, 20, 30, 50, 70, 90, 100, 80, 60, 40]));
+        // hourlyData는 fetchHourlyByDay에서만 관리
       }
 
-      if (data.totalMembers      != null) setMetrics(prev => ({ ...prev, totalMembers:      Number(data.totalMembers) }));
+      if (data.totalMembers != null) setMetrics(prev => ({ ...prev, totalMembers: Number(data.totalMembers) }));
     } catch (e: any) {
       console.log('대시보드 통계 로드 실패:', e.response?.data?.message ?? e.message);
     }
@@ -235,19 +231,16 @@ export const useManagerDashboard = (navigation: any) => {
   const fetchHourlyByDay = useCallback(async (dayOfWeek: number) => {
     if (dayOfWeek === 7) return;
 
-    // 이미 캐시된 데이터가 있으면 바로 사용
+    // 캐시 있으면 먼저 보여주고, API도 항상 호출
     setHourlyCongestionByDay(prev => {
-      if (prev[dayOfWeek]?.length > 0) {
-        setHourlyData(prev[dayOfWeek]);
-        return prev;
-      }
+      if (prev[dayOfWeek]?.length > 0) setHourlyData(prev[dayOfWeek]);
       return prev;
     });
 
     try {
       const headers = await authHeader();
-      const res     = await axios.get(`${ADMIN}/dashboard/hourly`, { headers, params: { dayOfWeek } });
-      const list    = (extractData(res) ?? []).map(Number) as number[];
+      const res = await axios.get(`${ADMIN}/dashboard/hourly`, { headers, params: { dayOfWeek } });
+      const list = (extractData(res) ?? []).map(Number) as number[];
       setHourlyCongestionByDay(prev => ({ ...prev, [dayOfWeek]: list }));
       const fallback = dayOfWeek === 6 ? [10, 20, 35, 60, 80, 55, 30] : [10, 20, 30, 50, 70, 90, 100, 80, 60, 40];
       setHourlyData(list.length > 0 ? list : fallback);
@@ -299,7 +292,10 @@ export const useManagerDashboard = (navigation: any) => {
         return !(user.deleted === true || m.isDeleted === true || m.status === 'DELETED');
       });
 
-      setRecentMembers(validMembers.slice(0, 2));
+      setRecentMembers(validMembers.slice(0, 2).map((user: any) => ({
+        ...user,
+        profileImageUrl: resolveImageUrl(user.profileImageUrl ?? user.member?.profileImageUrl ?? user.profileImage),
+      })));
       setMetrics(prev => ({ ...prev, totalMembers: validMembers.length }));
     } catch (e: any) {
       console.log('회원 로드 실패:', e.response?.data?.message ?? e.message);
@@ -322,31 +318,25 @@ export const useManagerDashboard = (navigation: any) => {
     }
   }, []);
 
-  // 💡 핵심 변경: 전체 회원/이용권 목록에서 ACTIVE 상태인 이용권만 추출하여 개수 집계
   const fetchActiveMemberships = useCallback(async () => {
     try {
       const headers = await authHeader();
-      // 전체 이용권 목록을 가져옵니다. (페이징 없이 충분히 큰 사이즈 지정)
       const res = await axios.get(`${ADMIN}/memberships/members`, { headers, params: { page: 0, size: 2000 } });
       const usersList = extractList(res);
 
       let activeCount = 0;
 
       usersList.forEach((user: any) => {
-        // 회원이 삭제되었는지 확인
         const m = user.member ?? user;
         if (user.deleted === true || m.isDeleted === true || m.status === 'DELETED') return;
 
-        // 회원이 보유한 여러 개의 이용권(memberships 배열)을 각각 검사
         if (Array.isArray(user.memberships)) {
           user.memberships.forEach((membership: any) => {
             if (String(membership.membershipStatus || membership.status).toUpperCase() === 'ACTIVE') {
               activeCount += 1;
             }
           });
-        } 
-        // 만약 단일 객체(activeMembership)로 내려올 경우를 대비한 방어 코드
-        else if (user.activeMembership && String(user.activeMembership.status).toUpperCase() === 'ACTIVE') {
+        } else if (user.activeMembership && String(user.activeMembership.status).toUpperCase() === 'ACTIVE') {
           activeCount += 1;
         }
       });
@@ -357,7 +347,6 @@ export const useManagerDashboard = (navigation: any) => {
     }
   }, []);
 
-  // ─── 전체 데이터 로드 ─────────────────────────────────────────────────────
   const checkAdminAndFetchData = useCallback(async () => {
     try {
       const [role, token] = await Promise.all([AsyncStorage.getItem('userRole'), getToken()]);
@@ -372,7 +361,7 @@ export const useManagerDashboard = (navigation: any) => {
         fetchPosts(),
         fetchMembers(),
         fetchVisits(),
-        fetchActiveMemberships(), // 변경된 집계 로직 호출
+        fetchActiveMemberships(),
       ]);
     } catch (e: any) {
       console.log('데이터 로딩 실패:', e.response?.data?.message ?? e.message);
@@ -406,11 +395,12 @@ export const useManagerDashboard = (navigation: any) => {
     await Promise.all([
       fetchDashboardMain(), 
       fetchDashboardSummary(),
-      fetchActiveMemberships() // 새로고침 시 활성 이용권도 다시 계산
+      fetchActiveMemberships(),
+      fetchHourlyByDay(dashboardStats.selectedDay)
     ]);
-  }, [fetchDashboardMain, fetchDashboardSummary, fetchActiveMemberships]);
+  }, [fetchDashboardMain, fetchDashboardSummary, fetchActiveMemberships, fetchHourlyByDay, dashboardStats.selectedDay]);
 
-  // ─── 공지 / 게시글 삭제 ───────────────────────────────────────────────────
+  // 공지 / 게시글 삭제
   const executeDelete = useCallback(async () => {
     if (!itemToDelete) return;
     try {
@@ -432,7 +422,7 @@ export const useManagerDashboard = (navigation: any) => {
     }
   }, [itemToDelete, showResultModal, fetchNotices, fetchPosts]);
 
-  // ─── 회원 상세 조회 ───────────────────────────────────────────────────────
+  // 회원 상세 조회
   const loadUserDetail = useCallback(async (memberId: number, fallbackName: string, fallbackPhone: string) => {
     try {
       const headers = await authHeader();
@@ -498,7 +488,7 @@ export const useManagerDashboard = (navigation: any) => {
     }
   }, [alertTitle, alertContent, selectedUser, showResultModal]);
 
-  // QR 스캐너 
+  // QR 스캐너
   const openScanner = useCallback(() => {
     scannedRef.current = false;
     setIsProcessing(false);
@@ -513,10 +503,22 @@ export const useManagerDashboard = (navigation: any) => {
     setTimeout(() => { scannedRef.current = false; }, 800);
   }, []);
 
+  // 🔧 수정: ALREADY 케이스에서 확인 버튼 누르면 스캐너 재오픈
   const handleBarCodeScanned = useCallback(async (qrData: string) => {
     if (scannedRef.current || isProcessing) return;
     scannedRef.current = true;
     setIsProcessing(true);
+
+    // 스캐너 재오픈 헬퍼 (모달 닫힌 후 호출)
+    const reopenScanner = () => {
+      setTimeout(() => {
+        scannedRef.current = false;
+        setIsProcessing(false);
+        setScannerVisible(true);
+        setTimeout(() => setCameraReady(true), 500);
+      }, 300);
+    };
+
     try {
       const headers = await authHeader();
       const res    = await axios.post(`${ADMIN}/visits/scan`, { qrToken: qrData, deductionCount: 1 }, { headers });
@@ -526,29 +528,30 @@ export const useManagerDashboard = (navigation: any) => {
       closeScanner();
       setTimeout(() => {
         if (statusCode === 'ALREADY' || message.includes('이미 출석')) {
-          showResultModal('금일 출석 완료', `${memberName}님은\n오늘 이미 출석하셨습니다.`, 'info');
+          // 🔧 수정: 확인 누르면 스캐너 재오픈
+          showResultModal(
+            '금일 출석 완료',
+            `${memberName}님은\n오늘 이미 출석하셨습니다.`,
+            'info',
+            reopenScanner,
+          );
         } else if (statusCode === 'ERROR') {
           showResultModal('출석 실패', message || '출석 처리에 실패했습니다.', 'error', () => {
-            setTimeout(() => {
-              scannedRef.current = false;
-              setIsProcessing(false);
-              setScannerVisible(true);
-            }, 300);
+            reopenScanner();
           });
         } else {
           fetchVisits();
           fetchMembers();
-          showResultModal('출석 완료!', [memberName ? `${memberName}님 환영합니다!` : '', remainingInfo, message].filter(Boolean).join('\n\n'));
+          showResultModal(
+            '출석 완료!',
+            [memberName ? `${memberName}님 환영합니다!` : '', remainingInfo, message].filter(Boolean).join('\n\n'),
+          );
         }
       }, 300);
     } catch (e: any) {
       closeScanner();
       setTimeout(() => showResultModal('출석 실패', e.response?.data?.message ?? '출석 처리에 실패했습니다.', 'error', () => {
-        setTimeout(() => {
-          scannedRef.current = false;
-          setIsProcessing(false);
-          setScannerVisible(true);
-        }, 300);
+        reopenScanner();
       }), 300);
     } finally {
       setIsProcessing(false);

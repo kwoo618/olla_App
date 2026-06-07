@@ -35,7 +35,7 @@ const HomeScreen = ({ navigation }: any) => {
       onPanResponderRelease: (_, gestureState) => {
         modalHeightAnim.flattenOffset();
         const finalHeight = currentSnap.current - gestureState.dy;
-        const CLOSE_THRESHOLD = currentSnap.current * 0.7; 
+        const CLOSE_THRESHOLD = currentSnap.current * 0.7;
         if (finalHeight < CLOSE_THRESHOLD) closeModal();
         else Animated.spring(modalHeightAnim, { toValue: currentSnap.current, useNativeDriver: false }).start();
       }
@@ -63,7 +63,7 @@ const HomeScreen = ({ navigation }: any) => {
   const isCountType = membership.membershipType === '일일권';
   const hasMembership = isCountType ? membership.remainingCount > 0 : !!(membership.startDate && membership.endDate);
   const isTodayAttended = viewDate.getFullYear() === today.getFullYear() && viewDate.getMonth() === today.getMonth() && attendedDates.includes(today.getDate());
-  
+
   let displayStatus = membership.status;
   if (isCountType && membership.status === '이용중') displayStatus = isTodayAttended ? '이용중' : '미사용';
 
@@ -71,28 +71,34 @@ const HomeScreen = ({ navigation }: any) => {
     if (title === '공지사항') navigation.navigate('Notice');
     else if (title === 'QR') {
       if (!hasMembership) {
-        if (membership.hasFuture) showResultModal('입장 불가', `${membership.futureStartDate}부터 이용 가능합니다`, 'info');
-        else showResultModal('입장 불가', '현재 활성화된 이용권이 없습니다. 이용권을 먼저 구매해주세요', 'info');
+        if (membership.hasFuture) showResultModal('입장 불가!', `${membership.futureStartDate}부터 이용 가능합니다.`, 'info');
+        else showResultModal('입장 불가!', '현재 활성화된 이용권이 없습니다. 이용권을 먼저 구매해주세요.', 'info');
         return;
       }
       openModal('QR');
-    } 
+    }
     else if (title === '회원권') openModal('Membership');
     else if (title === '이번달 방문') scrollViewRef.current?.scrollToEnd({ animated: true });
     else if (title === '지구력 랭킹') navigation.navigate('Ranking', { targetTab: '지구력' });
   };
 
-  // 💡 정확한 "남은 퍼센테이지(0~100%)" 계산 로직
-  let remainPercentage = 0;
+  // 💡 원형 그래프용: 형광색 = 남은 비율 (줄어들수록 다 써감)
+  // 💡 가로 바용: 형광색 = 사용한 비율 (늘어날수록 다 써감)
+  let circleRemainPercentage = 0; // 원형: 남은 비율 → 형광색
+  let barUsedPercentage = 0;      // 가로 바: 사용한 비율 → 형광색
+
   if (!isCountType && hasMembership && membership.startDate && membership.endDate) {
     const s = new Date(membership.startDate); s.setHours(0, 0, 0, 0);
     const e = new Date(membership.endDate); e.setHours(0, 0, 0, 0);
-    // 전체 일수 = (종료일 - 시작일) + 1
     const totalDays = Math.max(1, Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1);
     const remainDays = Math.max(0, membership.remainingDays);
-    remainPercentage = Math.min((remainDays / totalDays) * 100, 100);
+    const usedDays = totalDays - remainDays;
+
+    circleRemainPercentage = Math.min((remainDays / totalDays) * 100, 100); // 남은 비율
+    barUsedPercentage = Math.min((usedDays / totalDays) * 100, 100);        // 사용한 비율
   } else if (isCountType && hasMembership) {
-    remainPercentage = 100; // 일일권은 남은 횟수 상관없이 그래프를 가득 채웁니다
+    circleRemainPercentage = 100;
+    barUsedPercentage = 0;
   }
 
   const circleText = membership.isLoading ? '' : hasMembership ? (isCountType ? `${membership.remainingCount}회` : `D-${membership.remainingDays}`) : membership.hasFuture ? '예정' : '없음';
@@ -106,11 +112,10 @@ const HomeScreen = ({ navigation }: any) => {
   const days: (number | null)[] = [...Array(firstDayOfMonth).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
   const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
 
-  // 💡 원형 프로그레스 바 (시계 방향으로 줄어들게) 설정
+  // 💡 원형 프로그레스 바: 형광색이 남은 비율만큼 표시
   const circleRadius = 21;
   const circleCircumference = 2 * Math.PI * circleRadius;
-  // 남은 양만큼의 offset 계산 (비율에 맞춰 음수 적용으로 오른쪽이 비워지며 시계방향 진행)
-  const strokeDashoffset = circleCircumference * (1 - remainPercentage / 100);
+  const strokeDashoffset = circleCircumference * (1 - circleRemainPercentage / 100);
 
   return (
     <View style={styles.background}>
@@ -136,18 +141,19 @@ const HomeScreen = ({ navigation }: any) => {
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.UserCardCentered} onPress={() => handlePopupPress('회원권')}>
-            {/* 💡 원형 프로그레스 바 적용 */}
             <View style={styles.circleGraphContainer}>
-              {hasMembership && remainPercentage > 0 ? (
+              {hasMembership && circleRemainPercentage > 0 ? (
                 <Svg width="50" height="50" viewBox="0 0 50 50">
+                  {/* 회색 배경 원 (사용한 만큼 회색으로 보임) */}
                   <Circle cx="25" cy="25" r="21" stroke="#444444" strokeWidth="4" fill="none" />
+                  {/* 형광색 = 남은 비율 */}
                   <Circle
                     cx="25" cy="25" r="21"
                     stroke="#A1BE44"
                     strokeWidth="4"
                     fill="none"
                     strokeDasharray={`${circleCircumference}`}
-                    strokeDashoffset={-strokeDashoffset} // 💡 핵심: 마이너스로 오른쪽(시계방향)부터 비워지게
+                    strokeDashoffset={strokeDashoffset}
                     strokeLinecap="round"
                     rotation="-90"
                     origin="25, 25"
@@ -158,8 +164,8 @@ const HomeScreen = ({ navigation }: any) => {
               )}
               <View style={styles.circleTextWrapper}>
                 <Text style={[
-                  styles.circleGraphText, 
-                  !hasMembership && { color: '#999999', fontSize: 13 }, 
+                  styles.circleGraphText,
+                  !hasMembership && { color: '#999999', fontSize: 13 },
                   !hasMembership && membership.hasFuture && { color: '#A1BE44', fontSize: 13 }
                 ]}>
                   {circleText}
@@ -186,7 +192,7 @@ const HomeScreen = ({ navigation }: any) => {
               <>
                 <Text style={styles.microValuecolor} numberOfLines={1} adjustsFontSizeToFit>{userStats.difficultyColor}</Text>
                 <Text style={styles.microUnit}>{userStats.difficultyType} <Text style={{ color: '#999999' }}>{userStats.difficultyStatus}</Text></Text>
-              </  >
+              </>
             )}
           </TouchableOpacity>
           <View style={styles.verticalDivider} />
@@ -217,7 +223,7 @@ const HomeScreen = ({ navigation }: any) => {
               const isAttended = day !== null && attendedDates.includes(day);
 
               return (
-                <TouchableOpacity key={index} style={styles.dayCell} disabled={!day} onPress={() => day && onDateClick(day)}>
+                <TouchableOpacity key={index} style={styles.dayCell} disabled={!day} onPress={() => day && onDateClick(day)} activeOpacity={0.6}>
                   {day ? (
                     <View style={[styles.dayCircle, isToday && styles.todayCircle, isSelected && !isToday && styles.selectedCircle, isAttended && !isToday && !isSelected && styles.attendedCircle]}>
                       <Text style={[styles.dayText, isToday && styles.todayText, isSelected && !isToday && styles.selectedText, isAttended && !isToday && !isSelected && styles.attendedText, index % 7 === 0 && !isToday && !isSelected && !isAttended && styles.sundayText]}>
@@ -235,7 +241,9 @@ const HomeScreen = ({ navigation }: any) => {
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={closeResultModal}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
-            <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>{resultModalConfig.title}</Text>
+            <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>
+              {resultModalConfig.title}
+            </Text>
             <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
             <TouchableOpacity style={styles.resultModalBtn} onPress={closeResultModal}>
               <Text style={styles.resultModalBtnText}>확인</Text>
@@ -275,9 +283,11 @@ const HomeScreen = ({ navigation }: any) => {
                     <View style={styles.memCardHeader}>
                       <Text style={styles.memCardTitle}>{isCountType ? '잔여 횟수' : (membership.hasFuture && !hasMembership ? '시작 예정' : '남은 이용 기간')}</Text>
                     </View>
-                    {/* 💡 회원권 상세의 가로 프로그레스 바 영역 */}
+                    {/* 💡 가로 프로그레스 바: 형광색 = 사용한 만큼 */}
                     {!isCountType && hasMembership && (
-                      <View style={styles.progressBarBg}><View style={[styles.progressBarFill, { width: `${remainPercentage}%` }]} /></View>
+                      <View style={styles.progressBarBg}>
+                        <View style={[styles.progressBarFill, { width: `${barUsedPercentage}%` }]} />
+                      </View>
                     )}
                     <View style={[styles.memCardDates, (!hasMembership) && { justifyContent: 'center' }]}>
                       {hasMembership ? (
@@ -327,15 +337,15 @@ const styles = StyleSheet.create({
   QRCardCentered: { width: '60%', backgroundColor: '#2A2A2A', padding: 20, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   UserCardCentered: { width: '38%', backgroundColor: '#2A2A2A', padding: 20, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   largeIcon: { width: 45, height: 45, marginBottom: 10, resizeMode: 'contain', tintColor: '#A1BE44' },
-  
+
   circleGraphContainer: { width: 50, height: 50, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   circleTextWrapper: { position: 'absolute', justifyContent: 'center', alignItems: 'center' },
   circleGraphDummy: { width: 50, height: 50, borderRadius: 25, borderWidth: 4, borderColor: '#A1BE44', justifyContent: 'center', alignItems: 'center' },
   circleGraphText: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
-  
+
   cardTitleCentered: { color: '#ffffff', fontSize: 18, fontWeight: '600' },
   futureStartDateText: { color: '#A1BE44', fontSize: 11, marginTop: 4, textAlign: 'center', paddingVertical: 18 },
-  
+
   unifiedDataFrame: { flexDirection: 'row', backgroundColor: '#2A2A2A', borderRadius: 16, marginBottom: 20, overflow: 'hidden' },
   innerTouchableMicro: { flex: 1, paddingVertical: 18, paddingHorizontal: 2, alignItems: 'center', justifyContent: 'center', minHeight: 90 },
   verticalDivider: { width: 1, backgroundColor: '#3D3D3D', marginVertical: 15 },
@@ -343,7 +353,7 @@ const styles = StyleSheet.create({
   microValue: { color: '#ffffff', fontSize: 21, fontWeight: 'bold', textAlign: 'center' },
   microValuecolor: { color: '#ffffff', fontSize: 21, fontWeight: 'bold', textAlign: 'center' },
   microUnit: { fontSize: 13, color: '#999999' },
-  
+
   calendarCard: { width: '100%', backgroundColor: '#2A2A2A', borderRadius: 16, padding: 20, marginBottom: 20 },
   calendarHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   monthArrow: { padding: 10 },
@@ -353,16 +363,18 @@ const styles = StyleSheet.create({
   weekDayText: { color: '#999999', fontSize: 15, width: '14.28%', textAlign: 'center', fontWeight: '600' },
   daysGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start' },
   dayCell: { width: '14.28%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center', marginBottom: 5 },
-  dayCircle: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  
+  // 💡 수정된 부분: 네모나게 보이는 현상을 막고 완벽한 원형으로 강제 고정
+  dayCircle: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   dayText: { color: '#ffffff', fontSize: 16, fontWeight: '500' },
   sundayText: { color: '#FF6B6B' },
-  todayCircle: { backgroundColor: '#A1BE44' },
+  todayCircle: { backgroundColor: '#A1BE44', borderRadius: 17, overflow: 'hidden' },
   todayText: { color: '#1A1A1A', fontWeight: 'bold' },
-  selectedCircle: { backgroundColor: '#5DADE2' },
+  selectedCircle: { backgroundColor: '#5DADE2', borderRadius: 17, overflow: 'hidden' }, // 선택된 날짜 원형 강제
   selectedText: { color: '#000000', fontWeight: 'bold' },
-  attendedCircle: { backgroundColor: '#3A3A3A', borderWidth: 1.5, borderColor: '#A1BE44' },
+  attendedCircle: { backgroundColor: '#3A3A3A', borderWidth: 1.5, borderColor: '#A1BE44', borderRadius: 17, overflow: 'hidden' },
   attendedText: { color: '#A1BE44', fontWeight: 'bold' },
-  
+
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 50, alignItems: 'center', width: '100%', overflow: 'hidden' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
@@ -370,7 +382,7 @@ const styles = StyleSheet.create({
   sheetTitle: { color: '#ffffff', fontSize: 23, fontWeight: 'bold', marginLeft: 10 },
   closeBtn: { color: '#999999', fontSize: 28, paddingHorizontal: 10 },
   qrDesc: { color: '#999999', fontSize: 16 },
-  
+
   membershipContainer: { width: '100%' },
   memCard: { backgroundColor: '#2A2A2A', borderRadius: 16, padding: 22, marginBottom: 15, width: '100%' },
   memCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
@@ -386,11 +398,11 @@ const styles = StyleSheet.create({
   memHalfValueWhite: { color: '#ffffff', fontSize: 28, fontWeight: 'bold' },
 
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
-  resultModalMessage: { color: '#ffffff', fontSize: 15, marginBottom: 25, textAlign: 'center', lineHeight: 20 },
-  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  resultModalBtnText: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
+  resultModalBox: { width: '90%', backgroundColor: '#212121', borderRadius: 25, paddingVertical: 45, paddingHorizontal: 35, alignItems: 'center' },
+  resultModalTitle: { fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
+  resultModalMessage: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center', lineHeight: 24 },
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
 });
 
 export default HomeScreen;

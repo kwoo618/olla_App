@@ -1,8 +1,10 @@
+
 import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, TextInput, RefreshControl, KeyboardAvoidingView, Platform, Dimensions, PanResponder, TouchableWithoutFeedback, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
-import { useManagerCommunityData, getProfileImage, formatCommentDate } from '../ts/ManagerCommunity';
+import FastImage from 'react-native-fast-image';
+import { useManagerCommunityData, getProfileImage, getFullImageUrl, formatCommentDate } from '../ts/ManagerCommunity';
 
 const ManagerCommunity = ({ route, navigation }: any) => {
   const isFocused = useIsFocused();
@@ -110,6 +112,44 @@ const ManagerCommunity = ({ route, navigation }: any) => {
     </View>
   );
 
+  // 💡 프로필 상세 시트 공통 렌더 함수 (댓글 모달 안/밖 양쪽에서 재사용)
+  const renderDetailSheet = () => (
+    <Animated.View style={[styles.bottomSheet, { height: detailHeightAnim, overflow: 'hidden' }]}>
+      <View {...detailPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
+        <View style={styles.dragHandle} />
+        <View style={styles.sheetHeader}>
+          <Text style={styles.sheetTitle}>회원 정보 확인</Text>
+          <TouchableOpacity onPress={closeDetailModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity>
+        </View>
+        <View style={styles.horizontalDivider} />
+      </View>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
+        {selectedUser && (
+          <View style={styles.detailContainer}>
+            <View style={styles.detailProfileWrapper}>
+              {getFullImageUrl(selectedUser.profileImageUrl)
+                ? <FastImage source={{ uri: getFullImageUrl(selectedUser.profileImageUrl)!, priority: FastImage.priority.normal }} style={styles.profileBig} />
+                : <Image source={require('../assets/profile.png')} style={styles.profileBig} />
+              }
+              <Text style={styles.profileName}>{selectedUser.name}</Text>
+            </View>
+            <View style={styles.detailInfoBox}>
+              {renderDetailRow('이름', selectedUser.name)}
+              {renderDetailRow('전화번호', selectedUser.phone)}
+              {renderDetailRow('성별', selectedUser.gender)}
+              {renderDetailRow('나이', selectedUser.age, '세')}
+              {renderDetailRow('키', selectedUser.height, 'cm')}
+              {renderDetailRow('몸무게', selectedUser.weight, 'kg')}
+              {renderDetailRow('팔길이', selectedUser.arm, 'cm')}
+              {renderDetailRow('암벽화 사이즈', selectedUser.shoe, 'mm')}
+            </View>
+            <TouchableOpacity style={styles.closeFullBtn} onPress={closeDetailModal}><Text style={styles.closeFullBtnText}>닫기</Text></TouchableOpacity>
+          </View>
+        )}
+      </ScrollView>
+    </Animated.View>
+  );
+
   const filteredPosts = posts.filter((post: any) => selectedTab === '전체' || post.type === selectedTab);
 
   if (loading) {
@@ -171,7 +211,10 @@ const ManagerCommunity = ({ route, navigation }: any) => {
               
               <View style={styles.cardFooter}>
                 <TouchableOpacity style={styles.profileRow} onPress={() => openDetailModal(post.writerId, post.author)}>
-                  <Image source={getProfileImage(post.profileImageUrl)} style={[styles.profileImg, isPast && { opacity: 0.5 }]} />
+                  {getFullImageUrl(post.profileImageUrl)
+                    ? <FastImage source={{ uri: getFullImageUrl(post.profileImageUrl)!, priority: FastImage.priority.normal }} style={[styles.profileImg, isPast && { opacity: 0.5 }]} />
+                    : <Image source={require('../assets/profile.png')} style={[styles.profileImg, isPast && { opacity: 0.5 }]} />
+                  }
                   <Text style={[styles.authorText, isPast && { color: '#666666' }]}>{post.author}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={{ marginRight: 10 }} onPress={() => openPostDetail(post)}>
@@ -187,7 +230,7 @@ const ManagerCommunity = ({ route, navigation }: any) => {
         {filteredPosts.length === 0 && <Text style={{ color: '#999', textAlign: 'center', marginTop: 30, fontSize: 16 }}>등록된 커뮤니티 글이 없습니다.</Text>}
       </ScrollView>
 
-      {/* 기본 모달 영역 */}
+      {/* 기본 모달 영역 (댓글 모달 닫힌 상태에서만) */}
       {!isCommentVisible && (
         <>
           <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={closeResultModal}>
@@ -203,7 +246,8 @@ const ManagerCommunity = ({ route, navigation }: any) => {
           <Modal visible={deleteTarget !== null} animationType="fade" transparent={true} onRequestClose={() => setDeleteTarget(null)}>
             <View style={styles.deleteModalOverlay}>
               <View style={styles.deleteModalBox}>
-                <Text style={styles.deleteModalText}>삭제하시겠습니까?</Text>
+                <Text style={[styles.deleteModalTitle, { color: '#FF4D4D' }]}>삭제 확인</Text>
+                <Text style={styles.deleteModalMessage}>게시글을 정말로 삭제하시겠습니까?</Text>
                 <View style={styles.deleteBtnRow}>
                   <TouchableOpacity style={styles.deleteBtnYes} onPress={executeDelete}><Text style={styles.deleteBtnYesText}>예</Text></TouchableOpacity>
                   <TouchableOpacity style={styles.deleteBtnNo} onPress={() => setDeleteTarget(null)}><Text style={styles.deleteBtnNoText}>아니오</Text></TouchableOpacity>
@@ -212,40 +256,11 @@ const ManagerCommunity = ({ route, navigation }: any) => {
             </View>
           </Modal>
 
+          {/* 💡 게시글 목록에서 프로필 클릭 시 뜨는 프로필 상세 모달 (댓글 모달 밖) */}
           <Modal visible={isDetailVisible} transparent={true} animationType="fade" onRequestClose={closeDetailModal}>
             <View style={styles.modalOverlay}>
               <TouchableWithoutFeedback onPress={closeDetailModal}><View style={StyleSheet.absoluteFill} /></TouchableWithoutFeedback>
-              <Animated.View style={[styles.bottomSheet, { height: detailHeightAnim, overflow: 'hidden' }]}>
-                <View {...detailPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
-                  <View style={styles.dragHandle} />
-                  <View style={styles.sheetHeader}>
-                    <Text style={styles.sheetTitle}>회원 정보 확인</Text>
-                    <TouchableOpacity onPress={closeDetailModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity>
-                  </View>
-                  <View style={styles.horizontalDivider} />
-                </View>
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
-                  {selectedUser && (
-                    <View style={styles.detailContainer}>
-                      <View style={styles.detailProfileWrapper}>
-                        <Image source={getProfileImage(selectedUser.profileImageUrl)} style={styles.profileBig} /> 
-                        <Text style={styles.profileName}>{selectedUser.name}</Text>
-                      </View>
-                      <View style={styles.detailInfoBox}>
-                        {renderDetailRow('이름', selectedUser.name)}
-                        {renderDetailRow('전화번호', selectedUser.phone)}
-                        {renderDetailRow('성별', selectedUser.gender)}
-                        {renderDetailRow('나이', selectedUser.age, '세')}
-                        {renderDetailRow('키', selectedUser.height, 'cm')}
-                        {renderDetailRow('몸무게', selectedUser.weight, 'kg')}
-                        {renderDetailRow('팔길이', selectedUser.arm, 'cm')}
-                        {renderDetailRow('암벽화 사이즈', selectedUser.shoe, 'mm')}
-                      </View>
-                      <TouchableOpacity style={styles.closeFullBtn} onPress={closeDetailModal}><Text style={styles.closeFullBtnText}>닫기</Text></TouchableOpacity>
-                    </View>
-                  )}
-                </ScrollView>
-              </Animated.View>
+              {renderDetailSheet()}
             </View>
           </Modal>
         </>
@@ -299,7 +314,10 @@ const ManagerCommunity = ({ route, navigation }: any) => {
                   return (
                     <View key={`comment-${parent.id}`}>
                       <View style={styles.commentItem}>
-                        <TouchableOpacity onPress={() => openDetailModal(parent.writerId, parent.writerName)}><Image source={getProfileImage(parent.profileImageUrl)} style={styles.commentAvatar} /></TouchableOpacity>
+                        <TouchableOpacity onPress={() => openDetailModal(parent.writerId, parent.writerName)}>{getFullImageUrl(parent.profileImageUrl)
+                          ? <FastImage source={{ uri: getFullImageUrl(parent.profileImageUrl)!, priority: FastImage.priority.normal }} style={styles.commentAvatar} />
+                          : <Image source={require('../assets/profile.png')} style={styles.commentAvatar} />
+                        }</TouchableOpacity>
                         <View style={styles.commentContentArea}>
                           <View style={styles.commentHeaderLine}>
                             <TouchableOpacity onPress={() => openDetailModal(parent.writerId, parent.writerName)}><Text style={styles.commentAuthorName}>{parent.writerName}</Text></TouchableOpacity>
@@ -317,7 +335,10 @@ const ManagerCommunity = ({ route, navigation }: any) => {
                         const isChildDeleted = child.content === "삭제된 댓글입니다.";
                         return (
                           <View key={`reply-${child.id}`} style={[styles.commentItem, styles.childCommentItem]}>
-                            <TouchableOpacity onPress={() => openDetailModal(child.writerId, child.writerName)}><Image source={getProfileImage(child.profileImageUrl)} style={styles.commentAvatar} /></TouchableOpacity>
+                            <TouchableOpacity onPress={() => openDetailModal(child.writerId, child.writerName)}>{getFullImageUrl(child.profileImageUrl)
+                              ? <FastImage source={{ uri: getFullImageUrl(child.profileImageUrl)!, priority: FastImage.priority.normal }} style={styles.commentAvatar} />
+                              : <Image source={require('../assets/profile.png')} style={styles.commentAvatar} />
+                            }</TouchableOpacity>
                             <View style={styles.commentContentArea}>
                               <View style={styles.commentHeaderLine}>
                                 <TouchableOpacity onPress={() => openDetailModal(child.writerId, child.writerName)}><Text style={styles.commentAuthorName}>{child.writerName}</Text></TouchableOpacity>
@@ -345,7 +366,10 @@ const ManagerCommunity = ({ route, navigation }: any) => {
                   </View>
                 )}
                 <View style={styles.commentInputRow}>
-                  <Image source={getProfileImage(myProfileImageUrl)} style={styles.commentInputAvatar} />
+                  {getFullImageUrl(myProfileImageUrl)
+                    ? <FastImage source={{ uri: getFullImageUrl(myProfileImageUrl)!, priority: FastImage.priority.normal }} style={styles.commentInputAvatar} />
+                    : <Image source={require('../assets/profile.png')} style={styles.commentInputAvatar} />
+                  }
                   <TextInput style={styles.commentTextInput} placeholder="댓글을 작성해주세요." placeholderTextColor="#666" value={commentInput} onChangeText={setCommentInput} multiline />
                   <TouchableOpacity onPress={submitComment}><Text style={[styles.commentSubmitBtn, commentInput.trim() ? { color: '#A1BE44' } : undefined]}>등록</Text></TouchableOpacity>
                 </View>
@@ -358,7 +382,8 @@ const ManagerCommunity = ({ route, navigation }: any) => {
             <View style={[StyleSheet.absoluteFill, { zIndex: 999, elevation: 999 }]}>
               <View style={styles.deleteModalOverlay}>
                 <View style={styles.deleteModalBox}>
-                  <Text style={styles.deleteModalText}>해당 댓글을 삭제하시겠습니까?</Text>
+                  <Text style={[styles.deleteModalTitle, { color: '#FF4D4D' }]}>삭제 확인</Text>
+                  <Text style={styles.deleteModalMessage}>해당 댓글을 삭제하시겠습니까?</Text>
                   <View style={styles.deleteBtnRow}>
                     <TouchableOpacity style={styles.deleteBtnYes} onPress={executeCommentDelete}><Text style={styles.deleteBtnYesText}>예</Text></TouchableOpacity>
                     <TouchableOpacity style={styles.deleteBtnNo} onPress={() => setCommentDeleteTarget(null)}><Text style={styles.deleteBtnNoText}>아니오</Text></TouchableOpacity>
@@ -380,41 +405,17 @@ const ManagerCommunity = ({ route, navigation }: any) => {
             </View>
           )}
 
+          {/* 💡 수정된 부분: 댓글 모달 내부에서 프로필 클릭 시 프로필 상세 시트 띄우기
+              댓글 모달(isCommentVisible) 안에서 openDetailModal 호출 시
+              Modal 레이어 구조상 바깥 Modal이 안 뜨는 문제를 해결하기 위해
+              댓글 모달 내부에 absoluteFill View로 프로필 시트를 직접 렌더링 */}
           {isDetailVisible && (
-            <View style={[StyleSheet.absoluteFill, { zIndex: 999, elevation: 999 }]}>
+            <View style={[StyleSheet.absoluteFill, { zIndex: 998, elevation: 998 }]}>
               <View style={styles.modalOverlay}>
-                <TouchableWithoutFeedback onPress={closeDetailModal}><View style={StyleSheet.absoluteFill} /></TouchableWithoutFeedback>
-                <Animated.View style={[styles.bottomSheet, { height: detailHeightAnim, overflow: 'hidden' }]}>
-                  <View {...detailPanResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
-                    <View style={styles.dragHandle} />
-                    <View style={styles.sheetHeader}>
-                      <Text style={styles.sheetTitle}>회원 정보 확인</Text>
-                      <TouchableOpacity onPress={closeDetailModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity>
-                    </View>
-                    <View style={styles.horizontalDivider} />
-                  </View>
-                  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
-                    {selectedUser && (
-                      <View style={styles.detailContainer}>
-                        <View style={styles.detailProfileWrapper}>
-                          <Image source={getProfileImage(selectedUser.profileImageUrl)} style={styles.profileBig} /> 
-                          <Text style={styles.profileName}>{selectedUser.name}</Text>
-                        </View>
-                        <View style={styles.detailInfoBox}>
-                          {renderDetailRow('이름', selectedUser.name)}
-                          {renderDetailRow('전화번호', selectedUser.phone)}
-                          {renderDetailRow('성별', selectedUser.gender)}
-                          {renderDetailRow('나이', selectedUser.age, '세')}
-                          {renderDetailRow('키', selectedUser.height, 'cm')}
-                          {renderDetailRow('몸무게', selectedUser.weight, 'kg')}
-                          {renderDetailRow('팔길이', selectedUser.arm, 'cm')}
-                          {renderDetailRow('암벽화 사이즈', selectedUser.shoe, 'mm')}
-                        </View>
-                        <TouchableOpacity style={styles.closeFullBtn} onPress={closeDetailModal}><Text style={styles.closeFullBtnText}>닫기</Text></TouchableOpacity>
-                      </View>
-                    )}
-                  </ScrollView>
-                </Animated.View>
+                <TouchableWithoutFeedback onPress={closeDetailModal}>
+                  <View style={StyleSheet.absoluteFill} />
+                </TouchableWithoutFeedback>
+                {renderDetailSheet()}
               </View>
             </View>
           )}
@@ -425,7 +426,6 @@ const ManagerCommunity = ({ route, navigation }: any) => {
   );
 };
 
-// ... 아래의 스타일 객체는 그대로 유지 ...
 const styles = StyleSheet.create({
   background: { flex: 1, backgroundColor: '#1A1A1A', paddingHorizontal: 20, paddingTop: 10 },
   tabContainer: { flexDirection: 'row', backgroundColor: '#3A3A3A', borderRadius: 24, padding: 4, marginBottom: 20 },
@@ -467,14 +467,60 @@ const styles = StyleSheet.create({
   textProfileText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' }, 
   authorText: { color: '#cccccc', fontSize: 16, fontWeight: '600' }, 
 
+  // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
   deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  deleteModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' }, 
-  deleteModalText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center' }, 
+  deleteModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
+    alignItems: 'center' 
+  },
+  deleteModalTitle: { 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    marginBottom: 8 
+  }, 
+  deleteModalMessage: { 
+    color: '#ffffff', 
+    fontSize: 18, 
+    fontWeight: 'bold', 
+    marginBottom: 25, 
+    textAlign: 'center', 
+    lineHeight: 24 
+  }, 
   deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  deleteBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginRight: 5 }, 
-  deleteBtnYesText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
-  deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginLeft: 5 }, 
+  deleteBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 }, 
+  deleteBtnYesText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
+  deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 }, 
   deleteBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
+
+  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  resultModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
+    alignItems: 'center' 
+  }, 
+  resultModalTitle: { 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    marginBottom: 8 
+  }, 
+  resultModalMessage: { 
+    color: '#ffffff', 
+    fontSize: 18, 
+    fontWeight: 'bold', 
+    marginBottom: 25, 
+    textAlign: 'center', 
+    lineHeight: 24 
+  }, 
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, 
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
+  // ─────────────────────────────────────────────────────────────────────────────────────────
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%' },
@@ -494,13 +540,6 @@ const styles = StyleSheet.create({
   detailValue: { color: '#ffffff', fontSize: 17, fontWeight: 'bold' }, 
   closeFullBtn: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 18, alignItems: 'center' }, 
   closeFullBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
-
-  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, 
-  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, 
-  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, 
-  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, 
-  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
 
   commentSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: Platform.OS === 'ios' ? 30 : 20, width: '100%', overflow: 'hidden' },
   postDetailContainer: { paddingBottom: 10, paddingTop: 10 },

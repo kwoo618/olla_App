@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useManagerUser, resolveMembershipType, getFullImageUrl } from '../ts/ManagerUser';
+import FastImage from 'react-native-fast-image';
 
 const ManagerUser = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
@@ -79,15 +80,13 @@ const ManagerUser = ({ navigation }: any) => {
               }
             }
 
-            // 💡 프로필 이미지 경로 변환 적용
-            const avatarSource = memberInfo.profileImageUrl 
-              ? { uri: getFullImageUrl(memberInfo.profileImageUrl) } 
-              : require('../assets/profile.png');
-
             return (
               <View key={`u-${memberId || index}`} style={styles.tableRow}>
                 <TouchableOpacity style={[styles.colName, styles.profileNameContainer]} onPress={() => openDetailModal(memberId, targetName, targetPhone)}>
-                  <Image source={avatarSource} style={styles.listProfileImg} />
+                  {getFullImageUrl(memberInfo.profileImageUrl)
+                    ? <FastImage source={{ uri: getFullImageUrl(memberInfo.profileImageUrl)!, priority: FastImage.priority.normal }} style={styles.listProfileImg} />
+                    : <Image source={require('../assets/profile.png')} style={styles.listProfileImg} />
+                  }
                   <Text style={styles.rowTextBold} numberOfLines={1}>{targetName}</Text>
                 </TouchableOpacity>
                 
@@ -110,7 +109,8 @@ const ManagerUser = ({ navigation }: any) => {
         )}
       </ScrollView>
 
-      <TouchableOpacity style={[styles.fab, { bottom: Math.max(insets.bottom, 20) }]} onPress={openAddModal}>
+      {/* 💡 수정된 부분: Dashboard와 위치(bottom 15, right 20)를 동일하게 맞춤 */}
+      <TouchableOpacity style={styles.fab} onPress={openAddModal}>
         <Text style={styles.fabText}>+ 회원 등록</Text>
       </TouchableOpacity>
 
@@ -130,7 +130,6 @@ const ManagerUser = ({ navigation }: any) => {
                 </TouchableOpacity>
               </View>
             </View>
-            {/* [수정 포인트] flex: 1 추가 및 paddingBottom 늘림 */}
             <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }}>
               {selectedUser && (
                 <View style={styles.infoBox}>
@@ -174,7 +173,6 @@ const ManagerUser = ({ navigation }: any) => {
                   </TouchableOpacity>
                 </View>
               </View>
-              {/* [수정 포인트] flex: 1 추가 및 paddingBottom 늘림 */}
               <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>이름</Text>
@@ -245,7 +243,6 @@ const ManagerUser = ({ navigation }: any) => {
                   </TouchableOpacity>
                 </View>
               </View>
-              {/* [수정 포인트] flex: 1 추가 및 paddingBottom 늘림 */}
               <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>제목</Text>
@@ -312,8 +309,24 @@ const styles = StyleSheet.create({
   badgeInactive: { backgroundColor: '#333' },
   badgeText: { fontSize: 11, fontWeight: 'bold', color: '#A1BE44' },
   trashIcon: { width: 20, height: 20, tintColor: '#FF4D4D' },
-  fab: { position: 'absolute', right: 20, backgroundColor: '#A1BE44', paddingHorizontal: 25, paddingVertical: 15, borderRadius: 30, elevation: 5 },
+  
+  // 💡 수정된 부분: Dashboard의 FAB 위치와 완전히 동일하게 통일 (디자인은 유지)
+  fab: { 
+    position: 'absolute', 
+    bottom: 15, 
+    right: 20, 
+    backgroundColor: '#A1BE44', 
+    paddingHorizontal: 25, 
+    paddingVertical: 15, 
+    borderRadius: 30, 
+    elevation: 5,
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.3, 
+    shadowRadius: 4.65 
+  },
   fabText: { color: '#000', fontWeight: 'bold', fontSize: 16 },
+
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 25, paddingTop: 10, overflow: 'hidden', width: '100%' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333', borderRadius: 2, alignSelf: 'center', marginTop: 10, marginBottom: 20 },
@@ -332,17 +345,52 @@ const styles = StyleSheet.create({
   detailValue: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
   closeFullBtn: { backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 10 },
   closeFullBtnText: { color: '#000', fontWeight: 'bold', fontSize: 18 },
+
+  // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
-  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 },
+  resultModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
+    alignItems: 'center' 
+  },
+  resultModalTitle: { 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    marginBottom: 8 
+  },
+  resultModalMessage: { 
+    color: '#ffffff', 
+    fontSize: 18, 
+    fontWeight: 'bold',
+    marginBottom: 25, 
+    textAlign: 'center', 
+    lineHeight: 24 
+  },
   resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
-  deleteModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
-  deleteModalText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center', lineHeight: 26 },
+
+  deleteModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
+    alignItems: 'center' 
+  },
+  deleteModalText: { 
+    color: '#ffffff', 
+    fontSize: 18, 
+    fontWeight: 'bold',
+    marginBottom: 25, 
+    textAlign: 'center', 
+    lineHeight: 24 
+  },
   deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  btnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginRight: 5 },
-  btnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
+  btnYes: { flex: 1, paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 },
+  btnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 },
   btnTextBlack: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
   btnTextWhite: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
 });

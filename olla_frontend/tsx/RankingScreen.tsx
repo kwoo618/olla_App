@@ -4,12 +4,13 @@ import {
   Modal, Animated, TouchableWithoutFeedback 
 } from 'react-native';
 import { useRanking, getFullImageUrl, getSectionColor, getRankColor, colors } from '../ts/Ranking';
+import FastImage from 'react-native-fast-image';
 
 // ─────────────────────────── 프로필 이미지 컴포넌트 ───────────────────────────
 const ProfileImage = ({ uri, style }: { uri?: string | null; style: any }) => {
   const fullUri = getFullImageUrl(uri);
   if (fullUri) {
-    return <Image source={{ uri: fullUri }} style={style} />;
+    return <FastImage source={{ uri: fullUri, priority: FastImage.priority.normal }} style={style} />;
   }
   return <Image source={require('../assets/profile.png')} style={style} />;
 };
@@ -210,14 +211,19 @@ const RankingScreen = ({ route }: any) => {
         </View>
       </Modal>
 
-      {/* Custom Alert Modal */}
+      {/* ─── 💡 커스텀 알림 결과 모달 (OLLA 표준 규격 적용) ─── */}
       <Modal visible={alertConfig.visible} animationType="fade" transparent onRequestClose={() => setAlertConfig(prev => ({ ...prev, visible: false }))}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' }}>
-          <View style={{ width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }}>
-            <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#FF4D4D', marginBottom: 5 }}>{alertConfig.title}</Text>
-            <Text style={{ color: '#fff', fontSize: 17, marginBottom: 25, textAlign: 'center' }}>{alertConfig.message}</Text>
-            <TouchableOpacity style={{ width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }} onPress={() => setAlertConfig(prev => ({ ...prev, visible: false }))}>
-              <Text style={{ color: '#000', fontSize: 18, fontWeight: 'bold' }}>확인</Text>
+        <View style={styles.resultModalOverlay}>
+          <View style={styles.resultModalBox}>
+            <Text style={[styles.resultModalTitle, { color: '#FF4D4D' }]}>
+              {alertConfig.title}
+            </Text>
+            <Text style={styles.resultModalMessage}>{alertConfig.message}</Text>
+            <TouchableOpacity 
+              style={styles.resultModalBtn} 
+              onPress={() => setAlertConfig(prev => ({ ...prev, visible: false }))}
+            >
+              <Text style={styles.resultModalBtnText}>확인</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -301,6 +307,42 @@ const styles = StyleSheet.create({
   detailValue: { color: '#ffffff', fontSize: 17, fontWeight: 'bold' }, 
   closeFullBtn: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 18, alignItems: 'center' }, 
   closeFullBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
+
+  // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
+  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  resultModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
+    alignItems: 'center' 
+  },
+  resultModalTitle: { 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    marginBottom: 8 
+  },
+  resultModalMessage: { 
+    color: '#ffffff', 
+    fontSize: 18, 
+    fontWeight: 'bold',
+    marginBottom: 25, 
+    textAlign: 'center', 
+    lineHeight: 24 
+  },
+  resultModalBtn: { 
+    width: '100%', 
+    backgroundColor: '#A1BE44', 
+    paddingVertical: 16, 
+    borderRadius: 12, 
+    alignItems: 'center' 
+  },
+  resultModalBtnText: { 
+    color: '#000000', 
+    fontSize: 18, 
+    fontWeight: 'bold' 
+  },
 });
 
 export default RankingScreen;

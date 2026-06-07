@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Dimensions, Animated, PanResponder, Platform, Keyboard } from 'react-native';
+import { Dimensions, Animated, PanResponder, Platform } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
@@ -7,9 +7,9 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import { API_BASE_URL } from '../src/constants/Config';
 import messaging from '@react-native-firebase/messaging';
 
-// 이미지 절대경로 변환
-export const getFullImageUrl = (path: string) => {
-  if (!path) return null;
+// 이미지 경로 
+export const getFullImageUrl = (path: string | null | undefined): string | null => {
+  if (!path || path === 'null' || path === 'undefined') return null;
   if (path.startsWith('http') || path.startsWith('file:') || path.startsWith('content:')) return path;
   const domain = API_BASE_URL.replace('/api/v1', '');
   const formattedPath = path.startsWith('/') ? path : `/${path}`;
@@ -144,6 +144,7 @@ export const useMyPage = (navigation: any) => {
       const notiRes = await axios.get(`${API_BASE_URL}/members/me/notifications/settings`, { headers: { Authorization: `Bearer ${userToken}` } });
       if (notiRes.data.data) {
         setNotiState(notiRes.data.data);
+        await AsyncStorage.setItem('notiSettings', JSON.stringify(notiRes.data.data));
       }
     } catch (e) {
       console.log('알림 설정 로드 실패');
@@ -250,7 +251,7 @@ export const useMyPage = (navigation: any) => {
     }
   }, [navigation]);
 
-  // 설명: 탭 복귀 시 데이터 최신화 동기화
+  // 탭 복귀 시 데이터 최신화 동기화
   useEffect(() => {
     if (isFocused) {
       fetchMyInfo();
@@ -265,11 +266,10 @@ export const useMyPage = (navigation: any) => {
     setRefreshing(false);
   }, [fetchMyInfo, fetchNotiSettings]);
 
-  // 알림 토글 백엔드 전송 (Spring Boot is 누락 방어)
-  const handleNotiToggle = async (field: keyof NotiState) => {
-    const currentValue = notiState[field];
-    const optimisticState = { ...notiState, [field]: !currentValue };
-    setNotiState(optimisticState); // 화면 즉시 변경
+  // ─── 💡 추가된 부분: 한 번에 여러 알림 상태를 업데이트하는 함수 ───
+  const updateMultipleNotiSettings = async (newStateObject: Partial<NotiState>) => {
+    const optimisticState = { ...notiState, ...newStateObject };
+    setNotiState(optimisticState); // UI에 즉시 한 번에 반영
 
     try {
       const userToken = await AsyncStorage.getItem('userToken');
@@ -287,9 +287,11 @@ export const useMyPage = (navigation: any) => {
         headers: { Authorization: `Bearer ${userToken}` } 
       });
       
-      if (res.data.data) setNotiState({ ...optimisticState, ...res.data.data });
+      const finalState = res.data.data ? { ...optimisticState, ...res.data.data } : optimisticState;
+      setNotiState(finalState);
+      await AsyncStorage.setItem('notiSettings', JSON.stringify(finalState));
     } catch (e) {
-      setNotiState(prev => ({ ...prev, [field]: currentValue })); // 롤백
+      setNotiState(notiState); // 에러 발생 시 원래 상태로 롤백
       showResultModal('오류', '알림 설정 변경에 실패했습니다.', 'error');
     }
   };
@@ -304,7 +306,7 @@ export const useMyPage = (navigation: any) => {
     });
   };
 
-  // 프로필 정보 및 공개 여부 백엔드 전송 (변수명 불일치 완벽 방어)
+  // 프로필 정보 저장
   const handleSaveProfile = async () => {
     setIsImageUploading(true);
     try {
@@ -344,21 +346,16 @@ export const useMyPage = (navigation: any) => {
         footSize: profileData.shoe ? parseFloat(profileData.shoe) : null,
         age: parseInt(calcAgeFromBirth(profileData.birthDate)) || 0,
 
-        // 백엔드 변수명 및 Jackson 파싱 에러 대비 4가지 경우의 수 모두 전송
         isPhonePublic: profileToggles.showPhone,
         phonePublic: profileToggles.showPhone,
         isPublicPhone: profileToggles.showPhone,
         publicPhone: profileToggles.showPhone,
-
         isHeightPublic: profileToggles.showHeight,
         heightPublic: profileToggles.showHeight,
-
         isWeightPublic: profileToggles.showWeight, 
         weightPublic: profileToggles.showWeight, 
-
         isArmSpanPublic: profileToggles.showArm,
         armSpanPublic: profileToggles.showArm,
-
         isFootSizePublic: profileToggles.showShoe,
         footSizePublic: profileToggles.showShoe,
       };
@@ -408,13 +405,11 @@ export const useMyPage = (navigation: any) => {
     }
   };
 
-  // 로그아웃 (기기 토큰 파기 + FCM 토큰 서버 삭제)
   const executeLogout = async () => {
     try {
       const token = await AsyncStorage.getItem('userToken');
       const refreshToken = await AsyncStorage.getItem('refreshToken');
 
-      // FCM 토큰을 서버에서 삭제 (로그아웃 후 알림 수신 차단)
       try {
         const fcmToken = await messaging().getToken();
         if (token && fcmToken) {
@@ -425,7 +420,6 @@ export const useMyPage = (navigation: any) => {
           });
         }
       } catch (fcmError) {
-        // FCM 토큰 삭제 실패해도 로그아웃은 계속 진행
         console.log('FCM 토큰 삭제 실패 (무시):', fcmError);
       }
 
@@ -433,13 +427,12 @@ export const useMyPage = (navigation: any) => {
         await axios.post(`${API_BASE_URL}/auth/logout`, { refreshToken }, { headers: { Authorization: `Bearer ${token}` }, timeout: 3000 });
       }
     } catch (e) {} finally {
-      await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole']);
+      await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole', 'fcmToken']);
       setLogoutModalVisible(false);
       setTimeout(() => navigation.reset({ index: 0, routes: [{ name: 'Login' }] }), Platform.OS === 'ios' ? 400 : 100);
     }
   };
 
-  // 회원 탈퇴
   const executeDeleteAccount = async () => {
     try {
       const token = await AsyncStorage.getItem('userToken');
@@ -504,7 +497,7 @@ export const useMyPage = (navigation: any) => {
     loading, refreshing, onRefresh, isAdmin, calcAgeFromBirth,
     memInfo, hasMembership, memSummaryText, isMembershipExpanded, setIsMembershipExpanded,
     profileData, setProfileData, profileToggles, setProfileToggles,
-    notiState, handleNotiToggle,
+    notiState, updateMultipleNotiSettings, // 💡 단일 토글(handleNotiToggle) 대신 배치(Batch) 토글 함수 노출
     resultModalVisible, setResultModalVisible, resultModalConfig,
     isProfileModalVisible, openProfileModal, closeProfileModal, profileHeightAnim, profilePanResponder,
     isImageUploading, handleSelectImage, handleSaveProfile,

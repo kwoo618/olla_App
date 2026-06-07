@@ -8,8 +8,6 @@ import axios from 'axios';
 import { API_BASE_URL } from './src/constants/Config';
 import messaging from '@react-native-firebase/messaging';
 
-// notifee 정적 import 제거 — 동적 import로만 사용
-
 type RootParamList = {
   Login: undefined; Signup: undefined; PersonalInfo: undefined; Loading: undefined;
   Home: undefined; Notice: undefined; Notification: undefined; Recode: undefined; Ranking: undefined;
@@ -42,89 +40,98 @@ const Stack = createNativeStackNavigator<RootParamList>();
 const USER_TAB_ORDER = ['Home', 'Recode', 'Ranking', 'Community', 'MY'];
 const ADMIN_TAB_ORDER = ['ManagerDashboard', 'ManagerUser', 'ManagerTicket', 'ManagerNotice', 'ManagerCommunity'];
 
-const CHANNEL_ID = 'olla_default';
+const CHANNEL_ID = 'olla_default_channel';
 
-// Android 전용 채널 생성
 const createNotificationChannel = async () => {
   if (Platform.OS !== 'android') return;
   try {
-    const notifee = (await import('@notifee/react-native')).default;
-    const { AndroidImportance } = await import('@notifee/react-native');
+    const notifeeModule = await import('@notifee/react-native');
+    const notifee = notifeeModule.default;
+    const { AndroidImportance } = notifeeModule;
+    await notifee.requestPermission();
     await notifee.createChannel({
       id: CHANNEL_ID,
       name: 'Olla 알림',
       importance: AndroidImportance.HIGH,
       sound: 'default',
     });
-  } catch (e) {
-    console.log('Notifee 채널 생성 실패:', e);
-  }
+  } catch (e) {}
 };
 
-// iOS 알림 권한 요청
 const requestIosPermission = async () => {
   if (Platform.OS !== 'ios') return;
   try {
-    const notifee = (await import('@notifee/react-native')).default;
+    const notifeeModule = await import('@notifee/react-native');
+    const notifee = notifeeModule.default;
     await notifee.requestPermission();
-  } catch (e) {
-    console.log('iOS 알림 권한 요청 실패:', e);
-  }
+  } catch (e) {}
 };
 
-// FCM 수신 시 Notifee 배너 표시 (iOS/Android 분기)
 const displayForegroundNotification = async (remoteMessage: any) => {
   try {
-    const notifee = (await import('@notifee/react-native')).default;
+    const settingsRaw = await AsyncStorage.getItem('notiSettings');
+    if (settingsRaw) {
+      const settings = JSON.parse(settingsRaw);
+      if (!settings.isGlobalNotificationOn) return;
+      const type = remoteMessage.data?.type;
+      if (type === 'ACTIVITY' && !settings.isActivityNotificationOn) return;
+      if (type === 'CREW' && !settings.isCrewNotificationOn) return;
+      if (type === 'MEMBERSHIP' && !settings.isMembershipNotificationOn) return;
+      if (type === 'NOTICE' && !settings.isNoticeNotificationOn) return;
+    }
+
+    const notifeeModule = await import('@notifee/react-native');
+    const notifee = notifeeModule.default;
+    const { AndroidImportance } = notifeeModule;
+
+    const title = remoteMessage.data?.title ?? remoteMessage.notification?.title ?? '알림';
+    const body  = remoteMessage.data?.body  ?? remoteMessage.notification?.body  ?? '';
+
     if (Platform.OS === 'android') {
-      const { AndroidImportance } = await import('@notifee/react-native');
       await notifee.displayNotification({
-        title: remoteMessage.notification?.title ?? '알림',
-        body: remoteMessage.notification?.body ?? '',
+        title,
+        body,
         android: {
           channelId: CHANNEL_ID,
           importance: AndroidImportance.HIGH,
           pressAction: { id: 'default' },
+          smallIcon: 'ic_launcher',
+          largeIcon: 'ic_launcher',
         },
       });
     } else {
-      // iOS
       await notifee.displayNotification({
-        title: remoteMessage.notification?.title ?? '알림',
-        body: remoteMessage.notification?.body ?? '',
-        ios: {
-          sound: 'default',
-        },
+        title,
+        body,
+        ios: { sound: 'default' },
       });
     }
-  } catch (e) {
-    console.log('Notifee 알림 표시 실패:', e);
-  }
+  } catch (e) {}
 };
 
-// FCM 토큰을 서버에 등록/갱신
 const registerFcmToken = async () => {
   try {
     const userToken = await AsyncStorage.getItem('userToken');
     if (!userToken) return;
 
-    // APNs(.p8) 설정 전까지 아이폰(iOS)은 토큰 발급을 강제로 건너뛰게 설정 
-    // 이렇게 하면 에러가 발생하지 않고 다음 화면으로 정상 작동합니다.
-    if (Platform.OS === 'ios') {
-      console.log('APNs 미설정 상태: iOS FCM 토큰 발급을 임시로 건너뜁니다.');
-      return; 
+    if (Platform.OS === 'ios' && !messaging().isDeviceRegisteredForRemoteMessages) {
+      await messaging().registerDeviceForRemoteMessages();
     }
 
     const fcmToken = await messaging().getToken();
     if (!fcmToken) return;
+
+    const savedToken = await AsyncStorage.getItem('fcmToken');
+    if (savedToken === fcmToken) return;
+
     await axios.post(
       `${API_BASE_URL}/members/me/fcm-token`,
-      { token: fcmToken },
+      { deviceToken: fcmToken },
       { headers: { Authorization: `Bearer ${userToken}` } },
     );
-  } catch (e) {
-    console.log('FCM 토큰 갱신 실패:', e);
-  }
+
+    await AsyncStorage.setItem('fcmToken', fcmToken);
+  } catch (e) {}
 };
 
 interface BottomNavItemProps {
@@ -164,6 +171,10 @@ const AppContent = () => {
   const [hasUnreadNotification, setHasUnreadNotification] = useState(false);
   const lastAlertId = useRef<number | null>(null);
 
+  // ✅ 세션 만료 모달
+  const [sessionExpiredVisible, setSessionExpiredVisible] = useState(false);
+  const isSessionExpired = useRef(false);
+
   const [profileData, setProfileData] = useState({ name: '권클라이밍', phone: '010-1234-5678', age: '25', height: '175', weight: '70', arm: '180', shoe: '260' });
   const [profileToggles, setProfileToggles] = useState({ showName: true, showPhone: false, showAge: true, showHeight: true, showWeight: true, showArm: true, showShoe: true });
   const [difficultyData, setDifficultyData] = useState([
@@ -183,27 +194,65 @@ const AppContent = () => {
   const adminScreens = ['ManagerDashboard', 'ManagerUser', 'ManagerTicket', 'ManagerNotice', 'ManagerCommunity'];
   const isAdminMode = adminScreens.includes(routeName);
 
+  // ✅ 세션 만료 인터셉터 - 중복 방지 포함
   useEffect(() => {
-    createNotificationChannel();
-    requestIosPermission();
-
-    const unsubscribeForeground = messaging().onMessage(async remoteMessage => {
-      await displayForegroundNotification(remoteMessage);
-      setHasUnreadNotification(true);
-    });
-
-    const unsubscribeTokenRefresh = messaging().onTokenRefresh(async () => {
-      await registerFcmToken();
-    });
-
-    registerFcmToken();
-
+    const interceptor = axios.interceptors.response.use(
+      response => response,
+      async error => {
+        if (error.response?.status === 401 && !isSessionExpired.current) {
+          isSessionExpired.current = true;
+          await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole', 'fcmToken']);
+          setSessionExpiredVisible(true);
+        }
+        return Promise.reject(error);
+      }
+    );
     return () => {
-      unsubscribeForeground();
-      unsubscribeTokenRefresh();
+      axios.interceptors.response.eject(interceptor);
     };
   }, []);
 
+  const handleSessionExpiredConfirm = () => {
+    setSessionExpiredVisible(false);
+    isSessionExpired.current = false;
+    navigationRef.reset({
+      index: 0,
+      routes: [{ name: 'Login' }],
+    });
+  };
+
+  // FCM 초기화
+  useEffect(() => {
+    let unsubscribeForeground: (() => void) | null = null;
+    let unsubscribeTokenRefresh: (() => void) | null = null;
+
+    const init = async () => {
+      try {
+        await createNotificationChannel();
+        await requestIosPermission();
+
+        unsubscribeForeground = messaging().onMessage(async remoteMessage => {
+          await displayForegroundNotification(remoteMessage);
+          setHasUnreadNotification(true);
+        });
+
+        unsubscribeTokenRefresh = messaging().onTokenRefresh(async () => {
+          await registerFcmToken();
+        });
+
+        await registerFcmToken();
+      } catch (e) {}
+    };
+
+    init();
+
+    return () => {
+      unsubscribeForeground?.();
+      unsubscribeTokenRefresh?.();
+    };
+  }, []);
+
+  // 미읽 알림 폴링
   useEffect(() => {
     const fetchUnreadNotifications = async () => {
       try {
@@ -231,9 +280,7 @@ const AppContent = () => {
         } else {
           setHasUnreadNotification(false);
         }
-      } catch (error) {
-        // 무시
-      }
+      } catch (error) {}
     };
 
     fetchUnreadNotifications();
@@ -247,6 +294,7 @@ const AppContent = () => {
     };
   }, [initialRoute, isAdminMode]);
 
+  // 자동 로그인 체크
   useEffect(() => {
     const checkLoginStatus = async () => {
       try {
@@ -256,9 +304,10 @@ const AppContent = () => {
             await axios.get(`${API_BASE_URL}/members/me`, {
               headers: { Authorization: `Bearer ${userToken}` },
             });
+            // ✅ Home 진입 시 FCM 토큰 재등록 강제
+            await AsyncStorage.removeItem('fcmToken');
             setInitialRoute('Home');
           } catch (apiError) {
-            console.log('토큰이 만료되었거나 유효하지 않음:', apiError);
             await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole']);
             setInitialRoute('Login');
           }
@@ -266,7 +315,6 @@ const AppContent = () => {
           setInitialRoute('Login');
         }
       } catch (error) {
-        console.error('기기 저장소 접근 실패', error);
         setInitialRoute('Login');
       }
     };
@@ -409,6 +457,20 @@ const AppContent = () => {
         )}
       </NavigationContainer>
 
+      {/* ✅ 세션 만료 모달 */}
+      <Modal visible={sessionExpiredVisible} animationType="fade" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.deleteModalBox}>
+            <Text style={[styles.modalTitle, { color: '#FF4D4D' }]}>세션 만료</Text>
+            <Text style={styles.modalMessage}>세션이 만료되었습니다.{'\n'}다시 로그인해주세요.</Text>
+            <TouchableOpacity style={styles.btnConfirm} onPress={handleSessionExpiredConfirm}>
+              <Text style={styles.btnTextBlack}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 관리자 모드 종료 모달 */}
       <Modal visible={isExitModalVisible} animationType="fade" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.deleteModalBox}>
@@ -463,8 +525,10 @@ const styles = StyleSheet.create({
   bottomNavText: { fontSize: 9, color: '#7D7D7D' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   deleteModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
-  modalTitle: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 25 },
+  modalTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 10 },
+  modalMessage: { color: '#999999', fontSize: 15, textAlign: 'center', marginBottom: 25, lineHeight: 22 },
   modalBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  btnConfirm: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
   btnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
   btnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
   btnTextBlack: { color: '#000000', fontSize: 16, fontWeight: 'bold' },

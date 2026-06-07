@@ -6,11 +6,13 @@ import {
   TouchableWithoutFeedback, TextInput, KeyboardAvoidingView,
 } from 'react-native';
 import { Camera } from 'react-native-camera-kit';
+import { useIsFocused } from '@react-navigation/native';
 import {
   useManagerDashboard,
   DAY_LABELS, DAY_SELECT_OPTIONS, getHourRange,
   isValidImageUrl,
 } from '../ts/ManagerDashboard';
+import FastImage from 'react-native-fast-image';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CARD_INNER_W   = SCREEN_WIDTH - 40;
@@ -31,6 +33,7 @@ const requestCameraPermission = async () => {
 // ─── 컴포넌트 ───────────────────────────────────────────────────────────────
 const ManagerDashboard = ({ navigation }: any) => {
   const dash = useManagerDashboard(navigation);
+  const isFocused = useIsFocused(); 
 
   // ─── 상세 모달 애니메이션 ────────────────────────────────────────────────
   const detailHeightAnim = useRef(new Animated.Value(0)).current;
@@ -82,6 +85,22 @@ const ManagerDashboard = ({ navigation }: any) => {
   useEffect(() => {
     dash.checkAdminAndFetchData();
   }, [dash.checkAdminAndFetchData]);
+
+  useEffect(() => {
+    if (isFocused) {
+      const today = new Date().getDay();
+      const mappedDay = today === 0 ? 1 : today; 
+      dash.handleDaySelect(mappedDay);
+    }
+  }, [isFocused]);
+
+  const handleRefreshData = () => {
+    dash.refreshDashboardData();
+  };
+
+  const handlePullToRefresh = () => {
+    dash.onRefresh();
+  };
 
   // ─── 차트: 요일별 막대 ──────────────────────────────────────────────────
   const renderWeeklyBar = () => {
@@ -135,6 +154,7 @@ const ManagerDashboard = ({ navigation }: any) => {
   };
 
   // ─── 차트: 시간대별 꺾은선 ─────────────────────────────────────────────
+  // 🔧 수정: lineW 기준 통일 + 포인트 컨테이너 left:0 고정 + x축 라벨 컨테이너 height 명시
   const renderHourlyLine = () => {
     const selectedDay = dash.dashboardStats.selectedDay;
     const hourRange   = getHourRange(selectedDay);
@@ -142,12 +162,12 @@ const ManagerDashboard = ({ navigation }: any) => {
     const displayData = dash.hourlyData.slice(0, hourRange.length);
     const maxVal      = Math.max(...displayData, 1);
     const count       = displayData.length;
-    
-    // 차트 영역을 화면 안에 맞추기 위한 정확한 넓이 계산
-    const lineW       = CARD_INNER_W - 90; 
-    
-    const points      = displayData.map((val, i) => ({
-      x: count > 1 ? (i / (count - 1)) * lineW : 0,
+
+    // y축(30px) + paddingRight(10px) 제외한 실제 선 그리는 너비
+    const lineW = CARD_INNER_W - 40 - 30 - 10; // card padding(20*2) - yAxis(30) - paddingRight(10)
+
+    const points = displayData.map((val, i) => ({
+      x: count > 1 ? (i / (count - 1)) * lineW : lineW / 2,
       y: CHART_H - (val / maxVal) * CHART_H,
     }));
 
@@ -156,16 +176,21 @@ const ManagerDashboard = ({ navigation }: any) => {
         <Text style={styles.chartTitle}>{DAY_LABELS[selectedDay]}요일 시간대별 상세 분포</Text>
         <Text style={styles.chartSubTitle}>운영시간: {selectedDay === 6 ? '13:00 ~ 19:00' : '13:00 ~ 22:00'}</Text>
         <View style={{ flexDirection: 'row', height: CHART_H + 32, marginTop: 15 }}>
+          {/* Y축 레이블 */}
           <View style={{ width: 30, height: CHART_H, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 6 }}>
             {['Max', 'Mid', '0'].map(l => <Text key={l} style={styles.yAxisText}>{l}</Text>)}
           </View>
-          <View style={{ flex: 1, height: CHART_H + 32 }}>
+
+          {/* 차트 본체 */}
+          <View style={{ flex: 1, height: CHART_H + 32, position: 'relative' }}>
+            {/* 수평 가이드라인 */}
             {[0, 0.5, 1].map((r, i) => (
               <View key={i} style={{ position: 'absolute', top: CHART_H * (1 - r), left: 0, right: 0, height: 1, backgroundColor: '#383838' }} />
             ))}
-            
-            {/* 데이터 표시선 및 점 (점들이 잘리지 않도록 좌측 10px 만큼 offset) */}
-            <View style={{ position: 'absolute', top: 0, left: 10, width: lineW, height: CHART_H }}>
+
+            {/* 선 + 점: left:0 기준으로 그림 */}
+            <View style={{ position: 'absolute', top: 0, left: 0, width: lineW, height: CHART_H }}>
+              {/* 선분 */}
               {points.slice(0, -1).map((p, i) => {
                 const next  = points[i + 1];
                 const dx    = next.x - p.x;
@@ -174,30 +199,40 @@ const ManagerDashboard = ({ navigation }: any) => {
                 const angle = Math.atan2(dy, dx) * (180 / Math.PI);
                 return (
                   <View key={i} style={{
-                    position: 'absolute', width: len, height: 2, backgroundColor: '#A1BE44',
-                    left: p.x + dx / 2 - len / 2, top: p.y + dy / 2 - 1,
+                    position: 'absolute',
+                    width: len,
+                    height: 2,
+                    backgroundColor: '#A1BE44',
+                    left: p.x + dx / 2 - len / 2,
+                    top:  p.y + dy / 2 - 1,
                     transform: [{ rotate: `${angle}deg` }],
                   }} />
                 );
               })}
+              {/* 점 */}
               {points.map((p, i) => (
                 <View key={i} style={{
-                  position: 'absolute', left: p.x - 4, top: p.y - 4,
+                  position: 'absolute',
+                  left: p.x - 4,
+                  top:  p.y - 4,
                   width: 8, height: 8, borderRadius: 4,
-                  backgroundColor: '#A1BE44', borderWidth: 2, borderColor: '#2C2C2C',
+                  backgroundColor: '#A1BE44',
+                  borderWidth: 2, borderColor: '#2C2C2C',
                 }} />
               ))}
             </View>
-            
-            {/* 시간대 모든 라벨 1시간 간격으로 출력 */}
-            <View style={{ position: 'absolute', top: CHART_H + 8, left: 10, width: lineW }}>
+
+            {/* X축 레이블: position relative + height 명시해서 잘리지 않게 */}
+            <View style={{ position: 'absolute', top: CHART_H + 8, left: 0, width: lineW, height: 24 }}>
               {hourRange.map((hour, i) => {
-                const pointX = count > 1 ? (i / (count - 1)) * lineW : 0;
-                
+                const pointX = count > 1 ? (i / (count - 1)) * lineW : lineW / 2;
                 return (
-                  <Text 
-                    key={i} 
-                    style={[styles.xAxisText, { position: 'absolute', left: pointX - 15, width: 30, textAlign: 'center' }]}
+                  <Text
+                    key={i}
+                    style={[
+                      styles.xAxisText,
+                      { position: 'absolute', left: pointX - 15, width: 30, textAlign: 'center' },
+                    ]}
                   >
                     {hour}시
                   </Text>
@@ -228,7 +263,8 @@ const ManagerDashboard = ({ navigation }: any) => {
               <Text style={[styles.expiringCol, { width: 50, textAlign: 'center' }]}>상태</Text>
             </View>
             {list.map((m, idx) => {
-              const ddayColor   = m.dDay <= 3 ? '#FF4D4D' : m.dDay <= 7 ? '#FF9800' : '#A1BE44';
+              const dDayNum     = Number(m.dDay); 
+              const ddayColor   = dDayNum <= 3 ? '#FF4D4D' : dDayNum <= 7 ? '#FF9800' : '#A1BE44';
               const maskedPhone = m.phone ? m.phone.replace(/(\d{3})-?(\d{4})-?(\d{4})/, '$1-****-$3') : '-';
               return (
                 <View key={m.id} style={[styles.expiringRow, idx % 2 === 1 && { backgroundColor: '#222222' }]}>
@@ -282,7 +318,7 @@ const ManagerDashboard = ({ navigation }: any) => {
             )}
           </View>
         </View>
-        <TouchableOpacity style={styles.refreshBtn} activeOpacity={0.8} onPress={dash.refreshDashboardData}>
+        <TouchableOpacity style={styles.refreshBtn} activeOpacity={0.8} onPress={handleRefreshData}>
           <Text style={styles.refreshBtnText}>데이터 새로고침</Text>
         </TouchableOpacity>
       </View>
@@ -304,7 +340,7 @@ const ManagerDashboard = ({ navigation }: any) => {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={dash.refreshing} onRefresh={dash.onRefresh} tintColor="#A1BE44" />}
+        refreshControl={<RefreshControl refreshing={dash.refreshing} onRefresh={handlePullToRefresh} tintColor="#A1BE44" />}
       >
         {/* 헤더 카드 */}
         <View style={styles.headerCard}>
@@ -385,10 +421,10 @@ const ManagerDashboard = ({ navigation }: any) => {
                   activeOpacity={0.7}
                   onPress={() => openDetailModal(memberId, userName, userPhone)}
                 >
-                  <Image
-                    source={isValidImageUrl(member.profileImageUrl) ? { uri: member.profileImageUrl } : require('../assets/profile.png')}
-                    style={styles.profileImg}
-                  />
+                  {isValidImageUrl(member.profileImageUrl)
+                    ? <FastImage source={{ uri: member.profileImageUrl!, priority: FastImage.priority.normal }} style={styles.profileImg} />
+                    : <Image source={require('../assets/profile.png')} style={styles.profileImg} />
+                  }
                   <View style={styles.infoCol}>
                     <Text style={styles.nameText}>{userName}</Text>
                     <Text style={styles.subText}>{userPhone}</Text>
@@ -463,14 +499,14 @@ const ManagerDashboard = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 삭제 확인 모달 ───────────────────────────────────────────────── */}
+      {/* ─── 삭제 확인 모달 ─────────────────────────────────────────────────── */}
       <Modal visible={dash.isDeleteModalVisible} animationType="fade" transparent onRequestClose={() => dash.setDeleteModalVisible(false)}>
         <View style={styles.deleteModalOverlay}>
           <View style={styles.deleteModalBox}>
-            <Text style={[styles.resultModalTitle, { color: '#A1BE44' }]}>
-              해당 {dash.itemToDelete?.type === 'notice' ? '공지사항' : '게시글'} 삭제
+            <Text style={[styles.deleteModalTitle, { color: '#FF4D4D' }]}>
+              해당 {dash.itemToDelete?.type === 'notice' ? '공지사항' : '게시글'} 삭제!
             </Text>
-            <Text style={styles.resultModalMessage}>정말 삭제하시겠습니까?</Text>
+            <Text style={styles.deleteModalMessage}>정말 삭제하시겠습니까?</Text>
             <View style={styles.deleteBtnRow}>
               <TouchableOpacity style={styles.deleteBtnYes} onPress={dash.executeDelete}>
                 <Text style={styles.deleteBtnYesText}>삭제</Text>
@@ -499,15 +535,14 @@ const ManagerDashboard = ({ navigation }: any) => {
                 </TouchableOpacity>
               </View>
             </View>
-            {/* [수정] ScrollView에 flex: 1을 추가하여 남은 공간을 꽉 채우고, 버튼들이 잘리지 않도록 함 */}
             <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }}>
               {dash.selectedUser && (
                 <View style={styles.detailContainer}>
                   <View style={styles.detailProfileWrapper}>
-                    <Image
-                      source={isValidImageUrl(dash.selectedUser.profileImageUrl) ? { uri: dash.selectedUser.profileImageUrl } : require('../assets/profile.png')}
-                      style={styles.profileBig}
-                    />
+                    {isValidImageUrl(dash.selectedUser.profileImageUrl)
+                      ? <FastImage source={{ uri: dash.selectedUser.profileImageUrl!, priority: FastImage.priority.normal }} style={styles.profileBig} />
+                      : <Image source={require('../assets/profile.png')} style={styles.profileBig} />
+                    }
                     <Text style={styles.profileName}>{dash.selectedUser.name}</Text>
                   </View>
                   <View style={styles.infoBox}>
@@ -587,7 +622,7 @@ const ManagerDashboard = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 알림 발송 모달 ───────────────────────────────────────────────── */}
+      {/* ─── 알림 발송 모달 ─────────────────────────────────────────────────── */}
       <Modal visible={dash.isSendAlertModalVisible} animationType="fade" transparent onRequestClose={() => dash.setSendAlertModalVisible(false)}>
         <View style={styles.alertModalOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%', alignItems: 'center' }}>
@@ -651,10 +686,7 @@ const styles = StyleSheet.create({
   chartTitle:     { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 2 },
   chartSubTitle:  { color: '#A1BE44', fontSize: 12, marginBottom: 5 },
   yAxisText:      { color: '#888888', fontSize: 10 },
-  
-  // 폰트 사이즈를 9로 줄여 1시간 간격 표시 시 겹침 방지
-  xAxisText:      { color: '#888888', fontSize: 9 }, 
-  
+  xAxisText:      { color: '#888888', fontSize: 9 },
   bar:            { borderRadius: 6 },
   barValText:     { color: '#cccccc', fontSize: 10, fontWeight: 'bold', marginBottom: 4 },
   barDayLabel:    { color: '#999999', fontSize: 11, textAlign: 'center' },
@@ -738,27 +770,30 @@ const styles = StyleSheet.create({
   closeFullBtnText:     { color: '#000', fontWeight: 'bold', fontSize: 18 },
 
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox:     { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle:   { fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
-  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 },
+  resultModalBox:     { width: '90%', backgroundColor: '#212121', borderRadius: 25, paddingVertical: 45, paddingHorizontal: 35, alignItems: 'center' },
+  resultModalTitle:   { fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
+  resultModalMessage: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center', lineHeight: 24 },
   resultModalBtn:     { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
+
   deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
-  deleteModalBox:     { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
+  deleteModalBox:     { width: '90%', backgroundColor: '#212121', borderRadius: 25, paddingVertical: 45, paddingHorizontal: 35, alignItems: 'center' },
+  deleteModalTitle:   { fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
+  deleteModalMessage: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center', lineHeight: 24 },
   deleteBtnRow:       { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  deleteBtnYes:       { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
+  deleteBtnYes:       { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 },
   deleteBtnYesText:   { color: '#000000', fontSize: 18, fontWeight: 'bold' },
-  deleteBtnNo:        { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
+  deleteBtnNo:        { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 },
   deleteBtnNoText:    { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
 
-  alertModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-  alertModalBox:     { width: 320, backgroundColor: '#2A2A2A', borderRadius: 16, padding: 20 },
-  alertModalHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  alertModalTitle:   { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
-  alertInputField:   { backgroundColor: '#1A1A1A', color: '#FFF', borderRadius: 8, padding: 15, marginBottom: 12, fontSize: 16, borderWidth: 1, borderColor: '#444' },
-  alertSubmitBtn:    { backgroundColor: '#A1BE44', borderRadius: 8, paddingVertical: 15, alignItems: 'center', marginTop: 10 },
-  alertSubmitBtnText:{ color: '#000', fontSize: 18, fontWeight: 'bold' },
-  alertCloseBtn:     { color: '#999999', fontSize: 24, paddingHorizontal: 5 },
+  alertModalOverlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  alertModalBox:      { width: '90%', backgroundColor: '#212121', borderRadius: 25, paddingVertical: 45, paddingHorizontal: 35 },
+  alertModalHeader:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
+  alertModalTitle:    { color: '#FFF', fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
+  alertCloseBtn:      { color: '#999999', fontSize: 24, paddingHorizontal: 5, marginBottom: 8 },
+  alertInputField:    { width: '100%', backgroundColor: '#1A1A1A', color: '#FFF', borderRadius: 12, padding: 15, marginBottom: 12, fontSize: 16, borderWidth: 1, borderColor: '#444444' },
+  alertSubmitBtn:     { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 20 },
+  alertSubmitBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
 });
 
 export default ManagerDashboard;

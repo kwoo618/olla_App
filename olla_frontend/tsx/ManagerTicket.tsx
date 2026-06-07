@@ -121,7 +121,6 @@ const ManagerTicket = ({ navigation }: any) => {
                 <View style={styles.colDday}>
                   {displayMemberships.map((m: any, idx: number) => (
                     <Text key={`dday-${m._type}-${idx}`} style={[styles.rowTextDday, idx > 0 && { marginTop: 6 }]} numberOfLines={1}>
-                      {/* 💡 [수정] 0일 남았을 때 강제로 '0일'이 표시되는 것을 막고 'D-Day'가 출력되도록 수정 */}
                       {m._type === '일일권'
                         ? `${m.remainingCount ?? 0}회`
                         : (m._totalRemainingDays !== undefined 
@@ -143,11 +142,12 @@ const ManagerTicket = ({ navigation }: any) => {
         )}
       </ScrollView>
 
-      <TouchableOpacity style={[styles.fab, { bottom: Math.max(insets.bottom + 5, 20) }]} activeOpacity={0.8} onPress={t.openEditModal}>
+      {/* 💡 수정된 부분: Dashboard와 동일하게 인라인 스타일(bottom: Math.max...) 제거 */}
+      <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={t.openEditModal}>
         <Text style={styles.fabText}>+ 이용권 등록</Text>
       </TouchableOpacity>
 
-      {/* ─── 확인 모달 ─────────────────────────────────────────────────────── */}
+      {/* ─── 💡 삭제 확인 모달 (OLLA 표준 규격 적용) ─────────────────────────────────────────────────────── */}
       <Modal visible={t.confirmModalVisible} animationType="fade" transparent onRequestClose={() => t.setConfirmModalVisible(false)}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.deleteModalBox}>
@@ -169,7 +169,7 @@ const ManagerTicket = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 결과 모달 (메인) ─────────────────────────────────────────────────────── */}
+      {/* ─── 💡 결과 모달 (메인 - OLLA 표준 규격 적용) ─────────────────────────────────────────────────────── */}
       <Modal visible={t.resultModalVisible} animationType="fade" transparent onRequestClose={() => t.setResultModalVisible(false)}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -224,7 +224,6 @@ const ManagerTicket = ({ navigation }: any) => {
                     <View style={styles.manageDetailContainer}>
                       {displayMemberships.map((m: any, idx: number) => (
                         <Text key={`merged-detail-${idx}`} style={styles.manageDetailText}>
-                          {/* 💡 [수정] 상세 내역에서도 0일이면 D-Day로 표시 */}
                           • {m._type === '일일권'
                             ? `[일일권] 총 잔여 ${m.remainingCount ?? 0}회`
                             : `[회원권] 총 잔여 ${m._totalRemainingDays === 0 ? 'D-Day' : `${m._totalRemainingDays}일`} (${m.startDate || '-'} ~ ${m.endDate || '-'})`
@@ -387,7 +386,7 @@ const ManagerTicket = ({ navigation }: any) => {
                       {/* 개월 수 or 횟수 입력 */}
                       <View style={styles.dateBlock}>
                         <Text style={styles.inputLabel}>
-                          {t.editType === 'PERIOD' ? '개월 수 (기본 1개월)' : '횟수 (기본 1회)'}
+                          {t.editType === 'PERIOD' ? '개월 수' : '횟수 (기본 1회)'}
                         </Text>
                         <TextInput
                           style={styles.amountInput}
@@ -412,7 +411,7 @@ const ManagerTicket = ({ navigation }: any) => {
                       ) : <View />}
                     </View>
 
-                    {/* 💡 [안전장치] 폼 내부에 에러 텍스트 직접 표시 */}
+                    {/* 폼 내부에 에러 텍스트 직접 표시 */}
                     {t.formError ? <Text style={styles.formErrorText}>{t.formError}</Text> : null}
 
                     <TouchableOpacity style={styles.submitBtn} onPress={t.handleGrantTicket}>
@@ -424,7 +423,7 @@ const ManagerTicket = ({ navigation }: any) => {
             </Animated.View>
           </KeyboardAvoidingView>
 
-          {/* 💡 [iOS 중첩 방지] 모달 내부 달력 오버레이 렌더링 */}
+          {/* Calendar 오버레이 */}
           {t.isStartCalendarVisible && (
             <View style={[StyleSheet.absoluteFill, styles.calendarOverlay, { zIndex: 1000, elevation: 10 }]}>
               <View style={styles.calendarBox}>
@@ -487,7 +486,21 @@ const styles = StyleSheet.create({
   badgeTextHolding:  { color: '#FF9900',  fontSize: 13, fontWeight: 'bold' },
   badgeTextPartial:  { color: '#4DA6FF',  fontSize: 13, fontWeight: 'bold' },
 
-  fab:     { position: 'absolute', right: 20, backgroundColor: '#A1BE44', paddingHorizontal: 25, paddingVertical: 18, borderRadius: 30, elevation: 5 },
+  // 💡 수정된 부분: Dashboard와 위치(bottom 15, right 20)를 동일하게 맞춤
+  fab: { 
+    position: 'absolute', 
+    bottom: 15, 
+    right: 20, 
+    backgroundColor: '#A1BE44', 
+    paddingHorizontal: 25, 
+    paddingVertical: 15, 
+    borderRadius: 30, 
+    elevation: 5,
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.3, 
+    shadowRadius: 4.65 
+  },
   fabText: { color: '#000', fontSize: 18, fontWeight: 'bold' },
 
   modalOverlay:      { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
@@ -537,7 +550,6 @@ const styles = StyleSheet.create({
   resetDateText:   { color: '#A1BE44', fontSize: 14, fontWeight: 'bold' },
   autoEndDateText: { color: '#A1BE44', fontSize: 14, fontWeight: 'bold' },
 
-  // 💡 빨간색 폼 에러 텍스트 스타일
   formErrorText: { color: '#FF4D4D', fontSize: 14, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
 
   submitBtn:     { backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 18, alignItems: 'center', marginTop: 5 },
@@ -548,21 +560,6 @@ const styles = StyleSheet.create({
   calendarTitle:    { color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
   calendarCloseBtn: { marginTop: 15, paddingVertical: 16, backgroundColor: '#333333', borderRadius: 10, alignItems: 'center' },
   calendarCloseText:{ color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
-
-  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox:     { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle:   { fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
-  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 24 },
-  resultModalBtn:     { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
-  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
-
-  deleteModalBox:  { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
-  deleteModalText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center', lineHeight: 26 },
-  deleteBtnRow:    { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  btnYes:          { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginRight: 5 },
-  btnNo:           { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
-  btnTextBlack:    { color: '#000000', fontSize: 18, fontWeight: 'bold' },
-  btnTextWhite:    { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
 
   manageInfoBox:        { backgroundColor: '#262626', borderRadius: 16, padding: 20, marginBottom: 16 },
   manageItemName:       { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 6 },
@@ -586,6 +583,67 @@ const styles = StyleSheet.create({
 
   closeFullBtn:     { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 18, alignItems: 'center' },
   closeFullBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
+
+  // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
+  
+  // 1. 시스템 결과 알림 모달
+  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  resultModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25,          // 💡 표준 모서리 곡률 적용
+    paddingVertical: 45,       // 💡 상하 여백 확장 적용
+    paddingHorizontal: 35,     // 💡 좌우 여백 적용
+    alignItems: 'center' 
+  },
+  resultModalTitle: { 
+    fontSize: 28,              // 💡 타이틀 크기 통일
+    fontWeight: 'bold', 
+    marginBottom: 8            // 💡 타이틀 하단 여백 통일
+  },
+  resultModalMessage: { 
+    color: '#ffffff', 
+    fontSize: 18,              // 💡 본문 크기 통일
+    fontWeight: 'bold',        // 💡 굵기 적용
+    marginBottom: 25,          // 💡 하단 여백 적용
+    textAlign: 'center', 
+    lineHeight: 24 
+  },
+  resultModalBtn: { 
+    width: '100%', 
+    backgroundColor: '#A1BE44', 
+    paddingVertical: 16,       // 💡 버튼 여백 통일
+    borderRadius: 12, 
+    alignItems: 'center' 
+  },
+  resultModalBtnText: { 
+    color: '#000000', 
+    fontSize: 18, 
+    fontWeight: 'bold' 
+  },
+
+  // 2. 삭제 확인용 더블 버튼 모달 (deleteModalBox)
+  deleteModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25,          // 💡 표준 모서리 곡률
+    paddingVertical: 45,       // 💡 상하 패딩 통일
+    paddingHorizontal: 35,     // 💡 좌우 패딩 통일
+    alignItems: 'center' 
+  },
+  deleteModalText: { 
+    color: '#ffffff', 
+    fontSize: 18,              // 💡 본문 크기 통일
+    fontWeight: 'bold',        // 💡 굵기 통일
+    marginBottom: 25, 
+    textAlign: 'center', 
+    lineHeight: 26 
+  },
+  deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  btnYes: { flex: 1, paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 }, 
+  btnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 }, 
+  btnTextBlack: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
+  btnTextWhite: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
 });
 
 export default ManagerTicket;

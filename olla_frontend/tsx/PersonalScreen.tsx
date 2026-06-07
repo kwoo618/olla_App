@@ -155,12 +155,32 @@ const styles = StyleSheet.create({
   button: { width: '100%', height: 60, backgroundColor: '#A1BE44', justifyContent: 'center', alignItems: 'center', borderRadius: 12, marginTop: 20 },
   buttonText: { color: '#000000', fontSize: 20, fontWeight: 'bold' },
   goBackText: { color: '#888888', fontSize: 16, textDecorationLine: 'underline' },
+  
+  // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 ───────────────────────────
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 320, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' }, 
-  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, 
-  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, 
+  resultModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25,          // 💡 표준 가이드 적용 (16 -> 25)
+    paddingVertical: 45,       // 💡 표준 가이드 적용 (20 -> 45)
+    paddingHorizontal: 35,     // 💡 표준 가이드 적용 (20 -> 35)
+    alignItems: 'center' 
+  }, 
+  resultModalTitle: { 
+    fontSize: 28,              // 💡 표준 가이드 적용 (20 -> 28)
+    fontWeight: 'bold', 
+    marginBottom: 8            // 💡 표준 가이드 적용 (5 -> 8)
+  }, 
+  resultModalMessage: { 
+    color: '#ffffff', 
+    fontSize: 18,              // 💡 표준 가이드 적용 (17 -> 18)
+    fontWeight: 'bold',        // 💡 표준 가이드 적용 (가독성 향상)
+    marginBottom: 25, 
+    textAlign: 'center', 
+    lineHeight: 24 
+  }, 
   resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' }, 
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
 });
 
-export default PersonalScreen; 
+export default PersonalScreen;

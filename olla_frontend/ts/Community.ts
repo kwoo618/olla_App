@@ -15,11 +15,12 @@ export const authHeader = async () => {
 
 export const p = (n: number) => String(n).padStart(2, '0');
 
-export const getProfileImage = (url: string | null | undefined) => {
-  if (url && typeof url === 'string' && url.trim() !== '' && url !== 'null' && url !== 'undefined') {
-    return { uri: url };
-  }
-  return require('../assets/profile.png');
+export const getFullImageUrl = (path: string | null | undefined): string | null => {
+  if (!path || path === 'null' || path === 'undefined') return null;
+  if (path.startsWith('http') || path.startsWith('file:') || path.startsWith('content:')) return path;
+  const domain = API_BASE_URL.replace('/api/v1', '');
+  const formattedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${domain}${formattedPath}`;
 };
 
 export const formatCommentDate = (dateStr: string) => {
@@ -37,7 +38,6 @@ export const translateGender = (gender: string) => {
   return gender;
 };
 
-// 오늘 날짜 반환 유틸 (YYYY-MM-DD)
 export const getToday = () => {
   const d = new Date();
   const offset = d.getTimezoneOffset() * 60000;
@@ -53,25 +53,51 @@ export interface CommentType {
   writerProfileImageUrl?: string | null;
   profileImage?: string | null;
   createdAt: string;
-  children: CommentType[]; 
+  children: CommentType[];
 }
+
+// 활성 회원권 판단 헬퍼 (MYScreen.ts 로직과 동일)
+const getTodayDate = () => {
+  const d = new Date(); d.setHours(0, 0, 0, 0); return d;
+};
+const isStarted = (startDate: string): boolean => {
+  if (!startDate) return true;
+  const start = new Date(startDate); start.setHours(0, 0, 0, 0);
+  return start <= getTodayDate();
+};
+const checkActiveMembership = (dataList: any[]): boolean => {
+  if (!Array.isArray(dataList) || dataList.length === 0) return false;
+  const activeList = dataList.filter(m => m.status === 'ACTIVE' && isStarted(m.startDate));
+  const hasPeriod = activeList.some(m => {
+    const t = String(m.membershipType).toUpperCase();
+    if (!(t.includes('PERIOD') || t.includes('기간') || t.includes('회원'))) return false;
+    if (!m.endDate) return false;
+    const end = new Date(m.endDate); end.setHours(0, 0, 0, 0);
+    return end >= getTodayDate();
+  });
+  const hasCount = activeList.some(m => {
+    const t = String(m.membershipType).toUpperCase();
+    return (t.includes('COUNT') || t.includes('횟수') || t.includes('일일')) && (m.remainingCount ?? 0) > 0;
+  });
+  return hasPeriod || hasCount;
+};
 
 export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // 모달 상태
   const [resultModalVisible, setResultModalVisible] = useState(false);
   const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info', onConfirm: () => {} });
   const [createAlertVisible, setCreateAlertVisible] = useState(false);
   const [createAlertMessage, setCreateAlertMessage] = useState('');
 
-  // 유저 및 게시글 상태
   const [posts, setPosts] = useState<any[]>([]);
   const [myNickname, setMyNickname] = useState('');
   const [myUserId, setMyUserId] = useState<number | null>(null);
-  const [myProfileImageUrl, setMyProfileImageUrl] = useState<string | null>(null); 
-  
+  const [myProfileImageUrl, setMyProfileImageUrl] = useState<string | null>(null);
+  // ✅ 회원권 보유 여부
+  const [hasMembership, setHasMembership] = useState(false);
+
   const [selectedTab, setSelectedTab] = useState('전체');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -82,19 +108,18 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
   const [editPostId, setEditPostId] = useState<number | null>(null);
   const [form, setForm] = useState({ category: '센터' as '센터'|'아웃도어', title: '', desc: '', date: '', time: '', people: '2', location: '' });
 
-  // 달력 및 시간 선택기 상태
   const [isCalendarVisible, setCalendarVisible] = useState(false);
   const [isTimePickerVisible, setTimePickerVisible] = useState(false);
   const [tempHour, setTempHour] = useState('12');
   const [tempMinute, setTempMinute] = useState('00');
 
-  // 상세/댓글 상태
   const [selectedUser, setSelectedUser] = useState<any>(null);
-  const [selectedPost, setSelectedPost] = useState<any>(null); 
+  const [selectedPost, setSelectedPost] = useState<any>(null);
   const [comments, setComments] = useState<CommentType[]>([]);
   const [commentInput, setCommentInput] = useState('');
   const [replyingTo, setReplyingTo] = useState<{id: number, name: string} | null>(null);
   const [commentDeleteTarget, setCommentDeleteTarget] = useState<number | null>(null);
+  const [isPostLoading, setIsPostLoading] = useState(false);
 
   const showResultModal = (title: string, message: string, type: 'info' | 'success' | 'error' = 'info', onConfirm: () => void = () => {}) => {
     Keyboard.dismiss();
@@ -113,26 +138,61 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
     setCreateAlertVisible(true);
   };
 
+  // ✅ 회원권 없으면 차단 (비로그인 + 회원권 없는 로그인 유저 모두 차단)
+  const checkHasMembershipOrAlert = (): boolean => {
+    if (myUserId === null) {
+      showResultModal('회원 전용', '해당 기능은 회원만 사용할 수 있습니다.', 'info');
+      return false;
+    }
+    if (!hasMembership) {
+      showResultModal('이용권 필요', '해당 기능은 이용권 보유 회원만 사용할 수 있습니다.', 'info');
+      return false;
+    }
+    return true;
+  };
+
   const initData = async (filterToUse: string) => {
     let uName = '', uNick = '', uId = null;
     try {
       const headers = await authHeader();
       const { data } = await axios.get(`${MEMBERS}/me`, { headers });
-      const d = data.data
+      const d = data.data;
       if (d) {
-        uName = d.name || ''; 
-        uNick = d.nickname || d.name || ''; 
+        uName = d.name || '';
+        uNick = d.nickname || d.name || '';
         uId = d.id || d.memberId || null;
-        setMyNickname(uNick || uName); 
+        setMyNickname(uNick || uName);
         setMyUserId(uId);
-        setMyProfileImageUrl(d.profileImageUrl || d.profileImage || null); 
+        setMyProfileImageUrl(getFullImageUrl(d.profileImageUrl || d.profileImage));
       }
-    } catch (e: any) {}
+    } catch (e: any) {
+      const isNetworkError = e?.response || e?.request;
+      if (!isNetworkError) {
+        // AsyncStorage나 기타 네이티브 에러 → 조용히 무시
+      }
+      // myUserId는 null 유지 (비회원 처리)
+    }
+
+    // ✅ 회원권 조회 (로그인 성공한 경우에만)
+    if (uId !== null) {
+      try {
+        const headers = await authHeader();
+        const memRes = await axios.get(`${API_BASE_URL}/memberships/me`, { headers });
+        const rawData = memRes.data.data;
+        const dataList: any[] = Array.isArray(rawData) ? rawData : (rawData?.content || []);
+        setHasMembership(checkActiveMembership(dataList));
+      } catch (e) {
+        setHasMembership(false);
+      }
+    } else {
+      setHasMembership(false);
+    }
+
     await fetchPosts(uName, uNick, uId, filterToUse);
   };
 
-  useEffect(() => { 
-    if (isFocused) initData(currentFilter); 
+  useEffect(() => {
+    if (isFocused) initData(currentFilter);
   }, [isFocused, currentFilter]);
 
   const onRefresh = useCallback(async () => {
@@ -150,7 +210,7 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
   };
 
   const checkIsMine = (writerId: number | null, writerName: string, uId: number | null, uName: string, uNick: string): boolean => {
-    return (uId !== null && writerId !== null && writerId !== undefined) ? Number(writerId) === Number(uId) : false; 
+    return (uId !== null && writerId !== null && writerId !== undefined) ? Number(writerId) === Number(uId) : false;
   };
 
   const fetchPosts = async (uName: string, uNick: string, uId: number | null, filterToUse: string) => {
@@ -159,10 +219,9 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
       const headers = await authHeader();
       const urlMap: any = { MY_WRITTEN: `${POSTS}/me`, MY_APPLIED: `${POSTS}/me/applied` };
       const url = `${urlMap[filterToUse] || POSTS}?page=0&size=100`;
-      
+
       const { data } = await axios.get(url, { headers });
-      
-      // 💡 [수정] 백엔드 응답이 페이징(content)인지 단순 배열 형태인지 모두 안전하게 대응
+
       const resData = data.data || {};
       let list = Array.isArray(resData) ? resData : (resData.content || []);
 
@@ -180,10 +239,9 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
 
   const mapPosts = (list: any[], uName: string, uNick: string, uId: number | null) =>
     list.map(item => {
-      // 💡 [수정] iOS 날짜 버그 방지를 위해 중간 공백을 'T'로 변환
       const safeMeetDate = item.meetDateTime ? String(item.meetDateTime).replace(' ', 'T') : '';
       const safeCreateDate = item.createdAt ? String(item.createdAt).replace(' ', 'T') : '';
-      
+
       const md = new Date(safeMeetDate);
       const cd = new Date(safeCreateDate);
       const author = item.writerName || '알 수 없음';
@@ -191,8 +249,6 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
       const isClosedFlag = item.isClosed === true || item.closed === true || item.status === 'CLOSED';
       const isPastDate = !isNaN(md.getTime()) && md.getTime() < new Date().getTime();
       const isPast = isClosedFlag || isPastDate;
-      
-      // 💡 [수정] 명세서의 isDifferentGym 과 프론트의 differentGym 모두 대응
       const isDiffGym = item.isDifferentGym === true || item.differentGym === true;
 
       return {
@@ -204,10 +260,10 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
         rawMeetDateTime: item.meetDateTime,
         people: `${item.memberCount||0}/${item.maxMember}명`, maxMember: item.maxMember,
         postDate: isNaN(cd.getTime()) ? item.createdAt : `${cd.getFullYear()}.${p(cd.getMonth()+1)}.${p(cd.getDate())}`,
-        isJoined: item.applied === true || item.isApplied === true, 
+        isJoined: item.applied === true || item.isApplied === true,
         viewCount: item.viewCount||0, likeCount: item.likeCount||0, isLiked: item.liked === true || item.isLiked === true,
         differentGym: isDiffGym, gymPlace: item.gymPlace,
-        profileImageUrl: item.writerProfileImageUrl || item.profileImageUrl || item.profileImage || null, 
+        profileImageUrl: getFullImageUrl(item.writerProfileImageUrl || item.profileImageUrl || item.profileImage),
       };
     });
 
@@ -220,17 +276,16 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
       let backendRes: any[] = [];
       try {
         const { data } = await axios.get(`${POSTS}/search?keyword=${encodeURIComponent(searchKeyword)}&page=0&size=100`, { headers });
-        // 💡 [수정] 검색 시에도 배열/content 예외 처리
         const resData1 = data.data || {};
         backendRes = Array.isArray(resData1) ? resData1 : (resData1.content || []);
       } catch (e) {}
-      
+
       const { data: allData } = await axios.get(`${POSTS}?page=0&size=100`, { headers });
       const resData2 = allData?.data || {};
       const all: any[] = Array.isArray(resData2) ? resData2 : (resData2.content || []);
-      
+
       const filtered = all.filter(i => [i.title,i.content,i.writerName,i.gymPlace].some(v => (v||'').toLowerCase().includes(kw)));
-      
+
       const map = new Map();
       [...backendRes, ...filtered].forEach(i => i?.id != null && map.set(i.id, i));
       setPosts(sortPosts(mapPosts(Array.from(map.values()), '', myNickname, myUserId)));
@@ -253,13 +308,16 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
       return { ...post, isJoined: joining, people: `${joining?Math.min(cur+1,max):Math.max(cur-1,1)}/${max}명` };
     }));
 
+  // ✅ 좋아요: 회원권 체크
   const toggleLike = async (id: number, liked: boolean) => {
+    if (!checkHasMembershipOrAlert()) return;
+
     updatePost(id, { isLiked: !liked, likeCount: (post: any) => liked ? Math.max(post.likeCount - 1, 0) : post.likeCount + 1 });
     if (selectedPost && selectedPost.id === id) {
       setSelectedPost((prev: any) => ({ ...prev, isLiked: !liked, likeCount: Math.max((prev.likeCount || 0) + (liked ? -1 : 1), 0) }));
     }
     showResultModal('알림', !liked ? '해당 게시물에 좋아요를 눌렀습니다.' : '좋아요를 취소했습니다.', 'success');
-    
+
     try {
       const headers = await authHeader();
       await axios.post(`${POSTS}/${id}/like`, {}, { headers });
@@ -269,7 +327,10 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
     }
   };
 
+  // ✅ 참여하기: 회원권 체크
   const toggleJoin = async (id: number, joined: boolean) => {
+    if (!joined && !checkHasMembershipOrAlert()) return;
+
     const post = posts.find(p => p.id === id);
     if (!post) return;
     if (post.isPast) return showResultModal('참여 불가', '이미 마감된 모집글입니다.', 'info');
@@ -317,13 +378,13 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
 
   const loadUserDetail = async (authorId: number, authorName: string, isMine: boolean) => {
     try {
-      Keyboard.dismiss(); 
+      Keyboard.dismiss();
       const headers = await authHeader();
       const url = isMine ? `${MEMBERS}/me` : `${MEMBERS}/${authorId}/profile`;
       const { data } = await axios.get(url, { headers });
-      const d = data.data; 
+      const d = data.data;
       if (!d) throw new Error('정보를 불러올 수 없습니다.');
-      
+
       const detail = d.detail || d;
       const privacy = d.privacy || d;
 
@@ -332,7 +393,7 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
         gender: translateGender(detail.gender || d.gender || '-'),
         height: detail.height || d.height || '-', weight: detail.weight || d.weight || '-',
         arm: detail.armSpan || d.armSpan || '-', shoe: detail.footSize || d.footSize || '-',
-        profileImageUrl: d.profileImageUrl || d.profileImage || null, 
+        profileImageUrl: getFullImageUrl(d.profileImageUrl || d.profileImage),
         toggles: {
           showName: true, showPhone: isMine || privacy.isPublicPhone || privacy.phonePublic,
           showAge: true, showHeight: isMine || privacy.isHeightPublic || privacy.heightPublic,
@@ -350,6 +411,9 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
   };
 
   const loadPostDetail = async (post: any) => {
+    if (isPostLoading) return false;
+    setIsPostLoading(true);
+
     setSelectedPost({ ...post, viewCount: post.viewCount + 1 });
     try {
       const headers = await authHeader();
@@ -358,17 +422,34 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
       const { data } = await axios.get(`${POSTS}/${post.id}/comments?page=0&size=100`, { headers });
       setComments(data.data.content ?? []);
       return true;
-    } catch (e) { return false; }
+    } catch (e) {
+      return false;
+    } finally {
+      setIsPostLoading(false);
+    }
   };
 
+  // ✅ 댓글 작성: 회원권 체크
   const submitComment = async () => {
-    if (!commentInput.trim() || !selectedPost) return;
+    if (!checkHasMembershipOrAlert()) return;
+
+    const trimmed = commentInput.trim();
+    if (!trimmed || !selectedPost) return;
+
+    const postId = selectedPost.id;
+    const parentId = replyingTo ? replyingTo.id : null;
+
     try {
       const headers = await authHeader();
-      const payload = { content: commentInput.trim(), parentId: replyingTo ? replyingTo.id : null };
-      await axios.post(`${POSTS}/${selectedPost.id}/comments`, payload, { headers });
-      setCommentInput(''); setReplyingTo(null); Keyboard.dismiss();
-      const { data } = await axios.get(`${POSTS}/${selectedPost.id}/comments?page=0&size=100`, { headers });
+      const payload = { content: trimmed, parentId };
+
+      setCommentInput('');
+      setReplyingTo(null);
+      Keyboard.dismiss();
+
+      await axios.post(`${POSTS}/${postId}/comments`, payload, { headers });
+
+      const { data } = await axios.get(`${POSTS}/${postId}/comments?page=0&size=100`, { headers });
       setComments(data.data.content ?? []);
     } catch (e: any) {
       showResultModal('오류', e.response?.data?.message || '댓글을 작성할 수 없습니다.', 'error');
@@ -390,11 +471,9 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
     }
   };
 
-  // 💡 달력 모달 제어
   const openCalendar = () => { Keyboard.dismiss(); setCalendarVisible(true); };
   const closeCalendar = () => setCalendarVisible(false);
 
-  // 💡 시간 선택기 모달 제어 (오늘 날짜면 과거 시간 차단 로직 포함)
   const openTimePicker = () => {
     Keyboard.dismiss();
     if (form.time) {
@@ -404,9 +483,8 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
     } else {
       const now = new Date();
       const isToday = !form.date || form.date === getToday();
-      
+
       if (isToday) {
-        // 오늘 날짜인 경우 가장 가까운 미래 10분 단위로 세팅
         let h = now.getHours();
         let m = Math.ceil(now.getMinutes() / 10) * 10;
         if (m >= 60) {
@@ -424,7 +502,6 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
   };
   const closeTimePicker = () => setTimePickerVisible(false);
 
-  // 💡 확인 버튼 클릭 시 이중 검증
   const confirmTimeSelection = () => {
     const isToday = !form.date || form.date === getToday();
     if (isToday) {
@@ -456,7 +533,10 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
     });
   };
 
+  // ✅ 글 작성/수정: 회원권 체크
   const submitPost = async (onSuccess: () => void) => {
+    if (!checkHasMembershipOrAlert()) return;
+
     const { category, title, desc, date, time, people, location } = form;
     let errorMsg = '';
 
@@ -467,16 +547,15 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
     else if (category === '아웃도어' && !location?.trim()) errorMsg = '아웃도어 장소 정보를 입력해주세요.';
 
     if (errorMsg) return showCreateAlert(errorMsg);
-    
-    // 달력에서 넘어온 YYYY-MM-DD 파싱
+
     const [yr, mo, dy] = date.split('-').map(Number);
     const [hr, mn] = time.split(':').map(Number);
-    
+
     const dt = new Date(yr, mo - 1, dy, hr, mn);
     if (dt < new Date()) return showCreateAlert('과거 시간으로 등록할 수 없습니다.');
     const max3 = new Date(); max3.setMonth(max3.getMonth() + 3);
     if (dt > max3) return showCreateAlert('최대 3개월 이내 날짜만 가능합니다.');
-    
+
     const formattedDateTime = `${yr}-${p(mo)}-${p(dy)}T${p(hr)}:${p(mn)}:00`;
 
     try {
@@ -484,9 +563,9 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
       const payload = { title, content: desc, isDifferentGym: category === '아웃도어', gymPlace: category === '센터' ? 'olla 클라이밍 센터' : location.trim(), meetDateTime: formattedDateTime, maxMember: parseInt(people, 10) };
       if (isEditMode && editPostId) await axios.patch(`${POSTS}/${editPostId}`, payload, { headers });
       else await axios.post(POSTS, payload, { headers });
-      
+
       initData(currentFilter);
-      onSuccess(); 
+      onSuccess();
       setTimeout(() => showResultModal('성공', isEditMode ? '게시글이 성공적으로 수정되었습니다.' : '모집 글이 성공적으로 작성되었습니다.', 'success'), 500);
     } catch (e: any) {
       showCreateAlert(e.response?.data?.message || '처리에 실패했습니다.');
@@ -495,6 +574,7 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
 
   return {
     posts, loading, refreshing, myUserId, myProfileImageUrl,
+    hasMembership,
     selectedTab, setSelectedTab, searchKeyword, setSearchKeyword, isSearching, form, setForm,
     comments, commentInput, setCommentInput, replyingTo, setReplyingTo,
     selectedUser, selectedPost, setSelectedPost, isEditMode,
@@ -502,7 +582,7 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
     deleteTarget, setDeleteTarget, closeTarget, setCloseTarget, commentDeleteTarget, setCommentDeleteTarget,
     isCalendarVisible, openCalendar, closeCalendar,
     isTimePickerVisible, tempHour, setTempHour, tempMinute, setTempMinute, openTimePicker, closeTimePicker, confirmTimeSelection,
-    onRefresh, searchPosts, clearSearch, toggleLike, toggleJoin, executeDelete, executeClose,
+    onRefresh, searchPosts, clearSearch, toggleLike, toggleJoin, executeDelete, executeClose, isPostLoading,
     submitPost, submitComment, executeCommentDelete, loadUserDetail, loadPostDetail, setupCreateForm, setupEditForm, closeResultModal
   };
 };

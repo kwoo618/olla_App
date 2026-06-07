@@ -155,7 +155,7 @@ const RecodeScreen = ({ route, navigation }: any) => {
                   <View key={item.id} style={styles.rowCardWithTrash}>
                     <View style={styles.enduranceCol}><Text style={styles.enduranceTopText}>{item.type}</Text><Text style={styles.enduranceBottomText}>{item.arrow}</Text></View>
                     <View style={styles.verticalDivider} />
-                    <View style={styles.enduranceCol}><Text style={styles.enduranceTopText}>{item.laps}</Text><Text style={styles.enduranceBottomText}>바퀴</Text></View>
+                    <View style={styles.enduranceCol}><Text style={styles.enduranceTopText}>{item.laps}</Text><Text style={styles.enduranceBottomText}>회</Text></View>
                     <View style={styles.verticalDivider} />
                     <View style={styles.enduranceCol}><Text style={styles.enduranceTopText}>{item.time}</Text><Text style={styles.enduranceBottomText}>시간</Text></View>
                     <View style={styles.verticalDivider} />
@@ -293,8 +293,10 @@ const RecodeScreen = ({ route, navigation }: any) => {
             </View>
             {showTimerFinishConfirm && (
               <View style={styles.confirmTimerOverlay}>
+                {/* 💡 타이머 완료 확인 모달 - OLLA 표준 적용 */}
                 <View style={styles.deleteModalBox}>
-                  <Text style={styles.deleteModalText}>{formatTime(timerSeconds)} 기록으로 저장됩니다</Text>
+                  <Text style={[styles.deleteModalText, { color: '#A1BE44' }]}>기록 확인</Text>
+                  <Text style={styles.deleteModalMessage}>{formatTime(timerSeconds)} 기록으로 저장됩니다.</Text>
                   <View style={styles.deleteBtnRow}>
                     <TouchableOpacity style={styles.deleteBtnYes} onPress={stopTimerAndSave}><Text style={styles.deleteBtnYesText}>저장</Text></TouchableOpacity>
                     <TouchableOpacity style={styles.deleteBtnNo} onPress={() => setShowTimerFinishConfirm(false)}><Text style={styles.deleteBtnNoText}>취소</Text></TouchableOpacity>
@@ -428,11 +430,13 @@ const RecodeScreen = ({ route, navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 결과 & 삭제 확인 모달 */}
+      {/* ─── 💡 결과 & 삭제 확인 모달 (OLLA 표준 규격 적용) ─── */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={closeResultModal}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
-            <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>{resultModalConfig.title}</Text>
+            <Text style={[styles.resultModalTitle, resultModalConfig.type === 'error' ? { color: '#FF4D4D' } : { color: '#A1BE44' }]}>
+              {resultModalConfig.title}
+            </Text>
             <Text style={styles.resultModalMessage}>{resultModalConfig.message}</Text>
             <TouchableOpacity style={styles.resultModalBtn} onPress={closeResultModal}>
               <Text style={styles.resultModalBtnText}>확인</Text>
@@ -444,10 +448,11 @@ const RecodeScreen = ({ route, navigation }: any) => {
       <Modal visible={isDeleteModalVisible} animationType="fade" transparent onRequestClose={cancelDelete}>
         <View style={styles.deleteModalOverlay}>
           <View style={styles.deleteModalBox}>
-            <Text style={styles.deleteModalText}>삭제하시겠습니까?</Text>
+            <Text style={[styles.deleteModalText, { color: '#FF4D4D' }]}>기록 삭제!</Text>
+            <Text style={styles.deleteModalMessage}>해당 기록을 정말 삭제하시겠습니까?</Text>
             <View style={styles.deleteBtnRow}>
-              <TouchableOpacity style={styles.deleteBtnYes} onPress={executeDelete}><Text style={styles.deleteBtnYesText}>예</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.deleteBtnNo} onPress={cancelDelete}><Text style={styles.deleteBtnNoText}>아니오</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.deleteBtnYes} onPress={executeDelete}><Text style={styles.deleteBtnYesText}>삭제</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.deleteBtnNo} onPress={cancelDelete}><Text style={styles.deleteBtnNoText}>취소</Text></TouchableOpacity>
             </View>
           </View>
         </View>
@@ -498,7 +503,7 @@ const styles = StyleSheet.create({
   circleContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingLeft: 10, flexWrap: 'wrap' },
   colorCircle: { width: 30, height: 30, borderRadius: 15, marginRight: 10, marginBottom: 5 },
   trashButton: { padding: 10, marginLeft: 5 },
-  trashIcon: { width: 24, height: 24, tintColor: '#A1BE44', resizeMode: 'contain' }, 
+  trashIcon: { width: 24, height: 24, tintColor: '#FF4D4D', resizeMode: 'contain' }, 
   emptyText: { color: '#999999', fontSize: 16, textAlign: 'center', width: '100%' }, 
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)', justifyContent: 'flex-end' },
@@ -569,23 +574,64 @@ const styles = StyleSheet.create({
   detailButtonText: { color: '#999999', fontSize: 15, fontWeight: '600' }, 
   totalScoreText: { color: '#A1BE44', fontSize: 40, fontWeight: 'bold', marginBottom: 10 }, 
 
+  confirmTimerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', zIndex: 999 },
+
+  // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
+  // 1. 공통 시스템 결과 알림 모달
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 20, alignItems: 'center' },
-  resultModalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 }, 
-  resultModalMessage: { color: '#ffffff', fontSize: 17, marginBottom: 25, textAlign: 'center', lineHeight: 22 }, 
-  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  resultModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
+    alignItems: 'center' 
+  },
+  resultModalTitle: { 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    marginBottom: 8 
+  }, 
+  resultModalMessage: { 
+    color: '#ffffff', 
+    fontSize: 18, 
+    fontWeight: 'bold',
+    marginBottom: 25, 
+    textAlign: 'center', 
+    lineHeight: 24 
+  }, 
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
 
+  // 2. 삭제/완료 투 버튼 확인 모달 (deleteModalBox 공유)
   deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  deleteModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
-  deleteModalText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center' }, 
+  deleteModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
+    alignItems: 'center' 
+  },
+  deleteModalText: { 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    marginBottom: 8 
+  }, 
+  deleteModalMessage: { 
+    color: '#ffffff', 
+    fontSize: 18, 
+    fontWeight: 'bold',
+    marginBottom: 25, 
+    textAlign: 'center', 
+    lineHeight: 24 
+  }, 
   deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  deleteBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
-  deleteBtnYesText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
-  deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
+  deleteBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 },
+  deleteBtnYesText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
+  deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 },
   deleteBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
-  
-  confirmTimerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', zIndex: 999 }
+  // ───────────────────────────────────────────────────────────────────────────────────────────
 });
 
 export default RecodeScreen;

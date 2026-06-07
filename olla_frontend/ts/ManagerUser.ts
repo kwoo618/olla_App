@@ -10,13 +10,13 @@ const MEMBER_DELETE_API = `${API_BASE_URL}/admin/members`;
 const PROFILE_API = `${API_BASE_URL}/members`;
 const ALERT_SEND_API_URL = `${API_BASE_URL}/admin/alerts/send`; 
 
-// 💡 [API 명세서 대응] 이미지 상대경로 -> 절대경로 변환 유틸
-export const getFullImageUrl = (path: string) => {
-  if (!path) return null;
-  if (path.startsWith('http')) return path;
-  // API_BASE_URL이 '/api/v1'을 포함한다면 제거하고 도메인만 추출
+// 이미지 불러오기
+export const getFullImageUrl = (path: string | null | undefined): string | null => {
+  if (!path || path === 'null' || path === 'undefined') return null;
+  if (path.startsWith('http') || path.startsWith('file:') || path.startsWith('content:')) return path;
   const domain = API_BASE_URL.replace('/api/v1', '');
-  return `${domain}${path}`;
+  const formattedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${domain}${formattedPath}`;
 };
 
 export const resolveMembershipType = (
@@ -39,7 +39,7 @@ export const useManagerUser = (navigation: any) => {
   const ADD_MODAL_HEIGHT = SCREEN_HEIGHT * 0.65;
   const ALERT_MODAL_HEIGHT = SCREEN_HEIGHT * 0.55;
 
-  // --- 상태 관리 ---
+  // 상태 관리
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [users, setUsers] = useState<any[]>([]);
@@ -67,7 +67,7 @@ export const useManagerUser = (navigation: any) => {
   const [alertContent, setAlertContent] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // --- 애니메이션 (PanResponder) ---
+  // 애니메이션 (PanResponder)
   const detailHeightAnim = useRef(new Animated.Value(0)).current;
   const currentDetailSnap = useRef(DETAIL_MODAL_HEIGHT);
   const detailPanResponder = useRef(
@@ -161,7 +161,7 @@ export const useManagerUser = (navigation: any) => {
     })
   ).current;
 
-  // --- 데이터 로직 ---
+  // 데이터 로직
   const fetchUsers = useCallback(async (token: string) => {
     try {
       const response = await axios.get(MEMBER_LIST_API, {
@@ -169,7 +169,7 @@ export const useManagerUser = (navigation: any) => {
         params: { size: 1000, sort: 'id,desc' } 
       });
       
-      const raw = response.data.data.content ||  [];
+      const raw = response.data.data.content || [];
       setUsers(Array.isArray(raw) ? raw : []);
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || "목록 로드 실패";
@@ -202,7 +202,7 @@ export const useManagerUser = (navigation: any) => {
     setRefreshing(false);
   }, [checkAdminAndFetchUsers]);
 
-  // --- 유틸 함수 ---
+  // 유틸 함수
   const isValidBirthDate = (dateStr: string) => {
     const regex = /^(19|20)\d{2}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
     if (!regex.test(dateStr)) return false;
@@ -233,7 +233,7 @@ export const useManagerUser = (navigation: any) => {
     setNewBirth(formatted);
   };
 
-  // --- 액션 핸들러 ---
+  // 액션 핸들러
   const handleRegister = async () => {
     if (!newName || !newGender || newBirth.length < 10 || newPhone.length < 12) {
       showResultModal("알림", "정보를 모두 올바르게 입력해주세요.", "info");
@@ -308,7 +308,7 @@ export const useManagerUser = (navigation: any) => {
     }
   };
 
-  // --- 모달 제어 ---
+  // 모달 제어
   const openDetailModal = async (memberId: number, fallbackName: string, fallbackPhone: string) => {
     try {
       Keyboard.dismiss();
@@ -327,7 +327,8 @@ export const useManagerUser = (navigation: any) => {
         name: d.name || fallbackName,
         gender: displayGender,
         phone: d.phone || fallbackPhone || '-', 
-        profileImageUrl: getFullImageUrl(d.profileImageUrl), // 💡 상대경로 변환 적용
+        // ✅ 프로필 이미지 URL 변환 적용
+        profileImageUrl: getFullImageUrl(d.profileImageUrl ?? d.profileImage),
         age: d.detail?.age || d.age || '-',
         height: d.detail?.height || d.height || '-',
         weight: d.detail?.weight || d.weight || '-',
@@ -347,7 +348,6 @@ export const useManagerUser = (navigation: any) => {
   const closeDetailModal = useCallback(() => {
     Animated.timing(detailHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => { 
       setDetailVisible(false); 
-      // setSelectedUser(null); 
     });
   }, [detailHeightAnim]);
 
@@ -395,7 +395,7 @@ export const useManagerUser = (navigation: any) => {
     setConfirmModalVisible(true);
   }, []);
 
-  // --- Derived State ---
+  // Derived State
   const filteredAndSortedUsers = useMemo(() => {
     const map = new Map();
     
