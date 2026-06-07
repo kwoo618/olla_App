@@ -26,7 +26,6 @@ export const useNotice = (navigation: any) => {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  // 모달 상태
   const [resultModalVisible, setResultModalVisible] = useState(false);
   const [resultModalConfig, setResultModalConfig] = useState({
     title: '',
@@ -35,7 +34,6 @@ export const useNotice = (navigation: any) => {
     onConfirm: () => {},
   });
 
-  // 이미지 뷰어 상태
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [imageViewerUrl, setImageViewerUrl] = useState('');
 
@@ -63,17 +61,16 @@ export const useNotice = (navigation: any) => {
 
   const fetchNotices = useCallback(async () => {
     try {
-      const token = await AsyncStorage.getItem('userToken');
-      if (!token) {
-        showResultModal('인증 오류', '로그인 정보가 없습니다.', 'error', () => {
-          navigation.navigate('Login');
-        });
-        return;
+      let token: string | null = null;
+      try {
+        token = await AsyncStorage.getItem('userToken');
+      } catch (e) {
+        // AsyncStorage 초기화 전 에러 → 토큰 없이 진행
       }
 
-      const response = await axios.get(`${API_BASE_URL}/admin/notices`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+      const response = await axios.get(`${API_BASE_URL}/notices`, { headers });
 
       const raw = response.data.data.content || [];
       const list: Notice[] = Array.isArray(raw) ? raw : [];
@@ -90,7 +87,7 @@ export const useNotice = (navigation: any) => {
     } finally {
       setLoading(false);
     }
-  }, [navigation, showResultModal]);
+  }, [showResultModal]);
 
   useEffect(() => {
     fetchNotices();
@@ -116,7 +113,6 @@ export const useNotice = (navigation: any) => {
     resultModalVisible,
     setResultModalVisible,
     resultModalConfig,
-    // 이미지 뷰어
     imageViewerVisible,
     imageViewerUrl,
     openImageViewer,
