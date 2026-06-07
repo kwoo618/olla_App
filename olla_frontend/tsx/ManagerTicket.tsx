@@ -368,28 +368,33 @@ const ManagerTicket = ({ navigation }: any) => {
                     </View>
 
                     <View style={styles.horizontalDateRow}>
-                      {/* 시작일 */}
-                      <View style={styles.dateBlock}>
-                        <Text style={styles.inputLabel}>시작일</Text>
-                        <View style={styles.dateInputBox}>
-                          <Text style={t.editStart ? styles.pickerTextActive : styles.pickerTextPlaceholder}>
-                            {t.editStart || '날짜 선택'}
-                          </Text>
-                          <TouchableOpacity onPress={t.openStartCalendar} style={styles.calendarIconBtn}>
-                            <Image source={require('../assets/DATE.png')} style={styles.dateIcon} />
-                          </TouchableOpacity>
-                        </View>
-                      </View>
+                      {/* 💡 회원권일 때만 '시작일' 표시되도록 조건부 렌더링 추가 */}
+                      {t.editType === 'PERIOD' && (
+                        <>
+                          <View style={styles.dateBlock}>
+                            <Text style={styles.inputLabel}>시작일</Text>
+                            <View style={styles.dateInputBox}>
+                              <Text style={t.editStart ? styles.pickerTextActive : styles.pickerTextPlaceholder}>
+                                {t.editStart || '날짜 선택'}
+                              </Text>
+                              <TouchableOpacity onPress={t.openStartCalendar} style={styles.calendarIconBtn}>
+                                <Image source={require('../assets/DATE.png')} style={styles.dateIcon} />
+                              </TouchableOpacity>
+                            </View>
+                          </View>
 
-                      <View style={styles.dateSpacer} />
+                          <View style={styles.dateSpacer} />
+                        </>
+                      )}
 
                       {/* 개월 수 or 횟수 입력 */}
                       <View style={styles.dateBlock}>
-                        <Text style={styles.inputLabel}>
+                        {/* 💡 일일권일 때 텍스트 가운데 정렬 스타일 추가 */}
+                        <Text style={[styles.inputLabel, t.editType === 'COUNT' && { textAlign: 'center', marginLeft: 0 }]}>
                           {t.editType === 'PERIOD' ? '개월 수' : '횟수 (기본 1회)'}
                         </Text>
                         <TextInput
-                          style={styles.amountInput}
+                          style={[styles.amountInput, t.editType === 'COUNT' && { textAlign: 'center' }]}
                           placeholder={t.editType === 'PERIOD' ? "기본 1개월" : "기본 1회"}
                           placeholderTextColor="#666"
                           keyboardType="numeric"
@@ -400,7 +405,8 @@ const ManagerTicket = ({ navigation }: any) => {
                     </View>
 
                     <View style={styles.dateHelperRow}>
-                      {t.editStart && t.editStart !== getToday() ? (
+                      {/* 💡 회원권일 때만 초기화 버튼 표시 */}
+                      {t.editType === 'PERIOD' && t.editStart && t.editStart !== getToday() ? (
                         <TouchableOpacity onPress={() => t.setEditStart('')}>
                           <Text style={styles.resetDateText}>↺ 오늘로 초기화</Text>
                         </TouchableOpacity>

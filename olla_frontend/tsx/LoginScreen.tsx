@@ -84,6 +84,7 @@ const LoginScreen = ({ navigation }: any) => {
                 placeholderTextColor="#ffffff80"
                 value={password}
                 onChangeText={setPassword}
+                autoCapitalize="none" // 💡 대문자 자동 전환 방지 옵션 추가
                 returnKeyType="done"
                 onSubmitEditing={handleLogin}
                 onFocus={() => handleFocus('password')}
