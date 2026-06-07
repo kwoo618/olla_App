@@ -11,9 +11,7 @@ import java.util.List;
 import java.util.Optional;
 
 public interface RecordBeginnerRepository extends JpaRepository<RecordBeginner, Long> {
-
-        // (동철 수정) 왕복 편도 기록 가져올때 최고기록을 가져오도록 수정 
-        Optional<RecordBeginner> findTopByMemberAndDifficultyOrderByIsSuccessDescMaxHoldNoDescAttemptTypeDesc(Member member, Difficulty difficulty); 
+     Optional<RecordBeginner> findTopByMemberAndDifficultyOrderByIsSuccessDescMaxHoldNoDescAttemptTypeDesc(Member member, Difficulty difficulty);
 
     // 1. 메모리 최적화: DB 안에서 점수 알고리즘을 돌려 난이도별 1등만 추출
     @Query(value =
