@@ -68,6 +68,8 @@ public class MembershipAdminService {
                 .build();
 
         membershipRepository.save(newMembership);
+        googleSheetsService.syncNewMembership(member, newMembership);
+
 
         log.info("이용권 부여 완료: 회원={}, 시작일={}, 기간={}개월, 횟수={}회",
                 member.getName(), effectiveStartDate, safeMonths, safeCount);

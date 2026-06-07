@@ -146,15 +146,15 @@ public class AuthService {
             throw new IllegalArgumentException("비밀번호가 일치하지 않습니다.");
         }
 
+        if (refreshTokenRepository.findByLoginId(member.getLoginId()).isPresent()) {
+            throw new IllegalArgumentException("이미 다른 기기에서 로그인 중인 계정입니다. 기존 기기에서 로그아웃 후 시도해주세요.");
+        }
+
         String accessToken = jwtTokenProvider.createAccessToken(member.getLoginId(), member.getRole().name());
         String refreshToken = jwtTokenProvider.createRefreshToken(member.getLoginId());
         // member.updateRefreshToken() 제거 - RefreshTokenRepository로 단일 관리
 
-        refreshTokenRepository.findByLoginId(member.getLoginId())
-                .ifPresentOrElse(
-                        token -> token.updateToken(refreshToken),
-                        () -> refreshTokenRepository.save(new RefreshToken(member.getLoginId(), refreshToken))
-                );
+        refreshTokenRepository.save(new RefreshToken(member.getLoginId(), refreshToken));
 
         return TokenResponse.builder()
                 .grantType("Bearer")
