@@ -23,7 +23,6 @@ public class NotificationController {
 
     private final NotificationService notificationService;
 
-    // [수정] MemberNotification 엔티티 직접 반환 → DTO 반환으로 교체
     // 엔티티 반환 시 Member → MemberDetail → Member 무한 순환 참조(StackOverflowError) 발생
     @GetMapping
     @Operation(summary = "내 알림 목록 조회", security = @SecurityRequirement(name = "bearerAuth"))

@@ -63,7 +63,6 @@ public class GlobalExceptionHandler {
                         "동시에 너무 많은 요청이 발생했습니다. 잠시 후 다시 시도해주세요."));
     }
 
-    // [수정] ex.printStackTrace() → log.error 로 교체
     // printStackTrace는 로그 시스템을 우회하고 운영 환경 콘솔에 직접 출력해 성능 악영향
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleAllException(Exception ex) {

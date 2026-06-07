@@ -48,8 +48,6 @@ public class GoogleSheetsService {
 
             log.info("[Google Sheets] 행 추가 성공: 시트={}, row={}", sheetName, emptyRowIdx);
         } catch (Exception e) {
-            // [수정] RuntimeException throw 제거 → 로그만 남기고 종료
-            // 이유: 시트 API 장애가 회원가입/이용권 부여 등 핵심 트랜잭션을 롤백시키면 안 됨
             log.error("[Google Sheets] 행 추가 실패: 시트={}, 사유={}", sheetName, e.getMessage());
         }
     }
@@ -78,7 +76,7 @@ public class GoogleSheetsService {
 
             int rowIndex = findRowIndexByMemberId("회원 정보 시트", member.getId());
             if (rowIndex != -1) {
-                String range = "올라클라이밍 회원정보!A" + rowIndex + ":K" + rowIndex;
+                String range = "회원 정보 시트!A" + rowIndex + ":K" + rowIndex;
                 ValueRange body = new ValueRange().setValues(List.of(rowData));
                 sheetsService.spreadsheets().values()
                         .update(spreadsheetId, range, body)
@@ -138,7 +136,7 @@ public class GoogleSheetsService {
 
             int rowIndex = findRowIndexByMemberId("이용권 관리 시트", member.getId());
             if (rowIndex != -1) {
-                String range = "이용권 관리!B" + rowIndex + ":O" + rowIndex;
+                String range = "이용권 관리 시트!B" + rowIndex + ":O" + rowIndex;
                 ValueRange body = new ValueRange().setValues(List.of(rowData.subList(1, rowData.size())));
                 sheetsService.spreadsheets().values()
                         .update(spreadsheetId, range, body)
@@ -159,7 +157,7 @@ public class GoogleSheetsService {
         try {
             int rowIndex = findRowIndexByMemberId("이용권 관리 시트", memberId);
             if (rowIndex != -1) {
-                String range = "이용권 관리!K" + rowIndex + ":L" + rowIndex;
+                String range = "이용권 관리 시트!K" + rowIndex + ":L" + rowIndex;
                 ValueRange body = new ValueRange().setValues(List.of(List.of(visitDateStr, accumulatedVisits)));
                 sheetsService.spreadsheets().values()
                         .update(spreadsheetId, range, body)
@@ -178,7 +176,7 @@ public class GoogleSheetsService {
         try {
             int rowIndex = findRowIndexByMemberId("이용권 관리 시트", memberId);
             if (rowIndex != -1) {
-                String range = "이용권 관리!M" + rowIndex + ":M" + rowIndex;
+                String range = "이용권 관리 시트!M" + rowIndex + ":M" + rowIndex;
                 ValueRange body = new ValueRange().setValues(List.of(List.of(pauseDateStr)));
                 sheetsService.spreadsheets().values()
                         .update(spreadsheetId, range, body)
@@ -197,7 +195,7 @@ public class GoogleSheetsService {
         try {
             int rowIndex = findRowIndexByMemberId("이용권 관리 시트", memberId);
             if (rowIndex != -1) {
-                String range = "이용권 관리!H" + rowIndex + ":M" + rowIndex;
+                String range = "이용권 관리 시트!H" + rowIndex + ":M" + rowIndex;
                 ValueRange body = new ValueRange().setValues(
                         List.of(List.of(newEndDateStr, "", "", "", "", "")));
                 sheetsService.spreadsheets().values()

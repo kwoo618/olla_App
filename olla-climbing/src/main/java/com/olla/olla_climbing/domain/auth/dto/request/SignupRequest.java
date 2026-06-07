@@ -47,8 +47,7 @@ public class SignupRequest {
 
     private Role role;
 
-    // (동철 수정) 회원가입할때 전달되는 기능이 (팔 길이, 키, 몸무게 등) 없음 
-    private MemberDetailDto detail; 
+    private MemberDetailDto detail;
     private PrivacyDto privacy;
 
     @Getter
