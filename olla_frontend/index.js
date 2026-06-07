@@ -54,7 +54,12 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
     await notifee.displayNotification({
       title,
       body,
-      android: { channelId: CHANNEL_ID, importance: AndroidImportance.HIGH, pressAction: { id: 'default' } },
+      android: { channelId: CHANNEL_ID, 
+        importance: AndroidImportance.HIGH, 
+        pressAction: { id: 'default' },
+        smallIcon: 'ic_launcher', 
+        largeIcon: 'ic_launcher',
+      },
     });
   }
 });

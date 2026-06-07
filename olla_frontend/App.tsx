@@ -73,7 +73,6 @@ const displayForegroundNotification = async (remoteMessage: any) => {
     if (settingsRaw) {
       const settings = JSON.parse(settingsRaw);
       if (!settings.isGlobalNotificationOn) return;
-
       const type = remoteMessage.data?.type;
       if (type === 'ACTIVITY' && !settings.isActivityNotificationOn) return;
       if (type === 'CREW' && !settings.isCrewNotificationOn) return;
@@ -96,6 +95,8 @@ const displayForegroundNotification = async (remoteMessage: any) => {
           channelId: CHANNEL_ID,
           importance: AndroidImportance.HIGH,
           pressAction: { id: 'default' },
+          smallIcon: 'ic_launcher',
+          largeIcon: 'ic_launcher',
         },
       });
     } else {
@@ -170,6 +171,10 @@ const AppContent = () => {
   const [hasUnreadNotification, setHasUnreadNotification] = useState(false);
   const lastAlertId = useRef<number | null>(null);
 
+  // ✅ 세션 만료 모달
+  const [sessionExpiredVisible, setSessionExpiredVisible] = useState(false);
+  const isSessionExpired = useRef(false);
+
   const [profileData, setProfileData] = useState({ name: '권클라이밍', phone: '010-1234-5678', age: '25', height: '175', weight: '70', arm: '180', shoe: '260' });
   const [profileToggles, setProfileToggles] = useState({ showName: true, showPhone: false, showAge: true, showHeight: true, showWeight: true, showArm: true, showShoe: true });
   const [difficultyData, setDifficultyData] = useState([
@@ -189,17 +194,15 @@ const AppContent = () => {
   const adminScreens = ['ManagerDashboard', 'ManagerUser', 'ManagerTicket', 'ManagerNotice', 'ManagerCommunity'];
   const isAdminMode = adminScreens.includes(routeName);
 
-  // ✅ 세션 만료 인터셉터
+  // ✅ 세션 만료 인터셉터 - 중복 방지 포함
   useEffect(() => {
     const interceptor = axios.interceptors.response.use(
       response => response,
       async error => {
-        if (error.response?.status === 401) {
+        if (error.response?.status === 401 && !isSessionExpired.current) {
+          isSessionExpired.current = true;
           await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole', 'fcmToken']);
-          navigationRef.reset({
-            index: 0,
-            routes: [{ name: 'Login' }],
-          });
+          setSessionExpiredVisible(true);
         }
         return Promise.reject(error);
       }
@@ -208,6 +211,15 @@ const AppContent = () => {
       axios.interceptors.response.eject(interceptor);
     };
   }, []);
+
+  const handleSessionExpiredConfirm = () => {
+    setSessionExpiredVisible(false);
+    isSessionExpired.current = false;
+    navigationRef.reset({
+      index: 0,
+      routes: [{ name: 'Login' }],
+    });
+  };
 
   // FCM 초기화
   useEffect(() => {
@@ -292,6 +304,8 @@ const AppContent = () => {
             await axios.get(`${API_BASE_URL}/members/me`, {
               headers: { Authorization: `Bearer ${userToken}` },
             });
+            // ✅ Home 진입 시 FCM 토큰 재등록 강제
+            await AsyncStorage.removeItem('fcmToken');
             setInitialRoute('Home');
           } catch (apiError) {
             await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole']);
@@ -443,6 +457,20 @@ const AppContent = () => {
         )}
       </NavigationContainer>
 
+      {/* ✅ 세션 만료 모달 */}
+      <Modal visible={sessionExpiredVisible} animationType="fade" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.deleteModalBox}>
+            <Text style={[styles.modalTitle, { color: '#FF4D4D' }]}>세션 만료</Text>
+            <Text style={styles.modalMessage}>세션이 만료되었습니다.{'\n'}다시 로그인해주세요.</Text>
+            <TouchableOpacity style={styles.btnConfirm} onPress={handleSessionExpiredConfirm}>
+              <Text style={styles.btnTextBlack}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 관리자 모드 종료 모달 */}
       <Modal visible={isExitModalVisible} animationType="fade" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.deleteModalBox}>
@@ -497,8 +525,10 @@ const styles = StyleSheet.create({
   bottomNavText: { fontSize: 9, color: '#7D7D7D' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   deleteModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
-  modalTitle: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 25 },
+  modalTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 10 },
+  modalMessage: { color: '#999999', fontSize: 15, textAlign: 'center', marginBottom: 25, lineHeight: 22 },
   modalBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  btnConfirm: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
   btnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
   btnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
   btnTextBlack: { color: '#000000', fontSize: 16, fontWeight: 'bold' },

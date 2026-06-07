@@ -113,10 +113,21 @@ export const useLogin = (navigation: any) => {
         if (refreshToken) await AsyncStorage.setItem('refreshToken', refreshToken);
         if (role) await AsyncStorage.setItem('userRole', role);
 
-        // ✅ 로그인 시 fcmToken 캐시 초기화 → App.tsx에서 새로 전송하도록
         await AsyncStorage.removeItem('fcmToken');
+        try {
+          const messaging = (await import('@react-native-firebase/messaging')).default;
+          const fcmToken = await messaging().getToken();
+          if (fcmToken) {
+            await axios.post(
+              `${API_BASE_URL}/members/me/fcm-token`,
+              { deviceToken: fcmToken },
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            await AsyncStorage.setItem('fcmToken', fcmToken);
+          }
+        } catch (e) {}
 
-        navigation.replace('Home');
+        setTimeout(() => navigation.replace('Home'), 100);
       } else {
         showResultModal('로그인 오류', '인증 정보를 찾을 수 없습니다.', 'error');
       }
