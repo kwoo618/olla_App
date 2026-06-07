@@ -46,7 +46,6 @@ public class AdminDashboardService {
         LocalDate startOfWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         long newMembersThisWeek = memberRepository.countByCreatedAtAfter(startOfWeek.atStartOfDay());
 
-        // [수정] findAll() 전체 로드 후 limit → DB에서 5개만 직접 조회
         List<NoticeResponse> recentNotices = noticeRepository
                 .findTop5ByOrderByCreatedAtDesc(PageRequest.of(0, 5))
                 .stream()
@@ -65,7 +64,6 @@ public class AdminDashboardService {
     public AdminDashboardResponse getDashboardStats() {
         long totalMembers = memberRepository.count();
 
-        // [수정] findByCreatedAtAfter(...).size() → countByCreatedAtAfter() 로 교체
         long newMembersToday = memberRepository.countByCreatedAtAfter(LocalDate.now().atStartOfDay());
         long activeMemberships = membershipRepository.countByStatusAndIsDeletedFalse(MembershipStatus.ACTIVE);
 

@@ -57,7 +57,6 @@ public class Membership extends BaseTimeEntity {
         }
     }
 
-    // [수정] 2가지 → 3가지 분류
     // 한 회원이 기간권+일일권 동시 보유 시 "회원권+일일권"으로 표기
     public String getMembershipTypeName() {
         boolean hasPeriod = this.durationMonth != null;

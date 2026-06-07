@@ -60,7 +60,6 @@ public class PostParticipantService {
         post.removeParticipant();
         participantRepository.delete(participant);
 
-        // [버그 수정] 기존 코드에서 취소 알림임에도 isJoin=true 를 전달하던 버그 수정
         notificationService.sendParticipantNotification(
                 post.getMember().getId(), member.getName(), post.getTitle(), post.getId(), false);
     }

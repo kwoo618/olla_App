@@ -26,7 +26,7 @@ public class MemberResponse {
     private Double armSpan;
     private Double footSize;
 
-    // [수정] is 접두사 Boolean 필드 전체 @JsonProperty 추가
+    // is 접두사 Boolean 필드 전체 @JsonProperty 추가
     @JsonProperty("isPhonePublic")
     private Boolean isPhonePublic;
 

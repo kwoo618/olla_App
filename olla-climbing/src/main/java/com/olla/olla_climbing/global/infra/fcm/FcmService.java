@@ -3,6 +3,7 @@ package com.olla.olla_climbing.global.infra.fcm;
 import com.google.firebase.messaging.AndroidConfig;
 import com.google.firebase.messaging.ApnsConfig;
 import com.google.firebase.messaging.Aps;
+import com.google.firebase.messaging.ApsAlert;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.Message;
 import lombok.extern.slf4j.Slf4j;
@@ -38,6 +39,11 @@ public class FcmService {
                             .putHeader("apns-priority", "10")
                             .setAps(Aps.builder()
                                     .setContentAvailable(true)
+                                    .setAlert(ApsAlert.builder()
+                                            .setTitle(title != null ? title : "")
+                                            .setBody(content != null ? content : "")
+                                            .build())
+                                    .setSound("default")
                                     .build())
                             .build())
                     .build();
