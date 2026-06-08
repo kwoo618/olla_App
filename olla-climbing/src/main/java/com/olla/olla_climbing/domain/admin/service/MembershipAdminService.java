@@ -145,6 +145,7 @@ public class MembershipAdminService {
         String newEndDateStr = membership.getEndDate() != null
                 ? membership.getEndDate().format(DateTimeFormatter.ofPattern("yyyy. MM. dd")) : "";
         googleSheetsService.unpauseMembershipData(membership.getMember().getId(), newEndDateStr);
+        googleSheetsService.updateMembershipStatus(membership.getMember().getId(), "HOLDING");
     }
 
     @Transactional(readOnly = true)
