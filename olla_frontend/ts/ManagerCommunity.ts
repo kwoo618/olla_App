@@ -248,6 +248,12 @@ export const useManagerCommunityData = (currentFilter: string, isFocused: boolea
   // 댓글 작성
   const submitComment = async () => {
     if (!commentInput.trim() || !selectedPost) return;
+
+    if (selectedPost.isPast) {
+      showResultModal('작성 불가', '마감된 게시글에는 댓글을 작성할 수 없습니다.', 'info');
+      return;
+    }
+    
     try {
       const headers = await authHeader();
       const payload = {

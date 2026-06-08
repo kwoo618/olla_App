@@ -42,6 +42,7 @@ const ProfileImg = ({ uri, style }: { uri: string | null | undefined; style: any
 };
 
 const CommunityScreen = ({ route, navigation }: any) => {
+  
   const isFocused = useIsFocused();
   const currentFilter = route?.params?.filter || 'ALL';
 

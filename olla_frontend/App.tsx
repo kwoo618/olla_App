@@ -8,10 +8,8 @@ import axios from 'axios';
 import { API_BASE_URL } from './src/constants/Config';
 import messaging from '@react-native-firebase/messaging';
 
-// 세션 만료 이벤트
 export const SESSION_EXPIRED_EVENT = 'SESSION_EXPIRED';
 
-// 앱 시작 시 1회 등록
 let _sessionExpiredFired = false;
 let _isReissuing = false;
 
@@ -23,7 +21,6 @@ axios.interceptors.response.use(
     const isLoginRequest = url.includes('/auth/login') || url.includes('/members/login');
     const isReissueRequest = url.includes('/auth/reissue');
 
-    // 재발급/로그인 요청 자체가 401이면 바로 세션 만료 처리
     if (status === 401 && (isLoginRequest || isReissueRequest)) {
       if (!_sessionExpiredFired) {
         _sessionExpiredFired = true;
@@ -33,7 +30,6 @@ axios.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // 일반 요청 401 → RefreshToken으로 자동 재발급 시도
     if (status === 401 && !_isReissuing && !_sessionExpiredFired) {
       _isReissuing = true;
       try {
@@ -48,11 +44,9 @@ axios.interceptors.response.use(
 
         await AsyncStorage.setItem('userToken', newAccessToken);
 
-        // 원래 실패했던 요청을 새 토큰으로 재시도
         error.config.headers['Authorization'] = `Bearer ${newAccessToken}`;
         return axios(error.config);
       } catch {
-        // 재발급 실패 → 세션 만료 처리
         if (!_sessionExpiredFired) {
           _sessionExpiredFired = true;
           await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole', 'fcmToken']);
@@ -201,49 +195,20 @@ interface BottomNavItemProps {
   currentRoute: string;
   nav: any;
   isAdmin?: boolean;
-  // 추가: 회원권 제한 탭 여부 + 보유 상태
-  membershipRequired?: boolean;
-  hasMembership?: boolean;
-  onBlockedPress?: () => void;
 }
 
-const BottomNavItem = ({
-  name, label, icon, currentRoute, nav,
-  isAdmin = false,
-  membershipRequired = false,
-  hasMembership = false,
-  onBlockedPress,
-}: BottomNavItemProps) => {
+const BottomNavItem = ({ name, label, icon, currentRoute, nav, isAdmin = false }: BottomNavItemProps) => {
   const isActive = currentRoute === name;
-  const isBlocked = membershipRequired && !hasMembership;
   const activeColor = '#A1BE44';
   const inactiveColor = '#7D7D7D';
 
-  const handlePress = () => {
-    if (isBlocked) {
-      onBlockedPress?.();
-      return;
-    }
-    nav.navigate(name);
-  };
-
   return (
-    <TouchableOpacity style={styles.bottomNavItem} onPress={handlePress}>
+    <TouchableOpacity style={styles.bottomNavItem} onPress={() => nav.navigate(name)}>
       <Image
         source={icon}
-        style={[
-          styles.navIcon,
-          {
-            tintColor: isBlocked ? '#444444' : (isActive ? activeColor : inactiveColor),
-            opacity: isBlocked ? 0.35 : (isActive ? 1 : 0.6),
-          },
-        ]}
+        style={[styles.navIcon, { tintColor: isActive ? activeColor : inactiveColor, opacity: isActive ? 1 : 0.6 }]}
       />
-      <Text style={[
-        styles.bottomNavText,
-        isActive && !isBlocked && { color: activeColor, fontWeight: 'bold' },
-        isBlocked && { color: '#444444' },
-      ]}>
+      <Text style={[styles.bottomNavText, isActive && { color: activeColor, fontWeight: 'bold' }]}>
         {label}
       </Text>
     </TouchableOpacity>
@@ -263,7 +228,6 @@ const AppContent = () => {
   const [hasUnreadNotification, setHasUnreadNotification] = useState(false);
   const lastAlertId = useRef<number | null>(null);
 
-  // ✅ 세션 만료 모달
   const [sessionExpiredVisible, setSessionExpiredVisible] = useState(false);
 
   const [profileData, setProfileData] = useState({ name: '권클라이밍', phone: '010-1234-5678', age: '25', height: '175', weight: '70', arm: '180', shoe: '260' });
@@ -286,10 +250,7 @@ const AppContent = () => {
   const isAdminMode = adminScreens.includes(routeName);
 
   const [hasMembership, setHasMembership] = useState(false);
-  const [membershipBlockVisible, setMembershipBlockVisible] = useState(false);
 
-  // ✅ 세션 만료 인터셉터 - 중복 방지 포함
-  // 로그인 성공 후 기간권 조회
   useEffect(() => {
     const fetchMembership = async () => {
       try {
@@ -329,14 +290,13 @@ const AppContent = () => {
 
   const handleSessionExpiredConfirm = () => {
     setSessionExpiredVisible(false);
-    _sessionExpiredFired = false; // 다음 로그인 세션을 위해 초기화
+    _sessionExpiredFired = false;
     navigationRef.reset({
       index: 0,
       routes: [{ name: 'Login' }],
     });
   };
 
-  // 세션 만료 이벤트 구독
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener(SESSION_EXPIRED_EVENT, () => {
       setSessionExpiredVisible(true);
@@ -344,7 +304,6 @@ const AppContent = () => {
     return () => sub.remove();
   }, []);
 
-  // FCM 초기화
   useEffect(() => {
     let unsubscribeForeground: (() => void) | null = null;
     let unsubscribeTokenRefresh: (() => void) | null = null;
@@ -375,9 +334,7 @@ const AppContent = () => {
     };
   }, []);
 
-  // 미읽 알림 폴링
   useEffect(() => {
-    // initialRoute가 Home으로 확정되기 전엔 아예 실행 안 함
     if (initialRoute !== 'Home') return;
 
     const fetchUnreadNotifications = async () => {
@@ -393,7 +350,6 @@ const AppContent = () => {
           headers: { Authorization: `Bearer ${userToken}` },
         });
 
-        // 응답 구조 정규화
         const raw = response.data?.data;
         const list: any[] = Array.isArray(raw)
           ? raw
@@ -401,7 +357,6 @@ const AppContent = () => {
           ? raw.content
           : [];
 
-        // isRead / read 둘 다 체크, 명확히 false인 것만 미읽으로 판단
         const unreadItems = list.filter(
           (item: any) => item.isRead === false || item.read === false
         );
@@ -420,7 +375,6 @@ const AppContent = () => {
     };
   }, [initialRoute, isAdminMode]);
 
-  // 자동 로그인 체크
   useEffect(() => {
     const checkLoginStatus = async () => {
       try {
@@ -430,7 +384,6 @@ const AppContent = () => {
             await axios.get(`${API_BASE_URL}/members/me`, {
               headers: { Authorization: `Bearer ${userToken}` },
             });
-            // ✅ Home 진입 시 FCM 토큰 재등록 강제
             await AsyncStorage.removeItem('fcmToken');
             setInitialRoute('Home');
           } catch (apiError) {
@@ -547,9 +500,42 @@ const AppContent = () => {
             <Stack.Screen name="Home" component={HomeScreen} />
             <Stack.Screen name="Notice" component={NoticeScreen} />
             <Stack.Screen name="Notification" component={NotificationScreen} />
-            <Stack.Screen name="Recode">{(props) => <RecodeScreen {...props} difficultyData={difficultyData} setDifficultyData={setDifficultyData} enduranceData={enduranceData} setEnduranceData={setEnduranceData} consecutiveData={consecutiveData} setConsecutiveData={setConsecutiveData} />}</Stack.Screen>
-            <Stack.Screen name="Ranking">{(props) => <RankingScreen {...props} myProfile={profileData} difficultyData={difficultyData} enduranceData={enduranceData} consecutiveData={consecutiveData} />}</Stack.Screen>
-            <Stack.Screen name="Community">{(props) => <CommunityScreen {...props} myProfile={profileData} myToggles={profileToggles} />}</Stack.Screen>
+            <Stack.Screen name="Recode">
+              {(props) => (
+                <RecodeScreen
+                  {...props}
+                  hasMembership={hasMembership}
+                  difficultyData={difficultyData}
+                  setDifficultyData={setDifficultyData}
+                  enduranceData={enduranceData}
+                  setEnduranceData={setEnduranceData}
+                  consecutiveData={consecutiveData}
+                  setConsecutiveData={setConsecutiveData}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Ranking">
+              {(props) => (
+                <RankingScreen
+                  {...props}
+                  hasMembership={hasMembership}
+                  myProfile={profileData}
+                  difficultyData={difficultyData}
+                  enduranceData={enduranceData}
+                  consecutiveData={consecutiveData}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Community">
+              {(props) => (
+                <CommunityScreen
+                  {...props}
+                  hasMembership={hasMembership}
+                  myProfile={profileData}
+                  myToggles={profileToggles}
+                />
+              )}
+            </Stack.Screen>
             <Stack.Screen name="MY">{(props) => <MYScreen {...props} profileData={profileData} setProfileData={setProfileData} profileToggles={profileToggles} setProfileToggles={setProfileToggles} />}</Stack.Screen>
             <Stack.Screen name="ManagerDashboard" component={ManagerDashboard} />
             <Stack.Screen name="ManagerUser">{(props) => <ManagerUser {...props} users={users} setUsers={setUsers} />}</Stack.Screen>
@@ -565,24 +551,9 @@ const AppContent = () => {
             {!isAdminMode ? (
               <>
                 <BottomNavItem name="Home" label="홈" icon={require('./assets/Home.png')} currentRoute={routeName} nav={navigationRef} />
-                <BottomNavItem
-                  name="Recode" label="기록" icon={require('./assets/recode.png')}
-                  currentRoute={routeName} nav={navigationRef}
-                  membershipRequired hasMembership={hasMembership}
-                  onBlockedPress={() => setMembershipBlockVisible(true)}
-                />
-                <BottomNavItem
-                  name="Ranking" label="랭킹" icon={require('./assets/ranking.png')}
-                  currentRoute={routeName} nav={navigationRef}
-                  membershipRequired hasMembership={hasMembership}
-                  onBlockedPress={() => setMembershipBlockVisible(true)}
-                />
-                <BottomNavItem
-                  name="Community" label="커뮤니티" icon={require('./assets/community.png')}
-                  currentRoute={routeName} nav={navigationRef}
-                  membershipRequired hasMembership={hasMembership}
-                  onBlockedPress={() => setMembershipBlockVisible(true)}
-                />
+                <BottomNavItem name="Recode" label="기록" icon={require('./assets/recode.png')} currentRoute={routeName} nav={navigationRef} />
+                <BottomNavItem name="Ranking" label="랭킹" icon={require('./assets/ranking.png')} currentRoute={routeName} nav={navigationRef} />
+                <BottomNavItem name="Community" label="커뮤니티" icon={require('./assets/community.png')} currentRoute={routeName} nav={navigationRef} />
                 <BottomNavItem name="MY" label="마이" icon={require('./assets/mypage.png')} currentRoute={routeName} nav={navigationRef} />
               </>
             ) : (
@@ -598,7 +569,6 @@ const AppContent = () => {
         )}
       </NavigationContainer>
 
-      {/* ✅ 세션 만료 모달 */}
       <Modal visible={sessionExpiredVisible} animationType="fade" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.deleteModalBox}>
@@ -611,22 +581,6 @@ const AppContent = () => {
         </View>
       </Modal>
 
-      {/* 이용권 필요 차단 모달 */}
-      <Modal visible={membershipBlockVisible} animationType="fade" transparent={true}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.deleteModalBox}>
-            <Text style={[styles.modalTitle, { color: '#A1BE44' }]}>이용권 필요</Text>
-            <Text style={styles.modalMessage}>
-              해당 기능은 기간권 보유 회원만{'\n'}이용할 수 있습니다.
-            </Text>
-            <TouchableOpacity style={styles.btnConfirm} onPress={() => setMembershipBlockVisible(false)}>
-              <Text style={styles.btnTextBlack}>확인</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* 관리자 모드 종료 모달 */}
       <Modal visible={isExitModalVisible} animationType="fade" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.deleteModalBox}>

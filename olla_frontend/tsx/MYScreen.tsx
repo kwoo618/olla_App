@@ -352,6 +352,12 @@ const MYScreen = ({ navigation }: any) => {
                   </View>
 
                   {renderEditField('전화번호', 'phone', '')}
+
+                  {/* 안내 텍스트 */}
+                  <Text style={styles.profilefixHint}>
+                    이름, 성별, 생년월일, 전화번호 수정은 관리자에게 문의하십시오
+                  </Text>
+
                   {renderEditField('키', 'height', 'cm')}
                   {renderEditField('몸무게', 'weight', 'kg')}
                   {renderEditField('팔길이', 'arm', 'cm')}
@@ -538,6 +544,7 @@ const styles = StyleSheet.create({
   deleteImageBtn: { position: 'absolute', top: -4, right: -4, width: 26, height: 26, borderRadius: 13, backgroundColor: '#FF4D4D', justifyContent: 'center', alignItems: 'center', zIndex: 10, borderWidth: 2, borderColor: '#262626' },
   deleteImageBtnText: { color: '#ffffff', fontSize: 11, fontWeight: 'bold', lineHeight: 13 },
   profileImageHint: { color: '#666666', fontSize: 12, textAlign: 'center', marginBottom: 20 },
+  profilefixHint: { color: '#666666', fontSize: 15, textAlign: 'center', marginBottom: 20 },
 
   editFieldWrapper: { marginBottom: 20 },
   editFieldHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },

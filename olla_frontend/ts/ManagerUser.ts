@@ -328,7 +328,7 @@ export const useManagerUser = (navigation: any) => {
       const d = response.data.data; 
       if (!d) return;
       
-      const rawGender = d.detail?.gender || d.gender;
+      const rawGender = d.gender || d.detail?.gender;
       let displayGender = '-';
       if (rawGender === 'MALE' || rawGender === '남' || rawGender === '남자') displayGender = '남자';
       else if (rawGender === 'FEMALE' || rawGender === '여' || rawGender === '여자') displayGender = '여자';
@@ -339,11 +339,11 @@ export const useManagerUser = (navigation: any) => {
         gender: displayGender,
         phone: d.phone || fallbackPhone || '-', 
         profileImageUrl: getFullImageUrl(d.profileImageUrl ?? d.profileImage),
-        age: d.detail?.age || d.age || '-',
-        height: d.detail?.height || d.height || '-',
-        weight: d.detail?.weight || d.weight || '-',
-        arm: d.detail?.armSpan || d.armSpan || '-',
-        shoe: d.detail?.footSize || d.footSize || '-',
+        age: d.age || d.detail?.age || '-',
+        height: d.height || d.detail?.height || '-',
+        weight: d.weight || d.detail?.weight || '-',
+        arm: d.armSpan || d.detail?.armSpan || '-',
+        shoe: d.footSize || d.detail?.footSize || '-',
       });
 
       setDetailVisible(true);

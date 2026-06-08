@@ -367,17 +367,26 @@ const ManagerCommunity = ({ route, navigation }: any) => {
               </ScrollView>
 
               <View style={styles.commentInputWrapper}>
-                {replyingTo && (
-                  <View style={styles.replyingToIndicator}>
-                    <Text style={styles.replyingToIndicatorText}>{replyingTo.name}님에게 답글 남기는 중</Text>
-                    <TouchableOpacity onPress={() => setReplyingTo(null)}><Text style={styles.replyingCancelText}>✕</Text></TouchableOpacity>
+                {/* ✅ 마감된 게시글은 댓글 입력 차단 */}
+                {selectedPost?.isPast ? (
+                  <View style={styles.closedCommentBlock}>
+                    <Text style={styles.closedCommentText}>마감된 게시글에는 댓글을 작성할 수 없습니다.</Text>
                   </View>
+                ) : (
+                  <>
+                    {replyingTo && (
+                      <View style={styles.replyingToIndicator}>
+                        <Text style={styles.replyingToIndicatorText}>{replyingTo.name}님에게 답글 남기는 중</Text>
+                        <TouchableOpacity onPress={() => setReplyingTo(null)}><Text style={styles.replyingCancelText}>✕</Text></TouchableOpacity>
+                      </View>
+                    )}
+                    <View style={styles.commentInputRow}>
+                      <ProfileImage uri={myProfileImageUrl} style={styles.commentInputAvatar} />
+                      <TextInput style={styles.commentTextInput} placeholder="댓글을 작성해주세요." placeholderTextColor="#666" value={commentInput} onChangeText={setCommentInput} multiline />
+                      <TouchableOpacity onPress={submitComment}><Text style={[styles.commentSubmitBtn, commentInput.trim() ? { color: '#A1BE44' } : undefined]}>등록</Text></TouchableOpacity>
+                    </View>
+                  </>
                 )}
-                <View style={styles.commentInputRow}>
-                  <ProfileImage uri={myProfileImageUrl} style={styles.commentInputAvatar} />
-                  <TextInput style={styles.commentTextInput} placeholder="댓글을 작성해주세요." placeholderTextColor="#666" value={commentInput} onChangeText={setCommentInput} multiline />
-                  <TouchableOpacity onPress={submitComment}><Text style={[styles.commentSubmitBtn, commentInput.trim() ? { color: '#A1BE44' } : undefined]}>등록</Text></TouchableOpacity>
-                </View>
               </View>
             </Animated.View>
           </KeyboardAvoidingView>
@@ -572,6 +581,9 @@ const styles = StyleSheet.create({
   commentInputAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#444', marginRight: 10 },
   commentTextInput: { flex: 1, backgroundColor: '#000000', color: '#ffffff', fontSize: 15, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, minHeight: 40, maxHeight: 100 },
   commentSubmitBtn: { color: '#666666', fontSize: 16, fontWeight: 'bold', marginLeft: 12, paddingVertical: 10 },
+  
+  closedCommentBlock: { paddingVertical: 14, alignItems: 'center', justifyContent: 'center' },
+  closedCommentText: { color: '#666666', fontSize: 15, fontWeight: 'bold' },
 });
 
 export default ManagerCommunity;

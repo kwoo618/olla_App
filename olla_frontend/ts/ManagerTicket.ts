@@ -427,9 +427,14 @@ export const useManagerTicket = (navigation: any) => {
     if (!selectedUser) return;
     setFormError(''); // 이전 에러 초기화
 
-    // 오프라인 회원 일일권 차단
+    // 오프라인 회원 일일권 차단 (백엔드에서도 차단되지만 프론트에서도 방어)
     const memberEmail = selectedUser?.email || '';
-    const isOfflineMember = memberEmail.includes('@olla.local');
+    const memberPhone = selectedUser?.phone || '';
+    const isOfflineMember = 
+      memberEmail.includes('@olla.local') ||
+      memberPhone.startsWith('offline') ||
+      selectedUser?.memberships?.some((m: any) => m.isOffline === true);
+
     if (isOfflineMember && editType === 'COUNT') {
       setFormError('오프라인 등록 회원에게는 일일권을 추가할 수 없습니다.');
       return;
@@ -479,9 +484,6 @@ export const useManagerTicket = (navigation: any) => {
         addMonths: editType === 'PERIOD' ? numericAddValue : 0,
         addCount: editType === 'COUNT' ? numericAddValue : 0,
       };
-      // 오프라인 회원 일일권 추가 안되게 수정 
-      const isOfflineMember = selectedUser?.phone?.startsWith('offline') || 
-        selectedUser?.memberships?.some((m: any) => m.isOffline === true);
 
       await axios.post(MEMBERSHIP_GRANT_API, requestBody, {
         headers: { Authorization: `Bearer ${token}` },
