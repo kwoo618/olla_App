@@ -13,7 +13,7 @@ const RecodeScreen = ({ route, navigation }: any) => {
     refreshing, onRefresh, expandedSection, toggleSection, beginnerHistoryData,
     resultModalVisible, resultModalConfig, closeResultModal,
     isDeleteModalVisible, confirmDelete, executeDelete, cancelDelete,
-    
+    hasValidMembership,
     isRecordModalVisible, openRecordModal, closeRecordModal, beginnerHeightAnim, beginnerPanResponder,
     selectedDifficulty, setSelectedDifficulty, selectedType, setSelectedType, selectedResult, setSelectedResult, holdCount, setHoldCount, currentMaxHolds, handleSaveBeginnerRecord,
     
@@ -33,7 +33,19 @@ const RecodeScreen = ({ route, navigation }: any) => {
         style={[styles.mapAbsBox, { backgroundColor: item.color, left: item.x - 10, top: item.y - 10 }]} />
     );
   };
-
+  if (!hasValidMembership) {
+    return (
+      <View style={[styles.background, { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 }]}>
+        <Text style={{ fontSize: 48, marginBottom: 20 }}>🔒</Text>
+        <Text style={{ color: '#ffffff', fontSize: 22, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' }}>
+          회원권 전용 기능입니다
+        </Text>
+        <Text style={{ color: '#999999', fontSize: 16, textAlign: 'center', lineHeight: 24 }}>
+          기록 탭은 회원권 보유 회원만{'\n'}이용할 수 있습니다.
+        </Text>
+      </View>
+    );
+  }
   return (
     <View style={styles.background}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}

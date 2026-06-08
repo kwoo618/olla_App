@@ -422,10 +422,18 @@ export const useManagerTicket = (navigation: any) => {
     Animated.spring(editHeightAnim, { toValue: GRANT_EXPANDED_HEIGHT, useNativeDriver: false }).start();
   }, [editHeightAnim, GRANT_EXPANDED_HEIGHT]);
 
-  // 💡 이용권 등록 및 유효성 검사 (과거 날짜 완벽 차단)
+  // 이용권 등록 및 유효성 검사 
   const handleGrantTicket = useCallback(async () => {
     if (!selectedUser) return;
     setFormError(''); // 이전 에러 초기화
+
+    // 오프라인 회원 일일권 차단
+    const memberEmail = selectedUser?.email || '';
+    const isOfflineMember = memberEmail.includes('@olla.local');
+    if (isOfflineMember && editType === 'COUNT') {
+      setFormError('오프라인 등록 회원에게는 일일권을 추가할 수 없습니다.');
+      return;
+    }
 
     const startDateStr = editStart || getToday();
     const numericAddValue = Number(addValue);
@@ -471,6 +479,9 @@ export const useManagerTicket = (navigation: any) => {
         addMonths: editType === 'PERIOD' ? numericAddValue : 0,
         addCount: editType === 'COUNT' ? numericAddValue : 0,
       };
+      // 오프라인 회원 일일권 추가 안되게 수정 
+      const isOfflineMember = selectedUser?.phone?.startsWith('offline') || 
+        selectedUser?.memberships?.some((m: any) => m.isOffline === true);
 
       await axios.post(MEMBERSHIP_GRANT_API, requestBody, {
         headers: { Authorization: `Bearer ${token}` },

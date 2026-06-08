@@ -65,21 +65,22 @@ const isStarted = (startDate: string): boolean => {
   const start = new Date(startDate); start.setHours(0, 0, 0, 0);
   return start <= getTodayDate();
 };
+// 기간권 보유자만 true — 일일권(COUNT/횟수/일일)은 false
 const checkActiveMembership = (dataList: any[]): boolean => {
   if (!Array.isArray(dataList) || dataList.length === 0) return false;
-  const activeList = dataList.filter(m => m.status === 'ACTIVE' && isStarted(m.startDate));
-  const hasPeriod = activeList.some(m => {
-    const t = String(m.membershipType).toUpperCase();
-    if (!(t.includes('PERIOD') || t.includes('기간') || t.includes('회원'))) return false;
+  const activeList = dataList.filter(m => {
+  const status = String(m.membershipStatus || m.status || '').toUpperCase();
+  if (status === 'DELETED' || status === 'INACTIVE') return false;
+    return isStarted(m.startDate);
+  });
+  return activeList.some(m => {
+    const t = String(m.membershipType ?? '').toUpperCase();
+    const isCountType = t.includes('COUNT') || t.includes('횟수') || t.includes('일일');
+    if (isCountType) return false;
     if (!m.endDate) return false;
-    const end = new Date(m.endDate); end.setHours(0, 0, 0, 0);
-    return end >= getTodayDate();
+    const end = new Date(m.endDate); end.setHours(23, 59, 59, 999);
+    return end.getTime() >= Date.now();
   });
-  const hasCount = activeList.some(m => {
-    const t = String(m.membershipType).toUpperCase();
-    return (t.includes('COUNT') || t.includes('횟수') || t.includes('일일')) && (m.remainingCount ?? 0) > 0;
-  });
-  return hasPeriod || hasCount;
 };
 
 export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
@@ -385,23 +386,20 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
       const d = data.data;
       if (!d) throw new Error('정보를 불러올 수 없습니다.');
 
-      const detail = d.detail || d;
-      const privacy = d.privacy || d;
+      const detail = d.detail || {};
 
       setSelectedUser({
-        name: d.name || authorName, phone: d.phone || '-', age: detail.age || d.age || '-',
+        name: d.name || authorName,
+        phone: d.phone || '-',
+        age: detail.age || d.age || '-',
         gender: translateGender(detail.gender || d.gender || '-'),
-        height: detail.height || d.height || '-', weight: detail.weight || d.weight || '-',
-        arm: detail.armSpan || d.armSpan || '-', shoe: detail.footSize || d.footSize || '-',
+        height: detail.height || d.height || '-',
+        weight: detail.weight || d.weight || '-',
+        arm: detail.armSpan || d.armSpan || '-',
+        shoe: detail.footSize || d.footSize || '-',
         profileImageUrl: getFullImageUrl(d.profileImageUrl || d.profileImage),
-        toggles: {
-          showName: true, showPhone: isMine || privacy.isPublicPhone || privacy.phonePublic,
-          showAge: true, showHeight: isMine || privacy.isHeightPublic || privacy.heightPublic,
-          showWeight: isMine || privacy.isWeightPublic || privacy.weightPublic,
-          showArm: isMine || privacy.isArmSpanPublic || privacy.armSpanPublic,
-          showShoe: isMine || privacy.isFootSizePublic || privacy.footSizePublic,
-        },
-        isMe: isMine
+        isMe: isMine,
+        // toggles 제거하고 모든 필드 항상 표시
       });
       return true;
     } catch (e: any) {
@@ -412,11 +410,14 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
 
   const loadPostDetail = async (post: any) => {
     if (isPostLoading) return false;
+    // 마감된 게시글은 처리하지 않음
+    if (post.isPast) return false;
     setIsPostLoading(true);
 
     setSelectedPost({ ...post, viewCount: post.viewCount + 1 });
     try {
       const headers = await authHeader();
+      // 마감 아닐 때만 조회수 올리도록 API 호출
       await axios.get(`${POSTS}/${post.id}`, { headers });
       updatePost(post.id, { viewCount: (p: any) => p.viewCount + 1 });
       const { data } = await axios.get(`${POSTS}/${post.id}/comments?page=0&size=100`, { headers });
@@ -429,9 +430,14 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
     }
   };
 
-  // ✅ 댓글 작성: 회원권 체크
+  // 댓글 작성 - 회원권 체크
   const submitComment = async () => {
     if (!checkHasMembershipOrAlert()) return;
+
+    if (selectedPost?.isPast) {
+      showResultModal('작성 불가', '마감된 게시글에는 댓글을 작성할 수 없습니다.', 'info');
+      return;
+    }
 
     const trimmed = commentInput.trim();
     if (!trimmed || !selectedPost) return;

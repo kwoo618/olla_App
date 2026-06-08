@@ -11,6 +11,7 @@ const RANKING_SERIES_URL    = `${API_BASE_URL}/rankings/series`;
 const MY_PROFILE_URL        = `${API_BASE_URL}/members/me`;
 const MY_BEGINNER_BEST_URL  = `${API_BASE_URL}/records/beginner/best`;
 const PROFILE_API_URL       = `${API_BASE_URL}/members`;
+const MEMBERSHIP_URL        = `${API_BASE_URL}/memberships/me`;
 
 // 이미지 불러오기
 export const getFullImageUrl = (path?: string | null): string | null => {
@@ -113,6 +114,8 @@ const getSectionLabel = (oneWayCount: number, additionalBlocks: number): string 
 };
 
 export const useRanking = (route: any) => {
+  // ✅ null = 로딩 중, true/false = 판별 완료
+  const [hasValidMembership, setHasValidMembership] = useState<boolean | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [mainTab, setMainTab]   = useState<string>(route?.params?.targetTab ?? '초보벽');
   const [colorTab, setColorTab] = useState<string>('전체');
@@ -125,7 +128,6 @@ export const useRanking = (route: any) => {
   const [myMemberId,        setMyMemberId]        = useState<number | null>(null);
   const [myProfileImageUrl, setMyProfileImageUrl] = useState<string | null>(null);
 
-  // 모달 State
   const [isDetailVisible, setDetailVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [alertConfig, setAlertConfig] = useState<{ visible: boolean; title: string; message: string }>({ visible: false, title: '', message: '' });
@@ -149,7 +151,6 @@ export const useRanking = (route: any) => {
       onPanResponderRelease: (_, gestureState) => {
         detailHeightAnim.flattenOffset();
         const finalHeight = currentDetailSnap.current - gestureState.dy;
-
         if (finalHeight < currentDetailSnap.current * 0.7) {
           closeDetailModal();
         } else {
@@ -168,19 +169,60 @@ export const useRanking = (route: any) => {
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
+  // ✅ 기간권 보유 여부 확인 — 일일권(COUNT/횟수/일일) 제외
+  const checkRankingMembership = async () => {
+    try {
+      const headers = await getAuthHeader();
+      const res = await axios.get(MEMBERSHIP_URL, { headers });
+      const rawData = res.data.data;
+      const memberships: any[] = Array.isArray(rawData) ? rawData : (rawData ? [rawData] : []);
+
+      let isValid = false;
+      for (const m of memberships) {
+        if (!m) continue;
+        const status = String(m.membershipStatus || m.status || '').toUpperCase();
+        if (status === 'DELETED' || status === 'INACTIVE') continue;
+        // ACTIVE가 아니면 건너뜀
+        if (status !== 'ACTIVE' && status !== '') continue;
+
+        const typeStr = String(m.membershipType ?? '').toUpperCase();
+
+        // 일일권 제외
+        const isCountType =
+        typeStr.includes('COUNT') || typeStr.includes('횟수') || typeStr.includes('일일');
+        if (isCountType) continue;
+
+        // 기간권 유효성 검사
+        if (typeStr.includes('PERIOD') || typeStr.includes('기간') || m.endDate) {
+          if (m.endDate) {
+            const end = new Date(m.endDate);
+            end.setHours(23, 59, 59, 999);
+            if (end.getTime() >= Date.now()) {
+              isValid = true;
+              break;
+            }
+          }
+        }
+      }
+      setHasValidMembership(isValid);
+    } catch {
+      setHasValidMembership(false);
+    }
+  };
+
   const openDetailModal = async (memberId: number, fallbackName: string) => {
     try {
       const headers = await getAuthHeader();
       const response = await axios.get(`${PROFILE_API_URL}/${memberId}/profile`, { headers });
       const d = response.data.data;
-      
-      if (!d) { 
-        showAlert('프로필 조회 불가', '정보를 불러올 수 없습니다.'); 
-        return; 
+
+      if (!d) {
+        showAlert('프로필 조회 불가', '정보를 불러올 수 없습니다.');
+        return;
       }
-      
+
       const detail = d.detail || {};
-      
+
       setSelectedUser({
         name: d.name || fallbackName,
         profileImageUrl: d.profileImageUrl || d.profileImage || null,
@@ -202,9 +244,9 @@ export const useRanking = (route: any) => {
   };
 
   const closeDetailModal = () => {
-    Animated.timing(detailHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => { 
-      setDetailVisible(false); 
-      setSelectedUser(null); 
+    Animated.timing(detailHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
+      setDetailVisible(false);
+      setSelectedUser(null);
     });
   };
 
@@ -280,8 +322,8 @@ export const useRanking = (route: any) => {
         });
 
         const myRecord = myBestList
-            .filter((r: any) => r.difficulty === currentColor.enum)
-            .reduce<any>((best, r: any) => {
+          .filter((r: any) => r.difficulty === currentColor.enum)
+          .reduce<any>((best, r: any) => {
             const hasDec = r.score !== undefined && r.score !== null && r.score % 1 !== 0;
             const isRT   = String(r.attemptType ?? '').toUpperCase() === 'ROUND_TRIP' || hasDec;
             const rawH   = r.maxHoldNo !== undefined ? r.maxHoldNo : (r.score !== undefined ? Math.floor(r.score) : undefined);
@@ -393,12 +435,14 @@ export const useRanking = (route: any) => {
     }
   };
 
+  // ✅ checkRankingMembership을 loadAllData와 같은 스코프에서 호출
   const loadAllData = async () => {
     const userData = await fetchMyProfile();
     await Promise.all([
+      checkRankingMembership(),
       fetchBeginnerRankings(userData),
       fetchEnduranceRankings(),
-      fetchConsecutiveRankings()
+      fetchConsecutiveRankings(),
     ]);
   };
 
@@ -461,12 +505,13 @@ export const useRanking = (route: any) => {
   const myCurrentRank = filteredList.find(r => r.isMe)?.rank ?? '-';
 
   return {
+    hasValidMembership, // ✅ 추가
     refreshing, onRefresh,
     mainTab, setMainTab,
     colorTab, setColorTab,
     myNickname, myCurrentRank, myProfileImageUrl,
     filteredList,
     isDetailVisible, selectedUser, openDetailModal, closeDetailModal, detailHeightAnim, detailPanResponder,
-    alertConfig, setAlertConfig
+    alertConfig, setAlertConfig,
   };
 };

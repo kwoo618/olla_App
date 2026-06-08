@@ -82,7 +82,7 @@ export const usePersonal = (navigation: any, route: any) => {
 
       if (accessToken) {
         await AsyncStorage.setItem('userToken', accessToken);
-        if (refreshToken) await AsyncStorage.setItem('refreshToken', refreshToken);
+        // 회원가입 시 RefreshToken 저장 안 함 → 로그인 시 동시 로그인 차단 안 걸리게
         if (role) await AsyncStorage.setItem('userRole', role);
       }
 

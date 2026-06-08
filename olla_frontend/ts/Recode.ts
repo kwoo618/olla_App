@@ -99,24 +99,34 @@ export const useRecode = ({ route, navigation }: any) => {
   const checkMembership = async () => {
     try {
       const config = await getAuthHeader();
-      const res = await axios.get(MEMBERSHIP_URL, config); 
-      const rawData = res.data.data; 
+      const res = await axios.get(MEMBERSHIP_URL, config);
+      const rawData = res.data.data;
       if (rawData) {
         const memberships = Array.isArray(rawData) ? rawData : [rawData];
         let isValid = false;
         for (const m of memberships) {
           if (!m) continue;
-          const status = String(m.membershipStatus || '').toUpperCase();
-          if (status === 'DELETED') continue;
+          const status = String(m.membershipStatus || m.status || '').toUpperCase();
+          if (status === 'DELETED' || status === 'INACTIVE') continue;
+          if (status !== 'ACTIVE' && status !== '') continue;
           const typeStr = String(m.membershipType ?? '').toUpperCase();
-          
-          if (typeStr.includes('COUNT') || typeStr.includes('횟수')) {
-            if ((m.remainingCount ?? 0) > 0) { isValid = true; break; }
-          } else if (typeStr.includes('PERIOD') || typeStr.includes('기간') || m.endDate) {
+
+          // ✅ 일일권(COUNT/횟수/일일) 제외 — 기간권만 허용
+          const isCountType =
+            typeStr.includes('COUNT') ||
+            typeStr.includes('횟수') ||
+            typeStr.includes('일일');
+          if (isCountType) continue;
+
+          // 기간권 유효성 검사
+          if (typeStr.includes('PERIOD') || typeStr.includes('기간') || m.endDate) {
             if (m.endDate) {
               const end = new Date(m.endDate);
               end.setHours(23, 59, 59, 999);
-              if (end.getTime() >= Date.now()) { isValid = true; break; }
+              if (end.getTime() >= Date.now()) {
+                isValid = true;
+                break;
+              }
             }
           }
         }
@@ -124,7 +134,7 @@ export const useRecode = ({ route, navigation }: any) => {
       } else {
         setHasValidMembership(false);
       }
-    } catch (error) {
+    } catch {
       setHasValidMembership(false);
     }
   };
@@ -591,7 +601,7 @@ export const useRecode = ({ route, navigation }: any) => {
     resultModalVisible, resultModalConfig, closeResultModal: () => setResultModalVisible(false),
     isDeleteModalVisible, confirmDelete, executeDelete, cancelDelete,
 
-    isRecordModalVisible, openRecordModal, closeRecordModal, beginnerHeightAnim, beginnerPanResponder,
+    isRecordModalVisible, openRecordModal, closeRecordModal, beginnerHeightAnim, beginnerPanResponder, hasValidMembership,
     selectedDifficulty, setSelectedDifficulty, selectedType, setSelectedType, selectedResult, setSelectedResult, holdCount, setHoldCount, currentMaxHolds, handleSaveBeginnerRecord,
 
     isEnduranceModalVisible, openEnduranceModal, closeEnduranceModal, enduranceHeightAnim, endurancePanResponder,

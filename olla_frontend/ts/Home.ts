@@ -31,6 +31,30 @@ const isPeriodTicket = (typeStr: string) => {
   return s === 'PERIOD' || s.includes('회원권') || s.includes('기간');
 };
 
+// ─── 개별 이용권 타입 ─────────────────────────────────────────────────────────
+export type MembershipItem = {
+  membershipType: '회원권' | '일일권' | '시작 예정';
+  remainingDays: number;
+  remainingCount: number;
+  startDate: string;
+  endDate: string;
+  status: string;
+};
+
+export type MembershipState = {
+  items: MembershipItem[];          // 보유 중인 이용권 목록 (복수)
+  hasFuture: boolean;
+  futureStartDate: string;
+  isLoading: boolean;
+  // 하위 호환용 — 홈 카드 원형 그래프에서 "대표" 이용권으로 사용
+  membershipType: string;
+  remainingDays: number;
+  remainingCount: number;
+  startDate: string;
+  endDate: string;
+  status: string;
+};
+
 export const HomeData = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [qrToken, setQrToken] = useState<string | null>(null);
@@ -58,16 +82,17 @@ export const HomeData = () => {
     important: false,
   });
 
-  const [membership, setMembership] = useState({
+  const [membership, setMembership] = useState<MembershipState>({
+    items: [],
+    hasFuture: false,
+    futureStartDate: '',
+    isLoading: true,
     membershipType: '-',
     remainingDays: 0,
     remainingCount: 0,
     startDate: '',
     endDate: '',
     status: '',
-    hasFuture: false,
-    futureStartDate: '',
-    isLoading: true
   });
 
   const [attendedDates, setAttendedDates] = useState<number[]>([]);
@@ -150,25 +175,15 @@ export const HomeData = () => {
         const noticeList = Array.isArray(responseData) ? responseData : (responseData?.content || []);
 
         if (noticeList.length > 0) {
-          // 중요 공지만 모아서 최신순 정렬
           const importantNotices = noticeList
             .filter((n: any) => n.important)
             .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-          // 일반 공지만 모아서 최신순 정렬
           const normalNotices = noticeList
             .filter((n: any) => !n.important)
             .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-          // 중요 공지가 있다면 제일 최신 1개, 없다면 일반 최신 1개를 타겟으로 선정
           const target = importantNotices.length > 0 ? importantNotices[0] : normalNotices[0];
-
           if (target) {
-            setNotice({
-              title: target.title,
-              content: target.content,
-              important: target.important === true,
-            });
+            setNotice({ title: target.title, content: target.content, important: target.important === true });
           }
         } else {
           setNotice({ title: '현재 등록된 공지가 없습니다.', content: '', important: false });
@@ -180,70 +195,89 @@ export const HomeData = () => {
 
       try {
         const memResponse = await axios.get(`${API_BASE_URL}/memberships/me`, config);
-        const dataList = memResponse.data.data || []; 
+        const rawData = memResponse.data.data || [];
+        const dataList: any[] = Array.isArray(rawData) ? rawData : (rawData?.content || []);
 
-        if (Array.isArray(dataList) && dataList.length > 0) {
+        if (dataList.length > 0) {
           const activeList = dataList.filter((m: any) => m.status === 'ACTIVE' && isStarted(m.startDate));
           const futureList = dataList.filter((m: any) => m.status === 'ACTIVE' && !isStarted(m.startDate));
-          
+
           if (activeList.length > 0) {
-            activeList.sort((a: any, b: any) => {
-              const dateA = new Date(a.startDate).getTime();
-              const dateB = new Date(b.startDate).getTime();
-              if (dateA !== dateB) return dateA - dateB;
-              
-              const isPeriodA = isPeriodTicket(a.membershipType) ? 1 : 0;
-              const isPeriodB = isPeriodTicket(b.membershipType) ? 1 : 0;
-              return isPeriodB - isPeriodA;
+            // ─── 회원권(기간) 목록 ───────────────────────────────────────────
+            const periodList = activeList.filter((m: any) => isPeriodTicket(m.membershipType));
+            // ─── 일일권(횟수) 목록 ───────────────────────────────────────────
+            const countList = activeList.filter((m: any) => !isPeriodTicket(m.membershipType));
+
+            const builtItems: MembershipItem[] = [];
+
+            // 회원권: 각 항목별로 remainingDays 계산 후 추가
+            periodList.forEach((m: any) => {
+              let remainingDays = 0;
+              if (m.endDate) {
+                const end = new Date(m.endDate);
+                end.setHours(0, 0, 0, 0);
+                const diff = Math.round((end.getTime() - getTodayDate().getTime()) / (1000 * 60 * 60 * 24));
+                remainingDays = diff > 0 ? diff : 0;
+              }
+              builtItems.push({
+                membershipType: '회원권',
+                remainingDays,
+                remainingCount: 0,
+                startDate: m.startDate || '',
+                endDate: m.endDate || '',
+                status: '이용중',
+              });
             });
 
-            const topMem = activeList[0];
-            const isPeriod = isPeriodTicket(topMem.membershipType);
-            
-            let remainingDays = 0;
-            if (isPeriod && topMem.endDate) {
-              const end = new Date(topMem.endDate);
-              end.setHours(0, 0, 0, 0);
-              const diff = Math.round((end.getTime() - getTodayDate().getTime()) / (1000 * 60 * 60 * 24));
-              remainingDays = diff > 0 ? diff : 0;
+            // 일일권: 잔여 횟수 합산해서 하나로 표시
+            if (countList.length > 0) {
+              const totalCount = countList.reduce((sum: number, m: any) => sum + (m.remainingCount ?? 0), 0);
+              builtItems.push({
+                membershipType: '일일권',
+                remainingDays: 0,
+                remainingCount: totalCount,
+                startDate: '',
+                endDate: '',
+                status: '이용중',
+              });
             }
 
-            const totalRemainingCount = !isPeriod 
-              ? activeList.filter(m => !isPeriodTicket(m.membershipType)).reduce((acc, m) => acc + (m.remainingCount ?? 0), 0)
-              : 0;
+            // 대표 이용권 (원형 그래프용): 회원권 우선, 없으면 일일권
+            const rep = builtItems[0];
 
             setMembership({
-              membershipType: isPeriod ? '회원권' : '일일권',
-              remainingDays: isPeriod ? remainingDays : 0,
-              remainingCount: totalRemainingCount,
-              startDate: topMem.startDate || '',
-              endDate: topMem.endDate || '',
-              status: '이용중',
-              hasFuture: false,
-              futureStartDate: '',
-              isLoading: false
+              items: builtItems,
+              hasFuture: futureList.length > 0,
+              futureStartDate: futureList.length > 0 ? (futureList.sort((a: any, b: any) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())[0]?.startDate || '') : '',
+              isLoading: false,
+              membershipType: rep.membershipType,
+              remainingDays: rep.remainingDays,
+              remainingCount: rep.remainingCount,
+              startDate: rep.startDate,
+              endDate: rep.endDate,
+              status: rep.status,
             });
 
           } else if (futureList.length > 0) {
             futureList.sort((a: any, b: any) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
             const topMem = futureList[0];
-
             setMembership({
+              items: [],
+              hasFuture: true,
+              futureStartDate: topMem.startDate || '',
+              isLoading: false,
               membershipType: '시작 예정',
               remainingDays: 0,
               remainingCount: 0,
               startDate: '',
               endDate: '',
               status: '시작 예정',
-              hasFuture: true,
-              futureStartDate: topMem.startDate || '',
-              isLoading: false
             });
           } else {
-            setMembership(prev => ({ ...prev, status: '만료', isLoading: false }));
+            setMembership(prev => ({ ...prev, items: [], status: '만료', isLoading: false }));
           }
         } else {
-          setMembership(prev => ({ ...prev, hasFuture: false, futureStartDate: '', isLoading: false }));
+          setMembership(prev => ({ ...prev, items: [], hasFuture: false, futureStartDate: '', isLoading: false }));
         }
       } catch (error) { setMembership(prev => ({ ...prev, isLoading: false })); }
 

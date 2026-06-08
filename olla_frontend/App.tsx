@@ -8,6 +8,66 @@ import axios from 'axios';
 import { API_BASE_URL } from './src/constants/Config';
 import messaging from '@react-native-firebase/messaging';
 
+// 세션 만료 이벤트
+export const SESSION_EXPIRED_EVENT = 'SESSION_EXPIRED';
+
+// 앱 시작 시 1회 등록
+let _sessionExpiredFired = false;
+let _isReissuing = false;
+
+axios.interceptors.response.use(
+  response => response,
+  async error => {
+    const status = error.response?.status;
+    const url: string = error.config?.url ?? '';
+    const isLoginRequest = url.includes('/auth/login') || url.includes('/members/login');
+    const isReissueRequest = url.includes('/auth/reissue');
+
+    // 재발급/로그인 요청 자체가 401이면 바로 세션 만료 처리
+    if (status === 401 && (isLoginRequest || isReissueRequest)) {
+      if (!_sessionExpiredFired) {
+        _sessionExpiredFired = true;
+        await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole', 'fcmToken']);
+        DeviceEventEmitter.emit(SESSION_EXPIRED_EVENT);
+      }
+      return Promise.reject(error);
+    }
+
+    // 일반 요청 401 → RefreshToken으로 자동 재발급 시도
+    if (status === 401 && !_isReissuing && !_sessionExpiredFired) {
+      _isReissuing = true;
+      try {
+        const refreshToken = await AsyncStorage.getItem('refreshToken');
+        if (!refreshToken) throw new Error('NO_REFRESH_TOKEN');
+
+        const reissueRes = await axios.post(`${API_BASE_URL}/auth/reissue`, { refreshToken });
+
+        const newAccessToken =
+          reissueRes.data?.data?.accessToken ?? reissueRes.data?.accessToken;
+        if (!newAccessToken) throw new Error('NO_ACCESS_TOKEN');
+
+        await AsyncStorage.setItem('userToken', newAccessToken);
+
+        // 원래 실패했던 요청을 새 토큰으로 재시도
+        error.config.headers['Authorization'] = `Bearer ${newAccessToken}`;
+        return axios(error.config);
+      } catch {
+        // 재발급 실패 → 세션 만료 처리
+        if (!_sessionExpiredFired) {
+          _sessionExpiredFired = true;
+          await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole', 'fcmToken']);
+          DeviceEventEmitter.emit(SESSION_EXPIRED_EVENT);
+        }
+        return Promise.reject(error);
+      } finally {
+        _isReissuing = false;
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
 type RootParamList = {
   Login: undefined; Signup: undefined; PersonalInfo: undefined; Loading: undefined;
   Home: undefined; Notice: undefined; Notification: undefined; Recode: undefined; Ranking: undefined;
@@ -141,19 +201,51 @@ interface BottomNavItemProps {
   currentRoute: string;
   nav: any;
   isAdmin?: boolean;
+  // 추가: 회원권 제한 탭 여부 + 보유 상태
+  membershipRequired?: boolean;
+  hasMembership?: boolean;
+  onBlockedPress?: () => void;
 }
 
-const BottomNavItem = ({ name, label, icon, currentRoute, nav, isAdmin = false }: BottomNavItemProps) => {
+const BottomNavItem = ({
+  name, label, icon, currentRoute, nav,
+  isAdmin = false,
+  membershipRequired = false,
+  hasMembership = false,
+  onBlockedPress,
+}: BottomNavItemProps) => {
   const isActive = currentRoute === name;
+  const isBlocked = membershipRequired && !hasMembership;
   const activeColor = '#A1BE44';
   const inactiveColor = '#7D7D7D';
+
+  const handlePress = () => {
+    if (isBlocked) {
+      onBlockedPress?.();
+      return;
+    }
+    nav.navigate(name);
+  };
+
   return (
-    <TouchableOpacity style={styles.bottomNavItem} onPress={() => nav.navigate(name)}>
+    <TouchableOpacity style={styles.bottomNavItem} onPress={handlePress}>
       <Image
         source={icon}
-        style={[styles.navIcon, { tintColor: isActive ? activeColor : inactiveColor, opacity: isActive ? 1 : 0.6 }]}
+        style={[
+          styles.navIcon,
+          {
+            tintColor: isBlocked ? '#444444' : (isActive ? activeColor : inactiveColor),
+            opacity: isBlocked ? 0.35 : (isActive ? 1 : 0.6),
+          },
+        ]}
       />
-      <Text style={[styles.bottomNavText, isActive && { color: activeColor, fontWeight: 'bold' }]}>{label}</Text>
+      <Text style={[
+        styles.bottomNavText,
+        isActive && !isBlocked && { color: activeColor, fontWeight: 'bold' },
+        isBlocked && { color: '#444444' },
+      ]}>
+        {label}
+      </Text>
     </TouchableOpacity>
   );
 };
@@ -173,7 +265,6 @@ const AppContent = () => {
 
   // ✅ 세션 만료 모달
   const [sessionExpiredVisible, setSessionExpiredVisible] = useState(false);
-  const isSessionExpired = useRef(false);
 
   const [profileData, setProfileData] = useState({ name: '권클라이밍', phone: '010-1234-5678', age: '25', height: '175', weight: '70', arm: '180', shoe: '260' });
   const [profileToggles, setProfileToggles] = useState({ showName: true, showPhone: false, showAge: true, showHeight: true, showWeight: true, showArm: true, showShoe: true });
@@ -194,32 +285,64 @@ const AppContent = () => {
   const adminScreens = ['ManagerDashboard', 'ManagerUser', 'ManagerTicket', 'ManagerNotice', 'ManagerCommunity'];
   const isAdminMode = adminScreens.includes(routeName);
 
+  const [hasMembership, setHasMembership] = useState(false);
+  const [membershipBlockVisible, setMembershipBlockVisible] = useState(false);
+
   // ✅ 세션 만료 인터셉터 - 중복 방지 포함
+  // 로그인 성공 후 기간권 조회
   useEffect(() => {
-    const interceptor = axios.interceptors.response.use(
-      response => response,
-      async error => {
-        if (error.response?.status === 401 && !isSessionExpired.current) {
-          isSessionExpired.current = true;
-          await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole', 'fcmToken']);
-          setSessionExpiredVisible(true);
-        }
-        return Promise.reject(error);
+    const fetchMembership = async () => {
+      try {
+        const userToken = await AsyncStorage.getItem('userToken');
+        if (!userToken) { setHasMembership(false); return; }
+        const res = await axios.get(`${API_BASE_URL}/memberships/me`, {
+          headers: { Authorization: `Bearer ${userToken}` },
+        });
+        const rawData = res.data.data;
+        const dataList: any[] = Array.isArray(rawData) ? rawData : (rawData?.content || []);
+
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const active = dataList.filter((m: any) => {
+          const status = String(m.membershipStatus || m.status || '').toUpperCase();
+          if (status === 'DELETED' || status === 'INACTIVE') return false;
+          if (m.startDate) {
+            const s = new Date(m.startDate); s.setHours(0,0,0,0);
+            if (s > today) return false;
+          }
+          return true;
+        });
+        const hasPeriod = active.some((m: any) => {
+          const t = String(m.membershipType ?? '').toUpperCase();
+          const isCountType = t.includes('COUNT') || t.includes('횟수') || t.includes('일일');
+          if (isCountType) return false;
+          if (!m.endDate) return false;
+          const end = new Date(m.endDate); end.setHours(23, 59, 59, 999);
+          return end.getTime() >= Date.now();
+        });
+        setHasMembership(hasPeriod);
+      } catch {
+        setHasMembership(false);
       }
-    );
-    return () => {
-      axios.interceptors.response.eject(interceptor);
     };
-  }, []);
+    if (initialRoute === 'Home') fetchMembership();
+  }, [initialRoute]);
 
   const handleSessionExpiredConfirm = () => {
     setSessionExpiredVisible(false);
-    isSessionExpired.current = false;
+    _sessionExpiredFired = false; // 다음 로그인 세션을 위해 초기화
     navigationRef.reset({
       index: 0,
       routes: [{ name: 'Login' }],
     });
   };
+
+  // 세션 만료 이벤트 구독
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(SESSION_EXPIRED_EVENT, () => {
+      setSessionExpiredVisible(true);
+    });
+    return () => sub.remove();
+  }, []);
 
   // FCM 초기화
   useEffect(() => {
@@ -254,40 +377,43 @@ const AppContent = () => {
 
   // 미읽 알림 폴링
   useEffect(() => {
+    // initialRoute가 Home으로 확정되기 전엔 아예 실행 안 함
+    if (initialRoute !== 'Home') return;
+
     const fetchUnreadNotifications = async () => {
       try {
         const userToken = await AsyncStorage.getItem('userToken');
-        if (!userToken || initialRoute !== 'Home') return;
+        if (!userToken) return;
 
         const endpoint = isAdminMode
-          ? `${API_BASE_URL}/admin/alerts?page=0&size=10`
-          : `${API_BASE_URL}/notifications?page=0&size=10`;
+          ? `${API_BASE_URL}/admin/alerts?page=0&size=50`
+          : `${API_BASE_URL}/notifications?page=0&size=50`;
 
         const response = await axios.get(endpoint, {
           headers: { Authorization: `Bearer ${userToken}` },
         });
 
-        const dataObj = response.data?.data?.data || response.data?.data || response.data;
-        const list = Array.isArray(dataObj) ? dataObj : (dataObj?.content || []);
-        const unreadItems = list.filter((item: any) => !(item.isRead === true || item.read === true));
+        // 응답 구조 정규화
+        const raw = response.data?.data;
+        const list: any[] = Array.isArray(raw)
+          ? raw
+          : Array.isArray(raw?.content)
+          ? raw.content
+          : [];
 
-        if (unreadItems.length > 0) {
-          setHasUnreadNotification(true);
-          const latest = unreadItems[0];
-          if (lastAlertId.current !== latest.id) {
-            lastAlertId.current = latest.id;
-          }
-        } else {
-          setHasUnreadNotification(false);
-        }
+        // isRead / read 둘 다 체크, 명확히 false인 것만 미읽으로 판단
+        const unreadItems = list.filter(
+          (item: any) => item.isRead === false || item.read === false
+        );
+
+        setHasUnreadNotification(unreadItems.length > 0);
       } catch (error) {}
     };
 
     fetchUnreadNotifications();
     const intervalId = setInterval(fetchUnreadNotifications, 30000);
-    const subscription = DeviceEventEmitter.addListener('notificationRead', () => {
-      fetchUnreadNotifications();
-    });
+    const subscription = DeviceEventEmitter.addListener('notificationRead', fetchUnreadNotifications);
+
     return () => {
       clearInterval(intervalId);
       subscription.remove();
@@ -439,9 +565,24 @@ const AppContent = () => {
             {!isAdminMode ? (
               <>
                 <BottomNavItem name="Home" label="홈" icon={require('./assets/Home.png')} currentRoute={routeName} nav={navigationRef} />
-                <BottomNavItem name="Recode" label="기록" icon={require('./assets/recode.png')} currentRoute={routeName} nav={navigationRef} />
-                <BottomNavItem name="Ranking" label="랭킹" icon={require('./assets/ranking.png')} currentRoute={routeName} nav={navigationRef} />
-                <BottomNavItem name="Community" label="커뮤니티" icon={require('./assets/community.png')} currentRoute={routeName} nav={navigationRef} />
+                <BottomNavItem
+                  name="Recode" label="기록" icon={require('./assets/recode.png')}
+                  currentRoute={routeName} nav={navigationRef}
+                  membershipRequired hasMembership={hasMembership}
+                  onBlockedPress={() => setMembershipBlockVisible(true)}
+                />
+                <BottomNavItem
+                  name="Ranking" label="랭킹" icon={require('./assets/ranking.png')}
+                  currentRoute={routeName} nav={navigationRef}
+                  membershipRequired hasMembership={hasMembership}
+                  onBlockedPress={() => setMembershipBlockVisible(true)}
+                />
+                <BottomNavItem
+                  name="Community" label="커뮤니티" icon={require('./assets/community.png')}
+                  currentRoute={routeName} nav={navigationRef}
+                  membershipRequired hasMembership={hasMembership}
+                  onBlockedPress={() => setMembershipBlockVisible(true)}
+                />
                 <BottomNavItem name="MY" label="마이" icon={require('./assets/mypage.png')} currentRoute={routeName} nav={navigationRef} />
               </>
             ) : (
@@ -464,6 +605,21 @@ const AppContent = () => {
             <Text style={[styles.modalTitle, { color: '#FF4D4D' }]}>세션 만료</Text>
             <Text style={styles.modalMessage}>세션이 만료되었습니다.{'\n'}다시 로그인해주세요.</Text>
             <TouchableOpacity style={styles.btnConfirm} onPress={handleSessionExpiredConfirm}>
+              <Text style={styles.btnTextBlack}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 이용권 필요 차단 모달 */}
+      <Modal visible={membershipBlockVisible} animationType="fade" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.deleteModalBox}>
+            <Text style={[styles.modalTitle, { color: '#A1BE44' }]}>이용권 필요</Text>
+            <Text style={styles.modalMessage}>
+              해당 기능은 기간권 보유 회원만{'\n'}이용할 수 있습니다.
+            </Text>
+            <TouchableOpacity style={styles.btnConfirm} onPress={() => setMembershipBlockVisible(false)}>
               <Text style={styles.btnTextBlack}>확인</Text>
             </TouchableOpacity>
           </View>

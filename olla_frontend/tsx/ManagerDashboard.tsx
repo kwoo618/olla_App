@@ -7,12 +7,13 @@ import {
 } from 'react-native';
 import { Camera } from 'react-native-camera-kit';
 import { useIsFocused } from '@react-navigation/native';
+import FastImage from 'react-native-fast-image';
 import {
   useManagerDashboard,
   DAY_LABELS, DAY_SELECT_OPTIONS, getHourRange,
-  isValidImageUrl,
+  resolveImageUrl,
 } from '../ts/ManagerDashboard';
-import FastImage from 'react-native-fast-image';
+
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CARD_INNER_W   = SCREEN_WIDTH - 40;
@@ -28,6 +29,22 @@ const requestCameraPermission = async () => {
     });
     return granted === PermissionsAndroid.RESULTS.GRANTED;
   } catch { return false; }
+};
+
+const ProfileImage = ({ uri, style }: { uri?: string | null; style: any }) => {
+  const [hasError, setHasError] = React.useState(false);
+  const fullUri = resolveImageUrl(uri);
+  if (fullUri && !hasError) {
+    return (
+      <FastImage
+        source={{ uri: fullUri, priority: FastImage.priority.normal }}
+        style={style}
+        onError={() => setHasError(true)}
+        defaultSource={require('../assets/profile.png')}
+      />
+    );
+  }
+  return <Image source={require('../assets/profile.png')} style={[style, { backgroundColor: 'transparent' }]} />;
 };
 
 // ─── 컴포넌트 ───────────────────────────────────────────────────────────────
@@ -421,10 +438,7 @@ const ManagerDashboard = ({ navigation }: any) => {
                   activeOpacity={0.7}
                   onPress={() => openDetailModal(memberId, userName, userPhone)}
                 >
-                  {isValidImageUrl(member.profileImageUrl)
-                    ? <FastImage source={{ uri: member.profileImageUrl!, priority: FastImage.priority.normal }} style={styles.profileImg} />
-                    : <Image source={require('../assets/profile.png')} style={styles.profileImg} />
-                  }
+                  <ProfileImage uri={member.profileImageUrl} style={styles.profileImg} />
                   <View style={styles.infoCol}>
                     <Text style={styles.nameText}>{userName}</Text>
                     <Text style={styles.subText}>{userPhone}</Text>
@@ -539,10 +553,7 @@ const ManagerDashboard = ({ navigation }: any) => {
               {dash.selectedUser && (
                 <View style={styles.detailContainer}>
                   <View style={styles.detailProfileWrapper}>
-                    {isValidImageUrl(dash.selectedUser.profileImageUrl)
-                      ? <FastImage source={{ uri: dash.selectedUser.profileImageUrl!, priority: FastImage.priority.normal }} style={styles.profileBig} />
-                      : <Image source={require('../assets/profile.png')} style={styles.profileBig} />
-                    }
+                    <ProfileImage uri={dash.selectedUser.profileImageUrl} style={styles.profileBig} />
                     <Text style={styles.profileName}>{dash.selectedUser.name}</Text>
                   </View>
                   <View style={styles.infoBox}>

@@ -59,6 +59,7 @@ export interface CommentType {
   children: CommentType[];
 }
 
+
 export const useManagerCommunityData = (currentFilter: string, isFocused: boolean) => {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading]       = useState(true);
