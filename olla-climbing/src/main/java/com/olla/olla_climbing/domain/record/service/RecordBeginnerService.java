@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -35,7 +36,6 @@ public class RecordBeginnerService {
         int totalHolds = request.getDifficulty().getHoldCount();
 
         // 마지막 홀드 도달 시 자동 성공 처리
-        // 왕복 도전 중 꼭대기 도달 시 편도 성공으로 취급
         if (!isSuccess && maxHoldNo != null && maxHoldNo == totalHolds) {
             isSuccess = true;
             maxHoldNo = null;
@@ -71,12 +71,27 @@ public class RecordBeginnerService {
     @Transactional(readOnly = true)
     public List<RecordBeginnerResponse> getBestRecords(String loginId) {
         Member member = findMember(loginId);
+
+        // 성공 기록 한 번에 조회
+        List<RecordBeginner> successRecords = recordBeginnerRepository
+                .findBestSuccessRecordsByMember(member);
+
+        Map<Difficulty, RecordBeginner> successMap = successRecords.stream()
+                .collect(Collectors.toMap(RecordBeginner::getDifficulty, r -> r));
+
         List<RecordBeginnerResponse> bestRecords = new ArrayList<>();
 
         for (Difficulty difficulty : Difficulty.values()) {
-            recordBeginnerRepository
-                    .findTopByMemberAndDifficultyOrderByIsSuccessDescMaxHoldNoDescAttemptTypeDesc(member, difficulty)
-                    .ifPresent(record -> bestRecords.add(RecordBeginnerResponse.from(record)));
+            if (successMap.containsKey(difficulty)) {
+                // 성공 기록 있으면 사용
+                bestRecords.add(RecordBeginnerResponse.from(successMap.get(difficulty)));
+            } else {
+                // 성공 기록 없으면 최고 홀드 기록 조회 (fallback - 난이도별 1개 쿼리)
+                recordBeginnerRepository
+                        .findTopByMemberAndDifficultyOrderByIsSuccessDescMaxHoldNoDescAttemptTypeDesc(
+                                member, difficulty)
+                        .ifPresent(record -> bestRecords.add(RecordBeginnerResponse.from(record)));
+            }
         }
 
         return bestRecords;
@@ -101,8 +116,6 @@ public class RecordBeginnerService {
         recordBeginnerRepository.delete(record);
         beginnerRankingService.syncRankingOnRecordDelete(record.getMember(), record.getDifficulty());
     }
-
-    // ── private 헬퍼 ─────────────────────────────────────────────
 
     private Member findMember(String loginId) {
         return memberRepository.findByLoginId(loginId)

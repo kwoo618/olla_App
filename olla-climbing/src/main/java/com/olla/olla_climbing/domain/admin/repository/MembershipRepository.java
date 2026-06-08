@@ -20,10 +20,12 @@ public interface MembershipRepository extends JpaRepository<Membership, Long> {
 
     List<Membership> findByEndDateAndStatus(LocalDate endDate, MembershipStatus status);
 
-    // 활성 이용권 여러 개 조회 (기간권/횟수권 우선순위 판별용)
     List<Membership> findAllByMemberIdAndStatusAndIsDeletedFalse(Long memberId, MembershipStatus status);
 
     List<Membership> findByEndDateBetweenAndStatus(LocalDate start, LocalDate end, MembershipStatus status);
+
+    @Query("SELECT m FROM Membership m WHERE m.member.id = :memberId AND m.remainingCount IS NOT NULL AND m.status = 'ACTIVE' AND m.isDeleted = false")
+    Optional<Membership> findActiveCountMembershipByMemberId(@Param("memberId") Long memberId);
 
     @Query("SELECT MAX(m.endDate) FROM Membership m WHERE m.member.id = :memberId AND m.isDeleted = false")
     Optional<LocalDate> findMaxEndDateByMemberId(@Param("memberId") Long memberId);
