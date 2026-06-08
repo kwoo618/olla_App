@@ -34,11 +34,11 @@ public class VisitService {
     private final GoogleSheetsService googleSheetsService;
     private final NotificationService notificationService;
 
-
-    boolean isCountMembership = false;
-
     @Transactional
     public VisitScanResponse processEntry(String qrToken, String adminLoginId, int deductionCount) {
+
+        boolean isCountMembership = false;
+
         if (deductionCount <= 0) {
             return errorResponse("차감 횟수는 1회 이상이어야 합니다.");
         }
@@ -113,6 +113,11 @@ public class VisitService {
 
         String todayStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy. MM. dd"));
         googleSheetsService.updateVisitData(member.getId(), todayStr, targetMembership.getAccumulatedVisits());
+
+        if (isCountMembership) {
+            googleSheetsService.updateCountInSheet(
+                    member.getId(), targetMembership.getRemainingCount());
+        }
 
         notificationService.sendMembershipNotification(member, "입장 완료 🧗", message + " 즐거운 클라이밍 되세요!");
 

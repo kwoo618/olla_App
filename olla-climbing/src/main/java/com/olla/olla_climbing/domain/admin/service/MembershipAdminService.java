@@ -13,6 +13,7 @@ import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.enums.Role;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
 import com.olla.olla_climbing.domain.member.service.NotificationService;
+import com.olla.olla_climbing.domain.ranking.repository.RankingRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -37,6 +38,8 @@ public class MembershipAdminService {
     private final GoogleSheetsService googleSheetsService;
     private final AdminNotificationRepository adminNotificationRepository;
     private final NotificationService notificationService;
+    private final RankingRepository rankingRepository;
+
 
     @Transactional
     public void grantMembership(Long memberId, Integer addMonths, Integer addCount, LocalDate startDate) {
@@ -48,6 +51,10 @@ public class MembershipAdminService {
 
         if (safeMonths == 0 && safeCount == 0) {
             throw new IllegalArgumentException("기간(개월) 또는 횟수 중 하나는 반드시 입력해야 합니다.");
+        }
+
+        if (safeCount > 0 && member.getPassword() == null) {
+            throw new IllegalArgumentException("오프라인 회원에게는 일일권을 추가할 수 없습니다.");
         }
 
         // 일일권 추가 시 기존 ACTIVE 일일권에 횟수 합산
@@ -95,7 +102,6 @@ public class MembershipAdminService {
         Membership membership = membershipRepository.findById(membershipId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 이용권입니다."));
         membership.markAsDeleted();
-        // [수정] 이용권 삭제 시 구글 시트 O열도 EXPIRED로 업데이트
         googleSheetsService.updateMembershipStatus(membership.getMember().getId(), "EXPIRED");
     }
 
@@ -120,7 +126,6 @@ public class MembershipAdminService {
 
         Member savedMember = memberRepository.save(offlineMember);
 
-        // [수정] 오프라인 회원 등록 시 구글 시트 동기화 추가
         googleSheetsService.syncNewMember(savedMember);
         googleSheetsService.syncUnregisteredMember(savedMember);
 
@@ -183,7 +188,6 @@ public class MembershipAdminService {
 
         if (expiredToday.isEmpty() && expiringIn3Days.isEmpty()) return;
 
-        // [수정] 만료된 이용권 DB EXPIRED 처리 + 구글 시트 O열 EXPIRED 업데이트
         expiredToday.forEach(m -> {
             m.expire();
             googleSheetsService.updateMembershipStatus(m.getMember().getId(), "EXPIRED");
@@ -209,6 +213,8 @@ public class MembershipAdminService {
     public void deleteMember(Long memberId) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
+        rankingRepository.deleteAllByMember(member);
         member.withdraw();
+        googleSheetsService.updateMembershipStatus(memberId, "EXPIRED");
     }
 }

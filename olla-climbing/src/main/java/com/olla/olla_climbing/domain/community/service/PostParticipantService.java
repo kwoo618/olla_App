@@ -67,7 +67,7 @@ public class PostParticipantService {
     // ── private 헬퍼 ─────────────────────────────────────────────
 
     private Member findActiveMember(String loginId) {
-        return memberRepository.findByLoginId(loginId)
+        return memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
     }
 }
