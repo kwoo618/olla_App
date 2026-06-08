@@ -84,7 +84,7 @@ public class MembershipAdminService {
                 .build();
 
         membershipRepository.save(newMembership);
-        googleSheetsService.syncNewMembership(member, newMembership);
+        googleSheetsService.syncMembershipStatus(member, newMembership);
 
         log.info("이용권 부여 완료: 회원={}, 시작일={}, 기간={}개월, 횟수={}회",
                 member.getName(), effectiveStartDate, safeMonths, safeCount);
@@ -95,6 +95,7 @@ public class MembershipAdminService {
         Membership membership = membershipRepository.findById(membershipId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 이용권입니다."));
         membership.markAsDeleted();
+        // [수정] 이용권 삭제 시 구글 시트 O열도 EXPIRED로 업데이트
         googleSheetsService.updateMembershipStatus(membership.getMember().getId(), "EXPIRED");
     }
 
@@ -119,6 +120,7 @@ public class MembershipAdminService {
 
         Member savedMember = memberRepository.save(offlineMember);
 
+        // [수정] 오프라인 회원 등록 시 구글 시트 동기화 추가
         googleSheetsService.syncNewMember(savedMember);
         googleSheetsService.syncUnregisteredMember(savedMember);
 
@@ -145,7 +147,6 @@ public class MembershipAdminService {
         String newEndDateStr = membership.getEndDate() != null
                 ? membership.getEndDate().format(DateTimeFormatter.ofPattern("yyyy. MM. dd")) : "";
         googleSheetsService.unpauseMembershipData(membership.getMember().getId(), newEndDateStr);
-        googleSheetsService.updateMembershipStatus(membership.getMember().getId(), "HOLDING");
     }
 
     @Transactional(readOnly = true)
@@ -182,6 +183,7 @@ public class MembershipAdminService {
 
         if (expiredToday.isEmpty() && expiringIn3Days.isEmpty()) return;
 
+        // [수정] 만료된 이용권 DB EXPIRED 처리 + 구글 시트 O열 EXPIRED 업데이트
         expiredToday.forEach(m -> {
             m.expire();
             googleSheetsService.updateMembershipStatus(m.getMember().getId(), "EXPIRED");
