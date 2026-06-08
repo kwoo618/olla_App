@@ -136,7 +136,14 @@ export const useLogin = (navigation: any) => {
       let debugMessage = '';
 
       if (error.response) {
-        debugMessage = error.response.data?.message || '가입된 아이디가 없습니다';
+        const serverMessage = error.response.data?.message || '가입된 아이디가 없습니다';
+
+        // 동시 로그인 차단 메시지 감지 → 타이틀 별도 처리
+        if (serverMessage.includes('이미 다른 기기에서 로그인 중')) {
+          modalTitle = '로그인 불가';
+        }
+
+        debugMessage = serverMessage;
       } else if (error.request) {
         modalTitle = '네트워크/연결 오류';
         debugMessage = `에러 원인: ${error.message}\n\n[요청한 주소]\n${error.config?.url || 'URL 알 수 없음'}`;
