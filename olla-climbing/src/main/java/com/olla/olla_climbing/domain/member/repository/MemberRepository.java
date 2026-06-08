@@ -20,12 +20,15 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     @EntityGraph(attributePaths = {"memberDetail", "memberPrivacy", "notificationSetting"})
     Optional<Member> findWithDetailsByLoginId(String loginId);
 
+    @EntityGraph(attributePaths = {"memberDetail", "memberPrivacy", "notificationSetting"})
+    Page<Member> findAll(Pageable pageable);
+
+    @EntityGraph(attributePaths = {"memberDetail", "memberPrivacy", "notificationSetting"})
     Page<Member> findByNameContaining(String name, Pageable pageable);
 
     Optional<Member> findByPhone(String phone);
     Optional<Member> findByPhoneAndIsDeletedFalse(String phone);
     Optional<Member> findByLoginIdAndIsDeletedFalse(String loginId);
 
-    // findByCreatedAtAfter(...).size() 패턴 제거용 count 메서드 추가
     long countByCreatedAtAfter(LocalDateTime dateTime);
 }
