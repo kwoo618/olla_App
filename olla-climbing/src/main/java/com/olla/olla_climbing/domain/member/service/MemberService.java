@@ -97,7 +97,9 @@ public class MemberService {
     public void withdrawMember(String loginId) {
         Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않거나 이미 탈퇴한 회원입니다."));
+        Long memberId = member.getId();
         member.withdraw();
+        googleSheetsService.updateMembershipStatus(memberId, "EXPIRED");
         log.info("회원 탈퇴 완료: loginId={}", loginId);
     }
 
@@ -107,6 +109,7 @@ public class MemberService {
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
         member.withdraw();
         log.info("관리자 강제 탈퇴 완료: memberId={}", memberId);
+        googleSheetsService.updateMembershipStatus(memberId, "EXPIRED");
     }
 
     @Transactional

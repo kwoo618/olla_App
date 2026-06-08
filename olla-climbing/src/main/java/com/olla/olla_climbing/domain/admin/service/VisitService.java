@@ -34,6 +34,9 @@ public class VisitService {
     private final GoogleSheetsService googleSheetsService;
     private final NotificationService notificationService;
 
+
+    boolean isCountMembership = false;
+
     @Transactional
     public VisitScanResponse processEntry(String qrToken, String adminLoginId, int deductionCount) {
         if (deductionCount <= 0) {
@@ -90,6 +93,7 @@ public class VisitService {
                 if (m.getRemainingCount() != null && m.getRemainingCount() >= deductionCount) {
                     targetMembership = m;
                     m.useCount(deductionCount);
+                    isCountMembership = true; // ← 추가
                     remainingInfo = "잔여 " + m.getRemainingCount() + "회";
                     message = member.getName() + " 회원님(" + deductionCount + "명 차감) 반갑습니다!";
                     if (m.getRemainingCount() <= 2) statusCode = "WARNING";
