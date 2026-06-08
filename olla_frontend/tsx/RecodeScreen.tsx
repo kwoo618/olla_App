@@ -93,7 +93,10 @@ const RecodeScreen = ({ route, navigation }: any) => {
                     </View>
                   </View>
                   <Text style={styles.recordHoldsLeft}>{item.current ?? 0} / {MAX_HOLDS[item.color] ?? item.total}번</Text>
-                  <Text style={[styles.recordStatus, item.status === '완료' ? styles.statusSuccess : styles.statusIng]}>{item.status || '-'}</Text>
+                  <Text style={[
+                    styles.recordStatus, 
+                    item.status === '완료' ? styles.statusSuccess : (item.status === '진행중' ? styles.statusIng : styles.statusNone)
+                  ]}>{item.status || '-'}</Text>
                 </View>
               ))}
             </View>
@@ -128,7 +131,11 @@ const RecodeScreen = ({ route, navigation }: any) => {
                     <View style={styles.verticalDivider} />
                     <View style={styles.enduranceCol}>
                       <Text style={[styles.enduranceBottomText, { marginBottom: 4 }]}>결과</Text>
-                      <Text style={[styles.enduranceTopText, { marginBottom: 0 }, item.status === '완등' ? styles.statusSuccess : styles.statusIng]}>{item.status}</Text>
+                      <Text style={[
+                        styles.enduranceTopText, 
+                        { marginBottom: 0 }, 
+                        item.status === '완등' ? styles.statusSuccess : (item.status === '진행중' ? styles.statusIng : styles.statusNone)
+                      ]}>{item.status}</Text>
                     </View>
                     <TouchableOpacity style={styles.trashButton} onPress={() => confirmDelete('difficulty', item.id)}>
                       <Image source={require('../assets/trash.png')} style={styles.trashIcon} />
@@ -493,7 +500,8 @@ const styles = StyleSheet.create({
   recordHoldsLeft: { flex: 1, color: '#ffffff', fontSize: 17, fontWeight: 'bold', marginLeft: 10 }, 
   recordStatus: { fontSize: 16, fontWeight: 'bold', width: 55, textAlign: 'right' }, 
   statusSuccess: { color: '#A1BE44' },
-  statusIng: { color: '#999999' },
+  statusIng: { color: '#ffffff' }, // 💡 진행중 상태: 흰색
+  statusNone: { color: '#999999' }, // 💡 미기록/실패 등 기본 상태: 회색
 
   rowCardWithTrash: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#2A2A2A', paddingVertical: 18, paddingHorizontal: 15, borderRadius: 16, marginBottom: 10 },
   enduranceCol: { flex: 1, alignItems: 'center', justifyContent: 'center' },
