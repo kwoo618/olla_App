@@ -30,12 +30,12 @@ public class OtherMemberProfileResponse {
         OtherMemberProfileResponseBuilder builder = OtherMemberProfileResponse.builder()
                 .memberId(member.getId())
                 .name(member.getName())
-                .profileImageUrl(member.getProfileImageUrl());
+                .profileImageUrl(member.getProfileImageUrl())
+                .gender(member.getGender());
 
         // 신체 정보 및 기타 정보 필터링 (Privacy 설정 체크)
         if (detail != null && privacy != null) {
             builder.age(detail.getAge());
-            builder.gender(member.getGender());
 
             // 키 공개 여부
             if (privacy.isHeightPublic()) builder.height(detail.getHeight());

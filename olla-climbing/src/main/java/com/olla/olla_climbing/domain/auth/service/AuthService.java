@@ -130,6 +130,8 @@ public class AuthService {
         if (isBrandNewMember) {
             googleSheetsService.syncNewMember(savedMember);
             googleSheetsService.syncUnregisteredMember(savedMember);
+        } else {
+            googleSheetsService.syncNewMember(savedMember);
         }
 
         return buildTokenResponse(savedMember);
