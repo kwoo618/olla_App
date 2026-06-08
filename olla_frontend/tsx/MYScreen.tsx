@@ -24,7 +24,7 @@ const MYScreen = ({ navigation }: any) => {
     isAdminModalVisible, setAdminModalVisible
   } = useMyPage(navigation);
 
-  // ─── 💡 동기화 컨트롤러: 모든 스위치를 한 번에 변경 ───
+  // ─── 💡 동기화 컨트롤러: 모든 스위치를 한 번에 변경 & 조건부 푸시 알림 동기화 ───
   const handleNotificationSwitch = (key: string) => {
     if (key === 'isGlobalNotificationOn') {
       const targetState = !notiState.isGlobalNotificationOn;
@@ -42,7 +42,40 @@ const MYScreen = ({ navigation }: any) => {
     } else {
       // 일반 하위 알림들은 개별적으로 토글
       const targetState = !(notiState as any)[key];
-      updateMultipleNotiSettings({ [key]: targetState });
+      
+      // 💡 현재 토글된 값을 반영하여 변경 후의 전체 하위 알림 상태 예측
+      const nextState = {
+        isMembershipNotificationOn: notiState.isMembershipNotificationOn,
+        isActivityNotificationOn: notiState.isActivityNotificationOn,
+        isCrewNotificationOn: notiState.isCrewNotificationOn,
+        isNoticeNotificationOn: notiState.isNoticeNotificationOn,
+        [key]: targetState, // 이번에 변경된 값 덮어쓰기
+      };
+
+      // 하위 알림 4개가 모두 켜져 있는지 확인
+      const isAllOn = 
+        nextState.isMembershipNotificationOn && 
+        nextState.isActivityNotificationOn && 
+        nextState.isCrewNotificationOn && 
+        nextState.isNoticeNotificationOn;
+
+      // 하위 알림 4개가 모두 꺼져 있는지 확인
+      const isAllOff = 
+        !nextState.isMembershipNotificationOn && 
+        !nextState.isActivityNotificationOn && 
+        !nextState.isCrewNotificationOn && 
+        !nextState.isNoticeNotificationOn;
+
+      const batchUpdate: any = { [key]: targetState };
+
+      // 조건에 따라 최상단 푸시 알림 스위치도 같이 업데이트
+      if (isAllOn) {
+        batchUpdate.isGlobalNotificationOn = true;
+      } else if (isAllOff) {
+        batchUpdate.isGlobalNotificationOn = false;
+      }
+
+      updateMultipleNotiSettings(batchUpdate);
     }
   };
 

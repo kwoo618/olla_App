@@ -26,6 +26,16 @@ export const resolveMembershipType = (
   remainingCount: number | null
 ): string => {
   const upper = String(typeStr || '').toUpperCase();
+
+  // 시작일이 오늘보다 미래면 → 시작 예정
+  if (startDate) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+    if (start > today) return '시작 예정';
+  }
+
   if (upper === 'COUNT' || upper.includes('횟수') || upper.includes('COUNT')) return '일일권';
   if (upper === 'PERIOD' || upper.includes('기간') || upper.includes('PERIOD') || upper.includes('MONTH')) return '회원권';
   if (remainingCount !== null && remainingCount !== undefined) return '일일권';
@@ -327,7 +337,6 @@ export const useManagerUser = (navigation: any) => {
         name: d.name || fallbackName,
         gender: displayGender,
         phone: d.phone || fallbackPhone || '-', 
-        // ✅ 프로필 이미지 URL 변환 적용
         profileImageUrl: getFullImageUrl(d.profileImageUrl ?? d.profileImage),
         age: d.detail?.age || d.age || '-',
         height: d.detail?.height || d.height || '-',

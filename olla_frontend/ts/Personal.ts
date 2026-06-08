@@ -41,7 +41,6 @@ export const usePersonal = (navigation: any, route: any) => {
   };
 
   const handleFinalSignup = async () => {
-    // 🚨 1단계 확인: 버튼이 제대로 눌렸는지 콘솔창(Terminal)에서 확인하세요!
     console.log("✅ 버튼 클릭됨! accountData 확인:", accountData);
 
     if (!accountData) {
@@ -49,7 +48,7 @@ export const usePersonal = (navigation: any, route: any) => {
       return;
     }
 
-    setIsLoading(true); // 로딩 시작
+    setIsLoading(true);
 
     try {
       const requestBody = {
@@ -74,33 +73,23 @@ export const usePersonal = (navigation: any, route: any) => {
 
       console.log("🚀 백엔드 요청 주소:", `${API_BASE_URL}/auth/signup`);
 
-      // 🚨 Axios 타임아웃 5초 설정 (무한 멈춤 방지)
-      await axios.post(`${API_BASE_URL}/auth/signup`, requestBody, { timeout: 5000 });
+      // 회원가입 응답에서 바로 토큰 받아서 저장 (자동 로그인 불필요)
+      const signupResponse = await axios.post(`${API_BASE_URL}/auth/signup`, requestBody, { timeout: 5000 });
 
-      // 자동 로그인 시도
-      try {
-        const loginResponse = await axios.post(`${API_BASE_URL}/auth/login`, {
-          loginId: accountData.loginId,
-          password: accountData.password
-        }, { timeout: 5000 });
+      const accessToken = signupResponse.data?.data?.accessToken || signupResponse.data?.accessToken;
+      const refreshToken = signupResponse.data?.data?.refreshToken || signupResponse.data?.refreshToken;
+      const role = signupResponse.data?.data?.role || signupResponse.data?.role;
 
-        const accessToken = loginResponse.data?.data?.accessToken || loginResponse.data?.accessToken;
-        const refreshToken = loginResponse.data?.data?.refreshToken || loginResponse.data?.refreshToken;
-        const role = loginResponse.data?.data?.role || loginResponse.data?.role;
-
-        if (accessToken) {
-          await AsyncStorage.setItem('userToken', accessToken);
-          if (refreshToken) await AsyncStorage.setItem('refreshToken', refreshToken);
-          if (role) await AsyncStorage.setItem('userRole', role);
-        }
-      } catch (loginError: any) {
-        console.error("자동 로그인 에러:", loginError.message);
+      if (accessToken) {
+        await AsyncStorage.setItem('userToken', accessToken);
+        if (refreshToken) await AsyncStorage.setItem('refreshToken', refreshToken);
+        if (role) await AsyncStorage.setItem('userRole', role);
       }
 
       navigation.replace('Loading', { type: 'signup' });
       
     } catch (error: any) {
-      console.error("❌ 통신 에러 발생:", error); // 터미널에 상세 에러 출력
+      console.error("❌ 통신 에러 발생:", error);
       let modalTitle = '가입 실패';
       let debugMessage = '';
 
@@ -108,7 +97,6 @@ export const usePersonal = (navigation: any, route: any) => {
         modalTitle = `서버 응답 에러 (${error.response.status})`;
         debugMessage = error.response.data?.message || '상세 메시지 없음';
       } else if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-        // ✅ 타임아웃 에러 잡기
         modalTitle = '서버 응답 지연';
         debugMessage = '서버와 연결할 수 없습니다.\n(API 주소 또는 서버 실행 상태를 확인하세요)';
       } else if (error.request) {
@@ -121,7 +109,7 @@ export const usePersonal = (navigation: any, route: any) => {
 
       showResultModal(modalTitle, debugMessage, 'error');
     } finally {
-      setIsLoading(false); // 통신 종료 후 로딩 해제
+      setIsLoading(false);
     }
   };
 
@@ -136,6 +124,6 @@ export const usePersonal = (navigation: any, route: any) => {
     isFootPublic, setIsFootPublic,
     resultModalVisible, resultModalConfig, closeResultModal,
     handleFinalSignup,
-    isLoading // 로딩 상태 반환 추가
+    isLoading
   };
 };
