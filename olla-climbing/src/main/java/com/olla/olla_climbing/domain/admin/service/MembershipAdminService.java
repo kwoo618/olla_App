@@ -43,21 +43,37 @@ public class MembershipAdminService {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new IllegalArgumentException("회원을 찾을 수 없습니다."));
 
-        LocalDate latestEndDate = membershipRepository.findMaxEndDateByMemberId(memberId).orElse(null);
-
-        // 기존 유효 이용권이 있으면 그 종료일부터 이어서 시작 (연장), 없으면 오늘 또는 수동 지정일
-        LocalDate effectiveStartDate;
-        if (latestEndDate != null && latestEndDate.isAfter(LocalDate.now().minusDays(1))) {
-            effectiveStartDate = latestEndDate;
-        } else {
-            effectiveStartDate = (startDate != null) ? startDate : LocalDate.now();
-        }
-
         int safeMonths = (addMonths != null) ? addMonths : 0;
         int safeCount = (addCount != null) ? addCount : 0;
 
         if (safeMonths == 0 && safeCount == 0) {
             throw new IllegalArgumentException("기간(개월) 또는 횟수 중 하나는 반드시 입력해야 합니다.");
+        }
+
+        // 일일권 추가 시 기존 ACTIVE 일일권에 횟수 합산
+        if (safeCount > 0) {
+            Membership existingCount = membershipRepository
+                    .findActiveCountMembershipByMemberId(memberId).orElse(null);
+            if (existingCount != null) {
+                existingCount.addRemainingCount(safeCount);
+                googleSheetsService.updateCountInSheet(member.getId(), existingCount.getRemainingCount());
+                log.info("일일권 횟수 합산 완료: 회원={}, 추가={}회, 잔여={}회",
+                        member.getName(), safeCount, existingCount.getRemainingCount());
+                return;
+            }
+        }
+
+        // 기간권 시작일 계산 (일일권은 항상 오늘)
+        LocalDate effectiveStartDate;
+        if (safeMonths > 0) {
+            LocalDate latestEndDate = membershipRepository.findMaxEndDateByMemberId(memberId).orElse(null);
+            if (latestEndDate != null && latestEndDate.isAfter(LocalDate.now().minusDays(1))) {
+                effectiveStartDate = latestEndDate;
+            } else {
+                effectiveStartDate = (startDate != null) ? startDate : LocalDate.now();
+            }
+        } else {
+            effectiveStartDate = LocalDate.now();
         }
 
         Membership newMembership = Membership.builder()
@@ -70,7 +86,6 @@ public class MembershipAdminService {
         membershipRepository.save(newMembership);
         googleSheetsService.syncNewMembership(member, newMembership);
 
-
         log.info("이용권 부여 완료: 회원={}, 시작일={}, 기간={}개월, 횟수={}회",
                 member.getName(), effectiveStartDate, safeMonths, safeCount);
     }
@@ -80,16 +95,15 @@ public class MembershipAdminService {
         Membership membership = membershipRepository.findById(membershipId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 이용권입니다."));
         membership.markAsDeleted();
+        googleSheetsService.updateMembershipStatus(membership.getMember().getId(), "EXPIRED");
     }
 
-    // 컨트롤러가 생성된 회원 정보를 응답에 포함할 수 있도록 함
     @Transactional
     public MemberResponse createOfflineMember(AdminMemberCreateRequest request) {
         if (memberRepository.findByPhone(request.getPhone()).isPresent()) {
             throw new IllegalArgumentException("이미 등록된 전화번호입니다.");
         }
 
-        // 오프라인 회원은 비밀번호, 실제 이메일이 없으므로 더미 이메일 생성
         String cleanPhone = request.getPhone().replaceAll("-", "");
         String dummyEmail = "offline_" + cleanPhone + "@ollagaja.com";
 
@@ -105,8 +119,10 @@ public class MembershipAdminService {
 
         Member savedMember = memberRepository.save(offlineMember);
 
-        log.info("오프라인 회원 등록 완료: 이름={}, 전화번호={}", savedMember.getName(), savedMember.getPhone());
+        googleSheetsService.syncNewMember(savedMember);
+        googleSheetsService.syncUnregisteredMember(savedMember);
 
+        log.info("오프라인 회원 등록 완료: 이름={}, 전화번호={}", savedMember.getName(), savedMember.getPhone());
         return MemberResponse.from(savedMember);
     }
 
@@ -127,8 +143,7 @@ public class MembershipAdminService {
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 이용권입니다."));
         membership.unpause();
         String newEndDateStr = membership.getEndDate() != null
-                ? membership.getEndDate().format(DateTimeFormatter.ofPattern("yyyy. MM. dd"))
-                : "";
+                ? membership.getEndDate().format(DateTimeFormatter.ofPattern("yyyy. MM. dd")) : "";
         googleSheetsService.unpauseMembershipData(membership.getMember().getId(), newEndDateStr);
     }
 
@@ -154,7 +169,7 @@ public class MembershipAdminService {
         });
     }
 
-    // 매일 오전 9시: 오늘 만료 + 3일 후 만료 회원 요약 알림 생성
+    // 매일 오전 9시: 오늘 만료 회원 EXPIRED 처리 + 요약 알림 생성
     @Scheduled(cron = "0 0 9 * * *")
     @Transactional
     public void generateExpirySummaryAlert() {
@@ -165,6 +180,11 @@ public class MembershipAdminService {
         List<Membership> expiringIn3Days = membershipRepository.findByEndDateAndStatus(d3, MembershipStatus.ACTIVE);
 
         if (expiredToday.isEmpty() && expiringIn3Days.isEmpty()) return;
+
+        expiredToday.forEach(m -> {
+            m.expire();
+            googleSheetsService.updateMembershipStatus(m.getMember().getId(), "EXPIRED");
+        });
 
         StringBuilder sb = new StringBuilder();
         sb.append("[오늘 만료: ").append(expiredToday.size()).append("명]\n");
