@@ -26,8 +26,38 @@ public class GoogleSheetsService {
     @Value("${google.sheet.id}")
     private String spreadsheetId;
 
+    private static final String MEMBER_SHEET = "회원 정보 시트";
+    private static final String TICKET_SHEET = "이용권 관리 시트";
+
     private String getTodayStr() {
         return LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy. MM. dd"));
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // [공통] 행 업데이트
+    // ─────────────────────────────────────────────────────────────
+    private void updateRow(String sheetName, int rowIndex, String range, List<Object> rowData) {
+        try {
+            ValueRange body = new ValueRange().setValues(List.of(rowData));
+            sheetsService.spreadsheets().values()
+                    .update(spreadsheetId, sheetName + "!" + range + rowIndex + ":" + range.charAt(range.length() - 1) + rowIndex, body)
+                    .setValueInputOption("USER_ENTERED")
+                    .execute();
+        } catch (Exception e) {
+            log.error("[Google Sheets] 행 업데이트 실패: 시트={}, row={}, 사유={}", sheetName, rowIndex, e.getMessage());
+        }
+    }
+
+    private void updateCell(String sheetName, String cellRange, Object value) {
+        try {
+            ValueRange body = new ValueRange().setValues(List.of(List.of(value)));
+            sheetsService.spreadsheets().values()
+                    .update(spreadsheetId, sheetName + "!" + cellRange, body)
+                    .setValueInputOption("USER_ENTERED")
+                    .execute();
+        } catch (Exception e) {
+            log.error("[Google Sheets] 셀 업데이트 실패: 시트={}, 범위={}, 사유={}", sheetName, cellRange, e.getMessage());
+        }
     }
 
     private void appendRow(String sheetName, List<Object> rowData) {
@@ -46,7 +76,7 @@ public class GoogleSheetsService {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 1. 신규 회원 가입 시 회원정보 시트 동기화
+    // 1. 회원정보 시트 동기화 (1인 1행 덮어쓰기)
     // ─────────────────────────────────────────────────────────────
     @Async
     public void syncNewMember(Member member) {
@@ -62,19 +92,21 @@ public class GoogleSheetsService {
             List<Object> rowData = List.of(
                     "=ROW()-2", member.getId(), member.getName(),
                     member.getGender() != null ? member.getGender() : "",
-                    member.getPhone(), birthDateStr, "", createdAtStr,
-                    footSizeStr, remark, ""
+                    member.getPhone() != null ? member.getPhone() : "",
+                    birthDateStr, "", createdAtStr, footSizeStr, remark, ""
             );
 
-            int rowIndex = findRowIndexByMemberId("회원 정보 시트", member.getId());
+            int rowIndex = findRowIndexByMemberId(MEMBER_SHEET, member.getId());
             if (rowIndex != -1) {
-                String range = "회원 정보 시트!A" + rowIndex + ":K" + rowIndex;
+                // 기존 행 덮어쓰기
                 ValueRange body = new ValueRange().setValues(List.of(rowData));
                 sheetsService.spreadsheets().values()
-                        .update(spreadsheetId, range, body)
+                        .update(spreadsheetId, MEMBER_SHEET + "!A" + rowIndex + ":K" + rowIndex, body)
                         .setValueInputOption("USER_ENTERED").execute();
+                log.info("[Google Sheets] 회원정보 업데이트: memberId={}, row={}", member.getId(), rowIndex);
             } else {
-                appendRow("회원 정보 시트", rowData);
+                // 신규 행 추가
+                appendRow(MEMBER_SHEET, rowData);
             }
         } catch (Exception e) {
             log.error("[Google Sheets] 회원정보 시트 동기화 실패: memberId={}, 사유={}", member.getId(), e.getMessage());
@@ -82,18 +114,65 @@ public class GoogleSheetsService {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 2. 미등록 회원 이용권 관리 시트 동기화
+    // 2. 이용권 현황 시트 동기화 (1인 1행 덮어쓰기)
+    // 회원권, 일일권 컬럼 분리 - 한 행에 둘 다 표시
+    // ─────────────────────────────────────────────────────────────
+    @Async
+    public void syncMembershipStatus(Member member, Membership membership) {
+        try {
+            String startDate = membership.getStartDate() != null
+                    ? membership.getStartDate().format(DateTimeFormatter.ofPattern("yyyy. MM. dd")) : "";
+            String endDate = membership.getEndDate() != null
+                    ? membership.getEndDate().format(DateTimeFormatter.ofPattern("yyyy. MM. dd")) : "";
+            int countValue = membership.getRemainingCount() != null ? membership.getRemainingCount() : 0;
+            String membershipType = membership.getDurationMonth() != null ? "회원권" : "일일권";
+
+            int rowIndex = findRowIndexByMemberId(TICKET_SHEET, member.getId());
+
+            if (rowIndex != -1) {
+                // 기존 행 덮어쓰기
+                if (membership.getDurationMonth() != null) {
+                    // 회원권 컬럼만 업데이트 (E~H열)
+                    ValueRange body = new ValueRange().setValues(List.of(List.of(
+                            membershipType, membership.getDurationMonth() + "개월", startDate, endDate
+                    )));
+                    sheetsService.spreadsheets().values()
+                            .update(spreadsheetId, TICKET_SHEET + "!E" + rowIndex + ":H" + rowIndex, body)
+                            .setValueInputOption("USER_ENTERED").execute();
+                } else {
+                    // 일일권 컬럼만 업데이트 (J열)
+                    updateCell(TICKET_SHEET, "J" + rowIndex, countValue);
+                }
+                log.info("[Google Sheets] 이용권 현황 업데이트: memberId={}", member.getId());
+            } else {
+                // 신규 행 추가
+                List<Object> rowData = List.of(
+                        "=ROW()-2", member.getId(), member.getName(), member.getPhone() != null ? member.getPhone() : "",
+                        membershipType,
+                        membership.getDurationMonth() != null ? membership.getDurationMonth() + "개월" : "",
+                        startDate, endDate, "", countValue, "", 0, "", "N", "ACTIVE"
+                );
+                appendRow(TICKET_SHEET, rowData);
+            }
+        } catch (Exception e) {
+            log.error("[Google Sheets] 이용권 현황 동기화 실패: memberId={}, 사유={}", member.getId(), e.getMessage());
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 3. 미등록 회원 이용권 시트 동기화
     // ─────────────────────────────────────────────────────────────
     @Async
     public void syncUnregisteredMember(Member member) {
         try {
-            List<Object> rowData = List.of(
-                    "=ROW()-2", member.getId(), "", "",
-                    "미등록", "", "", "", "", 0, "", 0, "", "N", ""
-            );
-            int rowIndex = findRowIndexByMemberId("이용권 관리 시트", member.getId());
+            int rowIndex = findRowIndexByMemberId(TICKET_SHEET, member.getId());
             if (rowIndex == -1) {
-                appendRow("이용권 관리 시트", rowData);
+                List<Object> rowData = List.of(
+                        "=ROW()-2", member.getId(), member.getName(),
+                        member.getPhone() != null ? member.getPhone() : "",
+                        "미등록", "", "", "", "", 0, "", 0, "", "N", ""
+                );
+                appendRow(TICKET_SHEET, rowData);
             }
         } catch (Exception e) {
             log.error("[Google Sheets] 미등록 회원 시트 생성 실패: memberId={}, 사유={}", member.getId(), e.getMessage());
@@ -101,62 +180,16 @@ public class GoogleSheetsService {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 3. 이용권 부여 시 이용권 관리 시트 동기화 (항상 새 행 추가 - 이력 관리)
-    // C열(이름), D열(연락처): XLOOKUP 수식 자동
-    // I열(잔여일수): ARRAYFORMULA 수식 자동
-    // O열(비고): ACTIVE/EXPIRED 상태 → 필터 뷰로 현황/이력 구분
-    // ─────────────────────────────────────────────────────────────
-    @Async
-    public void syncNewMembership(Member member, Membership membership) {
-        try {
-            String typeDesc = membership.getMembershipTypeName();
-            String serviceAmount = membership.getDurationMonth() != null
-                    ? membership.getDurationMonth() + "개월" : "";
-            int countValue = membership.getRemainingCount() != null
-                    ? membership.getRemainingCount() : 0;
-            String startDate = membership.getStartDate()
-                    .format(DateTimeFormatter.ofPattern("yyyy. MM. dd"));
-            String endDate = (membership.getEndDate() != null)
-                    ? membership.getEndDate().format(DateTimeFormatter.ofPattern("yyyy. MM. dd")) : "";
-
-            List<Object> rowData = List.of(
-                    "=ROW()-2",      // A: No
-                    member.getId(),  // B: 회원ID
-                    "",              // C: 이름 (XLOOKUP 수식 자동)
-                    "",              // D: 연락처 (XLOOKUP 수식 자동)
-                    typeDesc,        // E: 이용권 종류
-                    serviceAmount,   // F: 신청 서비스
-                    startDate,       // G: 시작일
-                    endDate,         // H: 종료일
-                    "",              // I: 잔여 일수 (ARRAYFORMULA 수식 자동)
-                    countValue,      // J: 일일권 갯수
-                    "",              // K: 최근 방문일
-                    0,               // L: 누적 방문 횟수
-                    "",              // M: 이용권 정지일
-                    "N",             // N: 기초강습 여부
-                    "ACTIVE"         // O: 비고 (필터 뷰용)
-            );
-
-            appendRow("이용권 관리 시트", rowData);
-            log.info("[Google Sheets] 이용권 이력 추가: memberId={}, 타입={}", member.getId(), typeDesc);
-
-        } catch (Exception e) {
-            log.error("[Google Sheets] 이용권 시트 동기화 실패: memberId={}, 사유={}", member.getId(), e.getMessage());
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // 4. 방문 데이터 업데이트 (K, L열) - ACTIVE 행 기준
+    // 4. 방문 데이터 업데이트 (K, L열)
     // ─────────────────────────────────────────────────────────────
     @Async
     public void updateVisitData(Long memberId, String visitDateStr, Integer accumulatedVisits) {
         try {
-            int rowIndex = findActiveRowIndexByMemberId("이용권 관리 시트", memberId);
+            int rowIndex = findRowIndexByMemberId(TICKET_SHEET, memberId);
             if (rowIndex != -1) {
-                String range = "이용권 관리 시트!K" + rowIndex + ":L" + rowIndex;
                 ValueRange body = new ValueRange().setValues(List.of(List.of(visitDateStr, accumulatedVisits)));
                 sheetsService.spreadsheets().values()
-                        .update(spreadsheetId, range, body)
+                        .update(spreadsheetId, TICKET_SHEET + "!K" + rowIndex + ":L" + rowIndex, body)
                         .setValueInputOption("USER_ENTERED").execute();
             }
         } catch (Exception e) {
@@ -165,57 +198,14 @@ public class GoogleSheetsService {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 5. 이용권 정지일 업데이트 (M열) - ACTIVE 행 기준
-    // ─────────────────────────────────────────────────────────────
-    @Async
-    public void updateMembershipPauseDate(Long memberId, String pauseDateStr) {
-        try {
-            int rowIndex = findActiveRowIndexByMemberId("이용권 관리 시트", memberId);
-            if (rowIndex != -1) {
-                String range = "이용권 관리 시트!M" + rowIndex + ":M" + rowIndex;
-                ValueRange body = new ValueRange().setValues(List.of(List.of(pauseDateStr)));
-                sheetsService.spreadsheets().values()
-                        .update(spreadsheetId, range, body)
-                        .setValueInputOption("USER_ENTERED").execute();
-            }
-        } catch (Exception e) {
-            log.error("[Google Sheets] 정지일 업데이트 실패: memberId={}, 사유={}", memberId, e.getMessage());
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // 6. 이용권 정지 해제 업데이트 (H, M열) - ACTIVE 행 기준
-    // ─────────────────────────────────────────────────────────────
-    @Async
-    public void unpauseMembershipData(Long memberId, String newEndDateStr) {
-        try {
-            int rowIndex = findActiveRowIndexByMemberId("이용권 관리 시트", memberId);
-            if (rowIndex != -1) {
-                String range = "이용권 관리 시트!H" + rowIndex + ":M" + rowIndex;
-                ValueRange body = new ValueRange().setValues(
-                        List.of(List.of(newEndDateStr, "", "", "", "", "")));
-                sheetsService.spreadsheets().values()
-                        .update(spreadsheetId, range, body)
-                        .setValueInputOption("USER_ENTERED").execute();
-            }
-        } catch (Exception e) {
-            log.error("[Google Sheets] 정지 해제 업데이트 실패: memberId={}, 사유={}", memberId, e.getMessage());
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // 7. 일일권 횟수 합산 시 J열 업데이트
+    // 5. 일일권 횟수 업데이트 (J열)
     // ─────────────────────────────────────────────────────────────
     @Async
     public void updateCountInSheet(Long memberId, int remainingCount) {
         try {
-            int rowIndex = findActiveRowIndexByMemberId("이용권 관리 시트", memberId);
+            int rowIndex = findRowIndexByMemberId(TICKET_SHEET, memberId);
             if (rowIndex != -1) {
-                String range = "이용권 관리 시트!J" + rowIndex;
-                ValueRange body = new ValueRange().setValues(List.of(List.of(remainingCount)));
-                sheetsService.spreadsheets().values()
-                        .update(spreadsheetId, range, body)
-                        .setValueInputOption("USER_ENTERED").execute();
+                updateCell(TICKET_SHEET, "J" + rowIndex, remainingCount);
                 log.info("[Google Sheets] 일일권 횟수 업데이트: memberId={}, 잔여={}회", memberId, remainingCount);
             }
         } catch (Exception e) {
@@ -224,18 +214,53 @@ public class GoogleSheetsService {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 8. 이용권 상태 업데이트 (O열) - ACTIVE/EXPIRED 구분용
+    // 6. 이용권 정지일 업데이트 (M열) + 상태 HOLDING
+    // ─────────────────────────────────────────────────────────────
+    @Async
+    public void updateMembershipPauseDate(Long memberId, String pauseDateStr) {
+        try {
+            int rowIndex = findRowIndexByMemberId(TICKET_SHEET, memberId);
+            if (rowIndex != -1) {
+                ValueRange body = new ValueRange().setValues(List.of(List.of(pauseDateStr)));
+                sheetsService.spreadsheets().values()
+                        .update(spreadsheetId, TICKET_SHEET + "!M" + rowIndex + ":M" + rowIndex, body)
+                        .setValueInputOption("USER_ENTERED").execute();
+                updateCell(TICKET_SHEET, "O" + rowIndex, "HOLDING");
+            }
+        } catch (Exception e) {
+            log.error("[Google Sheets] 정지일 업데이트 실패: memberId={}, 사유={}", memberId, e.getMessage());
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 7. 이용권 정지 해제 (H열 종료일 연장 + M열 초기화 + 상태 ACTIVE)
+    // ─────────────────────────────────────────────────────────────
+    @Async
+    public void unpauseMembershipData(Long memberId, String newEndDateStr) {
+        try {
+            int rowIndex = findRowIndexByMemberId(TICKET_SHEET, memberId);
+            if (rowIndex != -1) {
+                ValueRange body = new ValueRange().setValues(
+                        List.of(List.of(newEndDateStr, "", "", "", "", "")));
+                sheetsService.spreadsheets().values()
+                        .update(spreadsheetId, TICKET_SHEET + "!H" + rowIndex + ":M" + rowIndex, body)
+                        .setValueInputOption("USER_ENTERED").execute();
+                updateCell(TICKET_SHEET, "O" + rowIndex, "ACTIVE");
+            }
+        } catch (Exception e) {
+            log.error("[Google Sheets] 정지 해제 업데이트 실패: memberId={}, 사유={}", memberId, e.getMessage());
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 8. 이용권 상태 업데이트 (O열) - ACTIVE/EXPIRED/HOLDING
     // ─────────────────────────────────────────────────────────────
     @Async
     public void updateMembershipStatus(Long memberId, String status) {
         try {
-            int rowIndex = findActiveRowIndexByMemberId("이용권 관리 시트", memberId);
+            int rowIndex = findRowIndexByMemberId(TICKET_SHEET, memberId);
             if (rowIndex != -1) {
-                String range = "이용권 관리 시트!O" + rowIndex;
-                ValueRange body = new ValueRange().setValues(List.of(List.of(status)));
-                sheetsService.spreadsheets().values()
-                        .update(spreadsheetId, range, body)
-                        .setValueInputOption("USER_ENTERED").execute();
+                updateCell(TICKET_SHEET, "O" + rowIndex, status);
                 log.info("[Google Sheets] 이용권 상태 업데이트: memberId={}, status={}", memberId, status);
             }
         } catch (Exception e) {
@@ -244,7 +269,7 @@ public class GoogleSheetsService {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // private 헬퍼: B열 스캔으로 회원ID의 첫 번째 행 반환 (회원정보 시트용)
+    // private 헬퍼: B열 스캔으로 회원ID 행 번호 탐색
     // ─────────────────────────────────────────────────────────────
     private int findRowIndexByMemberId(String tabName, Long memberId) throws IOException {
         ValueRange response = sheetsService.spreadsheets().values()
@@ -252,39 +277,19 @@ public class GoogleSheetsService {
         List<List<Object>> values = response.getValues();
         if (values != null) {
             for (int i = 0; i < values.size(); i++) {
-                if (i < 3) continue;
+                if (i < 3) continue; // 1행(제목), 2행(헤더), 3행(수식예시) 스킵
                 List<Object> row = values.get(i);
-                if (!row.isEmpty() && row.get(0).toString().equals(String.valueOf(memberId))) {
-                    return i + 1;
+                if (row.isEmpty()) continue;
+                String cellValue = row.get(0).toString().trim();
+                if (cellValue.endsWith(".0")) {
+                    cellValue = cellValue.substring(0, cellValue.length() - 2);
+                }
+                if (cellValue.equals(String.valueOf(memberId))) {
+                    return i + 1; // 1-based row number
                 }
             }
         }
         return -1;
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // private 헬퍼: O열이 ACTIVE인 가장 마지막 행 반환 (이용권 관리 시트용)
-    // 회원 1명이 여러 이용권 행을 가질 수 있으므로 ACTIVE 상태인 행만 업데이트
-    // ─────────────────────────────────────────────────────────────
-    private int findActiveRowIndexByMemberId(String tabName, Long memberId) throws IOException {
-        ValueRange response = sheetsService.spreadsheets().values()
-                .get(spreadsheetId, tabName + "!B:O").execute();
-        List<List<Object>> values = response.getValues();
-        int lastMatchRow = -1;
-        if (values != null) {
-            for (int i = 0; i < values.size(); i++) {
-                if (i < 3) continue;
-                List<Object> row = values.get(i);
-                if (row.size() < 2) continue;
-                if (row.get(0).toString().equals(String.valueOf(memberId))) {
-                    // O열(index=14)이 ACTIVE인 행만 대상
-                    if (row.size() > 14 && "ACTIVE".equals(row.get(14).toString())) {
-                        lastMatchRow = i + 1;
-                    }
-                }
-            }
-        }
-        return lastMatchRow;
     }
 
     private int findFirstEmptyRow(String tabName) throws IOException {
