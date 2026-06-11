@@ -130,6 +130,8 @@ public class AuthService {
         if (isBrandNewMember) {
             googleSheetsService.syncNewMember(savedMember);
             googleSheetsService.syncUnregisteredMember(savedMember);
+        } else {
+            googleSheetsService.syncNewMember(savedMember);
         }
 
         return buildTokenResponse(savedMember);
@@ -148,7 +150,6 @@ public class AuthService {
 
         String accessToken = jwtTokenProvider.createAccessToken(member.getLoginId(), member.getRole().name());
         String refreshToken = jwtTokenProvider.createRefreshToken(member.getLoginId());
-        // member.updateRefreshToken() 제거 - RefreshTokenRepository로 단일 관리
 
         refreshTokenRepository.findByLoginId(member.getLoginId())
                 .ifPresentOrElse(

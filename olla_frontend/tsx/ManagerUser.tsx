@@ -21,6 +21,7 @@ const ManagerUser = ({ navigation }: any) => {
     
     isAddModalVisible, openAddModal, closeAddModal,
     newName, setNewName, newGender, setNewGender, newBirth, formatBirth, newPhone, formatPhone,
+    newHeight, setNewHeight, newWeight, setNewWeight,
     isFormValid, handleRegister,
     
     isDetailVisible, selectedUser, openDetailModal, closeDetailModal, detailHeightAnim, detailPanResponder,
@@ -115,10 +116,15 @@ const ManagerUser = ({ navigation }: any) => {
             return (
               <View key={`u-${memberId || index}`} style={styles.tableRow}>
                 <TouchableOpacity style={[styles.colName, styles.profileNameContainer]} onPress={() => openDetailModal(memberId, targetName, targetPhone)}>
-                  {getFullImageUrl(memberInfo.profileImageUrl)
-                    ? <FastImage source={{ uri: getFullImageUrl(memberInfo.profileImageUrl)!, priority: FastImage.priority.normal }} style={styles.listProfileImg} />
-                    : <Image source={require('../assets/profile.png')} style={styles.listProfileImg} />
-                  }
+                  <FastImage
+                    source={
+                      getFullImageUrl(memberInfo.profileImageUrl)
+                        ? { uri: getFullImageUrl(memberInfo.profileImageUrl)!, priority: FastImage.priority.normal }
+                        : require('../assets/profile.png')
+                    }
+                    style={styles.listProfileImg}
+                    defaultSource={require('../assets/profile.png')}
+                  />
                   <Text style={styles.rowTextBold} numberOfLines={1}>{targetName}</Text>
                 </TouchableOpacity>
                 
@@ -168,7 +174,6 @@ const ManagerUser = ({ navigation }: any) => {
                   <View style={styles.detailRow}><Text style={styles.detailLabel}>이름</Text><Text style={styles.detailValue}>{selectedUser.name}</Text></View>
                   <View style={styles.detailRow}><Text style={styles.detailLabel}>성별</Text><Text style={styles.detailValue}>{selectedUser.gender}</Text></View>
                   <View style={styles.detailRow}><Text style={styles.detailLabel}>연락처</Text><Text style={styles.detailValue}>{selectedUser.phone}</Text></View>
-                  <View style={styles.detailRow}><Text style={styles.detailLabel}>키/몸무게</Text><Text style={styles.detailValue}>{selectedUser.height}cm / {selectedUser.weight}kg</Text></View>
                 </View>
               )}
               <TouchableOpacity 
@@ -213,11 +218,11 @@ const ManagerUser = ({ navigation }: any) => {
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>성별</Text>
                   <View style={styles.genderRow}>
-                    <TouchableOpacity style={[styles.genderBtn, newGender === '남자' && styles.genderBtnActive]} onPress={() => setNewGender('남자')}>
-                      <Text style={[styles.genderText, newGender === '남자' && styles.genderTextActive]}>남자</Text>
+                    <TouchableOpacity style={[styles.genderBtn, newGender === '남' && styles.genderBtnActive]} onPress={() => setNewGender('남')}>
+                      <Text style={[styles.genderText, newGender === '남' && styles.genderTextActive]}>남자</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.genderBtn, newGender === '여자' && styles.genderBtnActive]} onPress={() => setNewGender('여자')}>
-                      <Text style={[styles.genderText, newGender === '여자' && styles.genderTextActive]}>여자</Text>
+                    <TouchableOpacity style={[styles.genderBtn, newGender === '여' && styles.genderBtnActive]} onPress={() => setNewGender('여')}>
+                      <Text style={[styles.genderText, newGender === '여' && styles.genderTextActive]}>여자</Text>
                     </TouchableOpacity>
                   </View>
                 </View>

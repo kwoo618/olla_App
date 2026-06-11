@@ -8,6 +8,26 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useMyPage, getFullImageUrl } from '../ts/MY';
 import FastImage from 'react-native-fast-image';
 
+// ─── 공통 프로필 이미지 컴포넌트 (onError 폴백 포함) ───────────────────────
+const ProfileImg = ({ uri, style }: { uri: string | null | undefined; style: any }) => {
+  const fullUri = getFullImageUrl(uri);
+
+  // uri가 없으면 FastImage 쓰지 않고 바로 fallback — 캐시 문제 회피
+  if (!fullUri) {
+    return <Image source={require('../assets/profile.png')} style={[style, { backgroundColor: 'transparent' }]} />;
+  }
+
+  return (
+    <FastImage
+      key={fullUri}  
+      source={{ uri: fullUri, priority: FastImage.priority.high }}
+      style={style}
+      onError={() => {/* 에러 시 아래 fallback으로 처리 */}}
+      defaultSource={require('../assets/profile.png')}
+    />
+  );
+};
+
 const MYScreen = ({ navigation }: any) => {
   const {
     loading, refreshing, onRefresh, isAdmin, calcAgeFromBirth,
@@ -16,7 +36,7 @@ const MYScreen = ({ navigation }: any) => {
     notiState, updateMultipleNotiSettings,
     resultModalVisible, setResultModalVisible, resultModalConfig,
     isProfileModalVisible, openProfileModal, closeProfileModal, profileHeightAnim, profilePanResponder,
-    isImageUploading, handleSelectImage, handleSaveProfile,
+    isImageUploading, handleSelectImage, handleSaveProfile,                                        
     isChangePwModalVisible, setChangePwModalVisible, oldPassword, setOldPassword, newPassword, setNewPassword, newPasswordConfirm, setNewPasswordConfirm, pwError, setPwError, isChangingPw, handleChangePassword,
     isPauseModalVisible, openPauseModal, closePauseModal, handleInquireClick, pauseSlideAnim,
     isContactModalVisible, closeContactModal, contactSlideAnim,
@@ -59,52 +79,54 @@ const MYScreen = ({ navigation }: any) => {
   );
 
   // ─── 동기화 컨트롤러: 모든 스위치를 한 번에 변경 & 조건부 푸시 알림 동기화 ───
+  // ─── 알림 설정 동기화 컨트롤러 ───────────────────────────────────────────
   const handleNotificationSwitch = (key: string) => {
     if (key === 'isGlobalNotificationOn') {
       const targetState = !notiState.isGlobalNotificationOn;
-      
-      const batchUpdate = {
+      updateMultipleNotiSettings({
         isGlobalNotificationOn: targetState,
         isMembershipNotificationOn: targetState,
         isActivityNotificationOn: targetState,
         isCrewNotificationOn: targetState,
         isNoticeNotificationOn: targetState,
-      };
-
-      updateMultipleNotiSettings(batchUpdate);
+      });
     } else {
       const targetState = !(notiState as any)[key];
-      
       const nextState = {
         isMembershipNotificationOn: notiState.isMembershipNotificationOn,
         isActivityNotificationOn: notiState.isActivityNotificationOn,
         isCrewNotificationOn: notiState.isCrewNotificationOn,
         isNoticeNotificationOn: notiState.isNoticeNotificationOn,
-        [key]: targetState, 
+        [key]: targetState,
       };
-
-      const isAllOn = 
-        nextState.isMembershipNotificationOn && 
-        nextState.isActivityNotificationOn && 
-        nextState.isCrewNotificationOn && 
+      const isAllOn =
+        nextState.isMembershipNotificationOn &&
+        nextState.isActivityNotificationOn &&
+        nextState.isCrewNotificationOn &&
         nextState.isNoticeNotificationOn;
+      const isAllOff =
+        !nextState.isMembershipNotificationOn &&
+        !nextState.isActivityNotificationOn &&
+        !nextState.isCrewNotificationOn &&
+        !nextState.isNoticeNotificationOn;
 
       const batchUpdate: any = { [key]: targetState };
-
-      // 💡 수정됨: 하위 알림이 4개 모두 켜져있으면 전체 푸시 켜짐, 하나라도 꺼지면 꺼짐
-      batchUpdate.isGlobalNotificationOn = isAllOn;
-
+      if (isAllOn) batchUpdate.isGlobalNotificationOn = true;
+      else if (isAllOff) batchUpdate.isGlobalNotificationOn = false;
       updateMultipleNotiSettings(batchUpdate);
     }
   };
 
-  const renderEditField = (title: string, fieldKey: string, unit: string, showToggle: boolean = true) => {
+  const renderEditField = (title: string, fieldKey: string, unit: string) => {
+    const isReadOnly = fieldKey === 'phone';
     const toggleKey = `show${fieldKey.charAt(0).toUpperCase() + fieldKey.slice(1)}`;
+
     return (
       <View style={styles.editFieldWrapper}>
         <View style={styles.editFieldHeader}>
           <Text style={styles.editFieldTitle}>{title}</Text>
-          {showToggle && (
+          {/* phone은 토글 숨김 */}
+          {!isReadOnly && (
             <View style={styles.toggleWrapper}>
               <Text style={styles.toggleLabel}>{profileToggles[toggleKey] ? '공개' : '비공개'}</Text>
               <Switch
@@ -118,9 +140,10 @@ const MYScreen = ({ navigation }: any) => {
         </View>
         <View style={styles.editInputBox}>
           <TextInput
-            style={styles.editInput}
+            style={[styles.editInput, isReadOnly && { color: '#999999' }]}
             value={profileData[fieldKey]}
-            onChangeText={(txt) => setProfileData({ ...profileData, [fieldKey]: txt })}
+            onChangeText={isReadOnly ? undefined : (txt) => setProfileData({ ...profileData, [fieldKey]: txt })}
+            editable={!isReadOnly}
             placeholderTextColor="#666666"
             keyboardType={unit ? 'numeric' : 'default'}
           />
@@ -139,14 +162,11 @@ const MYScreen = ({ navigation }: any) => {
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" />}
       >
+        {/* 프로필 카드 */}
         <TouchableOpacity style={styles.profileCard} activeOpacity={0.8} onPress={openProfileModal}>
           <View style={styles.profileLeft}>
             <View style={styles.profileImagePlaceholder}>
-              {/* 로컬/서버 이미지 렌더링 */}
-              {getFullImageUrl(profileData.profileImageUrl)
-                ? <FastImage source={{ uri: getFullImageUrl(profileData.profileImageUrl)!, priority: FastImage.priority.high }} style={styles.profileImage} />
-                : <Image source={require('../assets/profile.png')} style={styles.profileImage} />
-              }
+              <ProfileImg uri={profileData.profileImageUrl} style={styles.profileImage} />
             </View>
             <View style={styles.profileTextContainer}>
               <Text style={styles.profileName}>{profileData.name || '사용자'}</Text>
@@ -271,13 +291,13 @@ const MYScreen = ({ navigation }: any) => {
         <TouchableOpacity style={styles.deleteAccountBtn} onPress={() => Linking.openURL('https://www.termsfeed.com/live/934afa2d-b905-435a-9800-be35ec29dff2')}>
           <Text style={styles.deleteAccountText}>개인정보처리방침</Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity style={styles.deleteAccountBtn} onPress={() => setDeleteModalVisible(true)}>
           <Text style={styles.deleteAccountText}>계정삭제</Text>
         </TouchableOpacity>
       </ScrollView>
 
-      {/* 프로필 수정 바텀시트 */}
+      {/* ─── 프로필 수정 바텀시트 ────────────────────────────────────────────── */}
       <Modal visible={isProfileModalVisible} transparent animationType="fade" onRequestClose={() => closeProfileModal()}>
         <View style={styles.modalOverlay}>
           <TouchableWithoutFeedback onPress={() => closeProfileModal()}><View style={StyleSheet.absoluteFill} /></TouchableWithoutFeedback>
@@ -295,15 +315,33 @@ const MYScreen = ({ navigation }: any) => {
               </View>
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }} keyboardShouldPersistTaps="handled">
                 <View style={styles.profileEditContainer}>
-                  <TouchableOpacity style={styles.profileImageEditWrapper} activeOpacity={0.7} onPress={handleSelectImage} disabled={isImageUploading}>
-                    {getFullImageUrl(profileData.profileImageUrl)
-                      ? <FastImage source={{ uri: getFullImageUrl(profileData.profileImageUrl)!, priority: FastImage.priority.high }} style={styles.profileImageLarge} />
-                      : <Image source={require('../assets/profile.png')} style={styles.profileImageLarge} />
-                    }
-                    <View style={styles.profileImageEditOverlay}>
-                      {isImageUploading ? <ActivityIndicator size="small" color="#ffffff" /> : <Text style={styles.profileImageEditText}>수정</Text>}
-                    </View>
-                  </TouchableOpacity>
+
+                  {/* ─── 프로필 이미지 영역 ──────────────────────────────────── */}
+                  <View style={styles.profileImageSection}>
+                    <TouchableOpacity
+                      style={styles.profileImageEditWrapper}
+                      activeOpacity={0.7}
+                      onPress={handleSelectImage}
+                      disabled={isImageUploading}
+                    >
+                      <ProfileImg
+                        key={profileData.profileImageUrl ?? 'default'} 
+                        uri={profileData.profileImageUrl}
+                        style={styles.profileImageLarge}
+                      />
+                      <View style={styles.profileImageEditOverlay}>
+                        {isImageUploading
+                          ? <ActivityIndicator size="small" color="#ffffff" />
+                          : <Text style={styles.profileImageEditText}>수정</Text>
+                        }
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* 안내 텍스트 */}
+                  <Text style={styles.profileImageHint}>
+                    이미지를 탭하면 변경할 수 있어요
+                  </Text>
 
                   <TouchableOpacity 
                     style={styles.resetProfileBtn} 
@@ -315,18 +353,18 @@ const MYScreen = ({ navigation }: any) => {
 
                   <View style={styles.editFieldWrapper}>
                     <View style={styles.editFieldHeader}><Text style={styles.editFieldTitle}>이름</Text></View>
-                    <View style={styles.editInputBox}>
-                      <TextInput style={styles.editInput} value={profileData.name} onChangeText={(txt) => setProfileData({ ...profileData, name: txt })} placeholderTextColor="#666666" />
+                    <View style={styles.editInputBox}> 
+                      <TextInput style={[styles.editInput, { color: '#999999' }]} value={profileData.name} editable={false} placeholderTextColor="#666666" />
                     </View>
                   </View>
 
                   <View style={styles.editFieldWrapper}>
                     <View style={styles.editFieldHeader}><Text style={styles.editFieldTitle}>성별</Text></View>
                     <View style={styles.genderRow}>
-                      <TouchableOpacity style={[styles.genderBtn, profileData.gender === '남' && styles.genderBtnActive]} onPress={() => setProfileData({ ...profileData, gender: '남' })}>
+                      <TouchableOpacity style={[styles.genderBtn, profileData.gender === '남' && styles.genderBtnActive]} disabled={true}>
                         <Text style={[styles.genderBtnText, profileData.gender === '남' && styles.genderBtnTextActive]}>남자</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={[styles.genderBtn, profileData.gender === '여' && styles.genderBtnActive]} onPress={() => setProfileData({ ...profileData, gender: '여' })}>
+                      <TouchableOpacity style={[styles.genderBtn, profileData.gender === '여' && styles.genderBtnActive]} disabled={true}>
                         <Text style={[styles.genderBtnText, profileData.gender === '여' && styles.genderBtnTextActive]}>여자</Text>
                       </TouchableOpacity>
                     </View>
@@ -335,21 +373,34 @@ const MYScreen = ({ navigation }: any) => {
                   <View style={styles.editFieldWrapper}>
                     <View style={styles.editFieldHeader}><Text style={styles.editFieldTitle}>생년월일</Text></View>
                     <View style={styles.editInputBox}>
-                      <TextInput style={styles.editInput} value={profileData.birthDate} onChangeText={(txt) => setProfileData({ ...profileData, birthDate: txt })} placeholder="YYYY-MM-DD" keyboardType="numeric" maxLength={10} />
+                      <TextInput style={[styles.editInput, { color: '#999999' }]} value={profileData.birthDate} editable={false} placeholder="YYYY-MM-DD" keyboardType="numeric" maxLength={10} />
                     </View>
                   </View>
 
+                  {/* 기존 나이(만) 필드 전체를 아래로 교체 */}
                   <View style={styles.editFieldWrapper}>
                     <View style={styles.editFieldHeader}>
                       <Text style={styles.editFieldTitle}>나이(만)</Text>
+                      {/* 토글 완전 제거 */}
                     </View>
                     <View style={styles.editInputBox}>
-                      <TextInput style={[styles.editInput, { color: '#999999' }]} value={calcAgeFromBirth(profileData.birthDate)} editable={false} />
+                      <TextInput
+                        style={[styles.editInput, { color: '#999999' }]}
+                        value={calcAgeFromBirth(profileData.birthDate)}
+                        editable={false}
+                        placeholderTextColor="#666666"
+                      />
                       <Text style={styles.editUnit}>세</Text>
                     </View>
                   </View>
 
-                  {renderEditField('전화번호', 'phone', '', false)}
+                  {renderEditField('전화번호', 'phone', '')}
+
+                  {/* 안내 텍스트 */}
+                  <Text style={styles.profilefixHint}>
+                    이름, 성별, 생년월일, 전화번호 수정은 관리자에게 문의하십시오
+                  </Text>
+
                   {renderEditField('키', 'height', 'cm')}
                   {renderEditField('몸무게', 'weight', 'kg')}
                   {renderEditField('팔길이', 'arm', 'cm')}
@@ -365,7 +416,7 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 비밀번호 변경 폼 모달 */}
+      {/* ─── 비밀번호 변경 모달 ──────────────────────────────────────────────── */}
       <Modal visible={isChangePwModalVisible} transparent animationType="fade" onRequestClose={() => setChangePwModalVisible(false)}>
         <View style={styles.centerModalOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', alignItems: 'center' }}>
@@ -386,7 +437,7 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 관리자 모드 실행 확인 모달 */}
+      {/* ─── 관리자 모드 확인 모달 ───────────────────────────────────────────── */}
       <Modal visible={isAdminModalVisible} transparent animationType="fade" onRequestClose={() => setAdminModalVisible(false)}>
         <View style={styles.centerModalOverlay}>
           <View style={styles.centerModalBox}>
@@ -399,7 +450,7 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 로그아웃 확인 모달 */}
+      {/* ─── 로그아웃 확인 모달 ──────────────────────────────────────────────── */}
       <Modal visible={isLogoutModalVisible} transparent animationType="fade" onRequestClose={() => setLogoutModalVisible(false)}>
         <View style={styles.centerModalOverlay}>
           <View style={styles.centerModalBox}>
@@ -412,7 +463,7 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 계정 삭제 확인 모달 */}
+      {/* ─── 계정 삭제 확인 모달 ─────────────────────────────────────────────── */}
       <Modal visible={isDeleteModalVisible} transparent animationType="fade" onRequestClose={() => setDeleteModalVisible(false)}>
         <View style={styles.centerModalOverlay}>
           <View style={styles.centerModalBox}>
@@ -449,6 +500,7 @@ const MYScreen = ({ navigation }: any) => {
       </Modal>
 
       {/* 시스템 결과 알림 공통 모달 */}
+      {/* ─── 시스템 결과 알림 모달 ───────────────────────────────────────────── */}
       <Modal visible={resultModalVisible} transparent animationType="fade" onRequestClose={() => setResultModalVisible(false)}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -459,7 +511,7 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 프론트 데스크 문의 바텀시트 */}
+      {/* ─── 프론트 데스크 문의 바텀시트 ────────────────────────────────────── */}
       <Modal visible={isPauseModalVisible} transparent animationType="fade" onRequestClose={closePauseModal}>
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={closePauseModal} />
@@ -476,6 +528,7 @@ const MYScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
+      {/* ─── 연락처 바텀시트 ─────────────────────────────────────────────────── */}
       <Modal visible={isContactModalVisible} transparent animationType="fade" onRequestClose={closeContactModal}>
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={closeContactModal} />
@@ -539,8 +592,7 @@ const styles = StyleSheet.create({
   logoutText: { color: '#FF4D4D', fontSize: 18, fontWeight: 'bold' },
   deleteAccountBtn: { alignItems: 'center', paddingVertical: 10, marginBottom: 0 },
   deleteAccountText: { color: '#666666', fontSize: 16, textDecorationLine: 'underline' },
-  
-  // 바텀시트 공통
+
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#1E1E1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 40, width: '100%', overflow: 'hidden' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#333333', borderRadius: 2, marginTop: 12, marginBottom: 20, alignSelf: 'center' },
@@ -549,9 +601,9 @@ const styles = StyleSheet.create({
   sheetTitleCenter: { color: '#ffffff', fontSize: 23, fontWeight: 'bold', textAlign: 'center', marginBottom: 15 },
   closeBtn: { color: '#999999', fontSize: 28, paddingHorizontal: 10, marginBottom: 8 },
   horizontalDivider: { height: 1, backgroundColor: '#333333', width: '100%', marginBottom: 20 },
-  
-  // 프로필 편집
+
   profileEditContainer: { backgroundColor: '#262626', borderRadius: 16, padding: 20 },
+  profileImageSection: { alignSelf: 'center', marginBottom: 8, position: 'relative' },
   profileImageEditWrapper: { alignSelf: 'center', width: 90, height: 90, borderRadius: 45, backgroundColor: '#444444', marginBottom: 12, overflow: 'hidden' },
   profileImageLarge: { width: '100%', height: '100%' },
   profileImageEditOverlay: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: 'rgba(0,0,0,0.6)', paddingVertical: 4, alignItems: 'center' },
@@ -570,6 +622,10 @@ const styles = StyleSheet.create({
     fontSize: 14, 
     fontWeight: 'bold' 
   },
+  deleteImageBtn: { position: 'absolute', top: -4, right: -4, width: 26, height: 26, borderRadius: 13, backgroundColor: '#FF4D4D', justifyContent: 'center', alignItems: 'center', zIndex: 10, borderWidth: 2, borderColor: '#262626' },
+  deleteImageBtnText: { color: '#ffffff', fontSize: 11, fontWeight: 'bold', lineHeight: 13 },
+  profileImageHint: { color: '#666666', fontSize: 12, textAlign: 'center', marginBottom: 20 },
+  profilefixHint: { color: '#666666', fontSize: 15, textAlign: 'center', marginBottom: 20 },
 
   editFieldWrapper: { marginBottom: 20 },
   editFieldHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
@@ -587,7 +643,6 @@ const styles = StyleSheet.create({
   genderBtnText: { color: '#999999', fontSize: 18, fontWeight: 'bold' },
   genderBtnTextActive: { color: '#A1BE44' },
 
-  // 문의하기/프론트데스크
   pauseInfoBox: { backgroundColor: '#2C2C2C', borderRadius: 12, padding: 18, marginBottom: 25 },
   pauseInfoText: { color: '#ffffff', fontSize: 16, lineHeight: 24, textAlign: 'center' },
   modalBtnRow: { flexDirection: 'row', justifyContent: 'space-between' },
@@ -601,77 +656,26 @@ const styles = StyleSheet.create({
   contactTime: { color: '#999999', fontSize: 14, textAlign: 'center' },
   errorText: { color: '#FF4D4D', fontSize: 14, marginBottom: 10, textAlign: 'center' },
 
-  // 1. 입력 모달 (비밀번호 변경)
-  inputModalBox: { 
-    width: '90%', 
-    backgroundColor: '#212121', 
-    borderRadius: 25, 
-    paddingVertical: 45, 
-    paddingHorizontal: 35 
-  },
+  inputModalBox: { width: '90%', backgroundColor: '#212121', borderRadius: 25, paddingVertical: 45, paddingHorizontal: 35 },
   inputModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
   inputModalTitle: { color: '#ffffff', fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
-  inputField: { 
-    width: '100%',
-    backgroundColor: '#1A1A1A', 
-    color: '#FFF', 
-    borderRadius: 12, 
-    padding: 15, 
-    marginBottom: 12, 
-    fontSize: 16, 
-    borderWidth: 1, 
-    borderColor: '#444' 
-  },
+  inputField: { width: '100%', backgroundColor: '#1A1A1A', color: '#FFF', borderRadius: 12, padding: 15, marginBottom: 12, fontSize: 16, borderWidth: 1, borderColor: '#444' },
   submitBtn: { width: '100%', backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 20 },
   submitBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
 
-  // 2. 투 버튼 확인 모달 (관리자 모드 실행 / 로그아웃 / 계정삭제)
   centerModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  centerModalBox: { 
-    width: '90%', 
-    backgroundColor: '#212121', 
-    borderRadius: 25, 
-    paddingVertical: 45, 
-    paddingHorizontal: 35, 
-    alignItems: 'center' 
-  },
-  centerModalText: { 
-    color: '#ffffff', 
-    fontSize: 18, 
-    fontWeight: 'bold', 
-    marginBottom: 25,
-    lineHeight: 24,
-    textAlign: 'center'
-  },
+  centerModalBox: { width: '90%', backgroundColor: '#212121', borderRadius: 25, paddingVertical: 45, paddingHorizontal: 35, alignItems: 'center' },
+  centerModalText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, lineHeight: 24, textAlign: 'center' },
   centerBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
   centerBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 },
   centerBtnYesText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
   centerBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 },
   centerBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
 
-  // 3. 단일 버튼 시스템 안내 모달 (결과 알림)
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  resultModalBox: { 
-    width: '90%', 
-    backgroundColor: '#212121', 
-    borderRadius: 25, 
-    paddingVertical: 45, 
-    paddingHorizontal: 35, 
-    alignItems: 'center' 
-  },
-  resultModalTitle: { 
-    fontSize: 28, 
-    fontWeight: 'bold', 
-    marginBottom: 8 
-  },
-  resultModalMessage: { 
-    color: '#ffffff', 
-    fontSize: 18, 
-    fontWeight: 'bold',
-    marginBottom: 25, 
-    textAlign: 'center', 
-    lineHeight: 24 
-  },
+  resultModalBox: { width: '90%', backgroundColor: '#212121', borderRadius: 25, paddingVertical: 45, paddingHorizontal: 35, alignItems: 'center' },
+  resultModalTitle: { fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
+  resultModalMessage: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 25, textAlign: 'center', lineHeight: 24 },
   resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
 });

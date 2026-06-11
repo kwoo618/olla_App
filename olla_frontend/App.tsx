@@ -8,6 +8,60 @@ import axios from 'axios';
 import { API_BASE_URL } from './src/constants/Config';
 import messaging from '@react-native-firebase/messaging';
 
+export const SESSION_EXPIRED_EVENT = 'SESSION_EXPIRED';
+
+let _sessionExpiredFired = false;
+let _isReissuing = false;
+
+axios.interceptors.response.use(
+  response => response,
+  async error => {
+    const status = error.response?.status;
+    const url: string = error.config?.url ?? '';
+    const isLoginRequest = url.includes('/auth/login') || url.includes('/members/login');
+    const isReissueRequest = url.includes('/auth/reissue');
+
+    if (status === 401 && (isLoginRequest || isReissueRequest)) {
+      if (!_sessionExpiredFired) {
+        _sessionExpiredFired = true;
+        await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole', 'fcmToken']);
+        DeviceEventEmitter.emit(SESSION_EXPIRED_EVENT);
+      }
+      return Promise.reject(error);
+    }
+
+    if (status === 401 && !_isReissuing && !_sessionExpiredFired) {
+      _isReissuing = true;
+      try {
+        const refreshToken = await AsyncStorage.getItem('refreshToken');
+        if (!refreshToken) throw new Error('NO_REFRESH_TOKEN');
+
+        const reissueRes = await axios.post(`${API_BASE_URL}/auth/reissue`, { refreshToken });
+
+        const newAccessToken =
+          reissueRes.data?.data?.accessToken ?? reissueRes.data?.accessToken;
+        if (!newAccessToken) throw new Error('NO_ACCESS_TOKEN');
+
+        await AsyncStorage.setItem('userToken', newAccessToken);
+
+        error.config.headers['Authorization'] = `Bearer ${newAccessToken}`;
+        return axios(error.config);
+      } catch {
+        if (!_sessionExpiredFired) {
+          _sessionExpiredFired = true;
+          await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole', 'fcmToken']);
+          DeviceEventEmitter.emit(SESSION_EXPIRED_EVENT);
+        }
+        return Promise.reject(error);
+      } finally {
+        _isReissuing = false;
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
 type RootParamList = {
   Login: undefined; Signup: undefined; PersonalInfo: undefined; Loading: undefined;
   Home: undefined; Notice: undefined; Notification: undefined; Recode: undefined; Ranking: undefined;
@@ -147,13 +201,16 @@ const BottomNavItem = ({ name, label, icon, currentRoute, nav, isAdmin = false }
   const isActive = currentRoute === name;
   const activeColor = '#A1BE44';
   const inactiveColor = '#7D7D7D';
+
   return (
     <TouchableOpacity style={styles.bottomNavItem} onPress={() => nav.navigate(name)}>
       <Image
         source={icon}
         style={[styles.navIcon, { tintColor: isActive ? activeColor : inactiveColor, opacity: isActive ? 1 : 0.6 }]}
       />
-      <Text style={[styles.bottomNavText, isActive && { color: activeColor, fontWeight: 'bold' }]}>{label}</Text>
+      <Text style={[styles.bottomNavText, isActive && { color: activeColor, fontWeight: 'bold' }]}>
+        {label}
+      </Text>
     </TouchableOpacity>
   );
 };
@@ -171,9 +228,7 @@ const AppContent = () => {
   const [hasUnreadNotification, setHasUnreadNotification] = useState(false);
   const lastAlertId = useRef<number | null>(null);
 
-  // ✅ 세션 만료 모달
   const [sessionExpiredVisible, setSessionExpiredVisible] = useState(false);
-  const isSessionExpired = useRef(false);
 
   const [profileData, setProfileData] = useState({ name: '권클라이밍', phone: '010-1234-5678', age: '25', height: '175', weight: '70', arm: '180', shoe: '260' });
   const [profileToggles, setProfileToggles] = useState({ showName: true, showPhone: false, showAge: true, showHeight: true, showWeight: true, showArm: true, showShoe: true });
@@ -194,34 +249,61 @@ const AppContent = () => {
   const adminScreens = ['ManagerDashboard', 'ManagerUser', 'ManagerTicket', 'ManagerNotice', 'ManagerCommunity'];
   const isAdminMode = adminScreens.includes(routeName);
 
-  // ✅ 세션 만료 인터셉터 - 중복 방지 포함
+  const [hasMembership, setHasMembership] = useState(false);
+
   useEffect(() => {
-    const interceptor = axios.interceptors.response.use(
-      response => response,
-      async error => {
-        if (error.response?.status === 401 && !isSessionExpired.current) {
-          isSessionExpired.current = true;
-          await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole', 'fcmToken']);
-          setSessionExpiredVisible(true);
-        }
-        return Promise.reject(error);
+    const fetchMembership = async () => {
+      try {
+        const userToken = await AsyncStorage.getItem('userToken');
+        if (!userToken) { setHasMembership(false); return; }
+        const res = await axios.get(`${API_BASE_URL}/memberships/me`, {
+          headers: { Authorization: `Bearer ${userToken}` },
+        });
+        const rawData = res.data.data;
+        const dataList: any[] = Array.isArray(rawData) ? rawData : (rawData?.content || []);
+
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const active = dataList.filter((m: any) => {
+          const status = String(m.membershipStatus || m.status || '').toUpperCase();
+          if (status === 'DELETED' || status === 'INACTIVE') return false;
+          if (m.startDate) {
+            const s = new Date(m.startDate); s.setHours(0,0,0,0);
+            if (s > today) return false;
+          }
+          return true;
+        });
+        const hasPeriod = active.some((m: any) => {
+          const t = String(m.membershipType ?? '').toUpperCase();
+          const isCountType = t.includes('COUNT') || t.includes('횟수') || t.includes('일일');
+          if (isCountType) return false;
+          if (!m.endDate) return false;
+          const end = new Date(m.endDate); end.setHours(23, 59, 59, 999);
+          return end.getTime() >= Date.now();
+        });
+        setHasMembership(hasPeriod);
+      } catch {
+        setHasMembership(false);
       }
-    );
-    return () => {
-      axios.interceptors.response.eject(interceptor);
     };
-  }, []);
+    if (initialRoute === 'Home') fetchMembership();
+  }, [initialRoute]);
 
   const handleSessionExpiredConfirm = () => {
     setSessionExpiredVisible(false);
-    isSessionExpired.current = false;
+    _sessionExpiredFired = false;
     navigationRef.reset({
       index: 0,
       routes: [{ name: 'Login' }],
     });
   };
 
-  // FCM 초기화
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(SESSION_EXPIRED_EVENT, () => {
+      setSessionExpiredVisible(true);
+    });
+    return () => sub.remove();
+  }, []);
+
   useEffect(() => {
     let unsubscribeForeground: (() => void) | null = null;
     let unsubscribeTokenRefresh: (() => void) | null = null;
@@ -252,49 +334,47 @@ const AppContent = () => {
     };
   }, []);
 
-  // 미읽 알림 폴링
   useEffect(() => {
+    if (initialRoute !== 'Home') return;
+
     const fetchUnreadNotifications = async () => {
       try {
         const userToken = await AsyncStorage.getItem('userToken');
-        if (!userToken || initialRoute !== 'Home') return;
+        if (!userToken) return;
 
         const endpoint = isAdminMode
-          ? `${API_BASE_URL}/admin/alerts?page=0&size=10`
-          : `${API_BASE_URL}/notifications?page=0&size=10`;
+          ? `${API_BASE_URL}/admin/alerts?page=0&size=50`
+          : `${API_BASE_URL}/notifications?page=0&size=50`;
 
         const response = await axios.get(endpoint, {
           headers: { Authorization: `Bearer ${userToken}` },
         });
 
-        const dataObj = response.data?.data?.data || response.data?.data || response.data;
-        const list = Array.isArray(dataObj) ? dataObj : (dataObj?.content || []);
-        const unreadItems = list.filter((item: any) => !(item.isRead === true || item.read === true));
+        const raw = response.data?.data;
+        const list: any[] = Array.isArray(raw)
+          ? raw
+          : Array.isArray(raw?.content)
+          ? raw.content
+          : [];
 
-        if (unreadItems.length > 0) {
-          setHasUnreadNotification(true);
-          const latest = unreadItems[0];
-          if (lastAlertId.current !== latest.id) {
-            lastAlertId.current = latest.id;
-          }
-        } else {
-          setHasUnreadNotification(false);
-        }
+        const unreadItems = list.filter(
+          (item: any) => item.isRead === false || item.read === false
+        );
+
+        setHasUnreadNotification(unreadItems.length > 0);
       } catch (error) {}
     };
 
     fetchUnreadNotifications();
     const intervalId = setInterval(fetchUnreadNotifications, 30000);
-    const subscription = DeviceEventEmitter.addListener('notificationRead', () => {
-      fetchUnreadNotifications();
-    });
+    const subscription = DeviceEventEmitter.addListener('notificationRead', fetchUnreadNotifications);
+
     return () => {
       clearInterval(intervalId);
       subscription.remove();
     };
   }, [initialRoute, isAdminMode]);
 
-  // 자동 로그인 체크
   useEffect(() => {
     const checkLoginStatus = async () => {
       try {
@@ -304,7 +384,6 @@ const AppContent = () => {
             await axios.get(`${API_BASE_URL}/members/me`, {
               headers: { Authorization: `Bearer ${userToken}` },
             });
-            // ✅ Home 진입 시 FCM 토큰 재등록 강제
             await AsyncStorage.removeItem('fcmToken');
             setInitialRoute('Home');
           } catch (apiError) {
@@ -421,9 +500,42 @@ const AppContent = () => {
             <Stack.Screen name="Home" component={HomeScreen} />
             <Stack.Screen name="Notice" component={NoticeScreen} />
             <Stack.Screen name="Notification" component={NotificationScreen} />
-            <Stack.Screen name="Recode">{(props) => <RecodeScreen {...props} difficultyData={difficultyData} setDifficultyData={setDifficultyData} enduranceData={enduranceData} setEnduranceData={setEnduranceData} consecutiveData={consecutiveData} setConsecutiveData={setConsecutiveData} />}</Stack.Screen>
-            <Stack.Screen name="Ranking">{(props) => <RankingScreen {...props} myProfile={profileData} difficultyData={difficultyData} enduranceData={enduranceData} consecutiveData={consecutiveData} />}</Stack.Screen>
-            <Stack.Screen name="Community">{(props) => <CommunityScreen {...props} myProfile={profileData} myToggles={profileToggles} />}</Stack.Screen>
+            <Stack.Screen name="Recode">
+              {(props) => (
+                <RecodeScreen
+                  {...props}
+                  hasMembership={hasMembership}
+                  difficultyData={difficultyData}
+                  setDifficultyData={setDifficultyData}
+                  enduranceData={enduranceData}
+                  setEnduranceData={setEnduranceData}
+                  consecutiveData={consecutiveData}
+                  setConsecutiveData={setConsecutiveData}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Ranking">
+              {(props) => (
+                <RankingScreen
+                  {...props}
+                  hasMembership={hasMembership}
+                  myProfile={profileData}
+                  difficultyData={difficultyData}
+                  enduranceData={enduranceData}
+                  consecutiveData={consecutiveData}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Community">
+              {(props) => (
+                <CommunityScreen
+                  {...props}
+                  hasMembership={hasMembership}
+                  myProfile={profileData}
+                  myToggles={profileToggles}
+                />
+              )}
+            </Stack.Screen>
             <Stack.Screen name="MY">{(props) => <MYScreen {...props} profileData={profileData} setProfileData={setProfileData} profileToggles={profileToggles} setProfileToggles={setProfileToggles} />}</Stack.Screen>
             <Stack.Screen name="ManagerDashboard" component={ManagerDashboard} />
             <Stack.Screen name="ManagerUser">{(props) => <ManagerUser {...props} users={users} setUsers={setUsers} />}</Stack.Screen>

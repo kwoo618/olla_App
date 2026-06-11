@@ -63,7 +63,7 @@ const SignupScreen = ({ navigation }: any) => {
           <TextInput
             ref={passwordRef}
             style={[styles.input, focusedField === 'password' && styles.focusedInput, passwordError ? styles.inputError : null]}
-            placeholder="영문, 숫자, 특수문자(@$!%*?&) 포함 6자 이상"
+            placeholder="영문, 숫자, 특수문자 포함 6자 이상"
             placeholderTextColor="#ffffff80"
             secureTextEntry
             autoCapitalize="none"

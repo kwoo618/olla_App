@@ -43,6 +43,13 @@ export const resolveImageUrl = (url: string | null | undefined): string | null =
   return `${domain}${formattedPath}`;
 };
 
+// 이미지 소스 헬퍼 — uri가 없으면 profile.png로 fallback
+export const getProfileImageSource = (url: string | null | undefined) => {
+  const resolved = resolveImageUrl(url);
+  if (resolved) return { uri: resolved };
+  return require('../assets/profile.png');
+};
+
 export const isValidImageUrl = (url: string | null | undefined): url is string =>
   !!url && url !== 'null' && url !== 'undefined';
 
@@ -202,7 +209,6 @@ export const useManagerDashboard = (navigation: any) => {
           if (day !== 7) normalized[day] = Array.isArray(v) ? (v as unknown[]).map(Number) : [];
         });
         setHourlyCongestionByDay(normalized);
-        // hourlyData는 fetchHourlyByDay에서만 관리
       }
 
       if (data.totalMembers != null) setMetrics(prev => ({ ...prev, totalMembers: Number(data.totalMembers) }));
@@ -231,7 +237,6 @@ export const useManagerDashboard = (navigation: any) => {
   const fetchHourlyByDay = useCallback(async (dayOfWeek: number) => {
     if (dayOfWeek === 7) return;
 
-    // 캐시 있으면 먼저 보여주고, API도 항상 호출
     setHourlyCongestionByDay(prev => {
       if (prev[dayOfWeek]?.length > 0) setHourlyData(prev[dayOfWeek]);
       return prev;
@@ -503,13 +508,11 @@ export const useManagerDashboard = (navigation: any) => {
     setTimeout(() => { scannedRef.current = false; }, 800);
   }, []);
 
-  // 🔧 수정: ALREADY 케이스에서 확인 버튼 누르면 스캐너 재오픈
   const handleBarCodeScanned = useCallback(async (qrData: string) => {
     if (scannedRef.current || isProcessing) return;
     scannedRef.current = true;
     setIsProcessing(true);
 
-    // 스캐너 재오픈 헬퍼 (모달 닫힌 후 호출)
     const reopenScanner = () => {
       setTimeout(() => {
         scannedRef.current = false;
@@ -528,7 +531,6 @@ export const useManagerDashboard = (navigation: any) => {
       closeScanner();
       setTimeout(() => {
         if (statusCode === 'ALREADY' || message.includes('이미 출석')) {
-          // 🔧 수정: 확인 누르면 스캐너 재오픈
           showResultModal(
             '금일 출석 완료',
             `${memberName}님은\n오늘 이미 출석하셨습니다.`,
@@ -582,5 +584,6 @@ export const useManagerDashboard = (navigation: any) => {
     handleSendAlert,
     openScanner, closeScanner, handleBarCodeScanned,
     showResultModal, closeResultModal,
+    getProfileImageSource,
   };
 };

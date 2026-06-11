@@ -27,7 +27,6 @@ public interface RankingRepository extends JpaRepository<Ranking, Long> {
 
     List<Ranking> findByRankTypeAndDifficultyAndIsMasterFalseOrderByScoreDescBaseDateAsc(RankType rankType, Difficulty difficulty);
 
-
     @Query("SELECT MAX(r.baseDate) FROM Ranking r WHERE r.rankType = :rankType AND r.isMaster = false")
     Optional<LocalDateTime> findLatestBaseDateByRankType(@Param("rankType") RankType rankType);
 
@@ -36,4 +35,6 @@ public interface RankingRepository extends JpaRepository<Ranking, Long> {
     Optional<Ranking> findByMemberAndRankType(Member member, RankType rankType);
 
     List<Ranking> findByRankTypeAndIsMasterFalseOrderByScoreDescBaseDateAsc(RankType rankType);
+
+    void deleteAllByMember(Member member);
 }

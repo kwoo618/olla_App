@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Ani
 import { useFocusEffect } from '@react-navigation/native';
 import QRCode from 'react-native-qrcode-svg';
 import Svg, { Circle } from 'react-native-svg';
-import { HomeData } from '../ts/Home';
+import { HomeData, MembershipItem } from '../ts/Home';
 
 const HomeScreen = ({ navigation }: any) => {
   const {
@@ -20,7 +20,12 @@ const HomeScreen = ({ navigation }: any) => {
 
   const { height: SCREEN_HEIGHT } = Dimensions.get('window');
   const QR_MODAL_HEIGHT = SCREEN_HEIGHT * 0.55;
-  const MEMBERSHIP_MODAL_HEIGHT = SCREEN_HEIGHT * 0.53;
+  // 이용권 개수에 따라 모달 높이 조정 (항목당 약 110pt 추가)
+  const itemCount = membership.items.length;
+  const MEMBERSHIP_MODAL_HEIGHT = Math.min(
+    SCREEN_HEIGHT * 0.9,
+    SCREEN_HEIGHT * 0.53 + Math.max(0, itemCount - 1) * 110
+  );
 
   const modalHeightAnim = useRef(new Animated.Value(0)).current;
   const currentSnap = useRef(0);
@@ -95,6 +100,7 @@ const HomeScreen = ({ navigation }: any) => {
     }, [resultModalVisible, activeModal, isExitModalVisible, closeResultModal])
   );
 
+  // ─── 대표 이용권 기준 (원형 그래프용) ──────────────────────────────────────
   const isCountType = membership.membershipType === '일일권';
   const hasMembership = isCountType ? membership.remainingCount > 0 : !!(membership.startDate && membership.endDate);
   const isTodayAttended = viewDate.getFullYear() === today.getFullYear() && viewDate.getMonth() === today.getMonth() && attendedDates.includes(today.getDate());
@@ -117,6 +123,7 @@ const HomeScreen = ({ navigation }: any) => {
     else if (title === '지구력 랭킹') navigation.navigate('Ranking', { targetTab: '지구력' });
   };
 
+  // ─── 원형 그래프 (대표 이용권 기준) ───────────────────────────────────────
   let circleRemainPercentage = 0;
   let barUsedPercentage = 0;
 
@@ -126,7 +133,6 @@ const HomeScreen = ({ navigation }: any) => {
     const totalDays = Math.max(1, Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1);
     const remainDays = Math.max(0, membership.remainingDays);
     const usedDays = totalDays - remainDays;
-
     circleRemainPercentage = Math.min((remainDays / totalDays) * 100, 100);
     barUsedPercentage = Math.min((usedDays / totalDays) * 100, 100);
   } else if (isCountType && hasMembership) {
@@ -134,8 +140,24 @@ const HomeScreen = ({ navigation }: any) => {
     barUsedPercentage = 0;
   }
 
-  const circleText = membership.isLoading ? '' : hasMembership ? (isCountType ? `${membership.remainingCount}회` : `D-${membership.remainingDays}`) : membership.hasFuture ? '예정' : '없음';
-  const membershipCardTitle = hasMembership ? membership.membershipType : membership.hasFuture ? '시작 예정' : '이용권';
+  // 카드 상단 원형 텍스트: 둘 다 있으면 두 줄로 표시
+  const hasPeriod = membership.items.some(i => i.membershipType === '회원권');
+  const hasCount = membership.items.some(i => i.membershipType === '일일권');
+  const periodItem = membership.items.find(i => i.membershipType === '회원권');
+  const countItem = membership.items.find(i => i.membershipType === '일일권');
+
+  const circleText = membership.isLoading ? '' : hasMembership
+    ? (hasPeriod && hasCount
+        ? `D-${periodItem?.remainingDays}`   // 둘 다 있으면 회원권 기준
+        : isCountType ? `${membership.remainingCount}회` : `D-${membership.remainingDays}`)
+    : membership.hasFuture ? '예정' : '없음';
+
+  // 홈 카드 타이틀: 보유 이용권 조합 표시
+  const membershipCardTitle = (() => {
+    if (!hasMembership) return membership.hasFuture ? '시작 예정' : '이용권';
+    if (hasPeriod && hasCount) return '회원권/일일권';
+    return membership.membershipType;
+  })();
 
   const currentYear = viewDate.getFullYear();
   const currentMonth = viewDate.getMonth();
@@ -147,6 +169,56 @@ const HomeScreen = ({ navigation }: any) => {
   const circleRadius = 21;
   const circleCircumference = 2 * Math.PI * circleRadius;
   const strokeDashoffset = circleCircumference * (1 - circleRemainPercentage / 100);
+
+  // ─── 이용권 모달 개별 카드 렌더링 ─────────────────────────────────────────
+  const renderMembershipItem = (item: MembershipItem, index: number) => {
+    const isPeriod = item.membershipType === '회원권';
+    let itemBarUsed = 0;
+
+    if (isPeriod && item.startDate && item.endDate) {
+      const s = new Date(item.startDate); s.setHours(0, 0, 0, 0);
+      const e = new Date(item.endDate); e.setHours(0, 0, 0, 0);
+      const totalDays = Math.max(1, Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+      const usedDays = totalDays - Math.max(0, item.remainingDays);
+      itemBarUsed = Math.min((usedDays / totalDays) * 100, 100);
+    }
+
+    return (
+      <View key={index} style={styles.memCard}>
+        <View style={styles.memCardHeader}>
+          <View style={styles.memCardTitleRow}>
+            <View style={[styles.memTypeBadge, isPeriod ? styles.memTypeBadgePeriod : styles.memTypeBadgeCount]}>
+              <Text style={[styles.memTypeBadgeText, isPeriod ? styles.memTypeBadgeTextPeriod : styles.memTypeBadgeTextCount]}>
+                {item.membershipType}
+              </Text>
+            </View>
+            <Text style={styles.memCardTitle}>
+              {isPeriod ? `남은 기간` : `잔여 횟수`}
+            </Text>
+          </View>
+          <Text style={[styles.memCardValueBig, isPeriod ? styles.colorGreen : styles.colorWhite]}>
+            {isPeriod ? `D-${item.remainingDays}` : `${item.remainingCount}회`}
+          </Text>
+        </View>
+
+        {isPeriod && (
+          <View style={styles.progressBarBg}>
+            <View style={[styles.progressBarFill, { width: `${itemBarUsed}%` }]} />
+          </View>
+        )}
+
+        <View style={[styles.memCardDates, !isPeriod && { justifyContent: 'center' }]}>
+          {isPeriod ? (
+            <><Text style={styles.memDateText}>{item.startDate}</Text><Text style={styles.memDateText}>{item.endDate}</Text></>
+          ) : (
+            <Text style={[styles.memDateText, { color: '#A1BE44', textAlign: 'center', fontSize: 30 }]}>
+              {item.remainingCount}회 남음
+            </Text>
+          )}
+        </View>
+      </View>
+    );
+  };
 
   return (
     <View style={styles.background}>
@@ -202,8 +274,16 @@ const HomeScreen = ({ navigation }: any) => {
               </View>
             </View>
 
-            <Text style={styles.cardTitleCentered}>{membershipCardTitle}</Text>
-            {!hasMembership && membership.hasFuture && <Text style={styles.futureStartDateText}>{membership.futureStartDate}</Text>}
+            <Text style={[styles.cardTitleCentered, (hasPeriod && hasCount) && { fontSize: 14 }]}>
+              {membershipCardTitle}
+            </Text>
+            {/* 둘 다 있으면 서브 텍스트로 일일권 잔여횟수 표시 */}
+            {hasPeriod && hasCount && countItem && (
+              <Text style={styles.subBadgeText}>일일권 {countItem.remainingCount}회</Text>
+            )}
+            {!hasMembership && membership.hasFuture && (
+              <Text style={styles.futureStartDateText}>{membership.futureStartDate}</Text>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -292,6 +372,7 @@ const HomeScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
+      {/* 결과 모달 */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={closeResultModal}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -306,6 +387,7 @@ const HomeScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
+      {/* QR / 이용권 바텀시트 */}
       <Modal visible={activeModal !== null} animationType="fade" transparent={true} onRequestClose={closeModal}>
         <View style={styles.modalOverlay}>
           <TouchableWithoutFeedback onPress={closeModal}><View style={StyleSheet.absoluteFill} /></TouchableWithoutFeedback>
@@ -313,12 +395,20 @@ const HomeScreen = ({ navigation }: any) => {
             <View {...panResponder.panHandlers} style={{ width: '100%', backgroundColor: 'transparent' }}>
               <View style={styles.dragHandle} />
               <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle}>{activeModal === 'QR' ? 'QR 체크인' : (hasMembership ? membership.membershipType : (membership.hasFuture ? '시작 예정' : '이용권'))}</Text>
-                <TouchableOpacity onPress={closeModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}><Text style={styles.closeBtn}>✕</Text></TouchableOpacity>
+                <Text style={styles.sheetTitle}>
+                  {activeModal === 'QR' ? 'QR 체크인' : (
+                    hasMembership
+                      ? (hasPeriod && hasCount ? '보유 이용권' : membership.membershipType)
+                      : (membership.hasFuture ? '시작 예정' : '이용권')
+                  )}
+                </Text>
+                <TouchableOpacity onPress={closeModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Text style={styles.closeBtn}>✕</Text>
+                </TouchableOpacity>
               </View>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1, width: '100%' }} contentContainerStyle={{ alignItems: 'center' }}>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1, width: '100%' }} contentContainerStyle={{ alignItems: 'center', paddingBottom: 20 }}>
               {activeModal === 'QR' ? (
                 <>
                   <View style={{ marginBottom: 20, alignItems: 'center', justifyContent: 'center', height: 200, width: 200 }}>
@@ -333,38 +423,45 @@ const HomeScreen = ({ navigation }: any) => {
                 </>
               ) : (
                 <View style={styles.membershipContainer}>
-                  <View style={styles.memCard}>
-                    <View style={styles.memCardHeader}>
-                      <Text style={styles.memCardTitle}>{isCountType ? '잔여 횟수' : (membership.hasFuture && !hasMembership ? '시작 예정' : '남은 이용 기간')}</Text>
-                    </View>
-                    {!isCountType && hasMembership && (
-                      <View style={styles.progressBarBg}>
-                        <View style={[styles.progressBarFill, { width: `${barUsedPercentage}%` }]} />
+                  {/* ── 보유 이용권이 있을 때: 각 카드 렌더링 ── */}
+                  {membership.items.length > 0 ? (
+                    membership.items.map((item, index) => renderMembershipItem(item, index))
+                  ) : (
+                    /* ── 이용권 없음 / 시작 예정 ── */
+                    <View style={styles.memCard}>
+                      <View style={styles.memCardHeader}>
+                        <Text style={styles.memCardTitle}>
+                          {membership.hasFuture ? '시작 예정' : '이용권'}
+                        </Text>
                       </View>
-                    )}
-                    <View style={[styles.memCardDates, (!hasMembership) && { justifyContent: 'center' }]}>
-                      {hasMembership ? (
-                        isCountType ? <Text style={[styles.memDateText, { fontSize: 18, color: '#A1BE44' }]}>{membership.remainingCount}회 남음</Text>
-                        : <><Text style={styles.memDateText}>{membership.startDate}</Text><Text style={styles.memDateText}>{membership.endDate}</Text></>
-                      ) : membership.hasFuture ? (
-                        <Text style={[styles.memDateText, { color: '#A1BE44', fontSize: 16 }]}>{membership.futureStartDate} 시작 예정</Text>
-                      ) : <Text style={styles.memDateText}>구매 필요</Text>}
+                      <View style={[styles.memCardDates, { justifyContent: 'center' }]}>
+                        {membership.hasFuture ? (
+                          <Text style={[styles.memDateText, { color: '#A1BE44', fontSize: 16, textAlign: 'center' }]}>
+                            {membership.futureStartDate} 시작 예정
+                          </Text>
+                        ) : (
+                          <Text style={[styles.memDateText, { textAlign: 'center' }]}>구매 필요</Text>
+                        )}
+                      </View>
                     </View>
-                  </View>
-                  <View style={styles.memRow}>
-                    <View style={styles.memHalfCard}>
-                      <Text style={styles.memHalfTitle}>{isCountType ? '잔여 횟수' : '남은 기간'}</Text>
-                      <Text style={[styles.memHalfValueGreen, !hasMembership && !membership.hasFuture && { color: '#999999', fontSize: 18 }, !hasMembership && membership.hasFuture && { color: '#A1BE44', fontSize: 18 }]} numberOfLines={1} adjustsFontSizeToFit>
-                        {hasMembership ? (isCountType ? `${membership.remainingCount}회` : `${membership.remainingDays}일`) : (membership.hasFuture ? '시작 예정' : '구매 필요')}
+                  )}
+
+                  {/* ── 시작 예정 이용권이 있으면 하단에 추가 안내 ── */}
+                  {membership.hasFuture && membership.items.length > 0 && (
+                    <View style={[styles.memCard, { backgroundColor: '#1E2A1E', borderWidth: 1, borderColor: '#3A5A3A' }]}>
+                      <View style={styles.memCardHeader}>
+                        <View style={styles.memCardTitleRow}>
+                          <View style={[styles.memTypeBadge, { backgroundColor: '#1A3A1A', borderColor: '#4A7A4A' }]}>
+                            <Text style={[styles.memTypeBadgeText, { color: '#7ABF7A' }]}>예정</Text>
+                          </View>
+                          <Text style={styles.memCardTitle}>시작 예정 이용권</Text>
+                        </View>
+                      </View>
+                      <Text style={[styles.memDateText, { color: '#7ABF7A', textAlign: 'center', marginTop: 4 }]}>
+                        {membership.futureStartDate} 부터 이용 가능
                       </Text>
                     </View>
-                    <View style={styles.memHalfCard}>
-                      <Text style={styles.memHalfTitle}>상태</Text>
-                      <Text style={[styles.memHalfValueWhite, !hasMembership && !membership.hasFuture && { fontSize: 18, color: '#FF6B6B' }, !hasMembership && membership.hasFuture && { fontSize: 18, color: '#A1BE44' }]} numberOfLines={1} adjustsFontSizeToFit>
-                        {displayStatus || (hasMembership ? '이용중' : '구매 필요')}
-                      </Text>
-                    </View>
-                  </View>
+                  )}
                 </View>
               )}
             </ScrollView>
@@ -397,6 +494,7 @@ const styles = StyleSheet.create({
   circleGraphText: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
 
   cardTitleCentered: { color: '#ffffff', fontSize: 18, fontWeight: '600' },
+  subBadgeText: { color: '#A1BE44', fontSize: 11, marginTop: 4, textAlign: 'center' },
   futureStartDateText: { color: '#A1BE44', fontSize: 11, marginTop: 4, textAlign: 'center', paddingVertical: 18 },
 
   unifiedDataFrame: { flexDirection: 'row', backgroundColor: '#2A2A2A', borderRadius: 16, marginBottom: 20, overflow: 'hidden' },
@@ -416,7 +514,6 @@ const styles = StyleSheet.create({
   weekDayText: { color: '#999999', fontSize: 15, width: '14.28%', textAlign: 'center', fontWeight: '600' },
   daysGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start' },
   dayCell: { width: '14.28%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center', marginBottom: 5 },
-  
   dayCircle: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   dayText: { color: '#ffffff', fontSize: 16, fontWeight: '500' },
   sundayText: { color: '#FF6B6B' },
@@ -436,13 +533,28 @@ const styles = StyleSheet.create({
   qrDesc: { color: '#999999', fontSize: 16 },
 
   membershipContainer: { width: '100%' },
-  memCard: { backgroundColor: '#2A2A2A', borderRadius: 16, padding: 22, marginBottom: 15, width: '100%' },
-  memCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  memCardTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' },
-  progressBarBg: { height: 8, backgroundColor: '#444444', borderRadius: 4, marginBottom: 10 },
+
+  // ─── 이용권 카드 (복수 지원) ───────────────────────────────────────────────
+  memCard: { backgroundColor: '#2A2A2A', borderRadius: 16, padding: 22, marginBottom: 14, width: '100%' },
+  memCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  memCardTitleRow: { flexDirection: 'row', alignItems: 'center' },
+  memTypeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginRight: 8, borderWidth: 1 },
+  memTypeBadgePeriod: { backgroundColor: '#1A2A0A', borderColor: '#A1BE44' },
+  memTypeBadgeCount: { backgroundColor: '#0A1A2A', borderColor: '#5DADE2' },
+  memTypeBadgeText: { fontSize: 12, fontWeight: 'bold' },
+  memTypeBadgeTextPeriod: { color: '#A1BE44' },
+  memTypeBadgeTextCount: { color: '#5DADE2' },
+  memCardTitle: { color: '#ffffff', fontSize: 17, fontWeight: 'bold' },
+  memCardValueBig: { fontSize: 24, fontWeight: 'bold' },
+  colorGreen: { color: '#A1BE44' },
+  colorWhite: { color: '#ffffff' },
+
+  progressBarBg: { height: 8, backgroundColor: '#444444', borderRadius: 4, marginBottom: 14 },
   progressBarFill: { height: '100%', backgroundColor: '#A1BE44', borderRadius: 4 },
   memCardDates: { flexDirection: 'row', justifyContent: 'space-between' },
   memDateText: { color: '#999999', fontSize: 15 },
+
+  // 하위 호환용 (이전 스타일 유지)
   memRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%' },
   memHalfCard: { backgroundColor: '#2A2A2A', borderRadius: 16, paddingVertical: 25, width: '48%', alignItems: 'center', justifyContent: 'center' },
   memHalfTitle: { color: '#ffffff', fontSize: 17, fontWeight: '600', marginBottom: 12 },

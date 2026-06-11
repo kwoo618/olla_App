@@ -12,11 +12,17 @@ import com.olla.olla_climbing.domain.community.repository.PostRepository;
 import com.olla.olla_climbing.domain.member.entity.Member;
 import com.olla.olla_climbing.domain.member.enums.Role;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
+import com.olla.olla_climbing.domain.member.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -26,6 +32,7 @@ public class PostService {
     private final MemberRepository memberRepository;
     private final PostParticipantRepository participantRepository;
     private final PostLikeRepository postLikeRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public PostResponse createPost(PostCreateRequest request, String loginId) {
@@ -70,7 +77,7 @@ public class PostService {
     @Transactional
     public PostResponse getPostDetail(Long postId, String loginId) {
         Post post = findActivePost(postId);
-        post.increaseViewCount();
+        increaseViewCountAsync(postId); // 비동기로 조회수 증가
 
         Member member = findActiveMember(loginId);
         boolean isApplied = participantRepository.existsByPostAndMember(post, member);
@@ -83,8 +90,29 @@ public class PostService {
     @Transactional(readOnly = true)
     public Page<PostResponse> getPostList(Pageable pageable, String loginId) {
         Member member = findActiveMember(loginId);
-        return postRepository.findByIsDeletedFalseOrderByCreatedAtDesc(pageable)
-                .map(post -> toPostResponse(post, member));
+        Page<Post> posts = postRepository.findByIsDeletedFalseOrderByCreatedAtDesc(pageable);
+
+        // 현재 페이지의 게시글 ID 목록
+        List<Long> postIds = posts.getContent().stream()
+                .map(Post::getId).collect(Collectors.toList());
+
+        // 좋아요/참여 여부를 IN 쿼리로 한 번에 조회
+        Set<Long> likedPostIds = postLikeRepository
+                .findByMemberAndPostIdIn(member, postIds)
+                .stream().map(like -> like.getPost().getId())
+                .collect(Collectors.toSet());
+
+        Set<Long> participatedPostIds = participantRepository
+                .findByMemberAndPostIdIn(member, postIds)
+                .stream().map(p -> p.getPost().getId())
+                .collect(Collectors.toSet());
+
+        return posts.map(post -> {
+            boolean isApplied = participatedPostIds.contains(post.getId());
+            boolean isLiked = likedPostIds.contains(post.getId());
+            long likeCount = postLikeRepository.countByPostId(post.getId());
+            return PostResponse.of(post, isApplied, isLiked, likeCount);
+        });
     }
 
     @Transactional
@@ -97,6 +125,15 @@ public class PostService {
         }
 
         post.markAsDeleted();
+    }
+
+    @Transactional
+    public void closePost(Long postId, String loginId) {
+        Post post = findActivePost(postId);
+        if (!post.getMember().getLoginId().equals(loginId)) {
+            throw new IllegalArgumentException("게시글 작성자만 마감할 수 있습니다.");
+        }
+        post.closeManual();
     }
 
     @Transactional(readOnly = true)
@@ -147,17 +184,20 @@ public class PostService {
                 });
     }
 
+    // ── private 헬퍼 ─────────────────────────────────────────────
+
+    @Async
     @Transactional
-    public void closePost(Long postId, String loginId) {
-        Post post = postRepository.findById(postId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 게시글입니다."));
-        if (!post.getMember().getLoginId().equals(loginId)) {
-            throw new IllegalArgumentException("게시글 작성자만 마감할 수 있습니다.");
-        }
-        post.closeManual();
+    public void increaseViewCountAsync(Long postId) {
+        postRepository.findById(postId).ifPresent(Post::increaseViewCount);
     }
 
-    // ── private 헬퍼 ─────────────────────────────────────────────
+    private PostResponse toPostResponse(Post post, Member member) {
+        boolean isApplied = participantRepository.existsByPostAndMember(post, member);
+        boolean isLiked = postLikeRepository.existsByPostAndMember(post, member);
+        long likeCount = postLikeRepository.countByPostId(post.getId());
+        return PostResponse.of(post, isApplied, isLiked, likeCount);
+    }
 
     private Member findActiveMember(String loginId) {
         return memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
@@ -169,12 +209,5 @@ public class PostService {
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 게시글입니다."));
         if (post.isDeleted()) throw new IllegalArgumentException("삭제된 게시글입니다.");
         return post;
-    }
-
-    private PostResponse toPostResponse(Post post, Member member) {
-        boolean isApplied = participantRepository.existsByPostAndMember(post, member);
-        boolean isLiked = postLikeRepository.existsByPostAndMember(post, member);
-        long likeCount = postLikeRepository.countByPostId(post.getId());
-        return PostResponse.of(post, isApplied, isLiked, likeCount);
     }
 }

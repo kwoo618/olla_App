@@ -5,6 +5,22 @@ import { useIsFocused, useFocusEffect } from '@react-navigation/native';
 import FastImage from 'react-native-fast-image';
 import { useManagerCommunityData, getProfileImage, getFullImageUrl, formatCommentDate } from '../ts/ManagerCommunity';
 
+const ProfileImage = ({ uri, style }: { uri?: string | null; style: any }) => {
+  const [hasError, setHasError] = React.useState(false);
+  const fullUri = getFullImageUrl(uri);
+  if (fullUri && !hasError) {
+    return (
+      <FastImage
+        source={{ uri: fullUri, priority: FastImage.priority.normal }}
+        style={style}
+        onError={() => setHasError(true)}
+        defaultSource={require('../assets/profile.png')}
+      />
+    );
+  }
+  return <Image source={require('../assets/profile.png')} style={[style, { backgroundColor: 'transparent' }]} />;
+};
+
 const ManagerCommunity = ({ route, navigation }: any) => {
   const isFocused = useIsFocused();
   const currentFilter = route?.params?.filter || 'ALL';
@@ -159,10 +175,7 @@ const ManagerCommunity = ({ route, navigation }: any) => {
         {selectedUser && (
           <View style={styles.detailContainer}>
             <View style={styles.detailProfileWrapper}>
-              {getFullImageUrl(selectedUser.profileImageUrl)
-                ? <FastImage source={{ uri: getFullImageUrl(selectedUser.profileImageUrl)!, priority: FastImage.priority.normal }} style={styles.profileBig} />
-                : <Image source={require('../assets/profile.png')} style={styles.profileBig} />
-              }
+              <ProfileImage uri={selectedUser.profileImageUrl} style={styles.profileBig} />
               <Text style={styles.profileName}>{selectedUser.name}</Text>
             </View>
             <View style={styles.detailInfoBox}>
@@ -243,10 +256,7 @@ const ManagerCommunity = ({ route, navigation }: any) => {
               
               <View style={styles.cardFooter}>
                 <TouchableOpacity style={styles.profileRow} onPress={() => openDetailModal(post.writerId, post.author)}>
-                  {getFullImageUrl(post.profileImageUrl)
-                    ? <FastImage source={{ uri: getFullImageUrl(post.profileImageUrl)!, priority: FastImage.priority.normal }} style={[styles.profileImg, isPast && { opacity: 0.5 }]} />
-                    : <Image source={require('../assets/profile.png')} style={[styles.profileImg, isPast && { opacity: 0.5 }]} />
-                  }
+                  <ProfileImage uri={post.profileImageUrl} style={[styles.profileImg, isPast && { opacity: 0.5 }]} />
                   <Text style={[styles.authorText, isPast && { color: '#666666' }]}>{post.author}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={{ marginRight: 10 }} onPress={() => openPostDetail(post)}>
@@ -347,10 +357,8 @@ const ManagerCommunity = ({ route, navigation }: any) => {
                     <View key={`comment-${parent.id}`}>
                       <View style={styles.commentItem}>
                         <TouchableOpacity onPress={() => openDetailModal(parent.writerId, parent.writerName)}>
-                          {getFullImageUrl(parent.profileImageUrl)
-                          ? <FastImage source={{ uri: getFullImageUrl(parent.profileImageUrl)!, priority: FastImage.priority.normal }} style={styles.commentAvatar} />
-                          : <Image source={require('../assets/profile.png')} style={styles.commentAvatar} />
-                        }</TouchableOpacity>
+                          <ProfileImage uri={parent.profileImageUrl} style={styles.commentAvatar} />
+                        </TouchableOpacity>
                         <View style={styles.commentContentArea}>
                           <View style={styles.commentHeaderLine}>
                             <TouchableOpacity onPress={() => openDetailModal(parent.writerId, parent.writerName)}><Text style={styles.commentAuthorName}>{parent.writerName}</Text></TouchableOpacity>
@@ -370,10 +378,7 @@ const ManagerCommunity = ({ route, navigation }: any) => {
                         return (
                           <View key={`reply-${child.id}`} style={[styles.commentItem, styles.childCommentItem]}>
                             <TouchableOpacity onPress={() => openDetailModal(child.writerId, child.writerName)}>
-                              {getFullImageUrl(child.profileImageUrl)
-                                ? <FastImage source={{ uri: getFullImageUrl(child.profileImageUrl)!, priority: FastImage.priority.normal }} style={styles.commentAvatar} />
-                                : <Image source={require('../assets/profile.png')} style={styles.commentAvatar} />
-                              }
+                              <ProfileImage uri={child.profileImageUrl} style={styles.commentAvatar} />
                             </TouchableOpacity>
                             <View style={styles.commentContentArea}>
                               <View style={styles.commentHeaderLine}>
@@ -395,20 +400,26 @@ const ManagerCommunity = ({ route, navigation }: any) => {
               </ScrollView>
 
               <View style={styles.commentInputWrapper}>
-                {replyingTo && (
-                  <View style={styles.replyingToIndicator}>
-                    <Text style={styles.replyingToIndicatorText}>{replyingTo.name}님에게 답글 남기는 중</Text>
-                    <TouchableOpacity onPress={() => setReplyingTo(null)}><Text style={styles.replyingCancelText}>✕</Text></TouchableOpacity>
+                {/* ✅ 마감된 게시글은 댓글 입력 차단 */}
+                {selectedPost?.isPast ? (
+                  <View style={styles.closedCommentBlock}>
+                    <Text style={styles.closedCommentText}>마감된 게시글에는 댓글을 작성할 수 없습니다.</Text>
                   </View>
+                ) : (
+                  <>
+                    {replyingTo && (
+                      <View style={styles.replyingToIndicator}>
+                        <Text style={styles.replyingToIndicatorText}>{replyingTo.name}님에게 답글 남기는 중</Text>
+                        <TouchableOpacity onPress={() => setReplyingTo(null)}><Text style={styles.replyingCancelText}>✕</Text></TouchableOpacity>
+                      </View>
+                    )}
+                    <View style={styles.commentInputRow}>
+                      <ProfileImage uri={myProfileImageUrl} style={styles.commentInputAvatar} />
+                      <TextInput style={styles.commentTextInput} placeholder="댓글을 작성해주세요." placeholderTextColor="#666" value={commentInput} onChangeText={setCommentInput} multiline />
+                      <TouchableOpacity onPress={submitComment}><Text style={[styles.commentSubmitBtn, commentInput.trim() ? { color: '#A1BE44' } : undefined]}>등록</Text></TouchableOpacity>
+                    </View>
+                  </>
                 )}
-                <View style={styles.commentInputRow}>
-                  {getFullImageUrl(myProfileImageUrl)
-                    ? <FastImage source={{ uri: getFullImageUrl(myProfileImageUrl)!, priority: FastImage.priority.normal }} style={styles.commentInputAvatar} />
-                    : <Image source={require('../assets/profile.png')} style={styles.commentInputAvatar} />
-                  }
-                  <TextInput style={styles.commentTextInput} placeholder="댓글을 작성해주세요." placeholderTextColor="#666" value={commentInput} onChangeText={setCommentInput} multiline />
-                  <TouchableOpacity onPress={submitComment}><Text style={[styles.commentSubmitBtn, commentInput.trim() ? { color: '#A1BE44' } : undefined]}>등록</Text></TouchableOpacity>
-                </View>
               </View>
             </Animated.View>
           </KeyboardAvoidingView>
@@ -641,6 +652,9 @@ const styles = StyleSheet.create({
   commentInputAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#444', marginRight: 10 },
   commentTextInput: { flex: 1, backgroundColor: '#000000', color: '#ffffff', fontSize: 15, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, minHeight: 40, maxHeight: 100 },
   commentSubmitBtn: { color: '#666666', fontSize: 16, fontWeight: 'bold', marginLeft: 12, paddingVertical: 10 },
+  
+  closedCommentBlock: { paddingVertical: 14, alignItems: 'center', justifyContent: 'center' },
+  closedCommentText: { color: '#666666', fontSize: 15, fontWeight: 'bold' },
 });
 
 export default ManagerCommunity;

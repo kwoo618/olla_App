@@ -12,6 +12,7 @@ import com.olla.olla_climbing.domain.member.entity.MemberDetail;
 import com.olla.olla_climbing.domain.member.entity.MemberPrivacy;
 import com.olla.olla_climbing.domain.member.entity.NotificationSetting;
 import com.olla.olla_climbing.domain.member.repository.MemberRepository;
+import com.olla.olla_climbing.domain.ranking.repository.RankingRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -29,6 +30,7 @@ public class MemberService {
     private final MemberRepository memberRepository;
     private final GoogleSheetsService googleSheetsService;
     private final ImageService imageService;
+    private final RankingRepository rankingRepository;
 
     @Transactional(readOnly = true)
     public boolean existsByLoginId(String loginId) {
@@ -47,7 +49,6 @@ public class MemberService {
 
     @Transactional(readOnly = true)
     public MemberResponse getMyInfo(String loginId) {
-        // N+1 방지를 위해 detail, privacy, notificationSetting 을 한 번의 쿼리로 함께 조회
         Member member = memberRepository.findWithDetailsByLoginId(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
         return MemberResponse.from(member);
@@ -58,18 +59,15 @@ public class MemberService {
         Member member = memberRepository.findByLoginId(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
 
-        member.updateBasicInfo(request.getName(), request.getPhone());
-        member.updateAdditionalInfo(request.getGender(), resolveBirthDate(member, request));
+        // 해당 정보 수정은 관리자에게 요청해야 함
         updateProfileImage(member, request.getProfileImageUrl());
         updateMemberDetail(member, request);
         updateMemberPrivacy(member, request);
 
-        memberRepository.save(member);
+        Member savedMember = memberRepository.save(member);
+        googleSheetsService.syncNewMember(savedMember);
 
-        // 이름/연락처/암벽화사이즈 등 시트에 반영되는 정보가 변경될 수 있으므로 동기화
-        googleSheetsService.syncNewMember(member);
-
-        return MemberResponse.from(member);
+        return MemberResponse.from(savedMember);
     }
 
     @Transactional
@@ -77,8 +75,12 @@ public class MemberService {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
 
+        // 관리자만 이름, 전화번호, 성별, 생년월일 수정 가능
         member.updateBasicInfo(request.getName(), request.getPhone());
         member.updateAdditionalInfo(request.getGender(), resolveBirthDate(member, request));
+
+        // 관리자 수정 시 구글 시트도 동기화
+        googleSheetsService.syncNewMember(member);
 
         log.info("관리자 회원 정보 수정 완료: memberId={}", memberId);
     }
@@ -97,7 +99,15 @@ public class MemberService {
     public void withdrawMember(String loginId) {
         Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않거나 이미 탈퇴한 회원입니다."));
+
+        Long memberId = member.getId();
+
+        rankingRepository.deleteAllByMember(member);
+
         member.withdraw();
+
+        googleSheetsService.updateMembershipStatus(memberId, "EXPIRED");
+
         log.info("회원 탈퇴 완료: loginId={}", loginId);
     }
 
@@ -105,7 +115,13 @@ public class MemberService {
     public void withdrawMemberById(Long memberId) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
+
+        rankingRepository.deleteAllByMember(member);
+
         member.withdraw();
+
+        googleSheetsService.updateMembershipStatus(memberId, "EXPIRED");
+
         log.info("관리자 강제 탈퇴 완료: memberId={}", memberId);
     }
 
@@ -114,7 +130,7 @@ public class MemberService {
         Member member = memberRepository.findByLoginIdAndIsDeletedFalse(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("회원 정보가 없습니다."));
         member.updateFcmToken(fcmToken);
-        memberRepository.save(member); // 더티체킹 의존 대신 명시적 저장
+        memberRepository.save(member);
     }
 
     @Transactional(readOnly = true)
@@ -123,7 +139,6 @@ public class MemberService {
                 .orElseThrow(() -> new IllegalArgumentException("회원 정보가 없습니다."));
 
         if (member.getNotificationSetting() == null) {
-            // 설정이 없으면 기본값(전체 ON) 반환
             return NotificationResponse.builder()
                     .isGlobalNotificationOn(true)
                     .isMembershipNotificationOn(true)
@@ -164,7 +179,6 @@ public class MemberService {
         return imageUrl;
     }
 
-    // 오프라인(비밀번호 없음) 회원은 중복으로 보지 않아 O2O 연동 가입 허용
     @Transactional(readOnly = true)
     public boolean isPhoneAvailableForSignup(String phone) {
         return memberRepository.findByPhone(phone)
