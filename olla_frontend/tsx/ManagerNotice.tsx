@@ -1,15 +1,47 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, Modal, TextInput, KeyboardAvoidingView, Platform,
-  ActivityIndicator, Animated, RefreshControl, TouchableWithoutFeedback, Dimensions,
+  ActivityIndicator, Animated, RefreshControl, TouchableWithoutFeedback, Dimensions, BackHandler
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { useManagerNotice, formatDate, resolveImageUrl } from '../ts/ManagerNotice';
 import FastImage from 'react-native-fast-image';
 
 const ManagerNotice = ({ route, navigation }: any) => {
   const n = useManagerNotice(navigation, route);
+
+  // 💡 관리자 모드 종료 커스텀 모달 상태 추가
+  const [isExitModalVisible, setExitModalVisible] = useState(false);
+
+  // 💡 하드웨어 뒤로가기 제어 로직 (모달 순차적 닫기 -> 관리자 모드 종료 커스텀 모달)
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        // 열려있는 모달이 있으면 해당 모달만 닫기 (순서 중요: 최상위 레이어부터 닫기)
+        if (isExitModalVisible) { setExitModalVisible(false); return true; }
+        if (n.imageViewerVisible) { n.closeImageViewer(); return true; }
+        if (n.resultModalVisible) { n.closeResultModal(); return true; }
+        if (n.isDeleteModalVisible) { n.cancelDelete(); return true; }
+        if (n.isDetailModalVisible) { n.closeDetailModal(); return true; }
+        if (n.isWriteModalVisible) { n.closeWriteModal(); return true; }
+
+        // 기본 화면일 때 관리자 모드 종료 알림창 띄우기
+        setExitModalVisible(true);
+        return true;
+      };
+
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      return () => backHandler.remove();
+    }, [
+      isExitModalVisible, n.imageViewerVisible, n.resultModalVisible, 
+      n.isDeleteModalVisible, n.isDetailModalVisible, n.isWriteModalVisible,
+      n.closeImageViewer, n.closeResultModal, n.cancelDelete, 
+      n.closeDetailModal, n.closeWriteModal
+    ])
+  );
 
   if (n.loading) {
     return (
@@ -89,6 +121,29 @@ const ManagerNotice = ({ route, navigation }: any) => {
               <TouchableOpacity style={styles.resultModalBtn} onPress={n.closeResultModal}>
                 <Text style={styles.resultModalBtnText}>확인</Text>
               </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        {/* ─── 💡 관리자 모드 종료 확인 커스텀 모달 (통일된 디자인 및 MY 이동) ─── */}
+        <Modal visible={isExitModalVisible} transparent animationType="fade" onRequestClose={() => setExitModalVisible(false)}>
+          <View style={styles.centerModalOverlay}>
+            <View style={styles.deleteModalBox}>
+              <Text style={styles.deleteTitle}>관리자 모드를 종료하시겠습니까?</Text>
+              <View style={styles.deleteBtnRow}>
+                <TouchableOpacity 
+                  style={styles.btnYes} 
+                  onPress={() => {
+                    setExitModalVisible(false);
+                    navigation.navigate('MY'); // 💡 앱 종료 대신 MY 페이지로 이동
+                  }}
+                >
+                  <Text style={styles.btnTextBlack}>예</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.btnNo} onPress={() => setExitModalVisible(false)}>
+                  <Text style={styles.btnTextWhite}>아니오</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </Modal>
@@ -288,7 +343,7 @@ const ManagerNotice = ({ route, navigation }: any) => {
           </View>
         </Modal>
 
-        {/* 삭제 확인 모달 */}
+        {/* ─── 삭제 확인 모달 ─── */}
         <Modal visible={n.isDeleteModalVisible} animationType="fade" transparent onRequestClose={n.cancelDelete}>
           <View style={styles.centerModalOverlay}>
             <View style={styles.deleteModalBox}>
@@ -415,6 +470,7 @@ const styles = StyleSheet.create({
   detailImage:    { width: '100%', height: 200, borderRadius: 12, marginBottom: 20, backgroundColor: '#2C2C2C' },
   detailContent:  { color: '#dddddd', fontSize: 16, lineHeight: 26, marginBottom: 30 },
 
+  // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
   resultModalBox: { width: '90%', backgroundColor: '#212121', borderRadius: 25, paddingVertical: 45, paddingHorizontal: 35, alignItems: 'center' },
   resultModalTitle: { fontSize: 28, fontWeight: 'bold', marginBottom: 8 },

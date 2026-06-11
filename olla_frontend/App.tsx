@@ -457,7 +457,7 @@ const AppContent = () => {
         )}
       </NavigationContainer>
 
-      {/* ✅ 세션 만료 모달 */}
+      {/* ─── 💡 세션 만료 모달 (OLLA 표준 규격 적용) ─── */}
       <Modal visible={sessionExpiredVisible} animationType="fade" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.deleteModalBox}>
@@ -470,11 +470,11 @@ const AppContent = () => {
         </View>
       </Modal>
 
-      {/* 관리자 모드 종료 모달 */}
+      {/* ─── 💡 관리자 모드 종료 모달 (OLLA 표준 규격 적용) ─── */}
       <Modal visible={isExitModalVisible} animationType="fade" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.deleteModalBox}>
-            <Text style={styles.modalTitle}>관리자 모드를 종료하시겠습니까?</Text>
+            <Text style={styles.modalMessage}>관리자 모드를 종료하시겠습니까?</Text>
             <View style={styles.modalBtnRow}>
               <TouchableOpacity style={styles.btnYes} onPress={() => { setExitModalVisible(false); navigationRef.navigate('MY'); }}>
                 <Text style={styles.btnTextBlack}>예</Text>
@@ -523,14 +523,35 @@ const styles = StyleSheet.create({
   bottomNavItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   navIcon: { width: 20, height: 20, marginBottom: 3, resizeMode: 'contain' },
   bottomNavText: { fontSize: 9, color: '#7D7D7D' },
+  
+  // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  deleteModalBox: { width: 300, backgroundColor: '#212121', borderRadius: 16, padding: 25, alignItems: 'center' },
-  modalTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold', marginBottom: 10 },
-  modalMessage: { color: '#999999', fontSize: 15, textAlign: 'center', marginBottom: 25, lineHeight: 22 },
+  deleteModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
+    alignItems: 'center' 
+  },
+  modalTitle: { 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    marginBottom: 8,
+    textAlign: 'center'
+  },
+  modalMessage: { 
+    color: '#ffffff', 
+    fontSize: 18, 
+    fontWeight: 'bold', 
+    marginBottom: 25, 
+    textAlign: 'center', 
+    lineHeight: 24 
+  },
   modalBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  btnConfirm: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
-  btnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginRight: 5 },
-  btnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginLeft: 5 },
-  btnTextBlack: { color: '#000000', fontSize: 16, fontWeight: 'bold' },
-  btnTextWhite: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
+  btnConfirm: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
+  btnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 },
+  btnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 },
+  btnTextBlack: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
+  btnTextWhite: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
 });

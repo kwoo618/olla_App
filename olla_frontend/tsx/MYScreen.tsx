@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Image, Switch, Modal, Animated, TextInput, ActivityIndicator, Linking, RefreshControl,
-  Platform, TouchableWithoutFeedback, KeyboardAvoidingView
+  Platform, TouchableWithoutFeedback, KeyboardAvoidingView, BackHandler
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useMyPage, getFullImageUrl } from '../ts/MY';
 import FastImage from 'react-native-fast-image';
 
@@ -12,7 +13,7 @@ const MYScreen = ({ navigation }: any) => {
     loading, refreshing, onRefresh, isAdmin, calcAgeFromBirth,
     memInfo, hasMembership, memSummaryText, isMembershipExpanded, setIsMembershipExpanded,
     profileData, setProfileData, profileToggles, setProfileToggles,
-    notiState, updateMultipleNotiSettings, // 💡 수정됨
+    notiState, updateMultipleNotiSettings,
     resultModalVisible, setResultModalVisible, resultModalConfig,
     isProfileModalVisible, openProfileModal, closeProfileModal, profileHeightAnim, profilePanResponder,
     isImageUploading, handleSelectImage, handleSaveProfile,
@@ -24,7 +25,40 @@ const MYScreen = ({ navigation }: any) => {
     isAdminModalVisible, setAdminModalVisible
   } = useMyPage(navigation);
 
-  // ─── 💡 동기화 컨트롤러: 모든 스위치를 한 번에 변경 & 조건부 푸시 알림 동기화 ───
+  // 💡 앱 종료 커스텀 모달 상태 추가
+  const [isExitModalVisible, setExitModalVisible] = useState(false);
+
+  // 💡 안드로이드 하드웨어 뒤로가기 제어 (모달 닫기 우선 -> 앱 종료 커스텀 모달)
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        // 열려있는 모달이 있으면 해당 모달만 닫기
+        if (isProfileModalVisible) { closeProfileModal(); return true; }
+        if (isChangePwModalVisible) { setChangePwModalVisible(false); return true; }
+        if (isAdminModalVisible) { setAdminModalVisible(false); return true; }
+        if (isLogoutModalVisible) { setLogoutModalVisible(false); return true; }
+        if (isDeleteModalVisible) { setDeleteModalVisible(false); return true; }
+        if (resultModalVisible) { setResultModalVisible(false); return true; }
+        if (isPauseModalVisible) { closePauseModal(); return true; }
+        if (isContactModalVisible) { closeContactModal(); return true; }
+        if (isExitModalVisible) { setExitModalVisible(false); return true; }
+
+        // 기본 화면일 때 커스텀 디자인의 앱 종료 모달 띄우기
+        setExitModalVisible(true);
+        return true;
+      };
+
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      return () => backHandler.remove();
+    }, [
+      isProfileModalVisible, isChangePwModalVisible, isAdminModalVisible,
+      isLogoutModalVisible, isDeleteModalVisible, resultModalVisible,
+      isPauseModalVisible, isContactModalVisible, isExitModalVisible, closeProfileModal, closePauseModal, closeContactModal
+    ])
+  );
+
+  // ─── 동기화 컨트롤러: 모든 스위치를 한 번에 변경 & 조건부 푸시 알림 동기화 ───
   const handleNotificationSwitch = (key: string) => {
     if (key === 'isGlobalNotificationOn') {
       const targetState = !notiState.isGlobalNotificationOn;
@@ -37,63 +71,50 @@ const MYScreen = ({ navigation }: any) => {
         isNoticeNotificationOn: targetState,
       };
 
-      // 딜레이 없이 5개의 설정을 한 번에 요청 및 UI 반영
       updateMultipleNotiSettings(batchUpdate);
     } else {
-      // 일반 하위 알림들은 개별적으로 토글
       const targetState = !(notiState as any)[key];
       
-      // 💡 현재 토글된 값을 반영하여 변경 후의 전체 하위 알림 상태 예측
       const nextState = {
         isMembershipNotificationOn: notiState.isMembershipNotificationOn,
         isActivityNotificationOn: notiState.isActivityNotificationOn,
         isCrewNotificationOn: notiState.isCrewNotificationOn,
         isNoticeNotificationOn: notiState.isNoticeNotificationOn,
-        [key]: targetState, // 이번에 변경된 값 덮어쓰기
+        [key]: targetState, 
       };
 
-      // 하위 알림 4개가 모두 켜져 있는지 확인
       const isAllOn = 
         nextState.isMembershipNotificationOn && 
         nextState.isActivityNotificationOn && 
         nextState.isCrewNotificationOn && 
         nextState.isNoticeNotificationOn;
 
-      // 하위 알림 4개가 모두 꺼져 있는지 확인
-      const isAllOff = 
-        !nextState.isMembershipNotificationOn && 
-        !nextState.isActivityNotificationOn && 
-        !nextState.isCrewNotificationOn && 
-        !nextState.isNoticeNotificationOn;
-
       const batchUpdate: any = { [key]: targetState };
 
-      // 조건에 따라 최상단 푸시 알림 스위치도 같이 업데이트
-      if (isAllOn) {
-        batchUpdate.isGlobalNotificationOn = true;
-      } else if (isAllOff) {
-        batchUpdate.isGlobalNotificationOn = false;
-      }
+      // 💡 수정됨: 하위 알림이 4개 모두 켜져있으면 전체 푸시 켜짐, 하나라도 꺼지면 꺼짐
+      batchUpdate.isGlobalNotificationOn = isAllOn;
 
       updateMultipleNotiSettings(batchUpdate);
     }
   };
 
-  const renderEditField = (title: string, fieldKey: string, unit: string) => {
+  const renderEditField = (title: string, fieldKey: string, unit: string, showToggle: boolean = true) => {
     const toggleKey = `show${fieldKey.charAt(0).toUpperCase() + fieldKey.slice(1)}`;
     return (
       <View style={styles.editFieldWrapper}>
         <View style={styles.editFieldHeader}>
           <Text style={styles.editFieldTitle}>{title}</Text>
-          <View style={styles.toggleWrapper}>
-            <Text style={styles.toggleLabel}>{profileToggles[toggleKey] ? '공개' : '비공개'}</Text>
-            <Switch
-              trackColor={{ false: '#333333', true: '#A1BE44' }}
-              thumbColor={'#ffffff'}
-              onValueChange={() => setProfileToggles({ ...profileToggles, [toggleKey]: !profileToggles[toggleKey] })}
-              value={profileToggles[toggleKey]}
-            />
-          </View>
+          {showToggle && (
+            <View style={styles.toggleWrapper}>
+              <Text style={styles.toggleLabel}>{profileToggles[toggleKey] ? '공개' : '비공개'}</Text>
+              <Switch
+                trackColor={{ false: '#333333', true: '#A1BE44' }}
+                thumbColor={'#ffffff'}
+                onValueChange={() => setProfileToggles({ ...profileToggles, [toggleKey]: !profileToggles[toggleKey] })}
+                value={profileToggles[toggleKey]}
+              />
+            </View>
+          )}
         </View>
         <View style={styles.editInputBox}>
           <TextInput
@@ -284,6 +305,14 @@ const MYScreen = ({ navigation }: any) => {
                     </View>
                   </TouchableOpacity>
 
+                  <TouchableOpacity 
+                    style={styles.resetProfileBtn} 
+                    onPress={() => setProfileData({ ...profileData, profileImageUrl: null })} // 이미지를 기본 상태로 변경
+                    disabled={isImageUploading}
+                  >
+                    <Text style={styles.resetProfileBtnText}>기본 프로필로 돌아가기</Text>
+                  </TouchableOpacity>
+
                   <View style={styles.editFieldWrapper}>
                     <View style={styles.editFieldHeader}><Text style={styles.editFieldTitle}>이름</Text></View>
                     <View style={styles.editInputBox}>
@@ -313,10 +342,6 @@ const MYScreen = ({ navigation }: any) => {
                   <View style={styles.editFieldWrapper}>
                     <View style={styles.editFieldHeader}>
                       <Text style={styles.editFieldTitle}>나이(만)</Text>
-                      <View style={styles.toggleWrapper}>
-                        <Text style={styles.toggleLabel}>{profileToggles.showAge ? '공개' : '비공개'}</Text>
-                        <Switch trackColor={{ false: '#333333', true: '#A1BE44' }} thumbColor={'#ffffff'} onValueChange={() => setProfileToggles({ ...profileToggles, showAge: !profileToggles.showAge })} value={profileToggles.showAge} />
-                      </View>
                     </View>
                     <View style={styles.editInputBox}>
                       <TextInput style={[styles.editInput, { color: '#999999' }]} value={calcAgeFromBirth(profileData.birthDate)} editable={false} />
@@ -324,7 +349,7 @@ const MYScreen = ({ navigation }: any) => {
                     </View>
                   </View>
 
-                  {renderEditField('전화번호', 'phone', '')}
+                  {renderEditField('전화번호', 'phone', '', false)}
                   {renderEditField('키', 'height', 'cm')}
                   {renderEditField('몸무게', 'weight', 'kg')}
                   {renderEditField('팔길이', 'arm', 'cm')}
@@ -395,6 +420,29 @@ const MYScreen = ({ navigation }: any) => {
             <View style={styles.centerBtnRow}>
               <TouchableOpacity style={[styles.centerBtnYes, { backgroundColor: '#FF4D4D' }]} onPress={executeDeleteAccount}><Text style={[styles.centerBtnYesText, { color: '#ffffff' }]}>삭제하기</Text></TouchableOpacity>
               <TouchableOpacity style={styles.centerBtnNo} onPress={() => setDeleteModalVisible(false)}><Text style={styles.centerBtnNoText}>취소</Text></TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 💡 앱 종료 확인 커스텀 모달 (통일된 디자인) */}
+      <Modal visible={isExitModalVisible} transparent animationType="fade" onRequestClose={() => setExitModalVisible(false)}>
+        <View style={styles.centerModalOverlay}>
+          <View style={styles.centerModalBox}>
+            <Text style={styles.centerModalText}>앱을 종료하시겠습니까?</Text>
+            <View style={styles.centerBtnRow}>
+              <TouchableOpacity
+                              style={styles.centerBtnYes}
+                              onPress={() => {
+                                setExitModalVisible(false);
+                                setTimeout(() => {
+                                  BackHandler.exitApp();
+                                }, 100);
+                              }}
+                            >
+                              <Text style={styles.centerBtnYesText}>예</Text>
+                            </TouchableOpacity>
+              <TouchableOpacity style={styles.centerBtnNo} onPress={() => setExitModalVisible(false)}><Text style={styles.centerBtnNoText}>아니오</Text></TouchableOpacity>
             </View>
           </View>
         </View>
@@ -504,10 +552,25 @@ const styles = StyleSheet.create({
   
   // 프로필 편집
   profileEditContainer: { backgroundColor: '#262626', borderRadius: 16, padding: 20 },
-  profileImageEditWrapper: { alignSelf: 'center', width: 90, height: 90, borderRadius: 45, backgroundColor: '#444444', marginBottom: 25, overflow: 'hidden' },
+  profileImageEditWrapper: { alignSelf: 'center', width: 90, height: 90, borderRadius: 45, backgroundColor: '#444444', marginBottom: 12, overflow: 'hidden' },
   profileImageLarge: { width: '100%', height: '100%' },
   profileImageEditOverlay: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: 'rgba(0,0,0,0.6)', paddingVertical: 4, alignItems: 'center' },
   profileImageEditText: { color: '#ffffff', fontSize: 12, fontWeight: 'bold' },
+
+  resetProfileBtn: { 
+    alignSelf: 'center', 
+    backgroundColor: '#A1BE44', 
+    paddingVertical: 8, 
+    paddingHorizontal: 15, 
+    borderRadius: 15, 
+    marginBottom: 25 
+  },
+  resetProfileBtnText: { 
+    color: '#000000', 
+    fontSize: 14, 
+    fontWeight: 'bold' 
+  },
+
   editFieldWrapper: { marginBottom: 20 },
   editFieldHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   editFieldTitle: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },

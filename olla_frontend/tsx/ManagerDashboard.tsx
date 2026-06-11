@@ -1,12 +1,12 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, ActivityIndicator, Modal, Platform, PermissionsAndroid,
   RefreshControl, Animated, Dimensions, PanResponder,
-  TouchableWithoutFeedback, TextInput, KeyboardAvoidingView,
+  TouchableWithoutFeedback, TextInput, KeyboardAvoidingView, BackHandler
 } from 'react-native';
 import { Camera } from 'react-native-camera-kit';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused, useFocusEffect } from '@react-navigation/native';
 import {
   useManagerDashboard,
   DAY_LABELS, DAY_SELECT_OPTIONS, getHourRange,
@@ -35,9 +35,46 @@ const ManagerDashboard = ({ navigation }: any) => {
   const dash = useManagerDashboard(navigation);
   const isFocused = useIsFocused(); 
 
-  // ─── 상세 모달 애니메이션 ────────────────────────────────────────────────
+  // 💡 관리자 모드 종료 커스텀 모달 상태
+  const [isExitModalVisible, setExitModalVisible] = useState(false);
+
+  // ─── 상세 모달 애니메이션 (위로 이동) ────────────────────────────────────────────────
   const detailHeightAnim = useRef(new Animated.Value(0)).current;
   const currentSnap      = useRef(DETAIL_MODAL_H);
+
+  const closeDetailModal = useCallback(() => {
+    Animated.timing(detailHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
+      dash.setDetailVisible(false);
+      dash.setSelectedUser(null);
+    });
+  }, [detailHeightAnim, dash]);
+
+  // 💡 안드로이드 뒤로가기 통합 제어
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        // 모달 순차적 닫기 처리
+        if (isExitModalVisible) { setExitModalVisible(false); return true; }
+        if (dash.resultModalVisible) { dash.closeResultModal(); return true; }
+        if (dash.isDeleteModalVisible) { dash.setDeleteModalVisible(false); return true; }
+        if (dash.isSendAlertModalVisible) { dash.setSendAlertModalVisible(false); return true; }
+        if (dash.isScannerVisible) { dash.closeScanner(); return true; }
+        if (dash.isDetailVisible) { closeDetailModal(); return true; }
+
+        // 모두 닫혀있는 기본 상태일 때 관리자 종료 커스텀 모달 띄우기
+        setExitModalVisible(true);
+        return true;
+      };
+
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      return () => backHandler.remove();
+    }, [
+      isExitModalVisible, dash.resultModalVisible, dash.isDeleteModalVisible, 
+      dash.isSendAlertModalVisible, dash.isScannerVisible, dash.isDetailVisible, 
+      dash.closeResultModal, dash.setDeleteModalVisible, dash.setSendAlertModalVisible, 
+      dash.closeScanner, closeDetailModal
+    ])
+  );
 
   const detailPanResponder = useRef(
     PanResponder.create({
@@ -67,13 +104,6 @@ const ManagerDashboard = ({ navigation }: any) => {
     dash.setDetailVisible(true);
     detailHeightAnim.setValue(0);
     Animated.spring(detailHeightAnim, { toValue: DETAIL_MODAL_H, friction: 8, tension: 45, useNativeDriver: false }).start();
-  };
-
-  const closeDetailModal = () => {
-    Animated.timing(detailHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
-      dash.setDetailVisible(false);
-      dash.setSelectedUser(null);
-    });
   };
 
   const openScannerWithPermission = async () => {
@@ -484,6 +514,29 @@ const ManagerDashboard = ({ navigation }: any) => {
         <Image source={require('../assets/Camera.png')} style={styles.fabIcon} />
       </TouchableOpacity>
 
+      {/* ─── 💡 관리자 모드 종료 확인 모달 (OLLA 표준 규격 적용) ─────────────────────── */}
+      <Modal visible={isExitModalVisible} transparent animationType="fade" onRequestClose={() => setExitModalVisible(false)}>
+        <View style={styles.deleteModalOverlay}>
+          <View style={styles.deleteModalBox}>
+            <Text style={styles.deleteModalMessage}>관리자 모드를 종료하시겠습니까?</Text>
+            <View style={styles.deleteBtnRow}>
+              <TouchableOpacity 
+                style={styles.deleteBtnYes} 
+                onPress={() => { 
+                  setExitModalVisible(false); 
+                  navigation.navigate('MY'); 
+                }}
+              >
+                <Text style={styles.deleteBtnYesText}>예</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.deleteBtnNo} onPress={() => setExitModalVisible(false)}>
+                <Text style={styles.deleteBtnNoText}>아니오</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* ─── 결과 모달 ─────────────────────────────────────────────────────── */}
       <Modal visible={dash.resultModalVisible} animationType="fade" transparent onRequestClose={dash.closeResultModal}>
         <View style={styles.resultModalOverlay}>
@@ -769,6 +822,7 @@ const styles = StyleSheet.create({
   closeFullBtn:         { backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 10 },
   closeFullBtnText:     { color: '#000', fontWeight: 'bold', fontSize: 18 },
 
+  // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
   resultModalBox:     { width: '90%', backgroundColor: '#212121', borderRadius: 25, paddingVertical: 45, paddingHorizontal: 35, alignItems: 'center' },
   resultModalTitle:   { fontSize: 28, fontWeight: 'bold', marginBottom: 8 },

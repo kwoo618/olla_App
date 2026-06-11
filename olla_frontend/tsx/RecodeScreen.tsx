@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, 
-  Modal, Animated, RefreshControl, TouchableWithoutFeedback, TextInput 
+  Modal, Animated, RefreshControl, TouchableWithoutFeedback, TextInput, BackHandler 
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRecode, MAX_HOLDS, BASE_SCORES, rainbowColors, formatTime } from '../ts/Recode'; 
 
@@ -25,6 +26,38 @@ const RecodeScreen = ({ route, navigation }: any) => {
     isConsecutiveModalVisible, openConsecutiveModal, closeConsecutiveModal, consecutiveHeightAnim, consecutivePanResponder,
     selectedConsecutiveList, setSelectedConsecutiveList, removeConsecutiveItem, showDetails, setShowDetails, displayTotalScore, handleSaveConsecutiveRecord,
   } = useRecode({ route, navigation });
+
+  // 💡 앱 종료 커스텀 모달 상태 추가
+  const [isExitModalVisible, setExitModalVisible] = useState(false);
+
+  // 💡 안드로이드 하드웨어 뒤로가기 제어 (모달 닫기 우선 -> 앱 종료 커스텀 모달)
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        // 열려있는 모달/팝업이 있으면 해당 창만 닫기
+        if (resultModalVisible) { closeResultModal(); return true; }
+        if (isDeleteModalVisible) { cancelDelete(); return true; }
+        if (isRecordModalVisible) { closeRecordModal(); return true; }
+        if (showTimerFinishConfirm) { setShowTimerFinishConfirm(false); return true; }
+        if (isEnduranceModalVisible) { closeEnduranceModal(); return true; }
+        if (isConsecutiveModalVisible) { closeConsecutiveModal(); return true; }
+        if (isExitModalVisible) { setExitModalVisible(false); return true; }
+
+        // 기본 화면일 때 커스텀 디자인의 앱 종료 모달 띄우기
+        setExitModalVisible(true);
+        return true;
+      };
+
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      return () => backHandler.remove();
+    }, [
+      resultModalVisible, isDeleteModalVisible, isRecordModalVisible, showTimerFinishConfirm,
+      isEnduranceModalVisible, isConsecutiveModalVisible, isExitModalVisible,
+      closeResultModal, cancelDelete, closeRecordModal, setShowTimerFinishConfirm,
+      closeEnduranceModal, closeConsecutiveModal
+    ])
+  );
 
   const renderMapNode = (item: any) => {
     if (item.type === 'text') return <Text key={item.id} style={[styles.mapAbsText, { left: item.x - 15, top: item.y - 8 }]}>{item.val}</Text>;
@@ -95,7 +128,7 @@ const RecodeScreen = ({ route, navigation }: any) => {
                   <Text style={styles.recordHoldsLeft}>{item.current ?? 0} / {MAX_HOLDS[item.color] ?? item.total}번</Text>
                   <Text style={[
                     styles.recordStatus, 
-                    item.status === '완료' ? styles.statusSuccess : (item.status === '진행중' ? styles.statusIng : styles.statusNone)
+                    item.status === '완등' ? styles.statusSuccess : (item.status === '진행중' ? styles.statusIng : styles.statusNone)
                   ]}>{item.status || '-'}</Text>
                 </View>
               ))}
@@ -300,7 +333,7 @@ const RecodeScreen = ({ route, navigation }: any) => {
             </View>
             {showTimerFinishConfirm && (
               <View style={styles.confirmTimerOverlay}>
-                {/* 💡 타이머 완료 확인 모달 - OLLA 표준 적용 */}
+                {/* 타이머 완료 확인 모달 - OLLA 표준 적용 */}
                 <View style={styles.deleteModalBox}>
                   <Text style={[styles.deleteModalText, { color: '#A1BE44' }]}>기록 확인</Text>
                   <Text style={styles.deleteModalMessage}>{formatTime(timerSeconds)} 기록으로 저장됩니다.</Text>
@@ -434,6 +467,31 @@ const RecodeScreen = ({ route, navigation }: any) => {
               </TouchableOpacity>
             </ScrollView>
           </Animated.View>
+        </View>
+      </Modal>
+
+      {/* ─── 💡 앱 종료 확인 커스텀 모달 (통일된 디자인) ─── */}
+      <Modal visible={isExitModalVisible} transparent animationType="fade" onRequestClose={() => setExitModalVisible(false)}>
+        <View style={styles.deleteModalOverlay}>
+          <View style={styles.deleteModalBox}>
+            <Text style={styles.deleteModalMessage}>앱을 종료하시겠습니까?</Text>
+            <View style={styles.deleteBtnRow}>
+              <TouchableOpacity
+                style={styles.deleteBtnYes}
+                onPress={() => {
+                  setExitModalVisible(false);
+                  setTimeout(() => {
+                    BackHandler.exitApp();
+                    }, 100);
+                }}
+              >
+                <Text style={styles.deleteBtnYesText}>예</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.deleteBtnNo} onPress={() => setExitModalVisible(false)}>
+                <Text style={styles.deleteBtnNoText}>아니오</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
 

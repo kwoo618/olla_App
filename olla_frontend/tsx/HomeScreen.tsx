@@ -1,5 +1,6 @@
-import React, { useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, RefreshControl, Dimensions, PanResponder, TouchableWithoutFeedback } from 'react-native';
+import React, { useRef, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, RefreshControl, Dimensions, PanResponder, TouchableWithoutFeedback, BackHandler } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import QRCode from 'react-native-qrcode-svg';
 import Svg, { Circle } from 'react-native-svg';
 import { HomeData } from '../ts/Home';
@@ -13,6 +14,9 @@ const HomeScreen = ({ navigation }: any) => {
 
   const scrollViewRef = useRef<ScrollView>(null);
   const [activeModal, setActiveModal] = useState<string | null>(null);
+  
+  // 💡 앱 종료 커스텀 모달 상태 추가
+  const [isExitModalVisible, setExitModalVisible] = useState(false);
 
   const { height: SCREEN_HEIGHT } = Dimensions.get('window');
   const QR_MODAL_HEIGHT = SCREEN_HEIGHT * 0.55;
@@ -60,6 +64,37 @@ const HomeScreen = ({ navigation }: any) => {
     });
   };
 
+  // 💡 안드로이드 하드웨어 뒤로가기 제어 로직 (커스텀 앱 종료 모달 적용)
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        // 1. 결과 모달창이 열려있으면 닫기
+        if (resultModalVisible) {
+          closeResultModal();
+          return true;
+        }
+        // 2. 바텀 시트(QR, 회원권) 모달이 열려있으면 닫기
+        if (activeModal !== null) {
+          closeModal();
+          return true;
+        }
+        // 3. 앱 종료 확인 모달이 열려있으면 닫기
+        if (isExitModalVisible) {
+          setExitModalVisible(false);
+          return true;
+        }
+        
+        // 4. 기본 화면일 때 앱 종료 커스텀 확인 알림창 띄우기
+        setExitModalVisible(true);
+        return true;
+      };
+
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      return () => backHandler.remove();
+    }, [resultModalVisible, activeModal, isExitModalVisible, closeResultModal])
+  );
+
   const isCountType = membership.membershipType === '일일권';
   const hasMembership = isCountType ? membership.remainingCount > 0 : !!(membership.startDate && membership.endDate);
   const isTodayAttended = viewDate.getFullYear() === today.getFullYear() && viewDate.getMonth() === today.getMonth() && attendedDates.includes(today.getDate());
@@ -82,10 +117,8 @@ const HomeScreen = ({ navigation }: any) => {
     else if (title === '지구력 랭킹') navigation.navigate('Ranking', { targetTab: '지구력' });
   };
 
-  // 💡 원형 그래프용: 형광색 = 남은 비율 (줄어들수록 다 써감)
-  // 💡 가로 바용: 형광색 = 사용한 비율 (늘어날수록 다 써감)
-  let circleRemainPercentage = 0; // 원형: 남은 비율 → 형광색
-  let barUsedPercentage = 0;      // 가로 바: 사용한 비율 → 형광색
+  let circleRemainPercentage = 0;
+  let barUsedPercentage = 0;
 
   if (!isCountType && hasMembership && membership.startDate && membership.endDate) {
     const s = new Date(membership.startDate); s.setHours(0, 0, 0, 0);
@@ -94,8 +127,8 @@ const HomeScreen = ({ navigation }: any) => {
     const remainDays = Math.max(0, membership.remainingDays);
     const usedDays = totalDays - remainDays;
 
-    circleRemainPercentage = Math.min((remainDays / totalDays) * 100, 100); // 남은 비율
-    barUsedPercentage = Math.min((usedDays / totalDays) * 100, 100);        // 사용한 비율
+    circleRemainPercentage = Math.min((remainDays / totalDays) * 100, 100);
+    barUsedPercentage = Math.min((usedDays / totalDays) * 100, 100);
   } else if (isCountType && hasMembership) {
     circleRemainPercentage = 100;
     barUsedPercentage = 0;
@@ -104,7 +137,6 @@ const HomeScreen = ({ navigation }: any) => {
   const circleText = membership.isLoading ? '' : hasMembership ? (isCountType ? `${membership.remainingCount}회` : `D-${membership.remainingDays}`) : membership.hasFuture ? '예정' : '없음';
   const membershipCardTitle = hasMembership ? membership.membershipType : membership.hasFuture ? '시작 예정' : '이용권';
 
-  // 달력 렌더링용 변수들
   const currentYear = viewDate.getFullYear();
   const currentMonth = viewDate.getMonth();
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
@@ -112,7 +144,6 @@ const HomeScreen = ({ navigation }: any) => {
   const days: (number | null)[] = [...Array(firstDayOfMonth).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
   const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
 
-  // 💡 원형 프로그레스 바: 형광색이 남은 비율만큼 표시
   const circleRadius = 21;
   const circleCircumference = 2 * Math.PI * circleRadius;
   const strokeDashoffset = circleCircumference * (1 - circleRemainPercentage / 100);
@@ -144,9 +175,7 @@ const HomeScreen = ({ navigation }: any) => {
             <View style={styles.circleGraphContainer}>
               {hasMembership && circleRemainPercentage > 0 ? (
                 <Svg width="50" height="50" viewBox="0 0 50 50">
-                  {/* 회색 배경 원 (사용한 만큼 회색으로 보임) */}
                   <Circle cx="25" cy="25" r="21" stroke="#444444" strokeWidth="4" fill="none" />
-                  {/* 형광색 = 남은 비율 */}
                   <Circle
                     cx="25" cy="25" r="21"
                     stroke="#A1BE44"
@@ -238,6 +267,31 @@ const HomeScreen = ({ navigation }: any) => {
         </View>
       </ScrollView>
 
+      {/* 💡 앱 종료 확인 커스텀 모달 (통일된 디자인) */}
+      <Modal visible={isExitModalVisible} transparent animationType="fade" onRequestClose={() => setExitModalVisible(false)}>
+        <View style={styles.centerModalOverlay}>
+          <View style={styles.centerModalBox}>
+            <Text style={styles.centerModalText}>앱을 종료하시겠습니까?</Text>
+            <View style={styles.centerBtnRow}>
+              <TouchableOpacity
+                style={styles.centerBtnYes}
+                onPress={() => {
+                  setExitModalVisible(false);
+                  setTimeout(() => {
+                    BackHandler.exitApp();
+                  }, 100);
+                }}
+              >
+                <Text style={styles.centerBtnYesText}>예</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.centerBtnNo} onPress={() => setExitModalVisible(false)}>
+                <Text style={styles.centerBtnNoText}>아니오</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={closeResultModal}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -283,7 +337,6 @@ const HomeScreen = ({ navigation }: any) => {
                     <View style={styles.memCardHeader}>
                       <Text style={styles.memCardTitle}>{isCountType ? '잔여 횟수' : (membership.hasFuture && !hasMembership ? '시작 예정' : '남은 이용 기간')}</Text>
                     </View>
-                    {/* 💡 가로 프로그레스 바: 형광색 = 사용한 만큼 */}
                     {!isCountType && hasMembership && (
                       <View style={styles.progressBarBg}>
                         <View style={[styles.progressBarFill, { width: `${barUsedPercentage}%` }]} />
@@ -364,13 +417,12 @@ const styles = StyleSheet.create({
   daysGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start' },
   dayCell: { width: '14.28%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center', marginBottom: 5 },
   
-  // 💡 수정된 부분: 네모나게 보이는 현상을 막고 완벽한 원형으로 강제 고정
   dayCircle: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   dayText: { color: '#ffffff', fontSize: 16, fontWeight: '500' },
   sundayText: { color: '#FF6B6B' },
   todayCircle: { backgroundColor: '#A1BE44', borderRadius: 17, overflow: 'hidden' },
   todayText: { color: '#1A1A1A', fontWeight: 'bold' },
-  selectedCircle: { backgroundColor: '#5DADE2', borderRadius: 17, overflow: 'hidden' }, // 선택된 날짜 원형 강제
+  selectedCircle: { backgroundColor: '#5DADE2', borderRadius: 17, overflow: 'hidden' },
   selectedText: { color: '#000000', fontWeight: 'bold' },
   attendedCircle: { backgroundColor: '#3A3A3A', borderWidth: 1.5, borderColor: '#A1BE44', borderRadius: 17, overflow: 'hidden' },
   attendedText: { color: '#A1BE44', fontWeight: 'bold' },
@@ -396,6 +448,30 @@ const styles = StyleSheet.create({
   memHalfTitle: { color: '#ffffff', fontSize: 17, fontWeight: '600', marginBottom: 12 },
   memHalfValueGreen: { color: '#A1BE44', fontSize: 28, fontWeight: 'bold' },
   memHalfValueWhite: { color: '#ffffff', fontSize: 28, fontWeight: 'bold' },
+
+  // 💡 추가된 커스텀 모달 스타일
+  centerModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  centerModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
+    alignItems: 'center' 
+  },
+  centerModalText: { 
+    color: '#ffffff', 
+    fontSize: 18, 
+    fontWeight: 'bold', 
+    marginBottom: 25,
+    lineHeight: 24,
+    textAlign: 'center'
+  },
+  centerBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  centerBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 },
+  centerBtnYesText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
+  centerBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 },
+  centerBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
 
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   resultModalBox: { width: '90%', backgroundColor: '#212121', borderRadius: 25, paddingVertical: 45, paddingHorizontal: 35, alignItems: 'center' },

@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   ScrollView, Image, Modal, KeyboardAvoidingView, Platform,
   ActivityIndicator, Animated, RefreshControl,
-  TouchableWithoutFeedback, Keyboard
+  TouchableWithoutFeedback, Keyboard, BackHandler,
+  Dimensions
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useIsFocused, useFocusEffect } from '@react-navigation/native';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import {
   useManagerTicket,
@@ -14,6 +16,7 @@ import {
   calculateDDay,
   getToday,
 } from '../ts/ManagerTicket';
+import FastImage from 'react-native-fast-image';
 
 LocaleConfig.locales['kr'] = {
   monthNames:      ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'],
@@ -45,6 +48,44 @@ const calendarTheme = {
 const ManagerTicket = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
   const t      = useManagerTicket(navigation);
+
+  // 💡 관리자 모드 종료 커스텀 모달 상태
+  const [isExitModalVisible, setExitModalVisible] = useState(false);
+
+  // 1. 애니메이션 Refs
+  const detailHeightAnim = useRef(new Animated.Value(0)).current;
+  const currentDetailSnap = useRef(Dimensions.get('window').height * 0.65);
+  
+  const addHeightAnim = useRef(new Animated.Value(0)).current;
+  const alertHeightAnim = useRef(new Animated.Value(0)).current;
+
+  // 2. 하드웨어 뒤로가기 제어 로직 (모달 순차적 닫기 -> 관리자 모드 종료 커스텀 모달)
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        // 열려있는 모달이 있으면 해당 모달만 닫기
+        if (isExitModalVisible) { setExitModalVisible(false); return true; }
+        if (t.resultModalVisible) { t.setResultModalVisible(false); return true; }
+        if (t.confirmModalVisible) { t.setConfirmModalVisible(false); return true; }
+        if (t.isStartCalendarVisible) { t.closeStartCalendar(); return true; }
+        if (t.isEditModalVisible) { t.closeEditModal(); return true; }
+        if (t.isManageVisible) { t.closeManageModal(); return true; }
+
+        // 모두 닫혀있는 기본 화면일 때 관리자 모드 종료 알림창 띄우기
+        setExitModalVisible(true);
+        return true;
+      };
+
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      return () => backHandler.remove();
+    }, [
+      isExitModalVisible, t.resultModalVisible, t.confirmModalVisible,
+      t.isStartCalendarVisible, t.isEditModalVisible, t.isManageVisible,
+      t.setResultModalVisible, t.setConfirmModalVisible,
+      t.closeStartCalendar, t.closeEditModal, t.closeManageModal
+    ])
+  );
 
   if (t.loading) {
     return (
@@ -142,7 +183,6 @@ const ManagerTicket = ({ navigation }: any) => {
         )}
       </ScrollView>
 
-      {/* 💡 수정된 부분: Dashboard와 동일하게 인라인 스타일(bottom: Math.max...) 제거 */}
       <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={t.openEditModal}>
         <Text style={styles.fabText}>+ 이용권 등록</Text>
       </TouchableOpacity>
@@ -183,6 +223,29 @@ const ManagerTicket = ({ navigation }: any) => {
             }}>
               <Text style={styles.resultModalBtnText}>확인</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── 💡 관리자 모드 종료 모달 (OLLA 표준 규격 적용 및 MY 이동 처리) ─────────────────────────────────────────────────────── */}
+      <Modal visible={isExitModalVisible} transparent animationType="fade" onRequestClose={() => setExitModalVisible(false)}>
+        <View style={styles.resultModalOverlay}>
+          <View style={styles.deleteModalBox}>
+            <Text style={styles.deleteModalText}>관리자 모드를 종료하시겠습니까?</Text>
+            <View style={styles.deleteBtnRow}>
+              <TouchableOpacity 
+                style={styles.btnYes} 
+                onPress={() => {
+                  setExitModalVisible(false);
+                  navigation.navigate('MY'); // 💡 앱 종료 대신 MY 페이지로 이동
+                }}
+              >
+                <Text style={styles.btnTextBlack}>예</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.btnNo} onPress={() => setExitModalVisible(false)}>
+                <Text style={styles.btnTextWhite}>아니오</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -368,7 +431,6 @@ const ManagerTicket = ({ navigation }: any) => {
                     </View>
 
                     <View style={styles.horizontalDateRow}>
-                      {/* 💡 회원권일 때만 '시작일' 표시되도록 조건부 렌더링 추가 */}
                       {t.editType === 'PERIOD' && (
                         <>
                           <View style={styles.dateBlock}>
@@ -387,9 +449,7 @@ const ManagerTicket = ({ navigation }: any) => {
                         </>
                       )}
 
-                      {/* 개월 수 or 횟수 입력 */}
                       <View style={styles.dateBlock}>
-                        {/* 💡 일일권일 때 텍스트 가운데 정렬 스타일 추가 */}
                         <Text style={[styles.inputLabel, t.editType === 'COUNT' && { textAlign: 'center', marginLeft: 0 }]}>
                           {t.editType === 'PERIOD' ? '개월 수' : '횟수 (기본 1회)'}
                         </Text>
@@ -405,7 +465,6 @@ const ManagerTicket = ({ navigation }: any) => {
                     </View>
 
                     <View style={styles.dateHelperRow}>
-                      {/* 💡 회원권일 때만 초기화 버튼 표시 */}
                       {t.editType === 'PERIOD' && t.editStart && t.editStart !== getToday() ? (
                         <TouchableOpacity onPress={() => t.setEditStart('')}>
                           <Text style={styles.resetDateText}>↺ 오늘로 초기화</Text>
@@ -417,7 +476,6 @@ const ManagerTicket = ({ navigation }: any) => {
                       ) : <View />}
                     </View>
 
-                    {/* 폼 내부에 에러 텍스트 직접 표시 */}
                     {t.formError ? <Text style={styles.formErrorText}>{t.formError}</Text> : null}
 
                     <TouchableOpacity style={styles.submitBtn} onPress={t.handleGrantTicket}>
@@ -492,7 +550,6 @@ const styles = StyleSheet.create({
   badgeTextHolding:  { color: '#FF9900',  fontSize: 13, fontWeight: 'bold' },
   badgeTextPartial:  { color: '#4DA6FF',  fontSize: 13, fontWeight: 'bold' },
 
-  // 💡 수정된 부분: Dashboard와 위치(bottom 15, right 20)를 동일하게 맞춤
   fab: { 
     position: 'absolute', 
     bottom: 15, 
@@ -591,62 +648,49 @@ const styles = StyleSheet.create({
   closeFullBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
 
   // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
-  
-  // 1. 시스템 결과 알림 모달
-  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
   resultModalBox: { 
     width: '90%', 
     backgroundColor: '#212121', 
-    borderRadius: 25,          // 💡 표준 모서리 곡률 적용
-    paddingVertical: 45,       // 💡 상하 여백 확장 적용
-    paddingHorizontal: 35,     // 💡 좌우 여백 적용
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
     alignItems: 'center' 
   },
   resultModalTitle: { 
-    fontSize: 28,              // 💡 타이틀 크기 통일
+    fontSize: 28, 
     fontWeight: 'bold', 
-    marginBottom: 8            // 💡 타이틀 하단 여백 통일
+    marginBottom: 8 
   },
   resultModalMessage: { 
     color: '#ffffff', 
-    fontSize: 18,              // 💡 본문 크기 통일
-    fontWeight: 'bold',        // 💡 굵기 적용
-    marginBottom: 25,          // 💡 하단 여백 적용
+    fontSize: 18, 
+    fontWeight: 'bold',
+    marginBottom: 25, 
     textAlign: 'center', 
     lineHeight: 24 
   },
-  resultModalBtn: { 
-    width: '100%', 
-    backgroundColor: '#A1BE44', 
-    paddingVertical: 16,       // 💡 버튼 여백 통일
-    borderRadius: 12, 
-    alignItems: 'center' 
-  },
-  resultModalBtnText: { 
-    color: '#000000', 
-    fontSize: 18, 
-    fontWeight: 'bold' 
-  },
+  resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
+  resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
 
-  // 2. 삭제 확인용 더블 버튼 모달 (deleteModalBox)
   deleteModalBox: { 
     width: '90%', 
     backgroundColor: '#212121', 
-    borderRadius: 25,          // 💡 표준 모서리 곡률
-    paddingVertical: 45,       // 💡 상하 패딩 통일
-    paddingHorizontal: 35,     // 💡 좌우 패딩 통일
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
     alignItems: 'center' 
   },
   deleteModalText: { 
     color: '#ffffff', 
-    fontSize: 18,              // 💡 본문 크기 통일
-    fontWeight: 'bold',        // 💡 굵기 통일
+    fontSize: 18, 
+    fontWeight: 'bold',
     marginBottom: 25, 
     textAlign: 'center', 
     lineHeight: 26 
   },
   deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  btnYes: { flex: 1, paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 }, 
+  btnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 }, 
   btnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 }, 
   btnTextBlack: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
   btnTextWhite: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
