@@ -75,6 +75,7 @@ const RankingScreen = ({ route }: any) => {
       <Text style={styles.detailValue}>{value}{value !== '-' ? unit : ''}</Text>
     </View>
   );
+
   if (hasValidMembership === null) {
     return (
       <View style={[styles.background, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -82,6 +83,7 @@ const RankingScreen = ({ route }: any) => {
       </View>
     );
   }
+
   if (!hasValidMembership) {
     return (
       <View style={[styles.background, { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 }]}>
@@ -95,6 +97,7 @@ const RankingScreen = ({ route }: any) => {
       </View>
     );
   }
+
   return (
     <View style={styles.background}>
       <ScrollView
@@ -220,7 +223,12 @@ const RankingScreen = ({ route }: any) => {
                       <Text style={[styles.rankTypeText, { color: item.type === '왕복' ? '#0058CC' : '#FF2528' }]}>{item.type}</Text>
                       <View style={styles.rankInfoBottomRow}>
                         <Text style={[styles.rankColorText, { color: item.colorHex === '#000000' ? '#FFFFFF' : item.colorHex }]}>{item.colorName}</Text>
-                        <Text style={styles.rankHoldText}>{item.hold}번</Text>
+                        
+                        {/* 💡 초보벽 수정 부분: item.isClear 값이 true 이면 '완등'으로 표시 */}
+                        <Text style={[styles.rankHoldText, item.isClear && { color: '#A1BE44' }]}>
+                          {item.isClear ? '완등' : `${item.hold}번`}
+                        </Text>
+
                       </View>
                     </>
                   )}
@@ -280,14 +288,14 @@ const RankingScreen = ({ route }: any) => {
             <Text style={styles.centerModalText}>앱을 종료하시겠습니까?</Text>
             <View style={styles.centerBtnRow}>
               <TouchableOpacity
-                              style={styles.centerBtnYes}
-                              onPress={() => {
-                                setExitModalVisible(false);
-                                setTimeout(() => {
-                                  BackHandler.exitApp();
-                                }, 100);
-                              }}
-                            >
+                style={styles.centerBtnYes}
+                onPress={() => {
+                  setExitModalVisible(false);
+                  setTimeout(() => {
+                    BackHandler.exitApp();
+                  }, 100);
+                }}
+              >
                 <Text style={styles.centerBtnYesText}>예</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.centerBtnNo} onPress={() => setExitModalVisible(false)}>
