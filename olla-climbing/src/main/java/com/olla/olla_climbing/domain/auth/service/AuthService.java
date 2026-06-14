@@ -177,6 +177,37 @@ public class AuthService {
                 });
     }
 
+    // ── 토큰 재발급 ──────────────────────────────────────────────
+
+    @Transactional
+    public TokenResponse reissue(String refreshToken) {
+        // 1. 토큰 자체가 유효한지 검증 (서명, 만료 여부)
+        if (!jwtTokenProvider.validateToken(refreshToken)) {
+            throw new IllegalArgumentException("유효하지 않거나 만료된 리프레시 토큰입니다. 다시 로그인해주세요.");
+        }
+
+        // 2. DB에 저장된 토큰과 일치하는지 확인 (탈취/재사용 방지)
+        RefreshToken savedToken = refreshTokenRepository.findByToken(refreshToken)
+                .orElseThrow(() -> new IllegalArgumentException("등록되지 않은 리프레시 토큰입니다. 다시 로그인해주세요."));
+
+        Member member = memberRepository.findByLoginId(savedToken.getLoginId())
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
+
+        // 3. 새 AccessToken + RefreshToken 발급 (RefreshToken Rotation)
+        String newAccessToken = jwtTokenProvider.createAccessToken(member.getLoginId(), member.getRole().name());
+        String newRefreshToken = jwtTokenProvider.createRefreshToken(member.getLoginId());
+
+        savedToken.updateToken(newRefreshToken);
+
+        return TokenResponse.builder()
+                .grantType("Bearer")
+                .accessToken(newAccessToken)
+                .refreshToken(newRefreshToken)
+                .role(member.getRole().name())
+                .name(member.getName())
+                .build();
+    }
+
     // ── 아이디/비밀번호 찾기 ──────────────────────────────────────
 
     @Transactional(readOnly = true)
