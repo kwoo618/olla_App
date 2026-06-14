@@ -7,13 +7,20 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import { API_BASE_URL } from '../src/constants/Config';
 import messaging from '@react-native-firebase/messaging';
 
-// 이미지 경로 
+// 이미지 경로
 export const getFullImageUrl = (path: string | null | undefined): string | null => {
-  if (!path || path === 'null' || path === 'undefined') return null;
+  if (!path || path.trim() === '' || path === 'null' || path === 'undefined') return null;
   if (path.startsWith('http') || path.startsWith('file:') || path.startsWith('content:')) return path;
   const domain = API_BASE_URL.replace('/api/v1', '');
   const formattedPath = path.startsWith('/') ? path : `/${path}`;
   return `${domain}${formattedPath}`;
+};
+
+// 이미지 소스 헬퍼 — uri가 없으면 profile.png로 fallback
+export const getProfileImageSource = (url: string | null | undefined) => {
+  const resolved = getFullImageUrl(url);
+  if (resolved) return { uri: resolved };
+  return require('../assets/profile.png');
 };
 
 const getTodayDate = () => {
@@ -59,12 +66,12 @@ export const useMyPage = (navigation: any) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
-  
+
   const [isImageUploading, setIsImageUploading] = useState(false);
   const [isMembershipExpanded, setIsMembershipExpanded] = useState(false);
-  
+
   const [resultModalVisible, setResultModalVisible] = useState(false);
-  const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info' as 'info'|'success'|'error' });
+  const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info' as 'info' | 'success' | 'error' });
 
   const [isProfileModalVisible, setProfileModalVisible] = useState(false);
   const [isPauseModalVisible, setPauseModalVisible] = useState(false);
@@ -85,6 +92,7 @@ export const useMyPage = (navigation: any) => {
   const [profileToggles, setProfileToggles] = useState<any>({ showPhone: true, showAge: true, showHeight: true, showWeight: true, showArm: true, showShoe: true });
   const [notiState, setNotiState] = useState<NotiState>(DEFAULT_NOTI_STATE);
 
+  const pendingImageUri = useRef<string | null>(null);
   const pendingImageAsset = useRef<any>(null);
   const originalImageUrl = useRef<string>('');
 
@@ -99,7 +107,6 @@ export const useMyPage = (navigation: any) => {
   const profileHeightAnim = useRef(new Animated.Value(0)).current;
   const currentProfileSnap = useRef(FULL_SCREEN);
 
-  // 드래그로 프로필 모달 닫기
   const profilePanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -136,7 +143,6 @@ export const useMyPage = (navigation: any) => {
     setResultModalVisible(true);
   };
 
-  // 알림 설정 로드
   const fetchNotiSettings = useCallback(async () => {
     try {
       const userToken = await AsyncStorage.getItem('userToken');
@@ -151,7 +157,6 @@ export const useMyPage = (navigation: any) => {
     }
   }, []);
 
-  // 유저 정보 및 멤버십 로드
   const fetchMyInfo = useCallback(async () => {
     try {
       const userToken = await AsyncStorage.getItem('userToken');
@@ -163,7 +168,7 @@ export const useMyPage = (navigation: any) => {
 
       if (data) {
         setIsAdmin(String(data.role || '').toUpperCase().includes('ADMIN'));
-        
+
         const detailData = data.detail ?? data;
         const privacyData = data.privacy ?? data;
 
@@ -180,7 +185,6 @@ export const useMyPage = (navigation: any) => {
         });
 
         setProfileToggles({
-          showPhone: privacyData.isPhonePublic ?? true,
           showAge: true,
           showHeight: privacyData.isHeightPublic ?? true,
           showWeight: privacyData.isWeightPublic ?? true,
@@ -196,7 +200,7 @@ export const useMyPage = (navigation: any) => {
       if (dataList.length > 0) {
         const activeList = dataList.filter(m => m.status === 'ACTIVE' && isStarted(m.startDate));
         const futureList = dataList.filter(m => m.status === 'ACTIVE' && !isStarted(m.startDate));
-        
+
         const periodList = activeList.filter(m => {
           const t = String(m.membershipType).toUpperCase();
           return t.includes('PERIOD') || t.includes('기간') || t.includes('회원');
@@ -209,20 +213,18 @@ export const useMyPage = (navigation: any) => {
         let totalRemainingDays = 0, earliestStart = '', latestEnd = '';
         periodList.forEach(m => {
           if (m.endDate) {
-            const end = new Date(m.endDate); 
+            const end = new Date(m.endDate);
             end.setHours(0, 0, 0, 0);
             const diff = Math.round((end.getTime() - getTodayDate().getTime()) / (1000 * 60 * 60 * 24));
-            
-            if (diff >= 0) totalRemainingDays += diff; 
-            
+            if (diff >= 0) totalRemainingDays += diff;
             if (!earliestStart || m.startDate < earliestStart) earliestStart = m.startDate;
             if (!latestEnd || m.endDate > latestEnd) latestEnd = m.endDate;
           }
         });
 
         const totalRemainingCount = countList.reduce((sum, m) => sum + (m.remainingCount ?? 0), 0);
-        
-        const hasPeriod = periodList.length > 0 && totalRemainingDays >= 0; 
+
+        const hasPeriod = periodList.length > 0 && totalRemainingDays >= 0;
         const hasCount = countList.length > 0 && totalRemainingCount > 0;
         const hasFuture = futureList.length > 0;
 
@@ -233,12 +235,12 @@ export const useMyPage = (navigation: any) => {
         else if (hasFuture) { displayType = '시작 예정'; periodDisplay = `${futureList[0]?.startDate || ''} 시작 예정`; }
 
         setMemInfo({
-          type: displayType, 
+          type: displayType,
           period: periodDisplay,
           status: hasPeriod || hasCount ? '이용중' : (hasFuture ? '시작 예정' : '비회원'),
-          remainingDays: totalRemainingDays, 
+          remainingDays: totalRemainingDays,
           remainingCount: totalRemainingCount,
-          hasPeriod, hasCount, hasFuture, 
+          hasPeriod, hasCount, hasFuture,
           startDate: earliestStart, endDate: latestEnd,
         });
       } else {
@@ -251,7 +253,6 @@ export const useMyPage = (navigation: any) => {
     }
   }, [navigation]);
 
-  // 탭 복귀 시 데이터 최신화 동기화
   useEffect(() => {
     if (isFocused) {
       fetchMyInfo();
@@ -266,14 +267,12 @@ export const useMyPage = (navigation: any) => {
     setRefreshing(false);
   }, [fetchMyInfo, fetchNotiSettings]);
 
-  // ─── 💡 추가된 부분: 한 번에 여러 알림 상태를 업데이트하는 함수 ───
   const updateMultipleNotiSettings = async (newStateObject: Partial<NotiState>) => {
     const optimisticState = { ...notiState, ...newStateObject };
-    setNotiState(optimisticState); // UI에 즉시 한 번에 반영
+    setNotiState(optimisticState);
 
     try {
       const userToken = await AsyncStorage.getItem('userToken');
-      
       const requestBody = {
         ...optimisticState,
         globalNotificationOn: optimisticState.isGlobalNotificationOn,
@@ -282,16 +281,14 @@ export const useMyPage = (navigation: any) => {
         crewNotificationOn: optimisticState.isCrewNotificationOn,
         noticeNotificationOn: optimisticState.isNoticeNotificationOn,
       };
-
-      const res = await axios.patch(`${API_BASE_URL}/members/me/notifications/settings`, requestBody, { 
-        headers: { Authorization: `Bearer ${userToken}` } 
+      const res = await axios.patch(`${API_BASE_URL}/members/me/notifications/settings`, requestBody, {
+        headers: { Authorization: `Bearer ${userToken}` }
       });
-      
       const finalState = res.data.data ? { ...optimisticState, ...res.data.data } : optimisticState;
       setNotiState(finalState);
       await AsyncStorage.setItem('notiSettings', JSON.stringify(finalState));
     } catch (e) {
-      setNotiState(notiState); // 에러 발생 시 원래 상태로 롤백
+      setNotiState(notiState);
       showResultModal('오류', '알림 설정 변경에 실패했습니다.', 'error');
     }
   };
@@ -300,70 +297,66 @@ export const useMyPage = (navigation: any) => {
     launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, (response) => {
       if (response.didCancel || response.errorCode) return;
       if (response.assets && response.assets.length > 0) {
-        pendingImageAsset.current = response.assets[0];
-        setProfileData((prev: any) => ({ ...prev, profileImageUrl: response.assets![0].uri }));
+        const asset = response.assets[0];
+        pendingImageAsset.current = asset;
+        const localUri = asset.uri ?? null;
+        pendingImageUri.current = localUri;
+        setProfileData((prev: any) => ({ ...prev, profileImageUrl: localUri ?? prev.profileImageUrl }));
       }
     });
   };
 
-  // 프로필 정보 저장
   const handleSaveProfile = async () => {
     setIsImageUploading(true);
     try {
       const userToken = await AsyncStorage.getItem('userToken');
       let finalImageUrl = profileData.profileImageUrl;
-
+      
       if (pendingImageAsset.current) {
         const asset = pendingImageAsset.current;
         const formData = new FormData();
-        
-        formData.append('image', { 
+
+        formData.append('image', {
           uri: Platform.OS === 'ios' ? asset.uri?.replace('file://', '') : asset.uri,
           type: asset.type || 'image/jpeg',
           name: asset.fileName || `profile_${Date.now()}.jpg`,
         } as any);
 
-        const uploadRes = await axios.post(`${API_BASE_URL}/members/me/profile-image`, formData, { 
-          headers: { 
+        const uploadRes = await axios.post(`${API_BASE_URL}/members/me/profile-image`, formData, {
+          headers: {
             Authorization: `Bearer ${userToken}`,
-            'Content-Type': 'multipart/form-data', 
-          }, 
-          timeout: 30000 
+            'Content-Type': 'multipart/form-data',
+          },
+          timeout: 30000
         });
-        
-        finalImageUrl = uploadRes.data.data.imageUrl || uploadRes.data.data.profileImageUrl; 
+
+        finalImageUrl = uploadRes.data.data.imageUrl || uploadRes.data.data.profileImageUrl;
         pendingImageAsset.current = null;
+        pendingImageUri.current = null;
       }
 
       const requestBody = {
-        name: profileData.name, 
-        phone: profileData.phone, 
-        gender: profileData.gender, 
-        birthDate: profileData.birthDate,
         height: profileData.height ? parseFloat(profileData.height) : null,
         weight: profileData.weight ? parseFloat(profileData.weight) : null,
         armSpan: profileData.arm ? parseFloat(profileData.arm) : null,
         footSize: profileData.shoe ? parseFloat(profileData.shoe) : null,
-        age: parseInt(calcAgeFromBirth(profileData.birthDate)) || 0,
-
-        isPhonePublic: profileToggles.showPhone,
-        phonePublic: profileToggles.showPhone,
-        isPublicPhone: profileToggles.showPhone,
-        publicPhone: profileToggles.showPhone,
         isHeightPublic: profileToggles.showHeight,
         heightPublic: profileToggles.showHeight,
-        isWeightPublic: profileToggles.showWeight, 
-        weightPublic: profileToggles.showWeight, 
+        isWeightPublic: profileToggles.showWeight,
+        weightPublic: profileToggles.showWeight,
         isArmSpanPublic: profileToggles.showArm,
         armSpanPublic: profileToggles.showArm,
         isFootSizePublic: profileToggles.showShoe,
         footSizePublic: profileToggles.showShoe,
       };
 
-      await axios.patch(`${API_BASE_URL}/members/me/info`, requestBody, { 
-        headers: { Authorization: `Bearer ${userToken}` } 
+      await axios.patch(`${API_BASE_URL}/members/me/info`, requestBody, {
+        headers: { Authorization: `Bearer ${userToken}` }
       });
-      
+
+      // 저장 성공 후 원본 참조값도 갱신
+      originalImageUrl.current = finalImageUrl;
+
       setProfileData((prev: any) => ({ ...prev, profileImageUrl: finalImageUrl }));
 
       closeProfileModal(() => {
@@ -372,7 +365,8 @@ export const useMyPage = (navigation: any) => {
       });
     } catch (e: any) {
       pendingImageAsset.current = null;
-      
+      pendingImageUri.current = null;                                  
+
       if (!e.response) {
         closeProfileModal(() => setTimeout(() => showResultModal('네트워크 오류', '서버와 통신할 수 없습니다.', 'error'), 500));
         return;
@@ -394,7 +388,7 @@ export const useMyPage = (navigation: any) => {
     try {
       const userToken = await AsyncStorage.getItem('userToken');
       await axios.patch(`${API_BASE_URL}/auth/password`, { oldPassword, newPassword }, { headers: { Authorization: `Bearer ${userToken}` } });
-      
+
       setChangePwModalVisible(false);
       setOldPassword(''); setNewPassword(''); setNewPasswordConfirm(''); setPwError('');
       setTimeout(() => showResultModal('성공', '비밀번호가 성공적으로 변경되었습니다.', 'success'), Platform.OS === 'ios' ? 400 : 100);
@@ -426,7 +420,7 @@ export const useMyPage = (navigation: any) => {
       if (token && refreshToken) {
         await axios.post(`${API_BASE_URL}/auth/logout`, { refreshToken }, { headers: { Authorization: `Bearer ${token}` }, timeout: 3000 });
       }
-    } catch (e) {} finally {
+    } catch (e) { } finally {
       await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole', 'fcmToken']);
       setLogoutModalVisible(false);
       setTimeout(() => navigation.reset({ index: 0, routes: [{ name: 'Login' }] }), Platform.OS === 'ios' ? 400 : 100);
@@ -451,6 +445,7 @@ export const useMyPage = (navigation: any) => {
 
   const openProfileModal = () => {
     pendingImageAsset.current = null;
+    pendingImageUri.current = null;
     originalImageUrl.current = profileData.profileImageUrl;
     setProfileModalVisible(true);
     currentProfileSnap.current = FULL_SCREEN;
@@ -461,6 +456,7 @@ export const useMyPage = (navigation: any) => {
   const closeProfileModal = (onClosed?: () => void) => {
     if (pendingImageAsset.current) {
       pendingImageAsset.current = null;
+      pendingImageUri.current = null;
       setProfileData((prev: any) => ({ ...prev, profileImageUrl: originalImageUrl.current }));
     }
     Animated.timing(profileHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
@@ -472,7 +468,7 @@ export const useMyPage = (navigation: any) => {
   const openPauseModal = () => { setPauseModalVisible(true); Animated.timing(pauseSlideAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(); };
   const closePauseModal = () => Animated.timing(pauseSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => setPauseModalVisible(false));
   const closeContactModal = () => Animated.timing(contactSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => setContactModalVisible(false));
-  
+
   const handleInquireClick = () => {
     Animated.timing(pauseSlideAnim, { toValue: 800, duration: 250, useNativeDriver: true }).start(() => {
       setPauseModalVisible(false);
@@ -497,15 +493,16 @@ export const useMyPage = (navigation: any) => {
     loading, refreshing, onRefresh, isAdmin, calcAgeFromBirth,
     memInfo, hasMembership, memSummaryText, isMembershipExpanded, setIsMembershipExpanded,
     profileData, setProfileData, profileToggles, setProfileToggles,
-    notiState, updateMultipleNotiSettings, // 💡 단일 토글(handleNotiToggle) 대신 배치(Batch) 토글 함수 노출
+    notiState, updateMultipleNotiSettings,
     resultModalVisible, setResultModalVisible, resultModalConfig,
     isProfileModalVisible, openProfileModal, closeProfileModal, profileHeightAnim, profilePanResponder,
-    isImageUploading, handleSelectImage, handleSaveProfile,
+    isImageUploading, handleSelectImage, handleSaveProfile,                                             
     isChangePwModalVisible, setChangePwModalVisible, oldPassword, setOldPassword, newPassword, setNewPassword, newPasswordConfirm, setNewPasswordConfirm, pwError, setPwError, isChangingPw, handleChangePassword,
     isPauseModalVisible, openPauseModal, closePauseModal, handleInquireClick, pauseSlideAnim,
     isContactModalVisible, closeContactModal, contactSlideAnim,
     isLogoutModalVisible, setLogoutModalVisible, executeLogout,
     isDeleteModalVisible, setDeleteModalVisible, executeDeleteAccount,
-    isAdminModalVisible, setAdminModalVisible
+    isAdminModalVisible, setAdminModalVisible,
+    getProfileImageSource,
   };
 };

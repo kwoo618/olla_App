@@ -10,6 +10,7 @@ import FastImage from 'react-native-fast-image';
 const ManagerUser = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
   
+  // 훅에서 모든 로직과 상태를 가져옵니다.
   const {
     loading, refreshing, onRefresh,
     searchQuery, setSearchQuery, filteredAndSortedUsers,
@@ -19,6 +20,7 @@ const ManagerUser = ({ navigation }: any) => {
     
     isAddModalVisible, openAddModal, closeAddModal,
     newName, setNewName, newGender, setNewGender, newBirth, formatBirth, newPhone, formatPhone,
+    newHeight, setNewHeight, newWeight, setNewWeight,
     isFormValid, handleRegister,
     
     isDetailVisible, selectedUser, openDetailModal, closeDetailModal, detailHeightAnim, detailPanResponder,
@@ -62,10 +64,7 @@ const ManagerUser = ({ navigation }: any) => {
               const types = memberships.map((m: any) => resolveMembershipType(m.membershipType, m.startDate, m.endDate, m.remainingCount));
               const validTypes = types.filter((t: string) => t !== '없음' && t !== '이용권');
 
-              if (validTypes.includes('시작 예정')) {
-                // 시작 예정이 하나라도 있으면 우선 표시
-                displayType = '시작 예정'; badgeStyle = styles.badgeUpcoming; badgeTextColor = '#F0A500';
-              } else if (validTypes.includes('회원권') && validTypes.includes('일일권')) {
+              if (validTypes.includes('회원권') && validTypes.includes('일일권')) {
                 displayType = '회원/일일'; badgeStyle = styles.badgePeriod; badgeTextColor = '#A1BE44';
               } else if (validTypes.includes('회원권')) {
                 displayType = '회원권'; badgeStyle = styles.badgePeriod; badgeTextColor = '#A1BE44';
@@ -75,9 +74,7 @@ const ManagerUser = ({ navigation }: any) => {
             } else {
               const memType = user.membershipType || memberInfo.membershipType || '';
               const resolved = resolveMembershipType(memType, user.startDate, user.endDate, user.remainingCount);
-              if (resolved === '시작 예정') {
-                displayType = '시작 예정'; badgeStyle = styles.badgeUpcoming; badgeTextColor = '#F0A500';
-              } else if (resolved === '회원권') { 
+              if (resolved === '회원권') { 
                 displayType = '회원권'; badgeStyle = styles.badgePeriod; badgeTextColor = '#A1BE44'; 
               } else if (resolved === '일일권') { 
                 displayType = '일일권'; badgeStyle = styles.badgeCount; badgeTextColor = '#009DFF'; 
@@ -87,10 +84,15 @@ const ManagerUser = ({ navigation }: any) => {
             return (
               <View key={`u-${memberId || index}`} style={styles.tableRow}>
                 <TouchableOpacity style={[styles.colName, styles.profileNameContainer]} onPress={() => openDetailModal(memberId, targetName, targetPhone)}>
-                  {getFullImageUrl(memberInfo.profileImageUrl)
-                    ? <FastImage source={{ uri: getFullImageUrl(memberInfo.profileImageUrl)!, priority: FastImage.priority.normal }} style={styles.listProfileImg} />
-                    : <Image source={require('../assets/profile.png')} style={styles.listProfileImg} />
-                  }
+                  <FastImage
+                    source={
+                      getFullImageUrl(memberInfo.profileImageUrl)
+                        ? { uri: getFullImageUrl(memberInfo.profileImageUrl)!, priority: FastImage.priority.normal }
+                        : require('../assets/profile.png')
+                    }
+                    style={styles.listProfileImg}
+                    defaultSource={require('../assets/profile.png')}
+                  />
                   <Text style={styles.rowTextBold} numberOfLines={1}>{targetName}</Text>
                 </TouchableOpacity>
                 
@@ -113,6 +115,7 @@ const ManagerUser = ({ navigation }: any) => {
         )}
       </ScrollView>
 
+      {/* 💡 수정된 부분: Dashboard와 위치(bottom 15, right 20)를 동일하게 맞춤 */}
       <TouchableOpacity style={styles.fab} onPress={openAddModal}>
         <Text style={styles.fabText}>+ 회원 등록</Text>
       </TouchableOpacity>
@@ -139,7 +142,6 @@ const ManagerUser = ({ navigation }: any) => {
                   <View style={styles.detailRow}><Text style={styles.detailLabel}>이름</Text><Text style={styles.detailValue}>{selectedUser.name}</Text></View>
                   <View style={styles.detailRow}><Text style={styles.detailLabel}>성별</Text><Text style={styles.detailValue}>{selectedUser.gender}</Text></View>
                   <View style={styles.detailRow}><Text style={styles.detailLabel}>연락처</Text><Text style={styles.detailValue}>{selectedUser.phone}</Text></View>
-                  <View style={styles.detailRow}><Text style={styles.detailLabel}>키/몸무게</Text><Text style={styles.detailValue}>{selectedUser.height}cm / {selectedUser.weight}kg</Text></View>
                 </View>
               )}
               <TouchableOpacity 
@@ -184,11 +186,11 @@ const ManagerUser = ({ navigation }: any) => {
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>성별</Text>
                   <View style={styles.genderRow}>
-                    <TouchableOpacity style={[styles.genderBtn, newGender === '남자' && styles.genderBtnActive]} onPress={() => setNewGender('남자')}>
-                      <Text style={[styles.genderText, newGender === '남자' && styles.genderTextActive]}>남자</Text>
+                    <TouchableOpacity style={[styles.genderBtn, newGender === '남' && styles.genderBtnActive]} onPress={() => setNewGender('남')}>
+                      <Text style={[styles.genderText, newGender === '남' && styles.genderTextActive]}>남자</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.genderBtn, newGender === '여자' && styles.genderBtnActive]} onPress={() => setNewGender('여자')}>
-                      <Text style={[styles.genderText, newGender === '여자' && styles.genderTextActive]}>여자</Text>
+                    <TouchableOpacity style={[styles.genderBtn, newGender === '여' && styles.genderBtnActive]} onPress={() => setNewGender('여')}>
+                      <Text style={[styles.genderText, newGender === '여' && styles.genderTextActive]}>여자</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -310,10 +312,10 @@ const styles = StyleSheet.create({
   badgePeriod: { backgroundColor: 'rgba(161, 190, 68, 0.2)' },
   badgeCount: { backgroundColor: 'rgba(0, 157, 255, 0.2)' },
   badgeInactive: { backgroundColor: '#333' },
-  badgeUpcoming: { backgroundColor: 'rgba(240, 165, 0, 0.2)' }, // 💡 시작 예정 배지 (주황)
   badgeText: { fontSize: 11, fontWeight: 'bold', color: '#A1BE44' },
   trashIcon: { width: 20, height: 20, tintColor: '#FF4D4D' },
   
+  // 💡 수정된 부분: Dashboard의 FAB 위치와 완전히 동일하게 통일 (디자인은 유지)
   fab: { 
     position: 'absolute', 
     bottom: 15, 
@@ -349,6 +351,7 @@ const styles = StyleSheet.create({
   closeFullBtn: { backgroundColor: '#A1BE44', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 10 },
   closeFullBtnText: { color: '#000', fontWeight: 'bold', fontSize: 18 },
 
+  // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
   resultModalBox: { 
     width: '90%', 

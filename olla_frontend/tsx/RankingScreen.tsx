@@ -1,18 +1,26 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, RefreshControl, 
-  Modal, Animated, TouchableWithoutFeedback 
+  Modal, Animated, TouchableWithoutFeedback, ActivityIndicator
 } from 'react-native';
 import { useRanking, getFullImageUrl, getSectionColor, getRankColor, colors } from '../ts/Ranking';
 import FastImage from 'react-native-fast-image';
 
 // ─────────────────────────── 프로필 이미지 컴포넌트 ───────────────────────────
 const ProfileImage = ({ uri, style }: { uri?: string | null; style: any }) => {
+  const [hasError, setHasError] = useState(false);
   const fullUri = getFullImageUrl(uri);
-  if (fullUri) {
-    return <FastImage source={{ uri: fullUri, priority: FastImage.priority.normal }} style={style} />;
+  if (fullUri && !hasError) {
+    return (
+      <FastImage
+        source={{ uri: fullUri, priority: FastImage.priority.normal }}
+        style={style}
+        onError={() => setHasError(true)}
+        defaultSource={require('../assets/profile.png')}
+      />
+    );
   }
-  return <Image source={require('../assets/profile.png')} style={style} />;
+  return <Image source={require('../assets/profile.png')} style={[style, { backgroundColor: 'transparent' }]} />;
 };
 
 const RankingScreen = ({ route }: any) => {
@@ -21,7 +29,7 @@ const RankingScreen = ({ route }: any) => {
     mainTab, setMainTab,
     colorTab, setColorTab,
     myNickname, myCurrentRank, myProfileImageUrl,
-    filteredList,
+    filteredList, hasValidMembership,
     isDetailVisible, selectedUser, openDetailModal, closeDetailModal, detailHeightAnim, detailPanResponder,
     alertConfig, setAlertConfig
   } = useRanking(route);
@@ -32,7 +40,26 @@ const RankingScreen = ({ route }: any) => {
       <Text style={styles.detailValue}>{value}{value !== '-' ? unit : ''}</Text>
     </View>
   );
-
+  if (hasValidMembership === null) {
+    return (
+      <View style={[styles.background, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#A1BE44" />
+      </View>
+    );
+  }
+  if (!hasValidMembership) {
+    return (
+      <View style={[styles.background, { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 }]}>
+        <Text style={{ fontSize: 48, marginBottom: 20 }}>🔒</Text>
+        <Text style={{ color: '#ffffff', fontSize: 22, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' }}>
+          회원권 전용 기능입니다
+        </Text>
+        <Text style={{ color: '#999999', fontSize: 16, textAlign: 'center', lineHeight: 24 }}>
+          랭킹은 회원권 보유 회원만{'\n'}이용할 수 있습니다.
+        </Text>
+      </View>
+    );
+  }
   return (
     <View style={styles.background}>
       <ScrollView

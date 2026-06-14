@@ -23,13 +23,32 @@ const calendarTheme = {
   textDayFontSize: 16, textMonthFontSize: 18, textDayHeaderFontSize: 14,
 };
 
+// ✅ 이미지 에러 시 기본 아이콘 fallback
+const ProfileImg = ({ uri, style }: { uri: string | null | undefined; style: any }) => {
+  const [hasError, setHasError] = useState(false);
+  const fullUri = getFullImageUrl(uri);
+
+  if (fullUri && !hasError) {
+    return (
+      <FastImage
+        source={{ uri: fullUri, priority: FastImage.priority.normal }}
+        style={style}
+        onError={() => setHasError(true)}
+        defaultSource={require('../assets/profile.png')}
+      />
+    );
+  }
+  return <Image source={require('../assets/profile.png')} style={style} />;
+};
+
 const CommunityScreen = ({ route, navigation }: any) => {
+  
   const isFocused = useIsFocused();
   const currentFilter = route?.params?.filter || 'ALL';
 
   const {
     posts, loading, refreshing, myUserId, myProfileImageUrl,
-    hasMembership, // ✅
+    hasMembership,
     selectedTab, setSelectedTab, searchKeyword, setSearchKeyword, isSearching, form, setForm,
     comments, commentInput, setCommentInput, replyingTo, setReplyingTo,
     selectedUser, selectedPost, setSelectedPost, isEditMode, isPostLoading,
@@ -132,6 +151,8 @@ const CommunityScreen = ({ route, navigation }: any) => {
 
   const openPostDetail = async (post: any) => {
     if (isPostLoading) return;
+    // ✅ 마감된 게시글은 모달 안 열고 조회수도 안 올림
+    if (post.isPast) return;
     if (await loadPostDetail(post)) {
       setCommentVisible(true);
       currentSnap.current = HALF_SCREEN;
@@ -145,7 +166,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
     });
   };
 
-  // ✅ FAB: 회원권 없으면 열지 않음 (hook의 checkHasMembershipOrAlert가 모달 띄움)
   const openCreateModal = () => {
     if (!hasMembership) return;
     setupCreateForm();
@@ -174,6 +194,19 @@ const CommunityScreen = ({ route, navigation }: any) => {
     return (
       <SafeAreaView style={[s.bg, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color="#A1BE44" />
+      </SafeAreaView>
+    );
+  }
+  if (!hasMembership) {
+    return (
+      <SafeAreaView style={[s.bg, { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 }]} edges={[]}>
+        <Text style={{ fontSize: 48, marginBottom: 20 }}>🔒</Text>
+        <Text style={{ color: '#ffffff', fontSize: 22, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' }}>
+          회원권 전용 기능입니다
+        </Text>
+        <Text style={{ color: '#999999', fontSize: 16, textAlign: 'center', lineHeight: 24 }}>
+          커뮤니티는 회원권 보유 회원만{'\n'}이용할 수 있습니다.
+        </Text>
       </SafeAreaView>
     );
   }
@@ -222,7 +255,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
           const isOut = post.type === '아웃도어';
           const isPast = post.isPast;
           return (
-            <TouchableOpacity key={post.id} style={[s.card, isPast && s.cardPast]} activeOpacity={0.95} disabled={isPostLoading} onPress={() => openPostDetail(post)}>
+            <TouchableOpacity key={post.id} style={[s.card, isPast && s.cardPast]} activeOpacity={isPast ? 1 : 0.95} disabled={isPostLoading} onPress={() => openPostDetail(post)}>
               <View style={s.cardHeader}>
                 <View style={[s.badge, { backgroundColor: isPast ? '#333' : (isOut ? '#00810F' : '#0072B9') }]}>
                   <Text style={[s.badgeText, { color: isPast ? '#888' : (isOut ? '#2CDE00' : '#009DFF') }]}>{post.type}</Text>
@@ -263,16 +296,14 @@ const CommunityScreen = ({ route, navigation }: any) => {
               <View style={s.divider} />
               <View style={s.footer}>
                 <TouchableOpacity style={s.profileRow} onPress={() => openDetailModal(post.writerId, post.author, post.isMine)}>
-                  {getFullImageUrl(post.profileImageUrl)
-                    ? <FastImage source={{ uri: getFullImageUrl(post.profileImageUrl)!, priority: FastImage.priority.normal }} style={[s.avatar, isPast && { opacity: 0.5 }]} />
-                    : <Image source={require('../assets/profile.png')} style={[s.avatar, isPast && { opacity: 0.5 }]} />
-                  }
+                  {/* ✅ ProfileImg로 교체 */}
+                  <ProfileImg uri={post.profileImageUrl} style={[s.avatar, isPast && { opacity: 0.5 }]} />
                   <Text style={[s.author, isPast && { color: '#666' }]}>{post.author}</Text>
                 </TouchableOpacity>
 
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <TouchableOpacity style={{ marginRight: post.isMine ? 11 : 15 }} disabled={isPostLoading} onPress={() => openPostDetail(post)}>
-                    <Image source={require('../assets/ChatText.png')} style={{ width: 22, height: 22, tintColor: '#ffffff' }} />
+                    <Image source={require('../assets/ChatText.png')} style={{ width: 22, height: 22, tintColor: isPast ? '#555' : '#ffffff' }} />
                   </TouchableOpacity>
 
                   {!post.isMine && (
@@ -295,7 +326,7 @@ const CommunityScreen = ({ route, navigation }: any) => {
         {filteredPosts.length === 0 && <Text style={s.empty}>등록된 게시글이 없습니다.</Text>}
       </ScrollView>
 
-      {/* ✅ FAB: 회원권 없으면 비활성 스타일 */}
+      {/* FAB: 회원권 없으면 비활성 */}
       <TouchableOpacity
         style={[s.fab, !hasMembership && s.fabDisabled]}
         onPress={openCreateModal}
@@ -384,10 +415,8 @@ const CommunityScreen = ({ route, navigation }: any) => {
                     <View key={`comment-${parent.id}`}>
                       <View style={s.commentItem}>
                         <TouchableOpacity onPress={() => openDetailModal(parent.writerId, parent.writerName, myUserId === parent.writerId)}>
-                          {getFullImageUrl(parent.profileImageUrl)
-                            ? <FastImage source={{ uri: getFullImageUrl(parent.profileImageUrl)!, priority: FastImage.priority.normal }} style={s.commentAvatar} />
-                            : <Image source={require('../assets/profile.png')} style={s.commentAvatar} />
-                          }
+                          {/* ✅ ProfileImg로 교체 */}
+                          <ProfileImg uri={parent.profileImageUrl ?? parent.writerProfileImageUrl} style={s.commentAvatar} />
                         </TouchableOpacity>
                         <View style={s.commentContentArea}>
                           <View style={s.commentHeaderLine}>
@@ -395,7 +424,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
                             <Text style={s.commentDateText}>{formatCommentDate(parent.createdAt)}</Text>
                           </View>
                           <Text style={[s.commentBodyText, isParentDeleted && { color: '#888' }]}>{parent.content}</Text>
-                          {/* ✅ 답글 달기: 회원권 보유자만 */}
                           {!isParentDeleted && hasMembership && (
                             <TouchableOpacity onPress={() => setReplyingTo({ id: parent.id, name: parent.writerName })}>
                               <Text style={s.commentReplyBtnText}>답글 달기</Text>
@@ -415,10 +443,8 @@ const CommunityScreen = ({ route, navigation }: any) => {
                         return (
                           <View key={`reply-${child.id}`} style={[s.commentItem, s.childCommentItem]}>
                             <TouchableOpacity onPress={() => openDetailModal(child.writerId, child.writerName, myUserId === child.writerId)}>
-                              {getFullImageUrl(child.profileImageUrl)
-                                ? <FastImage source={{ uri: getFullImageUrl(child.profileImageUrl)!, priority: FastImage.priority.normal }} style={s.commentAvatar} />
-                                : <Image source={require('../assets/profile.png')} style={s.commentAvatar} />
-                              }
+                              {/* ✅ ProfileImg로 교체 */}
+                              <ProfileImg uri={child.profileImageUrl ?? child.writerProfileImageUrl} style={s.commentAvatar} />
                             </TouchableOpacity>
                             <View style={s.commentContentArea}>
                               <View style={s.commentHeaderLine}>
@@ -443,11 +469,14 @@ const CommunityScreen = ({ route, navigation }: any) => {
                 {comments.length === 0 && <Text style={s.empty}>등록된 댓글이 없습니다.</Text>}
               </ScrollView>
 
-              {/* ✅ 댓글 입력창: 회원권 없으면 잠금 안내 */}
               <View style={s.commentInputWrapper}>
                 {!hasMembership ? (
                   <View style={s.guestCommentBlock}>
                     <Text style={s.guestCommentText}>댓글은 이용권 보유 회원만 작성할 수 있습니다.</Text>
+                  </View>
+                ) : selectedPost?.isPast ? (
+                  <View style={s.guestCommentBlock}>
+                    <Text style={s.guestCommentText}>마감된 게시글에는 댓글을 작성할 수 없습니다.</Text>
                   </View>
                 ) : (
                   <>
@@ -458,10 +487,8 @@ const CommunityScreen = ({ route, navigation }: any) => {
                       </View>
                     )}
                     <View style={s.commentInputRow}>
-                      {getFullImageUrl(myProfileImageUrl)
-                        ? <FastImage source={{ uri: getFullImageUrl(myProfileImageUrl)!, priority: FastImage.priority.normal }} style={s.commentInputAvatar} />
-                        : <Image source={require('../assets/profile.png')} style={s.commentInputAvatar} />
-                      }
+                      {/* ✅ ProfileImg로 교체 */}
+                      <ProfileImg uri={myProfileImageUrl} style={s.commentInputAvatar} />
                       <TextInput style={s.commentTextInput} placeholder="댓글을 작성해주세요." placeholderTextColor="#666" value={commentInput} onChangeText={setCommentInput} multiline />
                       <TouchableOpacity onPress={submitComment}><Text style={[s.commentSubmitBtn, commentInput.trim() && { color: '#A1BE44' }]}>등록</Text></TouchableOpacity>
                     </View>
@@ -505,16 +532,22 @@ const CommunityScreen = ({ route, navigation }: any) => {
                     {selectedUser && (
                       <View>
                         <View style={s.profileCenter}>
-                          {getFullImageUrl(selectedUser.profileImageUrl)
-                            ? <FastImage source={{ uri: getFullImageUrl(selectedUser.profileImageUrl)!, priority: FastImage.priority.normal }} style={s.profileBig} />
-                            : <Image source={require('../assets/profile.png')} style={s.profileBig} />
-                          }
+                          {/* ✅ ProfileImg로 교체 */}
+                          <ProfileImg uri={selectedUser.profileImageUrl} style={s.profileBig} />
                           <Text style={s.profileName}>{selectedUser.name}</Text>
                         </View>
                         <View style={s.infoBox}>
-                          {([['이름', selectedUser.name, selectedUser.toggles.showName, ''], ['성별', selectedUser.gender, true, ''], ['전화번호', selectedUser.phone, selectedUser.toggles.showPhone, ''], ['나이', selectedUser.age, selectedUser.toggles.showAge, '세'], ['키', selectedUser.height, selectedUser.toggles.showHeight, 'cm'], ['몸무게', selectedUser.weight, selectedUser.toggles.showWeight, 'kg'], ['팔길이', selectedUser.arm, selectedUser.toggles.showArm, 'cm'], ['암벽화 사이즈', selectedUser.shoe, selectedUser.toggles.showShoe, 'mm']] as [string, string, boolean, string][])
-                            .filter(([,, show]) => show)
-                            .map(([label, val,, unit]) => (
+                          {([
+                            ['이름', selectedUser.name, ''],
+                            ['성별', selectedUser.gender, ''],
+                            ['전화번호', selectedUser.phone, ''],
+                            ['나이', selectedUser.age, '세'],
+                            ['키', selectedUser.height, 'cm'],
+                            ['몸무게', selectedUser.weight, 'kg'],
+                            ['팔길이', selectedUser.arm, 'cm'],
+                            ['암벽화 사이즈', selectedUser.shoe, 'mm'],
+                          ] as [string, string, string][])
+                            .map(([label, val, unit]) => (
                               <View key={label} style={s.infoRowDetail}>
                                 <Text style={s.infoLabel}>{label}</Text>
                                 <Text style={s.infoVal}>{val !== '-' ? val + unit : '-'}</Text>
@@ -699,21 +732,28 @@ const CommunityScreen = ({ route, navigation }: any) => {
                 {selectedUser && (
                   <View>
                     <View style={s.profileCenter}>
-                      {getFullImageUrl(selectedUser.profileImageUrl)
-                        ? <FastImage source={{ uri: getFullImageUrl(selectedUser.profileImageUrl)!, priority: FastImage.priority.normal }} style={s.profileBig} />
-                        : <Image source={require('../assets/profile.png')} style={s.profileBig} />
-                      }
+                      {/* ✅ ProfileImg로 교체 */}
+                      <ProfileImg uri={selectedUser.profileImageUrl} style={s.profileBig} />
                       <Text style={s.profileName}>{selectedUser.name}</Text>
                     </View>
                     <View style={s.infoBox}>
-                      {([['이름', selectedUser.name, selectedUser.toggles.showName, ''], ['성별', selectedUser.gender, true, ''], ['전화번호', selectedUser.phone, selectedUser.toggles.showPhone, ''], ['나이', selectedUser.age, selectedUser.toggles.showAge, '세'], ['키', selectedUser.height, selectedUser.toggles.showHeight, 'cm'], ['몸무게', selectedUser.weight, selectedUser.toggles.showWeight, 'kg'], ['팔길이', selectedUser.arm, selectedUser.toggles.showArm, 'cm'], ['암벽화 사이즈', selectedUser.shoe, selectedUser.toggles.showShoe, 'mm']] as [string, string, boolean, string][])
-                        .filter(([,, show]) => show)
-                        .map(([label, val,, unit]) => (
+                      {([
+                        ['이름',          selectedUser.name,   ''],
+                        ['성별',          selectedUser.gender, ''],
+                        ['전화번호',      selectedUser.phone,  ''],
+                        ['나이',          selectedUser.age,    '세'],
+                        ['키',            selectedUser.height, 'cm'],
+                        ['몸무게',        selectedUser.weight, 'kg'],
+                        ['팔길이',        selectedUser.arm,    'cm'],
+                        ['암벽화 사이즈', selectedUser.shoe,   'mm'],
+                      ] as [string, string, string][])
+                        .map(([label, val, unit]) => (
                           <View key={label} style={s.infoRowDetail}>
                             <Text style={s.infoLabel}>{label}</Text>
                             <Text style={s.infoVal}>{val !== '-' ? val + unit : '-'}</Text>
                           </View>
-                        ))}
+                        ))
+                      }
                     </View>
                     <TouchableOpacity style={s.closeFullBtn} onPress={closeDetailModal}><Text style={s.closeFullText}>닫기</Text></TouchableOpacity>
                   </View>
@@ -745,6 +785,7 @@ const s = StyleSheet.create({
   tab:{flex:1,paddingVertical:10,alignItems:'center',borderRadius:20},
   tabActive:{backgroundColor:'#1D1D1D'},
   tabText:{color:'#999',fontSize:17,fontWeight:'bold'},
+  tabTextActive:{color:'#fff'},
   scroll:{paddingBottom:80},
   empty:{color:'#999',fontSize:16,textAlign:'center',marginTop:30},
   card:{backgroundColor:'#212121',borderColor:'#262626',borderWidth:1.5,borderRadius:16,padding:20,marginBottom:15},
@@ -853,7 +894,6 @@ const s = StyleSheet.create({
   commentInputAvatar:{width:36,height:36,borderRadius:18,backgroundColor:'#444',marginRight:10},
   commentTextInput:{flex:1,backgroundColor:'#000000',color:'#ffffff',fontSize:15,borderRadius:20,paddingHorizontal:16,paddingVertical:10,minHeight:40,maxHeight:100},
   commentSubmitBtn:{color:'#666666',fontSize:16,fontWeight:'bold',marginLeft:12,paddingVertical:10},
-  tabTextActive:{color:'#fff'},
   pickerInputBox:{height:50,backgroundColor:'#000',borderRadius:8,flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingLeft:15,paddingRight:8,borderWidth:1,borderColor:'#333'},
   pickerTextActive:{color:'#fff',fontSize:16},
   pickerTextPlaceholder:{color:'#666',fontSize:16},

@@ -12,11 +12,18 @@ const ALERT_SEND_API_URL = `${API_BASE_URL}/admin/alerts/send`;
 
 // 이미지 불러오기
 export const getFullImageUrl = (path: string | null | undefined): string | null => {
-  if (!path || path === 'null' || path === 'undefined') return null;
+  if (!path || path.trim() === '' || path === 'null' || path === 'undefined') return null;
   if (path.startsWith('http') || path.startsWith('file:') || path.startsWith('content:')) return path;
   const domain = API_BASE_URL.replace('/api/v1', '');
   const formattedPath = path.startsWith('/') ? path : `/${path}`;
   return `${domain}${formattedPath}`;
+};
+
+// 이미지 소스 헬퍼 — uri가 없으면 profile.png로 fallback
+export const getProfileImageSource = (url: string | null | undefined) => {
+  const resolved = getFullImageUrl(url);
+  if (resolved) return { uri: resolved };
+  return require('../assets/profile.png');
 };
 
 export const resolveMembershipType = (
@@ -26,16 +33,6 @@ export const resolveMembershipType = (
   remainingCount: number | null
 ): string => {
   const upper = String(typeStr || '').toUpperCase();
-
-  // 시작일이 오늘보다 미래면 → 시작 예정
-  if (startDate) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const start = new Date(startDate);
-    start.setHours(0, 0, 0, 0);
-    if (start > today) return '시작 예정';
-  }
-
   if (upper === 'COUNT' || upper.includes('횟수') || upper.includes('COUNT')) return '일일권';
   if (upper === 'PERIOD' || upper.includes('기간') || upper.includes('PERIOD') || upper.includes('MONTH')) return '회원권';
   if (remainingCount !== null && remainingCount !== undefined) return '일일권';
@@ -65,9 +62,11 @@ export const useManagerUser = (navigation: any) => {
 
   const [isAddModalVisible, setAddModalVisible] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newGender, setNewGender] = useState<'남자' | '여자' | null>(null);
+  const [newGender, setNewGender] = useState<'남' | '여' | null>(null);
   const [newBirth, setNewBirth] = useState('');
   const [newPhone, setNewPhone] = useState('');
+  const [newHeight, setNewHeight] = useState('');
+  const [newWeight, setNewWeight] = useState('');
 
   const [isDetailVisible, setDetailVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
@@ -245,7 +244,7 @@ export const useManagerUser = (navigation: any) => {
 
   // 액션 핸들러
   const handleRegister = async () => {
-    if (!newName || !newGender || newBirth.length < 10 || newPhone.length < 12) {
+    if (!newName || !newGender || newBirth.length < 10 || newPhone.replace(/-/g, '').length < 10) {
       showResultModal("알림", "정보를 모두 올바르게 입력해주세요.", "info");
       return;
     }
@@ -257,9 +256,11 @@ export const useManagerUser = (navigation: any) => {
       const token = await AsyncStorage.getItem('userToken');
       const requestBody = {
         name: newName, phone: newPhone,
-        gender: newGender === '남자' ? '남' : '여', 
+        gender: newGender,
         birthDate: newBirth,
-        email: `offline_${newPhone.replace(/-/g, '')}@olla.local` 
+        email: `offline_${newPhone.replace(/-/g, '')}@olla.local`,
+        height: newHeight ? parseFloat(newHeight) : null,
+        weight: newWeight ? parseFloat(newWeight) : null,
       };
       await axios.post(OFFLINE_REGISTER_API, requestBody, { headers: { Authorization: `Bearer ${token}` } });
       
@@ -327,7 +328,7 @@ export const useManagerUser = (navigation: any) => {
       const d = response.data.data; 
       if (!d) return;
       
-      const rawGender = d.detail?.gender || d.gender;
+      const rawGender = d.gender || d.detail?.gender;
       let displayGender = '-';
       if (rawGender === 'MALE' || rawGender === '남' || rawGender === '남자') displayGender = '남자';
       else if (rawGender === 'FEMALE' || rawGender === '여' || rawGender === '여자') displayGender = '여자';
@@ -338,11 +339,11 @@ export const useManagerUser = (navigation: any) => {
         gender: displayGender,
         phone: d.phone || fallbackPhone || '-', 
         profileImageUrl: getFullImageUrl(d.profileImageUrl ?? d.profileImage),
-        age: d.detail?.age || d.age || '-',
-        height: d.detail?.height || d.height || '-',
-        weight: d.detail?.weight || d.weight || '-',
-        arm: d.detail?.armSpan || d.armSpan || '-',
-        shoe: d.detail?.footSize || d.footSize || '-',
+        age: d.age || d.detail?.age || '-',
+        height: d.height || d.detail?.height || '-',
+        weight: d.weight || d.detail?.weight || '-',
+        arm: d.armSpan || d.detail?.armSpan || '-',
+        shoe: d.footSize || d.detail?.footSize || '-',
       });
 
       setDetailVisible(true);
@@ -371,6 +372,7 @@ export const useManagerUser = (navigation: any) => {
     Animated.timing(addHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
       setAddModalVisible(false);
       setNewName(''); setNewGender(null); setNewBirth(''); setNewPhone('');
+      setNewHeight(''); setNewWeight('');
       if (callback) callback();
     });
   }, [addHeightAnim]);
@@ -447,12 +449,15 @@ export const useManagerUser = (navigation: any) => {
     
     isAddModalVisible, openAddModal, closeAddModal,
     newName, setNewName, newGender, setNewGender, newBirth, formatBirth, newPhone, formatPhone,
+    newHeight, setNewHeight, newWeight, setNewWeight,
     isFormValid, handleRegister,
+    
     
     isDetailVisible, selectedUser, openDetailModal, closeDetailModal, detailHeightAnim, detailPanResponder,
     
     isSendAlertModalVisible, openAlertModal, closeAlertModal, alertHeightAnim, alertPanResponder,
     alertTitle, setAlertTitle, alertContent, setAlertContent, isProcessing, handleSendAlert,
-    addHeightAnim, addPanResponder
+    addHeightAnim, addPanResponder,
+    getProfileImageSource,
   };
 };

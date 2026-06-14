@@ -422,10 +422,23 @@ export const useManagerTicket = (navigation: any) => {
     Animated.spring(editHeightAnim, { toValue: GRANT_EXPANDED_HEIGHT, useNativeDriver: false }).start();
   }, [editHeightAnim, GRANT_EXPANDED_HEIGHT]);
 
-  // 💡 이용권 등록 및 유효성 검사 (과거 날짜 완벽 차단)
+  // 이용권 등록 및 유효성 검사 
   const handleGrantTicket = useCallback(async () => {
     if (!selectedUser) return;
     setFormError(''); // 이전 에러 초기화
+
+    // 오프라인 회원 일일권 차단 (백엔드에서도 차단되지만 프론트에서도 방어)
+    const memberEmail = selectedUser?.email || '';
+    const memberPhone = selectedUser?.phone || '';
+    const isOfflineMember = 
+      memberEmail.includes('@olla.local') ||
+      memberPhone.startsWith('offline') ||
+      selectedUser?.memberships?.some((m: any) => m.isOffline === true);
+
+    if (isOfflineMember && editType === 'COUNT') {
+      setFormError('오프라인 등록 회원에게는 일일권을 추가할 수 없습니다.');
+      return;
+    }
 
     const startDateStr = editStart || getToday();
     const numericAddValue = Number(addValue);
