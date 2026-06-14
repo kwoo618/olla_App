@@ -386,9 +386,20 @@ const AppContent = () => {
             });
             await AsyncStorage.removeItem('fcmToken');
             setInitialRoute('Home');
-          } catch (apiError) {
-            await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole']);
-            setInitialRoute('Login');
+          } catch (apiError: any) {
+            const status = apiError?.response?.status;
+
+            if (status === 401) {
+              const stillHasToken = await AsyncStorage.getItem('userToken');
+              if (stillHasToken) {
+                setInitialRoute('Home');
+              } else {
+                setInitialRoute('Login');
+              }
+            } else {
+              await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole']);
+              setInitialRoute('Login');
+            }
           }
         } else {
           setInitialRoute('Login');
