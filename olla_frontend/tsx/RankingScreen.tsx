@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, RefreshControl, 
-  Modal, Animated, TouchableWithoutFeedback, ActivityIndicator
+  Modal, Animated, TouchableWithoutFeedback, BackHandler, ActivityIndicator
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useRanking, getFullImageUrl, getSectionColor, getRankColor, colors } from '../ts/Ranking';
 import FastImage from 'react-native-fast-image';
 
@@ -34,12 +35,47 @@ const RankingScreen = ({ route }: any) => {
     alertConfig, setAlertConfig
   } = useRanking(route);
 
+  // 💡 앱 종료 커스텀 모달 상태 추가
+  const [isExitModalVisible, setExitModalVisible] = useState(false);
+
+  // 💡 안드로이드 하드웨어 뒤로가기 제어 (모달 닫기 우선 -> 앱 종료 커스텀 모달)
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        // 1. 커스텀 경고 모달이 열려있으면 닫기
+        if (alertConfig.visible) {
+          setAlertConfig(prev => ({ ...prev, visible: false }));
+          return true;
+        }
+        // 2. 회원 상세 바텀시트가 열려있으면 닫기
+        if (isDetailVisible) {
+          closeDetailModal();
+          return true;
+        }
+        // 3. 앱 종료 모달이 열려있으면 닫기
+        if (isExitModalVisible) {
+          setExitModalVisible(false);
+          return true;
+        }
+        
+        // 4. 기본 화면일 때 앱 종료 커스텀 모달 띄우기
+        setExitModalVisible(true);
+        return true;
+      };
+
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      return () => backHandler.remove();
+    }, [alertConfig.visible, isDetailVisible, isExitModalVisible, closeDetailModal, setAlertConfig])
+  );
+
   const renderDetailRow = (label: string, value: string, unit: string = '') => (
     <View style={styles.detailRow}>
       <Text style={styles.detailLabel}>{label}</Text>
       <Text style={styles.detailValue}>{value}{value !== '-' ? unit : ''}</Text>
     </View>
   );
+
   if (hasValidMembership === null) {
     return (
       <View style={[styles.background, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -47,6 +83,7 @@ const RankingScreen = ({ route }: any) => {
       </View>
     );
   }
+
   if (!hasValidMembership) {
     return (
       <View style={[styles.background, { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 }]}>
@@ -60,6 +97,7 @@ const RankingScreen = ({ route }: any) => {
       </View>
     );
   }
+
   return (
     <View style={styles.background}>
       <ScrollView
@@ -185,7 +223,12 @@ const RankingScreen = ({ route }: any) => {
                       <Text style={[styles.rankTypeText, { color: item.type === '왕복' ? '#0058CC' : '#FF2528' }]}>{item.type}</Text>
                       <View style={styles.rankInfoBottomRow}>
                         <Text style={[styles.rankColorText, { color: item.colorHex === '#000000' ? '#FFFFFF' : item.colorHex }]}>{item.colorName}</Text>
-                        <Text style={styles.rankHoldText}>{item.hold}번</Text>
+                        
+                        {/* 💡 초보벽 수정 부분: item.isClear 값이 true 이면 '완등'으로 표시 */}
+                        <Text style={[styles.rankHoldText, item.isClear && { color: '#A1BE44' }]}>
+                          {item.isClear ? '완등' : `${item.hold}번`}
+                        </Text>
+
                       </View>
                     </>
                   )}
@@ -235,6 +278,31 @@ const RankingScreen = ({ route }: any) => {
               )}
             </ScrollView>
           </Animated.View>
+        </View>
+      </Modal>
+
+      {/* ─── 💡 앱 종료 확인 커스텀 모달 (통일된 디자인) ─── */}
+      <Modal visible={isExitModalVisible} transparent animationType="fade" onRequestClose={() => setExitModalVisible(false)}>
+        <View style={styles.centerModalOverlay}>
+          <View style={styles.centerModalBox}>
+            <Text style={styles.centerModalText}>앱을 종료하시겠습니까?</Text>
+            <View style={styles.centerBtnRow}>
+              <TouchableOpacity
+                style={styles.centerBtnYes}
+                onPress={() => {
+                  setExitModalVisible(false);
+                  setTimeout(() => {
+                    BackHandler.exitApp();
+                  }, 100);
+                }}
+              >
+                <Text style={styles.centerBtnYesText}>예</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.centerBtnNo} onPress={() => setExitModalVisible(false)}>
+                <Text style={styles.centerBtnNoText}>아니오</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
 
@@ -336,6 +404,7 @@ const styles = StyleSheet.create({
   closeFullBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
 
   // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
+  // 1. 공통 시스템 결과 알림 모달
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   resultModalBox: { 
     width: '90%', 
@@ -370,6 +439,30 @@ const styles = StyleSheet.create({
     fontSize: 18, 
     fontWeight: 'bold' 
   },
+
+  // 2. 앱 종료 확인 커스텀 모달
+  centerModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  centerModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
+    alignItems: 'center' 
+  },
+  centerModalText: { 
+    color: '#ffffff', 
+    fontSize: 18, 
+    fontWeight: 'bold', 
+    marginBottom: 25,
+    lineHeight: 24,
+    textAlign: 'center'
+  },
+  centerBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  centerBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 },
+  centerBtnYesText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
+  centerBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 },
+  centerBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
 });
 
 export default RankingScreen;

@@ -1,8 +1,7 @@
-
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, TextInput, RefreshControl, KeyboardAvoidingView, Platform, Dimensions, PanResponder, TouchableWithoutFeedback, ActivityIndicator } from 'react-native';
+import React, { useState, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, TextInput, RefreshControl, KeyboardAvoidingView, Platform, Dimensions, PanResponder, TouchableWithoutFeedback, ActivityIndicator, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused, useFocusEffect } from '@react-navigation/native';
 import FastImage from 'react-native-fast-image';
 import { useManagerCommunityData, getProfileImage, getFullImageUrl, formatCommentDate } from '../ts/ManagerCommunity';
 
@@ -40,6 +39,9 @@ const ManagerCommunity = ({ route, navigation }: any) => {
   // UI 모달 상태
   const [isCommentVisible, setCommentVisible] = useState(false);
   const [isDetailVisible, setDetailVisible] = useState(false);
+  
+  // 💡 관리자 모드 종료 커스텀 모달 상태 추가
+  const [isExitModalVisible, setExitModalVisible] = useState(false);
 
   // 애니메이션 치수 설정
   const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -49,9 +51,53 @@ const ManagerCommunity = ({ route, navigation }: any) => {
   const THRESHOLD = (HALF_SCREEN + FULL_SCREEN) / 2; 
   const CLOSE_THRESHOLD = HALF_SCREEN * 0.7; 
 
-  // 1️⃣ 댓글창 애니메이션
+  // 1️⃣ 애니메이션 Refs
   const commentHeightAnim = useRef(new Animated.Value(0)).current;
   const currentSnap = useRef(HALF_SCREEN); 
+  const detailHeightAnim = useRef(new Animated.Value(0)).current;
+  const currentDetailSnap = useRef(DETAIL_MODAL_HEIGHT);
+
+  // 2️⃣ 모달 제어 함수 (useCallback으로 감싸기)
+  const closeDetailModal = useCallback(() => {
+    Animated.timing(detailHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => { 
+      setDetailVisible(false); setSelectedUser(null); 
+    });
+  }, [detailHeightAnim, setSelectedUser]);
+
+  const closeCommentModal = useCallback(() => {
+    Animated.timing(commentHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
+      setCommentVisible(false); setReplyingTo(null); setCommentInput(''); setSelectedPost(null);
+    });
+  }, [commentHeightAnim, setReplyingTo, setCommentInput, setSelectedPost]);
+
+  // 3️⃣ 하드웨어 뒤로가기 제어 로직 (모달 순차적 닫기 -> 관리자 모드 종료 커스텀 모달)
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        // 열려있는 모달이 있으면 해당 모달만 닫기
+        if (isExitModalVisible) { setExitModalVisible(false); return true; }
+        if (resultModalVisible) { closeResultModal(); return true; }
+        if (deleteTarget !== null) { setDeleteTarget(null); return true; }
+        if (commentDeleteTarget !== null) { setCommentDeleteTarget(null); return true; }
+        if (isDetailVisible) { closeDetailModal(); return true; }
+        if (isCommentVisible) { closeCommentModal(); return true; }
+
+        // 기본 화면일 때 관리자 모드 종료 알림창 띄우기
+        setExitModalVisible(true);
+        return true;
+      };
+
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      return () => backHandler.remove();
+    }, [
+      isExitModalVisible, resultModalVisible, deleteTarget, commentDeleteTarget, 
+      isDetailVisible, isCommentVisible, closeResultModal, setDeleteTarget, 
+      setCommentDeleteTarget, closeDetailModal, closeCommentModal
+    ])
+  );
+
+  // 4️⃣ PanResponders
   const commentPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -74,9 +120,6 @@ const ManagerCommunity = ({ route, navigation }: any) => {
     })
   ).current;
 
-  // 2️⃣ 회원 정보 상세 팝업 애니메이션
-  const detailHeightAnim = useRef(new Animated.Value(0)).current;
-  const currentDetailSnap = useRef(DETAIL_MODAL_HEIGHT);
   const detailPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -92,7 +135,6 @@ const ManagerCommunity = ({ route, navigation }: any) => {
     })
   ).current;
 
-  // 모달 제어 함수들
   const openDetailModal = async (authorId: number, authorName: string) => {
     if (await loadUserDetail(authorId, authorName)) {
       setDetailVisible(true);
@@ -100,11 +142,6 @@ const ManagerCommunity = ({ route, navigation }: any) => {
       detailHeightAnim.setValue(0);
       Animated.timing(detailHeightAnim, { toValue: DETAIL_MODAL_HEIGHT, duration: 300, useNativeDriver: false }).start();
     }
-  };
-  const closeDetailModal = () => {
-    Animated.timing(detailHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => { 
-      setDetailVisible(false); setSelectedUser(null); 
-    });
   };
 
   const openPostDetail = async (post: any) => {
@@ -114,11 +151,6 @@ const ManagerCommunity = ({ route, navigation }: any) => {
       commentHeightAnim.setValue(0);
       Animated.timing(commentHeightAnim, { toValue: HALF_SCREEN, duration: 300, useNativeDriver: false }).start();
     }
-  };
-  const closeCommentModal = () => {
-    Animated.timing(commentHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
-      setCommentVisible(false); setReplyingTo(null); setCommentInput(''); setSelectedPost(null);
-    });
   };
 
   const renderDetailRow = (label: string, value: string, unit: string = '') => (
@@ -333,6 +365,7 @@ const ManagerCommunity = ({ route, navigation }: any) => {
                             <Text style={styles.commentDateText}>{formatCommentDate(parent.createdAt)}</Text>
                           </View>
                           <Text style={[styles.commentBodyText, isParentDeleted && { color: '#888' }]}>{parent.content}</Text>
+                          {/* ✅ 답글 달기: 관리자도 허용 */}
                           {!isParentDeleted && <TouchableOpacity onPress={() => setReplyingTo({ id: parent.id, name: parent.writerName })}><Text style={styles.commentReplyBtnText}>답글 달기</Text></TouchableOpacity>}
                         </View>
                         <View style={{ alignItems: 'flex-end', justifyContent: 'flex-start', paddingTop: 2 }}>
@@ -436,6 +469,29 @@ const ManagerCommunity = ({ route, navigation }: any) => {
         </View>
       </Modal>
 
+      {/* ─── 💡 관리자 모드 종료 확인 커스텀 모달 (통일된 디자인 적용 및 MY 이동) ─── */}
+      <Modal visible={isExitModalVisible} transparent animationType="fade" onRequestClose={() => setExitModalVisible(false)}>
+        <View style={styles.resultModalOverlay}>
+          <View style={styles.deleteModalBox}>
+            <Text style={styles.deleteModalText}>관리자 모드를 종료하시겠습니까?</Text>
+            <View style={styles.deleteBtnRow}>
+              <TouchableOpacity 
+                style={styles.deleteBtnYes} 
+                onPress={() => {
+                  setExitModalVisible(false);
+                  navigation.navigate('MY'); // 💡 앱 종료 대신 MY 페이지로 이동 처리
+                }}
+              >
+                <Text style={styles.deleteBtnTextBlack}>예</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.deleteBtnNo} onPress={() => setExitModalVisible(false)}>
+                <Text style={styles.deleteBtnTextWhite}>아니오</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 };
@@ -504,11 +560,26 @@ const styles = StyleSheet.create({
     textAlign: 'center', 
     lineHeight: 24 
   }, 
+  
+  // ✅ 누락되었던 deleteModalText 속성 추가
+  deleteModalText: { 
+    color: '#ffffff', 
+    fontSize: 18, 
+    fontWeight: 'bold', 
+    marginBottom: 25, 
+    textAlign: 'center', 
+    lineHeight: 24 
+  }, 
+
   deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
   deleteBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 }, 
   deleteBtnYesText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
   deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 }, 
   deleteBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
+  
+  // ✅ 누락되었던 텍스트 컬러 속성 추가
+  deleteBtnTextBlack: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
+  deleteBtnTextWhite: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
 
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   resultModalBox: { 

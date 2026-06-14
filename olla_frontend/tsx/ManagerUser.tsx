@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { 
   View, Text, StyleSheet, TextInput, TouchableOpacity, 
-  ScrollView, Image, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Animated, RefreshControl, TouchableWithoutFeedback
+  ScrollView, Image, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Animated, RefreshControl, TouchableWithoutFeedback, BackHandler
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { useManagerUser, resolveMembershipType, getFullImageUrl } from '../ts/ManagerUser';
 import FastImage from 'react-native-fast-image';
 
@@ -29,6 +30,37 @@ const ManagerUser = ({ navigation }: any) => {
     alertTitle, setAlertTitle, alertContent, setAlertContent, isProcessing, handleSendAlert,
     addHeightAnim, addPanResponder
   } = useManagerUser(navigation);
+
+  // 💡 앱 종료 대신 "관리자 모드 종료" 커스텀 모달 상태
+  const [isExitModalVisible, setExitModalVisible] = useState(false);
+
+  // 💡 하드웨어 뒤로가기 제어 로직 (모달 순차적 닫기 -> 관리자 모드 종료 커스텀 모달)
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        // 열려있는 모달이 있으면 해당 모달만 닫기
+        if (isExitModalVisible) { setExitModalVisible(false); return true; }
+        if (resultModalVisible) { setResultModalVisible(false); return true; }
+        if (confirmModalVisible) { setConfirmModalVisible(false); return true; }
+        if (isSendAlertModalVisible) { closeAlertModal(); return true; }
+        if (isDetailVisible) { closeDetailModal(); return true; }
+        if (isAddModalVisible) { closeAddModal(); return true; }
+
+        // 기본 화면일 때 관리자 모드 종료 커스텀 알림창 띄우기
+        setExitModalVisible(true);
+        return true;
+      };
+
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      return () => backHandler.remove();
+    }, [
+      isExitModalVisible, resultModalVisible, confirmModalVisible, 
+      isSendAlertModalVisible, isDetailVisible, isAddModalVisible,
+      setResultModalVisible, setConfirmModalVisible, 
+      closeAlertModal, closeDetailModal, closeAddModal
+    ])
+  );
 
   if (loading) return <View style={styles.background}><ActivityIndicator size="large" color="#A1BE44" /></View>;
 
@@ -285,6 +317,29 @@ const ManagerUser = ({ navigation }: any) => {
           </View>
         </View>
       </Modal>
+
+      {/* 🌟 6. 관리자 모드 종료 확인 모달 (OLLA 표준 규격 적용 및 MY 이동 처리) */}
+      <Modal visible={isExitModalVisible} transparent animationType="fade" onRequestClose={() => setExitModalVisible(false)}>
+        <View style={styles.resultModalOverlay}>
+          <View style={styles.deleteModalBox}>
+            <Text style={styles.deleteModalText}>관리자 모드를 종료하시겠습니까?</Text>
+            <View style={styles.deleteBtnRow}>
+              <TouchableOpacity 
+                style={styles.btnYes} 
+                onPress={() => {
+                  setExitModalVisible(false);
+                  navigation.navigate('MY'); // 💡 MY 페이지로 이동 처리
+                }}
+              >
+                <Text style={styles.btnTextBlack}>예</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.btnNo} onPress={() => setExitModalVisible(false)}>
+                <Text style={styles.btnTextWhite}>아니오</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -394,7 +449,7 @@ const styles = StyleSheet.create({
     lineHeight: 24 
   },
   deleteBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  btnYes: { flex: 1, paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 },
+  btnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 },
   btnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 },
   btnTextBlack: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
   btnTextWhite: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },

@@ -1,5 +1,6 @@
-import React, { useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, RefreshControl, Dimensions, PanResponder, TouchableWithoutFeedback } from 'react-native';
+import React, { useRef, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, RefreshControl, Dimensions, PanResponder, TouchableWithoutFeedback, BackHandler } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import QRCode from 'react-native-qrcode-svg';
 import Svg, { Circle } from 'react-native-svg';
 import { HomeData, MembershipItem } from '../ts/Home';
@@ -13,6 +14,9 @@ const HomeScreen = ({ navigation }: any) => {
 
   const scrollViewRef = useRef<ScrollView>(null);
   const [activeModal, setActiveModal] = useState<string | null>(null);
+  
+  // 💡 앱 종료 커스텀 모달 상태 추가
+  const [isExitModalVisible, setExitModalVisible] = useState(false);
 
   const { height: SCREEN_HEIGHT } = Dimensions.get('window');
   const QR_MODAL_HEIGHT = SCREEN_HEIGHT * 0.55;
@@ -64,6 +68,37 @@ const HomeScreen = ({ navigation }: any) => {
       setActiveModal(null);
     });
   };
+
+  // 💡 안드로이드 하드웨어 뒤로가기 제어 로직 (커스텀 앱 종료 모달 적용)
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        // 1. 결과 모달창이 열려있으면 닫기
+        if (resultModalVisible) {
+          closeResultModal();
+          return true;
+        }
+        // 2. 바텀 시트(QR, 회원권) 모달이 열려있으면 닫기
+        if (activeModal !== null) {
+          closeModal();
+          return true;
+        }
+        // 3. 앱 종료 확인 모달이 열려있으면 닫기
+        if (isExitModalVisible) {
+          setExitModalVisible(false);
+          return true;
+        }
+        
+        // 4. 기본 화면일 때 앱 종료 커스텀 확인 알림창 띄우기
+        setExitModalVisible(true);
+        return true;
+      };
+
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      return () => backHandler.remove();
+    }, [resultModalVisible, activeModal, isExitModalVisible, closeResultModal])
+  );
 
   // ─── 대표 이용권 기준 (원형 그래프용) ──────────────────────────────────────
   const isCountType = membership.membershipType === '일일권';
@@ -124,7 +159,6 @@ const HomeScreen = ({ navigation }: any) => {
     return membership.membershipType;
   })();
 
-  // 달력 렌더링용 변수들
   const currentYear = viewDate.getFullYear();
   const currentMonth = viewDate.getMonth();
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
@@ -312,6 +346,31 @@ const HomeScreen = ({ navigation }: any) => {
           </View>
         </View>
       </ScrollView>
+
+      {/* 💡 앱 종료 확인 커스텀 모달 (통일된 디자인) */}
+      <Modal visible={isExitModalVisible} transparent animationType="fade" onRequestClose={() => setExitModalVisible(false)}>
+        <View style={styles.centerModalOverlay}>
+          <View style={styles.centerModalBox}>
+            <Text style={styles.centerModalText}>앱을 종료하시겠습니까?</Text>
+            <View style={styles.centerBtnRow}>
+              <TouchableOpacity
+                style={styles.centerBtnYes}
+                onPress={() => {
+                  setExitModalVisible(false);
+                  setTimeout(() => {
+                    BackHandler.exitApp();
+                  }, 100);
+                }}
+              >
+                <Text style={styles.centerBtnYesText}>예</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.centerBtnNo} onPress={() => setExitModalVisible(false)}>
+                <Text style={styles.centerBtnNoText}>아니오</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* 결과 모달 */}
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={closeResultModal}>
@@ -501,6 +560,30 @@ const styles = StyleSheet.create({
   memHalfTitle: { color: '#ffffff', fontSize: 17, fontWeight: '600', marginBottom: 12 },
   memHalfValueGreen: { color: '#A1BE44', fontSize: 28, fontWeight: 'bold' },
   memHalfValueWhite: { color: '#ffffff', fontSize: 28, fontWeight: 'bold' },
+
+  // 💡 추가된 커스텀 모달 스타일
+  centerModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
+  centerModalBox: { 
+    width: '90%', 
+    backgroundColor: '#212121', 
+    borderRadius: 25, 
+    paddingVertical: 45, 
+    paddingHorizontal: 35, 
+    alignItems: 'center' 
+  },
+  centerModalText: { 
+    color: '#ffffff', 
+    fontSize: 18, 
+    fontWeight: 'bold', 
+    marginBottom: 25,
+    lineHeight: 24,
+    textAlign: 'center'
+  },
+  centerBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  centerBtnYes: { flex: 1, backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginRight: 5 },
+  centerBtnYesText: { color: '#000000', fontSize: 18, fontWeight: 'bold' },
+  centerBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 },
+  centerBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
 
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   resultModalBox: { width: '90%', backgroundColor: '#212121', borderRadius: 25, paddingVertical: 45, paddingHorizontal: 35, alignItems: 'center' },

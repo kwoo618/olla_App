@@ -111,14 +111,8 @@ export const useRecode = ({ route, navigation }: any) => {
           if (status !== 'ACTIVE' && status !== '') continue;
           const typeStr = String(m.membershipType ?? '').toUpperCase();
 
-          // ✅ 일일권(COUNT/횟수/일일) 제외 — 기간권만 허용
-          const isCountType =
-            typeStr.includes('COUNT') ||
-            typeStr.includes('횟수') ||
-            typeStr.includes('일일');
-          if (isCountType) continue;
+          if (typeStr.includes('COUNT') || typeStr.includes('횟수') || typeStr.includes('일일')) continue;
 
-          // 기간권 유효성 검사
           if (typeStr.includes('PERIOD') || typeStr.includes('기간') || m.endDate) {
             if (m.endDate) {
               const end = new Date(m.endDate);
@@ -147,26 +141,21 @@ export const useRecode = ({ route, navigation }: any) => {
     action();
   };
 
-  // ── 데이터 로드 ──
-  // 진짜 최고 기록을 유지하기 위한 로직
   const fetchBestRecords = async () => {
     try {
       const config = await getAuthHeader();
-      // 최고 기록 전용 API 호출
       const bestRes = await axios.get(`${API_BASE_URL}/records/beginner/best`, config).catch(() => null);
       let rawData = bestRes?.data?.data;
       
       let bestList: any[] = [];
-      // 백엔드가 배열을 주든, Object(Map)를 주든 무조건 끄집어냄
       if (Array.isArray(rawData)) {
         bestList = rawData;
       } else if (rawData && typeof rawData === 'object') {
         if (Array.isArray(rawData.content)) bestList = rawData.content;
         else if (Array.isArray(rawData.list)) bestList = rawData.list;
-        else bestList = Object.values(rawData); // { "WHITE": {...} } 형태 대비
+        else bestList = Object.values(rawData); 
       }
 
-      // 최고기록 전용 API가 비어있다면, 안전하게 최신 500개 히스토리를 불러와서 직접 최고기록 산출
       if (bestList.length === 0) {
         const histRes = await axios.get(`${API_BASE_URL}/records/beginner/history`, { ...config, params: { size: 500 } }).catch(() => null);
         const histData = histRes?.data?.data;
@@ -192,7 +181,6 @@ export const useRecode = ({ route, navigation }: any) => {
               const isRoundTrip = String(r.attemptType || r.type).toUpperCase().includes('ROUND') || r.isRoundTrip;
               const colorIdx = colorOrder.indexOf(krColor);
               
-              // 왕복 가점과 성공여부를 포함하여 '진짜 가장 높은 점수' 산출
               const score = (colorIdx * 100000) + (isRoundTrip ? 50000 : 0) + Number(holdCount);
               if (score > highestScore) {
                 highestScore = score;
@@ -217,7 +205,6 @@ export const useRecode = ({ route, navigation }: any) => {
     } catch (error) { console.error('최고 기록 로드 실패'); }
   };
 
-  // 초보벽 최근 기록 데이터만 뽑아냄
   const fetchBeginnerHistoryRecords = async () => {
     try {
       const config = await getAuthHeader();
@@ -230,7 +217,7 @@ export const useRecode = ({ route, navigation }: any) => {
       const todayStr = getLocalDateStr();
       const todayList = list.filter((item: any) => {
         const dateStr = item.recordDate || item.createdAt || '';
-        return dateStr.startsWith(todayStr); // 여기서 오늘 날짜랑 똑같은 것만 걸러냄
+        return dateStr.startsWith(todayStr); 
       });
 
       const sortedList = todayList.sort((a: any, b: any) => b.id - a.id);
@@ -252,7 +239,6 @@ export const useRecode = ({ route, navigation }: any) => {
     } catch (error) { console.error('초보벽 최근 기록 로드 실패'); }
   };
 
-  // 💡 [수정] 지구력 기록도 동일하게 적용
   const fetchEnduranceRecords = async () => {
     try {
       const config = await getAuthHeader();
@@ -277,7 +263,6 @@ export const useRecode = ({ route, navigation }: any) => {
     } catch (error) { console.error('지구력 기록 로드 실패'); }
   };
 
-  // 연속 완등 기록도 동일하게 적용
   const fetchSeriesRecords = async () => {
     try {
       const config = await getAuthHeader();
@@ -337,7 +322,7 @@ export const useRecode = ({ route, navigation }: any) => {
       
       if (itemToDelete.type === 'difficulty') { 
         await axios.delete(`${API_BASE_URL}/records/beginner/${id}`, config);       
-        await fetchBestRecords(); // 💡 오늘꺼 지워져도 다른 최고 기록이 있는지 재검사
+        await fetchBestRecords(); 
         await fetchBeginnerHistoryRecords(); 
       }
       else if (itemToDelete.type === 'endurance') { 
@@ -357,7 +342,7 @@ export const useRecode = ({ route, navigation }: any) => {
     }
   };
 
-  // ── 애니메이션 & PanResponder ──
+  // ── 드래그 및 PanResponder ──
   const { height: SCREEN_HEIGHT } = Dimensions.get('window');
   const BEGINNER_MODAL_HEIGHT = SCREEN_HEIGHT * 0.70;       
   const ENDURANCE_HALF_HEIGHT = SCREEN_HEIGHT * 0.55;       
@@ -505,13 +490,22 @@ export const useRecode = ({ route, navigation }: any) => {
     return node ? { x: node.x, y: node.y } : { x: 0, y: 0 };
   }, [mapElements]);
 
-  // View 렌더링 부분을 데이터화 하여 분리
+  // 💡 완전히 애니메이션을 제거하고, 즉각 렌더링되도록 경로 데이터 최적화
   const pathSegmentsData = useMemo(() => {
     const segments: any[] = [];
     const maxIdx = BOX_SEQUENCE.length - 1;
-    for (let l = 0; l <= enduranceLaps; l++) {
-      const color = rainbowColors[l % 7]; const offset = l * 2; const isEven = l % 2 === 0;
+
+    // 편도수가 수백 번이 넘어가도 버벅이지 않도록 
+    // 동일한 자리에 수없이 겹쳐 그려지는 과거의 선들은 생략하고 
+    // 직전 바퀴와 현재 바퀴 2개만 렌더링하여 최고의 속도를 냅니다.
+    const startLap = Math.max(0, enduranceLaps - 1);
+
+    for (let l = startLap; l <= enduranceLaps; l++) {
+      const color = rainbowColors[l % 7]; 
+      const offset = 0; // 선들이 완벽히 겹치도록 0으로 설정
+      const isEven = l % 2 === 0;
       let startIdx: number, endIdx: number;
+      
       if (l === enduranceLaps) {
         if (!selectedMapNode) break;
         const targetIdx = BOX_SEQUENCE.indexOf(selectedMapNode);
@@ -520,6 +514,7 @@ export const useRecode = ({ route, navigation }: any) => {
       } else {
         startIdx = isEven ? 0 : maxIdx; endIdx = isEven ? maxIdx : 0;
       }
+      
       const step = isEven ? 1 : -1;
       for (let i = startIdx; i !== endIdx; i += step) {
         const nextI = i + step;
@@ -528,7 +523,8 @@ export const useRecode = ({ route, navigation }: any) => {
         const angle  = (Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180) / Math.PI;
         const cx = (p1.x + p2.x) / 2; const cy = (p1.y + p2.y) / 2;
         segments.push({
-          key: `line-${l}-${i}`, left: cx - length / 2 + offset, top: cy - 2 + offset,
+          key: `line-${l}-${i}`, 
+          left: cx - length / 2 + offset, top: cy - 2 + offset,
           width: length, color, angle, zIndex: 5 + l
         });
       }

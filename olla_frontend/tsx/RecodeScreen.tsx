@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, 
-  Modal, Animated, RefreshControl, TouchableWithoutFeedback, TextInput 
+  Modal, Animated, RefreshControl, TouchableWithoutFeedback, TextInput, BackHandler 
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRecode, MAX_HOLDS, BASE_SCORES, rainbowColors, formatTime } from '../ts/Recode'; 
 
@@ -26,6 +27,34 @@ const RecodeScreen = ({ route, navigation }: any) => {
     selectedConsecutiveList, setSelectedConsecutiveList, removeConsecutiveItem, showDetails, setShowDetails, displayTotalScore, handleSaveConsecutiveRecord,
   } = useRecode({ route, navigation });
 
+  const [isExitModalVisible, setExitModalVisible] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        if (resultModalVisible) { closeResultModal(); return true; }
+        if (isDeleteModalVisible) { cancelDelete(); return true; }
+        if (isRecordModalVisible) { closeRecordModal(); return true; }
+        if (showTimerFinishConfirm) { setShowTimerFinishConfirm(false); return true; }
+        if (isEnduranceModalVisible) { closeEnduranceModal(); return true; }
+        if (isConsecutiveModalVisible) { closeConsecutiveModal(); return true; }
+        if (isExitModalVisible) { setExitModalVisible(false); return true; }
+
+        setExitModalVisible(true);
+        return true;
+      };
+
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      return () => backHandler.remove();
+    }, [
+      resultModalVisible, isDeleteModalVisible, isRecordModalVisible, showTimerFinishConfirm,
+      isEnduranceModalVisible, isConsecutiveModalVisible, isExitModalVisible,
+      closeResultModal, cancelDelete, closeRecordModal, setShowTimerFinishConfirm,
+      closeEnduranceModal, closeConsecutiveModal
+    ])
+  );
+
   const renderMapNode = (item: any) => {
     if (item.type === 'text') return <Text key={item.id} style={[styles.mapAbsText, { left: item.x - 15, top: item.y - 8 }]}>{item.val}</Text>;
     return (
@@ -33,6 +62,32 @@ const RecodeScreen = ({ route, navigation }: any) => {
         style={[styles.mapAbsBox, { backgroundColor: item.color, left: item.x - 10, top: item.y - 10 }]} />
     );
   };
+
+  // 💡 애니메이션 제거: Animated.View를 완전히 제거하고 무거운 연산 없이 즉각 렌더링되도록 단순 View로 구성
+  const renderPathSegments = () => {
+    if (!pathSegmentsData || pathSegmentsData.length === 0) return null;
+
+    return pathSegmentsData.map((seg: any) => {
+      return (
+        <View
+          key={seg.key}
+          pointerEvents="none" // 💡 선이 버튼 터치를 방해하지 않도록 통과시킴
+          style={[
+            styles.pathSegmentBase,
+            {
+              left: seg.left,
+              top: seg.top,
+              width: seg.width,
+              backgroundColor: seg.color,
+              transform: [{ rotate: `${seg.angle}deg` }],
+              zIndex: seg.zIndex,
+            },
+          ]}
+        />
+      );
+    });
+  };
+
   if (!hasValidMembership) {
     return (
       <View style={[styles.background, { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 }]}>
@@ -51,7 +106,6 @@ const RecodeScreen = ({ route, navigation }: any) => {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A1BE44" colors={['#A1BE44']} />}
       >
-        {/* 요약 카드 영역 */}
         <View style={styles.summaryContainer}>
           <TouchableOpacity style={styles.summaryItemVertical} onPress={openRecordModal} activeOpacity={0.8}>
             <View style={styles.summaryLeft}>
@@ -87,7 +141,6 @@ const RecodeScreen = ({ route, navigation }: any) => {
           </TouchableOpacity>
         </View>
 
-        {/* 난이도별 최고기록 아코디언 */}
         <View style={styles.simpleAccordionWrapper}>
           <TouchableOpacity style={styles.simpleAccordionHeader} onPress={() => toggleSection('difficulty')} activeOpacity={0.8}>
             <Text style={styles.simpleAccordionTitle}>난이도 별 최고기록</Text>
@@ -107,7 +160,7 @@ const RecodeScreen = ({ route, navigation }: any) => {
                   <Text style={styles.recordHoldsLeft}>{item.current ?? 0} / {MAX_HOLDS[item.color] ?? item.total}번</Text>
                   <Text style={[
                     styles.recordStatus, 
-                    item.status === '완료' ? styles.statusSuccess : (item.status === '진행중' ? styles.statusIng : styles.statusNone)
+                    item.status === '완등' ? styles.statusSuccess : (item.status === '진행중' ? styles.statusIng : styles.statusNone)
                   ]}>{item.status || '-'}</Text>
                 </View>
               ))}
@@ -115,7 +168,6 @@ const RecodeScreen = ({ route, navigation }: any) => {
           )}
         </View>
 
-        {/* 오늘의 초보벽 기록 아코디언 */}
         <View style={styles.simpleAccordionWrapper}>
           <TouchableOpacity style={styles.simpleAccordionHeader} onPress={() => toggleSection('beginnerHistory')} activeOpacity={0.8}>
             <Text style={styles.simpleAccordionTitle}>오늘의 초보벽 기록</Text>
@@ -159,7 +211,6 @@ const RecodeScreen = ({ route, navigation }: any) => {
           )}
         </View>
 
-        {/* 지구력 기록 아코디언 */}
         <View style={styles.simpleAccordionWrapper}>
           <TouchableOpacity style={styles.simpleAccordionHeader} onPress={() => toggleSection('endurance')} activeOpacity={0.8}>
             <Text style={styles.simpleAccordionTitle}>오늘의 지구력 기록</Text>
@@ -189,7 +240,6 @@ const RecodeScreen = ({ route, navigation }: any) => {
           )}
         </View>
 
-        {/* 연속 완등 기록 아코디언 */}
         <View style={styles.simpleAccordionWrapper}>
           <TouchableOpacity style={styles.simpleAccordionHeader} onPress={() => toggleSection('consecutive')} activeOpacity={0.8}>
             <Text style={styles.simpleAccordionTitle}>오늘의 초보벽 연속 기록</Text>
@@ -217,7 +267,6 @@ const RecodeScreen = ({ route, navigation }: any) => {
 
       </ScrollView>
 
-      {/* 초보벽 기록 모달 */}
       <Modal visible={isRecordModalVisible} animationType="fade" transparent onRequestClose={closeRecordModal}>
         <View style={styles.modalOverlay}>
           <TouchableWithoutFeedback onPress={closeRecordModal}><View style={StyleSheet.absoluteFill} /></TouchableWithoutFeedback>
@@ -293,7 +342,6 @@ const RecodeScreen = ({ route, navigation }: any) => {
         </View>
       </Modal>
 
-      {/* 지구력 스톱워치 / 모달 */}
       <Modal visible={isEnduranceModalVisible} animationType="fade" transparent onRequestClose={closeEnduranceModal}>
         {isTimerActive ? (
           <SafeAreaView style={styles.timerModalBackground}>
@@ -312,7 +360,6 @@ const RecodeScreen = ({ route, navigation }: any) => {
             </View>
             {showTimerFinishConfirm && (
               <View style={styles.confirmTimerOverlay}>
-                {/* 💡 타이머 완료 확인 모달 - OLLA 표준 적용 */}
                 <View style={styles.deleteModalBox}>
                   <Text style={[styles.deleteModalText, { color: '#A1BE44' }]}>기록 확인</Text>
                   <Text style={styles.deleteModalMessage}>{formatTime(timerSeconds)} 기록으로 저장됩니다.</Text>
@@ -350,10 +397,9 @@ const RecodeScreen = ({ route, navigation }: any) => {
                       <View style={styles.mapInnerWrapper}>
                         <View style={{ width: 350, height: 235 }}>
                           {mapElements.map(renderMapNode)}
-                          
-                          {pathSegmentsData.map((seg: any) => (
-                            <View key={seg.key} style={{ position: 'absolute', left: seg.left, top: seg.top, width: seg.width, height: 4, backgroundColor: seg.color, transform: [{ rotate: `${seg.angle}deg` }], zIndex: seg.zIndex, borderRadius: 2 }} />
-                          ))}
+
+                          {/* 💡 애니메이션 제거되어 선이 클릭 즉시 나타남 */}
+                          {renderPathSegments()}
 
                           {selectedMapNode && (
                             <View style={[styles.headMarker, { backgroundColor: rainbowColors[enduranceLaps % 7], left: getBoxCoord(selectedMapNode).x - 10, top: getBoxCoord(selectedMapNode).y - 10 }]} />
@@ -387,7 +433,6 @@ const RecodeScreen = ({ route, navigation }: any) => {
         )}
       </Modal>
 
-      {/* 연속 완등 모달 */}
       <Modal visible={isConsecutiveModalVisible} animationType="fade" transparent onRequestClose={closeConsecutiveModal}>
         <View style={styles.modalOverlay}>
           <TouchableWithoutFeedback onPress={closeConsecutiveModal}><View style={StyleSheet.absoluteFill} /></TouchableWithoutFeedback>
@@ -449,7 +494,30 @@ const RecodeScreen = ({ route, navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ─── 💡 결과 & 삭제 확인 모달 (OLLA 표준 규격 적용) ─── */}
+      <Modal visible={isExitModalVisible} transparent animationType="fade" onRequestClose={() => setExitModalVisible(false)}>
+        <View style={styles.deleteModalOverlay}>
+          <View style={styles.deleteModalBox}>
+            <Text style={styles.deleteModalMessage}>앱을 종료하시겠습니까?</Text>
+            <View style={styles.deleteBtnRow}>
+              <TouchableOpacity
+                style={styles.deleteBtnYes}
+                onPress={() => {
+                  setExitModalVisible(false);
+                  setTimeout(() => {
+                    BackHandler.exitApp();
+                    }, 100);
+                }}
+              >
+                <Text style={styles.deleteBtnYesText}>예</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.deleteBtnNo} onPress={() => setExitModalVisible(false)}>
+                <Text style={styles.deleteBtnNoText}>아니오</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={resultModalVisible} animationType="fade" transparent onRequestClose={closeResultModal}>
         <View style={styles.resultModalOverlay}>
           <View style={styles.resultModalBox}>
@@ -512,8 +580,8 @@ const styles = StyleSheet.create({
   recordHoldsLeft: { flex: 1, color: '#ffffff', fontSize: 17, fontWeight: 'bold', marginLeft: 10 }, 
   recordStatus: { fontSize: 16, fontWeight: 'bold', width: 55, textAlign: 'right' }, 
   statusSuccess: { color: '#A1BE44' },
-  statusIng: { color: '#ffffff' }, // 💡 진행중 상태: 흰색
-  statusNone: { color: '#999999' }, // 💡 미기록/실패 등 기본 상태: 회색
+  statusIng: { color: '#ffffff' }, 
+  statusNone: { color: '#999999' }, 
 
   rowCardWithTrash: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#2A2A2A', paddingVertical: 18, paddingHorizontal: 15, borderRadius: 16, marginBottom: 10 },
   enduranceCol: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -566,6 +634,19 @@ const styles = StyleSheet.create({
   selectedSectionBox: { backgroundColor: '#2A2A2A', padding: 15, borderRadius: 12, alignItems: 'center', marginBottom: 10 },
   selectedSectionText: { color: '#A1BE44', fontSize: 18, fontWeight: 'bold' }, 
 
+  // 💡 선 스타일링: 애니메이션에 관여하던 속성들을 전부 빼고 단순 명료하게 스타일 지정
+  pathSegmentBase: {
+    position: 'absolute',
+    height: 7,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: '#000000', // 검은색 테두리
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.4,
+    shadowRadius: 2,
+  },
+
   timerInputRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   timerPlayBtn: { width: 50, height: 50, backgroundColor: '#333333', borderRadius: 25, alignItems: 'center', justifyContent: 'center', marginRight: 15 },
   timerPlayIcon: { color: '#A1BE44', fontSize: 20, marginLeft: 4 }, 
@@ -596,8 +677,6 @@ const styles = StyleSheet.create({
 
   confirmTimerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', zIndex: 999 },
 
-  // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
-  // 1. 공통 시스템 결과 알림 모달
   resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   resultModalBox: { 
     width: '90%', 
@@ -623,7 +702,6 @@ const styles = StyleSheet.create({
   resultModalBtn: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
   resultModalBtnText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
 
-  // 2. 삭제/완료 투 버튼 확인 모달 (deleteModalBox 공유)
   deleteModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
   deleteModalBox: { 
     width: '90%', 
@@ -651,7 +729,6 @@ const styles = StyleSheet.create({
   deleteBtnYesText: { color: '#000000', fontSize: 18, fontWeight: 'bold' }, 
   deleteBtnNo: { flex: 1, backgroundColor: '#262626', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginLeft: 5 },
   deleteBtnNoText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' }, 
-  // ───────────────────────────────────────────────────────────────────────────────────────────
 });
 
 export default RecodeScreen;

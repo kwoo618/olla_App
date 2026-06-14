@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Image, Switch, Modal, Animated, TextInput, ActivityIndicator, Linking, RefreshControl,
-  Platform, TouchableWithoutFeedback, KeyboardAvoidingView
+  Platform, TouchableWithoutFeedback, KeyboardAvoidingView, BackHandler
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useMyPage, getFullImageUrl } from '../ts/MY';
 import FastImage from 'react-native-fast-image';
 
@@ -11,7 +12,6 @@ import FastImage from 'react-native-fast-image';
 const ProfileImg = ({ uri, style }: { uri: string | null | undefined; style: any }) => {
   const fullUri = getFullImageUrl(uri);
 
-  // uri가 없으면 FastImage 쓰지 않고 바로 fallback — 캐시 문제 회피
   if (!fullUri) {
     return <Image source={require('../assets/profile.png')} style={[style, { backgroundColor: 'transparent' }]} />;
   }
@@ -21,7 +21,7 @@ const ProfileImg = ({ uri, style }: { uri: string | null | undefined; style: any
       key={fullUri}  
       source={{ uri: fullUri, priority: FastImage.priority.high }}
       style={style}
-      onError={() => {/* 에러 시 아래 fallback으로 처리 */}}
+      onError={() => {}}
       defaultSource={require('../assets/profile.png')}
     />
   );
@@ -43,6 +43,35 @@ const MYScreen = ({ navigation }: any) => {
     isDeleteModalVisible, setDeleteModalVisible, executeDeleteAccount,
     isAdminModalVisible, setAdminModalVisible
   } = useMyPage(navigation);
+
+  const [isExitModalVisible, setExitModalVisible] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        if (isProfileModalVisible) { closeProfileModal(); return true; }
+        if (isChangePwModalVisible) { setChangePwModalVisible(false); return true; }
+        if (isAdminModalVisible) { setAdminModalVisible(false); return true; }
+        if (isLogoutModalVisible) { setLogoutModalVisible(false); return true; }
+        if (isDeleteModalVisible) { setDeleteModalVisible(false); return true; }
+        if (resultModalVisible) { setResultModalVisible(false); return true; }
+        if (isPauseModalVisible) { closePauseModal(); return true; }
+        if (isContactModalVisible) { closeContactModal(); return true; }
+        if (isExitModalVisible) { setExitModalVisible(false); return true; }
+
+        setExitModalVisible(true);
+        return true;
+      };
+
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      return () => backHandler.remove();
+    }, [
+      isProfileModalVisible, isChangePwModalVisible, isAdminModalVisible,
+      isLogoutModalVisible, isDeleteModalVisible, resultModalVisible,
+      isPauseModalVisible, isContactModalVisible, isExitModalVisible, closeProfileModal, closePauseModal, closeContactModal
+    ])
+  );
 
   // ─── 알림 설정 동기화 컨트롤러 ───────────────────────────────────────────
   const handleNotificationSwitch = (key: string) => {
@@ -69,16 +98,12 @@ const MYScreen = ({ navigation }: any) => {
         nextState.isActivityNotificationOn &&
         nextState.isCrewNotificationOn &&
         nextState.isNoticeNotificationOn;
-      const isAllOff =
-        !nextState.isMembershipNotificationOn &&
-        !nextState.isActivityNotificationOn &&
-        !nextState.isCrewNotificationOn &&
-        !nextState.isNoticeNotificationOn;
 
-      const batchUpdate: any = { [key]: targetState };
-      if (isAllOn) batchUpdate.isGlobalNotificationOn = true;
-      else if (isAllOff) batchUpdate.isGlobalNotificationOn = false;
-      updateMultipleNotiSettings(batchUpdate);
+      // 모두 켜진 경우에만 글로벌 ON, 하나라도 꺼지면 글로벌 OFF
+      updateMultipleNotiSettings({
+        [key]: targetState,
+        isGlobalNotificationOn: isAllOn,
+      });
     }
   };
 
@@ -90,7 +115,6 @@ const MYScreen = ({ navigation }: any) => {
       <View style={styles.editFieldWrapper}>
         <View style={styles.editFieldHeader}>
           <Text style={styles.editFieldTitle}>{title}</Text>
-          {/* phone은 토글 숨김 */}
           {!isReadOnly && (
             <View style={styles.toggleWrapper}>
               <Text style={styles.toggleLabel}>{profileToggles[toggleKey] ? '공개' : '비공개'}</Text>
@@ -303,10 +327,17 @@ const MYScreen = ({ navigation }: any) => {
                     </TouchableOpacity>
                   </View>
 
-                  {/* 안내 텍스트 */}
                   <Text style={styles.profileImageHint}>
                     이미지를 탭하면 변경할 수 있어요
                   </Text>
+
+                  <TouchableOpacity 
+                    style={styles.resetProfileBtn} 
+                    onPress={() => setProfileData({ ...profileData, profileImageUrl: null })}
+                    disabled={isImageUploading}
+                  >
+                    <Text style={styles.resetProfileBtnText}>기본 프로필로 돌아가기</Text>
+                  </TouchableOpacity>
 
                   <View style={styles.editFieldWrapper}>
                     <View style={styles.editFieldHeader}><Text style={styles.editFieldTitle}>이름</Text></View>
@@ -334,11 +365,9 @@ const MYScreen = ({ navigation }: any) => {
                     </View>
                   </View>
 
-                  {/* 기존 나이(만) 필드 전체를 아래로 교체 */}
                   <View style={styles.editFieldWrapper}>
                     <View style={styles.editFieldHeader}>
                       <Text style={styles.editFieldTitle}>나이(만)</Text>
-                      {/* 토글 완전 제거 */}
                     </View>
                     <View style={styles.editInputBox}>
                       <TextInput
@@ -353,7 +382,6 @@ const MYScreen = ({ navigation }: any) => {
 
                   {renderEditField('전화번호', 'phone', '')}
 
-                  {/* 안내 텍스트 */}
                   <Text style={styles.profilefixHint}>
                     이름, 성별, 생년월일, 전화번호 수정은 관리자에게 문의하십시오
                   </Text>
@@ -428,6 +456,29 @@ const MYScreen = ({ navigation }: any) => {
             <View style={styles.centerBtnRow}>
               <TouchableOpacity style={[styles.centerBtnYes, { backgroundColor: '#FF4D4D' }]} onPress={executeDeleteAccount}><Text style={[styles.centerBtnYesText, { color: '#ffffff' }]}>삭제하기</Text></TouchableOpacity>
               <TouchableOpacity style={styles.centerBtnNo} onPress={() => setDeleteModalVisible(false)}><Text style={styles.centerBtnNoText}>취소</Text></TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 💡 앱 종료 확인 커스텀 모달 */}
+      <Modal visible={isExitModalVisible} transparent animationType="fade" onRequestClose={() => setExitModalVisible(false)}>
+        <View style={styles.centerModalOverlay}>
+          <View style={styles.centerModalBox}>
+            <Text style={styles.centerModalText}>앱을 종료하시겠습니까?</Text>
+            <View style={styles.centerBtnRow}>
+              <TouchableOpacity
+                style={styles.centerBtnYes}
+                onPress={() => {
+                  setExitModalVisible(false);
+                  setTimeout(() => {
+                    BackHandler.exitApp();
+                  }, 100);
+                }}
+              >
+                <Text style={styles.centerBtnYesText}>예</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.centerBtnNo} onPress={() => setExitModalVisible(false)}><Text style={styles.centerBtnNoText}>아니오</Text></TouchableOpacity>
             </View>
           </View>
         </View>
@@ -537,10 +588,13 @@ const styles = StyleSheet.create({
 
   profileEditContainer: { backgroundColor: '#262626', borderRadius: 16, padding: 20 },
   profileImageSection: { alignSelf: 'center', marginBottom: 8, position: 'relative' },
-  profileImageEditWrapper: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#444444', overflow: 'hidden' },
+  profileImageEditWrapper: { alignSelf: 'center', width: 90, height: 90, borderRadius: 45, backgroundColor: '#444444', marginBottom: 12, overflow: 'hidden' },
   profileImageLarge: { width: '100%', height: '100%' },
   profileImageEditOverlay: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: 'rgba(0,0,0,0.6)', paddingVertical: 4, alignItems: 'center' },
   profileImageEditText: { color: '#ffffff', fontSize: 12, fontWeight: 'bold' },
+
+  resetProfileBtn: { alignSelf: 'center', backgroundColor: '#A1BE44', paddingVertical: 8, paddingHorizontal: 15, borderRadius: 15, marginBottom: 25 },
+  resetProfileBtnText: { color: '#000000', fontSize: 14, fontWeight: 'bold' },
   deleteImageBtn: { position: 'absolute', top: -4, right: -4, width: 26, height: 26, borderRadius: 13, backgroundColor: '#FF4D4D', justifyContent: 'center', alignItems: 'center', zIndex: 10, borderWidth: 2, borderColor: '#262626' },
   deleteImageBtnText: { color: '#ffffff', fontSize: 11, fontWeight: 'bold', lineHeight: 13 },
   profileImageHint: { color: '#666666', fontSize: 12, textAlign: 'center', marginBottom: 20 },

@@ -316,6 +316,7 @@ export const useRanking = (route: any) => {
             colorHex:        currentColor.hex,
             type:            isRoundTrip ? '왕복' : '편도',
             hold:            holdCount,
+            isClear:         holdCount >= maxHold, // 💡 완등 여부 판별 (MAX_HOLDS 도달)
             rawScore:        calcBeginnerScore(currentColor.name, isRoundTrip, holdCount),
             achievedAt:      recordTime,
           };
@@ -356,6 +357,7 @@ export const useRanking = (route: any) => {
             colorHex:        currentColor.hex,
             type:            isRT ? '왕복' : '편도',
             hold,
+            isClear:         hold >= maxHold, // 💡 내 기록 완등 여부 판별
             rawScore:        score,
             achievedAt:      r.recordDate ? new Date(r.recordDate).getTime() : Date.now(),
           });

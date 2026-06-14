@@ -1,7 +1,7 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, TextInput, RefreshControl, KeyboardAvoidingView, Platform, Dimensions, PanResponder, TouchableWithoutFeedback, ActivityIndicator, Keyboard } from 'react-native';
+import React, { useState, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal, Animated, TextInput, RefreshControl, KeyboardAvoidingView, Platform, Dimensions, PanResponder, TouchableWithoutFeedback, ActivityIndicator, Keyboard, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused, useFocusEffect } from '@react-navigation/native';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { useCommunityData, getFullImageUrl, formatCommentDate, getToday, p } from '../ts/Community';
 import FastImage from 'react-native-fast-image';
@@ -63,6 +63,9 @@ const CommunityScreen = ({ route, navigation }: any) => {
   const [isCreateVisible, setCreateVisible] = useState(false);
   const [isCommentVisible, setCommentVisible] = useState(false);
   const [isDetailVisible, setDetailVisible] = useState(false);
+  
+  // 💡 앱 종료 모달 상태
+  const [isExitModalVisible, setExitModalVisible] = useState(false);
 
   const { height: SCREEN_HEIGHT } = Dimensions.get('window');
   const HALF_SCREEN = SCREEN_HEIGHT * 0.6;
@@ -72,8 +75,33 @@ const CommunityScreen = ({ route, navigation }: any) => {
   const THRESHOLD = (HALF_SCREEN + FULL_SCREEN) / 2;
   const CLOSE_THRESHOLD = HALF_SCREEN * 0.7;
 
+  // 1. 애니메이션 Refs (함수보다 먼저 선언)
   const commentHeightAnim = useRef(new Animated.Value(0)).current;
   const currentSnap = useRef(HALF_SCREEN);
+
+  const createHeightAnim = useRef(new Animated.Value(0)).current;
+  const currentCreateSnap = useRef(HALF_SCREEN);
+
+  const detailHeightAnim = useRef(new Animated.Value(0)).current;
+  const currentDetailSnap = useRef(DETAIL_MODAL_HEIGHT);
+
+  // 2. 모달 닫기 함수 (오류 해결: 선언 순서를 위로 변경하고 useCallback 적용)
+  const closeCommentModal = useCallback(() => {
+    Animated.timing(commentHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
+      setCommentVisible(false); setReplyingTo(null); setCommentInput(''); setSelectedPost(null);
+    });
+  }, [commentHeightAnim, setReplyingTo, setCommentInput, setSelectedPost]);
+
+  const closeCreateModal = useCallback(() => {
+    Keyboard.dismiss();
+    Animated.timing(createHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => setCreateVisible(false));
+  }, [createHeightAnim]);
+
+  const closeDetailModal = useCallback(() => {
+    Animated.timing(detailHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => setDetailVisible(false));
+  }, [detailHeightAnim]);
+
+  // 3. PanResponders (close 함수 참조)
   const commentPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -96,8 +124,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
     })
   ).current;
 
-  const createHeightAnim = useRef(new Animated.Value(0)).current;
-  const currentCreateSnap = useRef(HALF_SCREEN);
   const createPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -120,8 +146,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
     })
   ).current;
 
-  const detailHeightAnim = useRef(new Animated.Value(0)).current;
-  const currentDetailSnap = useRef(DETAIL_MODAL_HEIGHT);
   const detailPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -137,6 +161,38 @@ const CommunityScreen = ({ route, navigation }: any) => {
     })
   ).current;
 
+  // 4. 뒤로가기 제어 로직
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        if (isExitModalVisible) { setExitModalVisible(false); return true; }
+        if (resultModalVisible) { closeResultModal(); return true; }
+        if (createAlertVisible) { setCreateAlertVisible(false); return true; }
+        if (deleteTarget !== null) { setDeleteTarget(null); return true; }
+        if (closeTarget !== null) { setCloseTarget(null); return true; }
+        if (commentDeleteTarget !== null) { setCommentDeleteTarget(null); return true; }
+        if (isCalendarVisible) { closeCalendar(); return true; }
+        if (isTimePickerVisible) { closeTimePicker(); return true; }
+        if (isDetailVisible) { closeDetailModal(); return true; }
+        if (isCreateVisible) { closeCreateModal(); return true; }
+        if (isCommentVisible) { closeCommentModal(); return true; }
+
+        setExitModalVisible(true);
+        return true;
+      };
+
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      return () => backHandler.remove();
+    }, [
+      isExitModalVisible, resultModalVisible, createAlertVisible, deleteTarget,
+      closeTarget, commentDeleteTarget, isCalendarVisible, isTimePickerVisible,
+      isDetailVisible, isCreateVisible, isCommentVisible, closeResultModal,
+      setCreateAlertVisible, setDeleteTarget, setCloseTarget, setCommentDeleteTarget,
+      closeCalendar, closeTimePicker, closeDetailModal, closeCreateModal, closeCommentModal
+    ])
+  );
+
   const openDetailModal = async (authorId: number, authorName: string, isMine: boolean) => {
     if (await loadUserDetail(authorId, authorName, isMine)) {
       setDetailVisible(true);
@@ -144,9 +200,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
       detailHeightAnim.setValue(0);
       Animated.timing(detailHeightAnim, { toValue: DETAIL_MODAL_HEIGHT, duration: 300, useNativeDriver: false }).start();
     }
-  };
-  const closeDetailModal = () => {
-    Animated.timing(detailHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => setDetailVisible(false));
   };
 
   const openPostDetail = async (post: any) => {
@@ -159,11 +212,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
       commentHeightAnim.setValue(0);
       Animated.timing(commentHeightAnim, { toValue: HALF_SCREEN, duration: 300, useNativeDriver: false }).start();
     }
-  };
-  const closeCommentModal = () => {
-    Animated.timing(commentHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
-      setCommentVisible(false); setReplyingTo(null); setCommentInput(''); setSelectedPost(null);
-    });
   };
 
   const openCreateModal = () => {
@@ -181,11 +229,6 @@ const CommunityScreen = ({ route, navigation }: any) => {
     currentCreateSnap.current = CREATE_SCREEN;
     createHeightAnim.setValue(0);
     Animated.timing(createHeightAnim, { toValue: CREATE_SCREEN, duration: 300, useNativeDriver: false }).start();
-  };
-
-  const closeCreateModal = () => {
-    Keyboard.dismiss();
-    Animated.timing(createHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => setCreateVisible(false));
   };
 
   const filteredPosts = posts.filter(post => selectedTab === '전체' || post.type === selectedTab);
@@ -763,6 +806,29 @@ const CommunityScreen = ({ route, navigation }: any) => {
           </View>
         </Modal>
       )}
+
+      {/* ─── 💡 앱 종료 모달 (OLLA 표준 규격) ─── */}
+      <Modal visible={isExitModalVisible} transparent animationType="fade" onRequestClose={() => setExitModalVisible(false)}>
+        <View style={s.overlay}>
+          <View style={s.alertBox}>
+            <Text style={s.alertMessage}>앱을 종료하시겠습니까?</Text>
+            <View style={s.alertBtns}>
+              <TouchableOpacity
+                style={s.btnYes}
+                onPress={() => {
+                  setExitModalVisible(false);
+                  setTimeout(() => {
+                    BackHandler.exitApp();    // 2. 0.1초 뒤에 앱 종료 실행
+                  }, 100);
+                }}
+                >
+                  <Text style={s.btnYesText}>예</Text>
+                </TouchableOpacity>
+              <TouchableOpacity style={s.btnNo} onPress={() => setExitModalVisible(false)}><Text style={s.btnNoText}>아니오</Text></TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
     </SafeAreaView>
   );
