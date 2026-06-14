@@ -100,4 +100,11 @@ public class AuthController {
         authService.changePassword(member.getLoginId(), request);
         return ResponseEntity.ok(ApiResponse.success(200, "비밀번호가 성공적으로 변경되었습니다.", null));
     }
+
+    @PostMapping("/reissue")
+    @Operation(summary = "Access Token 재발급")
+    public ResponseEntity<ApiResponse<TokenResponse>> reissue(@RequestBody Map<String, String> request) {
+        String refreshToken = request.get("refreshToken");
+        return ResponseEntity.ok(ApiResponse.success(200, "토큰이 재발급되었습니다.", authService.reissue(refreshToken)));
+    }
 }
