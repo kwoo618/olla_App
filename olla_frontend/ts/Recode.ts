@@ -1,36 +1,72 @@
+// ============================================================
+// useRanking.ts
+// 랭킹 화면에서 사용하는 커스텀 훅
+// - 초보벽 / 지구력 / 연속 완등 3가지 탭 랭킹 조회
+// - 내 프로필 정보 로드 (닉네임, memberId, 프로필 이미지)
+// - 기간권 보유 여부 확인 (일일권/횟수권은 랭킹 접근 불가)
+// - 사용자 프로필 상세 모달 (드래그로 닫기 가능)
+// - 색상별 탭 필터링 및 점수 계산/정렬
+// - pull-to-refresh
+// ============================================================
+
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Animated, PanResponder, Dimensions, Keyboard } from 'react-native';
+import { Animated, PanResponder, Dimensions } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../src/constants/Config';
 
-// ─────────────────────────── 상수 및 유틸 ───────────────────────────
-const ENDURANCE_BASE_URL = `${API_BASE_URL}/records/endurance`;
-const SERIES_BASE_URL    = `${API_BASE_URL}/records/series`;
-const MEMBERSHIP_URL     = `${API_BASE_URL}/memberships/me`;
+// ── API 엔드포인트 상수 ──
+const RANKING_BEGINNER_URL  = `${API_BASE_URL}/rankings/beginner`;       // 초보벽 랭킹
+const RANKING_ENDURANCE_URL = `${API_BASE_URL}/rankings/endurance/distance`; // 지구력 랭킹 (거리 기준)
+const RANKING_SERIES_URL    = `${API_BASE_URL}/rankings/series`;          // 연속 완등 랭킹
+const MY_PROFILE_URL        = `${API_BASE_URL}/members/me`;              // 내 프로필
+const MY_BEGINNER_BEST_URL  = `${API_BASE_URL}/records/beginner/best`;   // 내 초보벽 최고 기록
+const PROFILE_API_URL       = `${API_BASE_URL}/members`;                 // 다른 사용자 프로필
+const MEMBERSHIP_URL        = `${API_BASE_URL}/memberships/me`;          // 내 회원권 목록
 
-export const MAX_HOLDS: Record<string, number> = {
+// 서버 이미지 상대경로를 절대 URL로 변환
+export const getFullImageUrl = (path?: string | null): string | null => {
+  if (!path || path === 'null' || path === 'undefined') return null;
+  if (path.startsWith('http') || path.startsWith('file:') || path.startsWith('content:')) return path;
+  const domain = API_BASE_URL.replace('/api/v1', '');
+  const formattedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${domain}${formattedPath}`;
+};
+
+// 난이도 색상 목록 (화면 표시용 한글명 + hex 코드 + 서버 enum 값)
+export const colors = [
+  { name: '흰색',  hex: '#EAEAEA', enum: 'WHITE'  },
+  { name: '노랑',  hex: '#F4D03F', enum: 'YELLOW' },
+  { name: '초록',  hex: '#58D68D', enum: 'GREEN'  },
+  { name: '파랑',  hex: '#5DADE2', enum: 'BLUE'   },
+  { name: '빨강',  hex: '#EC7063', enum: 'RED'    },
+  { name: '보라',  hex: '#AF7AC5', enum: 'PURPLE' },
+  { name: '주황',  hex: '#F0B27A', enum: 'ORANGE' },
+  { name: '검정',  hex: '#000000', enum: 'BLACK'  },
+];
+
+// 서버 enum → 한글 색상명 변환 맵
+const ENUM_TO_KR: Record<string, string> = {
+  WHITE: '흰색', YELLOW: '노랑', GREEN: '초록', BLUE: '파랑',
+  RED: '빨강', PURPLE: '보라', ORANGE: '주황', BLACK: '검정',
+};
+
+// 색상별 최대 홀드 수 (완등 판정 기준)
+const MAX_HOLDS: Record<string, number> = {
   '흰색': 26, '노랑': 33, '초록': 28, '파랑': 26,
   '빨강': 26, '보라': 25, '주황': 28, '검정': 30,
 };
 
-export const BASE_SCORES: Record<string, number> = {
+// 색상별 연속 완등 기본 점수 (연속 완등 점수 계산에 사용)
+const BASE_SCORES: Record<string, number> = {
   '흰색': 10, '노랑': 20, '주황': 30, '초록': 40,
   '파랑': 50, '빨강': 60, '보라': 70, '검정': 80,
 };
 
-const KR_TO_ENUM: Record<string, string> = {
-  '흰색': 'WHITE', '노랑': 'YELLOW', '주황': 'ORANGE', '초록': 'GREEN',
-  '파랑': 'BLUE',  '빨강': 'RED',    '보라': 'PURPLE', '검정': 'BLACK',
-};
+// 초보벽 점수 계산 시 색상 우선순위 (낮음 → 높음)
+const COLOR_ORDER = ['흰색', '노랑', '초록', '파랑', '빨강', '보라', '주황', '검정'];
 
-export const ENUM_TO_KR: Record<string, string> = {
-  WHITE: '흰색', YELLOW: '노랑', ORANGE: '주황', GREEN: '초록',
-  BLUE: '파랑',  RED: '빨강',   PURPLE: '보라', BLACK: '검정',
-};
-
-const colorOrder = ['흰색', '노랑', '초록', '파랑', '빨강', '보라', '주황', '검정'];
-
+// 지구력 지도 구간 순서 (추가 블록 수 → 구간 레이블 변환에 사용)
 const BOX_SEQUENCE = [
   '1-1','1-2','1-3','1-4','1-5','1-6',
   '2-1','2-2','2-3','2-4','2-5','2-6','2-7','2-8','2-9','2-10','2-11','2-12',
@@ -38,574 +74,542 @@ const BOX_SEQUENCE = [
   '4-1','4-2',
 ];
 
-export const rainbowColors = ['#FF0000','#FF7F00','#FFFF00','#00FF00','#0080FF','#4B0082','#9400D3'];
+// 지구력 지도 구간 레이블에 따른 배경 색상 반환
+export const getSectionColor = (section: string): string => {
+  if (!section || section === '0') return '#FFFFFF';
+  if (section.startsWith('1-')) return section === '1-6' ? '#B96BC6' : '#FFFFFF';
+  if (section.startsWith('2-')) {
+    const n = parseInt(section.split('-')[1], 10);
+    if (n <= 4) return '#58CCFF';
+    if (n <= 8) return '#3A4CA8';
+    return '#692498';
+  }
+  if (section.startsWith('3-')) return '#666666';
+  if (section.startsWith('4-')) return '#343434';
+  return '#FFFFFF';
+};
 
-export const formatTime = (totalSecs: number): string => {
-  const m = Math.floor(totalSecs / 60).toString().padStart(2, '0');
-  const s = (totalSecs % 60).toString().padStart(2, '0');
+// 랭킹 순위에 따른 색상 (1위 금, 2위 은, 3위 동, 나머지 회색)
+export const getRankColor = (rank: number): string => {
+  if (rank === 1) return '#FFCC00';
+  if (rank === 2) return '#C2C2C2';
+  if (rank === 3) return '#C0580E';
+  return '#666666';
+};
+
+// 초 단위를 "MM:SS" 형식 문자열로 변환
+const formatTime = (seconds: number): string => {
+  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const s = (seconds % 60).toString().padStart(2, '0');
   return `${m}:${s}`;
 };
 
+// 서버 성별 enum → 한글 변환 (MALE/M → 남자, FEMALE/F → 여자)
+const translateGender = (gender: string) => {
+  if (!gender || gender === '-') return '-';
+  const g = String(gender).toUpperCase();
+  if (g === 'MALE' || g === 'M') return '남자';
+  if (g === 'FEMALE' || g === 'F') return '여자';
+  return gender;
+};
+
+// 서버 응답에서 배열 형태의 랭킹 데이터를 추출하는 유틸
+// masters/challengers 필드가 있는 경우 합쳐서 반환
+const extractList = (serverData: any): any[] => {
+  if (!serverData) return [];
+  if (Array.isArray(serverData)) return serverData;
+  if (Array.isArray(serverData.list)) return serverData.list;
+  if (Array.isArray(serverData.data)) return serverData.data;
+  if (serverData.masters || serverData.challengers)
+    return [...(serverData.masters ?? []), ...(serverData.challengers ?? [])];
+  return [];
+};
+
+// 초보벽 점수 계산
+// 색상 순서(높을수록 고득점) * 100,000 + 왕복 보너스(50,000) + 홀드 번호
+const calcBeginnerScore = (colorName: string, isRoundTrip: boolean, holdCount: number): number => {
+  const colorIdx = COLOR_ORDER.indexOf(colorName);
+  return colorIdx * 100_000 + (isRoundTrip ? 50_000 : 0) + holdCount;
+};
+
+// 지구력 편도 수 + 추가 블록 수 → 구간 레이블 변환
+// 완주한 경우 '완주', 추가 블록이 있으면 BOX_SEQUENCE에서 레이블 조회
 const getSectionLabel = (oneWayCount: number, additionalBlocks: number): string => {
   if (oneWayCount === 0 && additionalBlocks === 0) return '0';
-  if (additionalBlocks > 0 && additionalBlocks <= BOX_SEQUENCE.length) return BOX_SEQUENCE[additionalBlocks - 1];
-  return '4-2'; 
+  if (additionalBlocks > 0 && additionalBlocks <= BOX_SEQUENCE.length)
+    return BOX_SEQUENCE[additionalBlocks - 1];
+  return '완주';
 };
 
-// 오늘 날짜 문자열 반환
-const getLocalDateStr = (): string => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-const getAuthHeader = async () => {
-  const token = await AsyncStorage.getItem('userToken');
-  return { headers: { Authorization: `Bearer ${token}` } };
-};
-
-export const useRecode = ({ route, navigation }: any) => {
-  const [difficultyData, setDifficultyData] = useState<any[]>([
-    { color: '흰색', hex: '#FFFFFF', type: null, current: 0, status: '미기록' },
-    { color: '노랑', hex: '#FFE600', type: null, current: 0, status: '미기록' },
-    { color: '초록', hex: '#00C853', type: null, current: 0, status: '미기록' },
-    { color: '파랑', hex: '#007AFF', type: null, current: 0, status: '미기록' },
-    { color: '빨강', hex: '#FF3B30', type: null, current: 0, status: '미기록' },
-    { color: '보라', hex: '#AF52DE', type: null, current: 0, status: '미기록' },
-    { color: '주황', hex: '#FF8A00', type: null, current: 0, status: '미기록' },
-    { color: '검정', hex: '#555555', type: null, current: 0, status: '미기록' },
-  ]);
-  const [enduranceData, setEnduranceData] = useState<any[]>([]);
-  const [consecutiveData, setConsecutiveData] = useState<any[]>([]);
-
+export const useRanking = (route: any) => {
+  // null = 아직 확인 중, true/false = 기간권 보유 여부
+  const [hasValidMembership, setHasValidMembership] = useState<boolean | null>(null);
+  // pull-to-refresh 진행 여부
   const [refreshing, setRefreshing] = useState(false);
-  const [showTimerFinishConfirm, setShowTimerFinishConfirm] = useState(false); 
-  const [beginnerHistoryData, setBeginnerHistoryData] = useState<any[]>([]);
-  const [expandedSection, setExpandedSection] = useState<string | null>(route?.params?.openSection ?? null);
-  const [hasValidMembership, setHasValidMembership] = useState(false);
+  // 현재 선택된 메인 탭 (초보벽 / 지구력 / 연속)
+  const [mainTab, setMainTab]   = useState<string>(route?.params?.targetTab ?? '초보벽');
+  // 초보벽 탭에서 선택된 색상 필터 (전체 또는 특정 색상)
+  const [colorTab, setColorTab] = useState<string>('전체');
 
-  // ─── 모달 상태 ───
-  const [resultModalVisible, setResultModalVisible] = useState(false);
-  const [resultModalConfig, setResultModalConfig] = useState({ title: '', message: '', type: 'info' as 'info'|'success'|'error' });
+  // 각 탭별 원시 랭킹 데이터 (정렬 전)
+  const [beginnerRankings,    setBeginnerRankings]    = useState<any[]>([]);
+  const [enduranceRankings,   setEnduranceRankings]   = useState<any[]>([]);
+  const [consecutiveRankings, setConsecutiveRankings] = useState<any[]>([]);
 
-  const showResultModal = useCallback((title: string, message: string, type: 'info' | 'success' | 'error' = 'info') => {
-    Keyboard.dismiss();
-    setResultModalConfig({ title, message, type });
-    setResultModalVisible(true);
-  }, []);
+  // 내 프로필 정보 (랭킹 목록에서 "나" 여부 판별에 사용)
+  const [myNickname,        setMyNickname]        = useState<string>('알 수 없음');
+  const [myMemberId,        setMyMemberId]        = useState<number | null>(null);
+  const [myProfileImageUrl, setMyProfileImageUrl] = useState<string | null>(null);
 
-  const checkMembership = async () => {
+  // 사용자 프로필 상세 모달 표시 여부 및 선택된 사용자 데이터
+  const [isDetailVisible, setDetailVisible] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  // 일반 알림 다이얼로그 상태 (프로필 조회 실패 등)
+  const [alertConfig, setAlertConfig] = useState<{ visible: boolean; title: string; message: string }>({ visible: false, title: '', message: '' });
+
+  // 프로필 상세 모달 높이 (화면 높이의 70%)
+  const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+  const DETAIL_MODAL_HEIGHT = SCREEN_HEIGHT * 0.70;
+  // 모달 현재 높이 애니메이션 값
+  const detailHeightAnim = useRef(new Animated.Value(0)).current;
+  // 현재 스냅 포인트 높이 저장 (드래그 시 기준점으로 사용)
+  const currentDetailSnap = useRef(DETAIL_MODAL_HEIGHT);
+
+  // 프로필 모달 드래그 제스처 처리
+  // - 위로 드래그: 현재 높이 70% 미만이 되면 모달 닫기
+  // - 그 외: 스프링 애니메이션으로 원위치 복귀
+  const detailPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 5,
+      onPanResponderGrant: () => {
+        // 드래그 시작 시 현재 높이를 offset으로 설정해 연속 드래그 지원
+        detailHeightAnim.setOffset(currentDetailSnap.current);
+        detailHeightAnim.setValue(0);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        // 아래로 드래그(양수 dy)만 허용, 위로는 최대 0까지만
+        detailHeightAnim.setValue(Math.min(0, -gestureState.dy));
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        detailHeightAnim.flattenOffset();
+        const finalHeight = currentDetailSnap.current - gestureState.dy;
+        if (finalHeight < currentDetailSnap.current * 0.7) {
+          closeDetailModal();
+        } else {
+          Animated.spring(detailHeightAnim, { toValue: currentDetailSnap.current, useNativeDriver: false }).start();
+        }
+      }
+    })
+  ).current;
+
+  // 일반 알림 다이얼로그 표시
+  const showAlert = (title: string, message: string) => {
+    setAlertConfig({ visible: true, title, message });
+  };
+
+  // AsyncStorage에서 JWT 토큰을 읽어 Authorization 헤더 객체로 반환
+  // 토큰 없으면 빈 객체 반환 (비로그인 허용)
+  const getAuthHeader = async () => {
+    const token = await AsyncStorage.getItem('userToken');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  // 랭킹 접근 가능한 기간권 보유 여부 확인
+  // - 일일권(COUNT/횟수/일일 타입)은 제외
+  // - 기간권(PERIOD/기간 타입 또는 endDate 있는 것) 중 만료일이 현재 이후인 것이 있으면 true
+  const checkRankingMembership = async () => {
     try {
-      const config = await getAuthHeader();
-      const res = await axios.get(MEMBERSHIP_URL, config);
+      const headers = await getAuthHeader();
+      const res = await axios.get(MEMBERSHIP_URL, { headers });
       const rawData = res.data.data;
-      if (rawData) {
-        const memberships = Array.isArray(rawData) ? rawData : [rawData];
-        let isValid = false;
-        for (const m of memberships) {
-          if (!m) continue;
-          const status = String(m.membershipStatus || m.status || '').toUpperCase();
-          if (status === 'DELETED' || status === 'INACTIVE') continue;
-          if (status !== 'ACTIVE' && status !== '') continue;
-          const typeStr = String(m.membershipType ?? '').toUpperCase();
+      const memberships: any[] = Array.isArray(rawData) ? rawData : (rawData ? [rawData] : []);
 
-          if (typeStr.includes('COUNT') || typeStr.includes('횟수') || typeStr.includes('일일')) continue;
+      let isValid = false;
+      for (const m of memberships) {
+        if (!m) continue;
+        const status = String(m.membershipStatus || m.status || '').toUpperCase();
+        // 삭제/비활성 상태 제외
+        if (status === 'DELETED' || status === 'INACTIVE') continue;
+        if (status !== 'ACTIVE' && status !== '') continue;
 
-          if (typeStr.includes('PERIOD') || typeStr.includes('기간') || m.endDate) {
-            if (m.endDate) {
-              const end = new Date(m.endDate);
-              end.setHours(23, 59, 59, 999);
-              if (end.getTime() >= Date.now()) {
-                isValid = true;
-                break;
-              }
+        const typeStr = String(m.membershipType ?? '').toUpperCase();
+
+        // 일일권/횟수권은 랭킹 접근 불가 → 건너뜀
+        const isCountType =
+        typeStr.includes('COUNT') || typeStr.includes('횟수') || typeStr.includes('일일');
+        if (isCountType) continue;
+
+        // 기간권이고 만료일이 현재 이후면 유효한 기간권으로 판단
+        if (typeStr.includes('PERIOD') || typeStr.includes('기간') || m.endDate) {
+          if (m.endDate) {
+            const end = new Date(m.endDate);
+            end.setHours(23, 59, 59, 999);
+            if (end.getTime() >= Date.now()) {
+              isValid = true;
+              break;
             }
           }
         }
-        setHasValidMembership(isValid);
-      } else {
-        setHasValidMembership(false);
       }
+      setHasValidMembership(isValid);
     } catch {
+      // 회원권 조회 실패 시 접근 불가로 처리
       setHasValidMembership(false);
     }
   };
 
-  const requireMembership = (action: () => void) => {
-    if (!hasValidMembership) {
-      showResultModal('알림', '이용권을 먼저 구매해주세요.', 'info');
-      return;
-    }
-    action();
-  };
-
-  const fetchBestRecords = async () => {
+  // 다른 사용자의 프로필 상세 조회 후 하단 모달로 표시
+  // - API 실패 시 알림 다이얼로그 표시
+  // - 성공 시 애니메이션으로 모달 슬라이드 업
+  const openDetailModal = async (memberId: number, fallbackName: string) => {
     try {
-      const config = await getAuthHeader();
-      const bestRes = await axios.get(`${API_BASE_URL}/records/beginner/best`, config).catch(() => null);
-      let rawData = bestRes?.data?.data;
-      
-      let bestList: any[] = [];
-      if (Array.isArray(rawData)) {
-        bestList = rawData;
-      } else if (rawData && typeof rawData === 'object') {
-        if (Array.isArray(rawData.content)) bestList = rawData.content;
-        else if (Array.isArray(rawData.list)) bestList = rawData.list;
-        else bestList = Object.values(rawData); 
+      const headers = await getAuthHeader();
+      const response = await axios.get(`${PROFILE_API_URL}/${memberId}/profile`, { headers });
+      const d = response.data.data;
+
+      if (!d) {
+        showAlert('프로필 조회 불가', '정보를 불러올 수 없습니다.');
+        return;
       }
 
-      if (bestList.length === 0) {
-        const histRes = await axios.get(`${API_BASE_URL}/records/beginner/history`, { ...config, params: { size: 500 } }).catch(() => null);
-        const histData = histRes?.data?.data;
-        if (Array.isArray(histData)) bestList = histData;
-        else if (Array.isArray(histData?.content)) bestList = histData.content;
-        else if (Array.isArray(histData?.list)) bestList = histData.list;
-      }
+      const detail = d.detail || {};
 
-      setDifficultyData((prevData: any[]) =>
-        prevData.map((item: any) => {
-          const krColor = item.color;
-          const enumColor = KR_TO_ENUM[krColor];
-          const maxHold = MAX_HOLDS[krColor] ?? 0;
-          
-          let bestRecord = null;
-          let highestScore = -1;
-
-          bestList.forEach((r: any) => {
-            const rColorEnum = r.difficulty || r.color;
-            if (rColorEnum === enumColor || rColorEnum === krColor) {
-              const isSuccess = r.success !== undefined ? r.success : r.isSuccess;
-              const holdCount = isSuccess ? maxHold : (r.maxHoldNo ?? r.score ?? 0);
-              const isRoundTrip = String(r.attemptType || r.type).toUpperCase().includes('ROUND') || r.isRoundTrip;
-              const colorIdx = colorOrder.indexOf(krColor);
-              
-              const score = (colorIdx * 100000) + (isRoundTrip ? 50000 : 0) + Number(holdCount);
-              if (score > highestScore) {
-                highestScore = score;
-                bestRecord = { ...r, calculatedHold: holdCount, isSuccess, isRoundTrip };
-              }
-            }
-          });
-
-          if (bestRecord) {
-            const b = bestRecord as any;
-            return { 
-              ...item, 
-              id: b.id, 
-              type: b.isRoundTrip ? '왕복' : '편도', 
-              current: b.calculatedHold, 
-              status: b.isSuccess ? '완료' : '진행중' 
-            };
-          }
-          return { ...item, type: null, current: 0, status: '미기록' };
-        })
-      );
-    } catch (error) { console.error('최고 기록 로드 실패'); }
-  };
-
-  const fetchBeginnerHistoryRecords = async () => {
-    try {
-      const config = await getAuthHeader();
-      const reqConfig = { ...config, params: { page: 0, size: 500, sort: 'id,desc' } };
-      
-      const res = await axios.get(`${API_BASE_URL}/records/beginner/history`, reqConfig); 
-      const raw = res.data.data ?? [];
-      const list = Array.isArray(raw) ? raw : Array.isArray(raw?.content) ? raw.content : Array.isArray(raw?.list) ? raw.list : [];
-      
-      const todayStr = getLocalDateStr();
-      const todayList = list.filter((item: any) => {
-        const dateStr = item.recordDate || item.createdAt || '';
-        return dateStr.startsWith(todayStr); 
+      // 성별 한글 변환, 비공개 항목은 '-'로 표시
+      setSelectedUser({
+        name: d.name || fallbackName,
+        profileImageUrl: d.profileImageUrl || d.profileImage || null,
+        gender: translateGender(detail.gender || d.gender || '-'),
+        age:    detail.age    || d.age    || '-',
+        height: detail.height || d.height || '-',
+        weight: detail.weight || d.weight || '-',
+        arm:    detail.armSpan  || d.armSpan  || '-',
+        shoe:   detail.footSize || d.footSize || '-',
       });
 
-      const sortedList = todayList.sort((a: any, b: any) => b.id - a.id);
+      setDetailVisible(true);
+      currentDetailSnap.current = DETAIL_MODAL_HEIGHT;
+      detailHeightAnim.setValue(0);
+      // 300ms 동안 모달이 아래에서 슬라이드 업
+      Animated.timing(detailHeightAnim, { toValue: DETAIL_MODAL_HEIGHT, duration: 300, useNativeDriver: false }).start();
+    } catch (error: any) {
+      showAlert('프로필 조회 오류', error.response?.data?.message || '정보를 불러올 수 없습니다.');
+    }
+  };
 
-      const mapped = sortedList.map((item: any) => {
-        const krColor = ENUM_TO_KR[item.difficulty] ?? '흰색';
-        const foundDiff = difficultyData?.find((d: any) => d.color === krColor);
-        const maxHold = MAX_HOLDS[krColor] ?? 0;
-        const isRT = String(item.attemptType ?? '').toUpperCase() === 'ROUND_TRIP';
-        const isSuccess = item.success !== undefined ? item.success : item.isSuccess;
-        const holdCount = isSuccess ? maxHold : (item.maxHoldNo ?? item.score ?? 0);
+  // 프로필 상세 모달 닫기 (슬라이드 다운 후 상태 초기화)
+  const closeDetailModal = () => {
+    Animated.timing(detailHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
+      setDetailVisible(false);
+      setSelectedUser(null);
+    });
+  };
+
+  // 내 프로필 정보 조회 (닉네임, memberId, 프로필 이미지)
+  // 반환값을 초보벽 랭킹 조회 시 "내 기록" 병합에 활용
+  const fetchMyProfile = async () => {
+    try {
+      const headers = await getAuthHeader();
+      const res = await axios.get(MY_PROFILE_URL, { headers });
+      const data = res.data.data;
+
+      if (data) {
+        const nickname        = data.nickname ?? data.name ?? '알 수 없음';
+        const id              = data.memberId ?? data.id ?? null;
+        const profileImageUrl = data.profileImageUrl ?? null;
+        setMyNickname(nickname);
+        setMyProfileImageUrl(profileImageUrl);
+        if (id !== null) setMyMemberId(Number(id));
+        return { id: id !== null ? Number(id) : null, nickname, profileImageUrl };
+      }
+    } catch (error: any) {
+      console.log('내 프로필 로드 실패:', error.response?.data?.message || error.message);
+    }
+    return { id: null, nickname: '알 수 없음', profileImageUrl: null };
+  };
+
+  // 색상별 초보벽 랭킹 조회 및 내 기록 병합
+  // - 8가지 색상 랭킹을 병렬로 요청
+  // - 내 최고 기록(MY_BEGINNER_BEST_URL)을 별도 조회 후
+  //   서버 랭킹에서 내 항목을 제거하고 최신 내 기록으로 교체 (이중 집계 방지)
+  // - 최종 데이터는 setBeginnerRankings로 저장 (색상 모두 합친 배열)
+  const fetchBeginnerRankings = async (userData: any) => {
+    try {
+      const headers = await getAuthHeader();
+      // 8가지 색상 랭킹 병렬 요청 (실패해도 빈 배열로 처리)
+      const rankResponses = await Promise.all(
+        colors.map(c =>
+          axios.get(`${RANKING_BEGINNER_URL}?difficulty=${c.enum}`, { headers })
+               .catch(() => ({ data: { data: [] } }))
+        )
+      );
+
+      // 내 최고 기록 별도 조회
+      let myBestList: any[] = [];
+      try {
+        const res = await axios.get(MY_BEGINNER_BEST_URL, { headers });
+        const raw = res.data.data;
+        myBestList = Array.isArray(raw) ? raw : (Array.isArray(raw?.list) ? raw.list : []);
+      } catch (error: any) {
+        console.log('내 초보벽 기록 로드 실패');
+      }
+
+      let allData: any[] = [];
+
+      rankResponses.forEach((response, colorIdx) => {
+        const currentColor = colors[colorIdx];
+        const maxHold      = MAX_HOLDS[currentColor.name] ?? 0;
+        const rawList = extractList(response.data.data);
+
+        // 서버 랭킹 데이터를 화면 표시용 형태로 변환
+        const mappedList = rawList.map((item: any, i: number) => {
+          // 소수점이 있으면 왕복(ROUND_TRIP) 기록으로 판단
+          const hasDecimal  = item.score !== undefined && item.score !== null && item.score % 1 !== 0;
+          const attemptStr  = String(item.attemptType ?? '').toUpperCase();
+          const isRoundTrip = attemptStr === 'ROUND_TRIP' || hasDecimal;
+
+          // 완등 시 또는 홀드 정보 없는 경우 최대 홀드 수로 처리
+          const rawHold   = item.maxHoldNo !== undefined ? item.maxHoldNo : (item.score !== undefined ? Math.floor(item.score) : undefined);
+          const holdCount = (item.success === true || rawHold === undefined || rawHold === null) ? maxHold : Number(rawHold);
+          const recordTimeStr = item.recordDate || item.achievedAt;
+          // 날짜 없으면 최댓값(정렬 시 후순위)
+          const recordTime    = recordTimeStr ? new Date(recordTimeStr).getTime() : 9_999_999_999_999;
+
+          return {
+            id:              item.memberId ?? `rank-beginner-${colorIdx}-${i}`,
+            memberId:        item.memberId ?? null,
+            name:            item.name ?? item.nickname ?? '알 수 없음',
+            profileImageUrl: item.profileImageUrl ?? null,
+            colorName:       currentColor.name,
+            colorHex:        currentColor.hex,
+            type:            isRoundTrip ? '왕복' : '편도',
+            hold:            holdCount,
+            isClear:         holdCount >= maxHold, // MAX_HOLDS 도달 시 완등 처리
+            rawScore:        calcBeginnerScore(currentColor.name, isRoundTrip, holdCount),
+            achievedAt:      recordTime,
+          };
+        });
+
+        // 내 최고 기록 중 이 색상에 해당하는 것을 점수 기준으로 선택
+        const myRecord = myBestList
+          .filter((r: any) => r.difficulty === currentColor.enum)
+          .reduce<any>((best, r: any) => {
+            const hasDec = r.score !== undefined && r.score !== null && r.score % 1 !== 0;
+            const isRT   = String(r.attemptType ?? '').toUpperCase() === 'ROUND_TRIP' || hasDec;
+            const rawH   = r.maxHoldNo !== undefined ? r.maxHoldNo : (r.score !== undefined ? Math.floor(r.score) : undefined);
+            const hold   = (r.success === true || rawH === undefined || rawH === null) ? maxHold : Number(rawH);
+            const score  = calcBeginnerScore(currentColor.name, isRT, hold);
+            if (!best || score > best.score) return { score, entry: r };
+            return best;
+          }, null);
+
+        let finalList = [...mappedList];
+
+        if (myRecord) {
+          const r      = myRecord.entry;
+          const hasDec = r.score !== undefined && r.score !== null && r.score % 1 !== 0;
+          const isRT   = String(r.attemptType ?? '').toUpperCase() === 'ROUND_TRIP' || hasDec;
+          const rawH   = r.maxHoldNo !== undefined ? r.maxHoldNo : (r.score !== undefined ? Math.floor(r.score) : undefined);
+          const hold   = (r.success === true || rawH === undefined || rawH === null) ? maxHold : Number(rawH);
+          const score  = calcBeginnerScore(currentColor.name, isRT, hold);
+
+          // 서버 랭킹에서 내 항목 제거 (id 또는 이름으로 식별)
+          finalList = finalList.filter(item =>
+            userData.id ? Number(item.memberId) !== userData.id : item.name !== userData.nickname
+          );
+
+          // 내 최고 기록을 정확한 정보로 직접 추가
+          finalList.push({
+            id:              userData.id ?? `my-beginner-${colorIdx}`,
+            memberId:        userData.id ?? null,
+            name:            userData.nickname,
+            profileImageUrl: userData.profileImageUrl,
+            colorName:       currentColor.name,
+            colorHex:        currentColor.hex,
+            type:            isRT ? '왕복' : '편도',
+            hold,
+            isClear:         hold >= maxHold,
+            rawScore:        score,
+            achievedAt:      r.recordDate ? new Date(r.recordDate).getTime() : Date.now(),
+          });
+        }
+
+        allData = [...allData, ...finalList];
+      });
+
+      setBeginnerRankings(allData);
+    } catch (error: any) {
+      console.error('초보벽 랭킹 실패');
+    }
+  };
+
+  // 지구력 랭킹 조회 (거리 기준, 서버에서 이미 정렬된 상태)
+  // - 편도 수(laps), 시간(time), 구간 레이블(section), 총점(totalScore) 변환
+  const fetchEnduranceRankings = async () => {
+    try {
+      const headers = await getAuthHeader();
+      const res     = await axios.get(RANKING_ENDURANCE_URL, { headers });
+      const rawList = extractList(res.data.data);
+
+      const mapped = rawList.map((item: any, i: number) => ({
+        id:              item.memberId ?? `rank-endurance-${i}`,
+        memberId:        item.memberId ?? null,
+        name:            item.name ?? item.nickname ?? '알 수 없음',
+        profileImageUrl: item.profileImageUrl ?? null,
+        laps:            item.oneWayCount  ?? 0,
+        timeSeconds:     item.timeSeconds  ?? 0,
+        time:            formatTime(item.timeSeconds ?? 0),
+        section:         getSectionLabel(item.oneWayCount ?? 0, item.additionalBlocks ?? 0),
+        totalScore:      item.totalScore   ?? 0,
+        rawRank:         item.ranking      ?? i + 1, // 서버 순위 우선, 없으면 배열 순서
+        recordDate:      item.recordDate,
+      }));
+
+      setEnduranceRankings(mapped);
+    } catch (error: any) {
+      console.error('지구력 랭킹 실패');
+    }
+  };
+
+  // 연속 완등 랭킹 조회
+  // - sequenceLog(완등 색상 순서 배열)를 hex 색상 배열로 변환
+  // - 점수 = Σ (색상 기본점수 * (1.0 + 인덱스 * 0.1)) → 연속할수록 점수 증가
+  const fetchConsecutiveRankings = async () => {
+    try {
+      const headers = await getAuthHeader();
+      const res     = await axios.get(RANKING_SERIES_URL, { headers });
+      const rawList = extractList(res.data.data);
+
+      const mapped = rawList.map((item: any, i: number) => {
+        // sequenceLog의 enum 값을 hex 색상으로 변환 (화면에 색상 칩으로 표시)
+        const colorHexList = (item.sequenceLog ?? []).map((diffEnum: string) => {
+          const krName = ENUM_TO_KR[diffEnum] ?? '흰색';
+          return colors.find(c => c.name === krName)?.hex ?? '#999999';
+        });
+
+        // 연속 완등 점수 계산: 뒤에 이을수록 10% 씩 배수 증가
+        const calculatedScore = (item.sequenceLog ?? []).reduce((acc: number, diffEnum: string, idx: number) => {
+          const krName    = ENUM_TO_KR[diffEnum] ?? '흰색';
+          const baseScore = BASE_SCORES[krName] ?? 10;
+          const multiplier = 1.0 + (idx * 0.1);
+          return acc + (baseScore * multiplier);
+        }, 0);
+
+        // 소수점 첫째 자리까지 반올림, 서버 점수가 있으면 보완용으로 활용
+        const displayScore = Math.round(calculatedScore * 10) / 10;
+        const finalScore   = displayScore > 0 ? displayScore : (item.score ?? item.totalScore ?? 0);
 
         return {
-          id: item.id, color: krColor, hex: foundDiff?.hex ?? '#999999',
-          type: isRT ? '왕복' : '편도', current: holdCount, max: maxHold, status: isSuccess ? '완등' : '실패',
+          id:              item.memberId ?? item.id ?? `rank-series-${i}`,
+          memberId:        item.memberId ?? null,
+          name:            item.name ?? item.nickname ?? '알 수 없음',
+          profileImageUrl: item.profileImageUrl ?? null,
+          colors:          colorHexList,
+          score:           finalScore,
+          recordDate:      item.recordDate,
         };
       });
-      setBeginnerHistoryData(mapped);
-    } catch (error) { console.error('초보벽 최근 기록 로드 실패'); }
+
+      setConsecutiveRankings(mapped);
+    } catch (error: any) {
+      console.error('연속 랭킹 실패');
+    }
   };
 
-  const fetchEnduranceRecords = async () => {
-    try {
-      const config = await getAuthHeader();
-      const reqConfig = { ...config, params: { page: 0, size: 500, sort: 'id,desc' } };
-
-      const res = await axios.get(`${ENDURANCE_BASE_URL}/history`, reqConfig); 
-      const raw = res.data.data ?? [];
-      const list = Array.isArray(raw) ? raw : Array.isArray(raw?.content) ? raw.content : [];
-      
-      const todayStr = getLocalDateStr();
-      const todayList = list.filter((item: any) => {
-        const dateStr = item.recordDate || item.createdAt || '';
-        return dateStr.startsWith(todayStr);
-      });
-
-      const mapped = todayList.map((item: any) => ({
-        id: item.id, type: '편도', arrow: item.oneWayCount % 2 !== 0 ? '<-' : '->', 
-        laps: String(item.oneWayCount), time: formatTime(item.timeSeconds),
-        section: getSectionLabel(item.oneWayCount, item.additionalBlocks),
-      }));
-      setEnduranceData(mapped);
-    } catch (error) { console.error('지구력 기록 로드 실패'); }
+  // 모든 데이터 한꺼번에 로드 (내 프로필 → 나머지 병렬)
+  // 내 프로필을 먼저 받아야 초보벽 랭킹에서 "내 기록" 병합이 가능
+  const loadAllData = async () => {
+    const userData = await fetchMyProfile();
+    await Promise.all([
+      checkRankingMembership(),
+      fetchBeginnerRankings(userData),
+      fetchEnduranceRankings(),
+      fetchConsecutiveRankings(),
+    ]);
   };
 
-  const fetchSeriesRecords = async () => {
-    try {
-      const config = await getAuthHeader();
-      const reqConfig = { ...config, params: { page: 0, size: 500, sort: 'id,desc' } };
+  // 외부에서 targetTab 파라미터를 받으면 해당 탭으로 전환 (딥링크 등)
+  useEffect(() => {
+    if (route?.params?.targetTab) setMainTab(route.params.targetTab);
+  }, [route?.params?.targetTab]);
 
-      const res = await axios.get(`${SERIES_BASE_URL}/history`, reqConfig); 
-      const raw = res.data.data ?? [];
-      const list = Array.isArray(raw) ? raw : Array.isArray(raw?.content) ? raw.content : [];
-      
-      const todayStr = getLocalDateStr();
-      const todayList = list.filter((item: any) => {
-        const dateStr = item.recordDate || item.createdAt || '';
-        return dateStr.startsWith(todayStr);
-      });
+  // 컴포넌트 마운트 시 전체 데이터 최초 로드
+  useEffect(() => {
+    loadAllData();
+  }, []);
 
-      const mapped = todayList.map((item: any) => ({
-        id: item.id, score: item.totalScore ?? 0,
-        colors: (item.sequenceLog ?? []).map((diffEnum: string) => {
-          const krName = ENUM_TO_KR[diffEnum] ?? '흰색';
-          const found  = difficultyData.find((d: any) => d.color === krName);
-          return found?.hex ?? '#999999';
-        }),
-      }));
-      setConsecutiveData(mapped);
-    } catch (error) { console.error('연속 완등 기록 로드 실패'); }
-  };
-
-  const loadAllData = useCallback(async () => {
-    await Promise.all([ checkMembership(), fetchBestRecords(), fetchBeginnerHistoryRecords(), fetchEnduranceRecords(), fetchSeriesRecords() ]);
-  }, [difficultyData]);
-
+  // pull-to-refresh 핸들러
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadAllData();
     setRefreshing(false);
-  }, [loadAllData]);
-
-  useEffect(() => {
-    loadAllData();
-    if (route?.params?.openSection) setExpandedSection(route.params.openSection);
-  }, [route?.params?.openSection]);
-
-  const toggleSection = (section: string) => setExpandedSection(expandedSection === section ? null : section);
-
-  // ── 삭제 로직 ──
-  const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState<{ id: number; type: 'endurance' | 'consecutive' | 'difficulty' } | null>(null);
-
-  const confirmDelete = (type: any, id: number) => { requireMembership(() => { setItemToDelete({ id, type }); setDeleteModalVisible(true); }); };
-  const cancelDelete = () => { setDeleteModalVisible(false); setItemToDelete(null); };
-
-  const executeDelete = async () => {
-    if (!itemToDelete) return;
-    try {
-      const config = await getAuthHeader();
-      const id = Number(itemToDelete.id);
-      
-      if (itemToDelete.type === 'difficulty') { 
-        await axios.delete(`${API_BASE_URL}/records/beginner/${id}`, config);       
-        await fetchBestRecords(); 
-        await fetchBeginnerHistoryRecords(); 
-      }
-      else if (itemToDelete.type === 'endurance') { 
-        await axios.delete(`${ENDURANCE_BASE_URL}/${id}`, config); 
-        await fetchEnduranceRecords();  
-      }
-      else if (itemToDelete.type === 'consecutive') { 
-        await axios.delete(`${SERIES_BASE_URL}/${id}`, config);    
-        await fetchSeriesRecords();     
-      }
-      
-      setDeleteModalVisible(false); setItemToDelete(null);
-      setTimeout(() => showResultModal('성공', '기록이 삭제되었습니다.', 'success'), 500);
-    } catch (error: any) {
-      setDeleteModalVisible(false); setItemToDelete(null);
-      setTimeout(() => showResultModal('오류', error.response?.data?.message || '기록 삭제에 실패했습니다.', 'error'), 500);
-    }
-  };
-
-  // ── 드래그 및 PanResponder ──
-  const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-  const BEGINNER_MODAL_HEIGHT = SCREEN_HEIGHT * 0.70;       
-  const ENDURANCE_HALF_HEIGHT = SCREEN_HEIGHT * 0.55;       
-  const ENDURANCE_FULL_HEIGHT = SCREEN_HEIGHT * 0.95;       
-  const CONSECUTIVE_MODAL_HEIGHT = SCREEN_HEIGHT * 0.77;    
-
-  const beginnerHeightAnim = useRef(new Animated.Value(0)).current;
-  const enduranceHeightAnim = useRef(new Animated.Value(0)).current;
-  const consecutiveHeightAnim = useRef(new Animated.Value(0)).current;
-
-  const beginnerSnap = useRef(BEGINNER_MODAL_HEIGHT);
-  const enduranceSnap = useRef(ENDURANCE_HALF_HEIGHT);
-  const consecutiveSnap = useRef(CONSECUTIVE_MODAL_HEIGHT);
-
-  const closeRecordModal = useCallback(() => {
-    Animated.timing(beginnerHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
-      setRecordModalVisible(false); setSelectedType(null); setSelectedResult(null); setHoldCount(0);
-    });
   }, []);
 
-  const closeEnduranceModal = useCallback(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    setTimerRunning(false);
-    Animated.timing(enduranceHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
-      setEnduranceModalVisible(false); setEnduranceLaps(0); setSelectedMapNode(null); setEnduranceMin(''); setEnduranceSec(''); setIsTimerActive(false);
-    });
-  }, []);
-
-  const closeConsecutiveModal = useCallback(() => {
-    Animated.timing(consecutiveHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
-      setConsecutiveModalVisible(false); setSelectedConsecutiveList([]); setShowDetails(false);
-    });
-  }, []);
-
-  const beginnerPanResponder = useRef(PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dy) > 5,
-    onPanResponderGrant: () => { beginnerHeightAnim.setOffset(beginnerSnap.current); beginnerHeightAnim.setValue(0); },
-    onPanResponderMove: (_, gs) => { beginnerHeightAnim.setValue(Math.min(0, -gs.dy)); },
-    onPanResponderRelease: (_, gs) => {
-      beginnerHeightAnim.flattenOffset();
-      if (beginnerSnap.current - gs.dy < beginnerSnap.current * 0.7) closeRecordModal();
-      else Animated.spring(beginnerHeightAnim, { toValue: beginnerSnap.current, useNativeDriver: false }).start();
-    }
-  })).current;
-
-  const endurancePanResponder = useRef(PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dy) > 5,
-    onPanResponderGrant: () => { enduranceHeightAnim.setOffset(enduranceSnap.current); enduranceHeightAnim.setValue(0); },
-    onPanResponderMove: (_, gs) => { enduranceHeightAnim.setValue(-gs.dy); },
-    onPanResponderRelease: (_, gs) => {
-      enduranceHeightAnim.flattenOffset();
-      const finalHeight = enduranceSnap.current - gs.dy;
-      const THRESHOLD = (ENDURANCE_HALF_HEIGHT + ENDURANCE_FULL_HEIGHT) / 2;
-      const CLOSE_THRESHOLD = ENDURANCE_HALF_HEIGHT * 0.7;
-      if (finalHeight > THRESHOLD) { enduranceSnap.current = ENDURANCE_FULL_HEIGHT; Animated.spring(enduranceHeightAnim, { toValue: ENDURANCE_FULL_HEIGHT, useNativeDriver: false }).start(); } 
-      else if (finalHeight < CLOSE_THRESHOLD) { closeEnduranceModal(); } 
-      else { enduranceSnap.current = ENDURANCE_HALF_HEIGHT; Animated.spring(enduranceHeightAnim, { toValue: ENDURANCE_HALF_HEIGHT, useNativeDriver: false }).start(); }
-    }
-  })).current;
-
-  const consecutivePanResponder = useRef(PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dy) > 5,
-    onPanResponderGrant: () => { consecutiveHeightAnim.setOffset(consecutiveSnap.current); consecutiveHeightAnim.setValue(0); },
-    onPanResponderMove: (_, gs) => { consecutiveHeightAnim.setValue(Math.min(0, -gs.dy)); },
-    onPanResponderRelease: (_, gs) => {
-      consecutiveHeightAnim.flattenOffset();
-      if (consecutiveSnap.current - gs.dy < consecutiveSnap.current * 0.7) closeConsecutiveModal();
-      else Animated.spring(consecutiveHeightAnim, { toValue: consecutiveSnap.current, useNativeDriver: false }).start();
-    }
-  })).current;
-
-  // ── 초보벽 상태 ──
-  const [isRecordModalVisible,  setRecordModalVisible]  = useState(false);
-  const [selectedDifficulty, setSelectedDifficulty] = useState<string>('흰색');
-  const [selectedType,   setSelectedType]   = useState<string | null>(null);
-  const [selectedResult, setSelectedResult] = useState<string | null>(null);
-  const [holdCount,      setHoldCount]      = useState(0);
-
-  useEffect(() => { setHoldCount(0); }, [selectedDifficulty]);
-
-  const openRecordModal = () => requireMembership(() => {
-    setRecordModalVisible(true); beginnerSnap.current = BEGINNER_MODAL_HEIGHT; beginnerHeightAnim.setValue(0);
-    Animated.timing(beginnerHeightAnim, { toValue: BEGINNER_MODAL_HEIGHT, duration: 300, useNativeDriver: false }).start();
-  });
-
-  const currentMaxHolds = useMemo(() => MAX_HOLDS[selectedDifficulty] ?? 0, [selectedDifficulty]);
-
-  const handleSaveBeginnerRecord = async () => {
-    if (!selectedType || !selectedResult) { showResultModal('알림', '모든 항목을 선택해주세요.', 'info'); return; }
-    const isSuccess = selectedResult === '완등';
-    const payload = {
-      difficulty: KR_TO_ENUM[selectedDifficulty] ?? 'WHITE',
-      attemptType: selectedType === '편도' ? 'ONE_WAY' : 'ROUND_TRIP',
-      maxHoldNo: Number(isSuccess ? currentMaxHolds : holdCount),
-      isSuccess: Boolean(isSuccess), 
-      recordDate: getLocalDateStr(),
-    };
-    try {
-      const config = await getAuthHeader(); 
-      await axios.post(`${API_BASE_URL}/records/beginner`, payload, config);
-      await fetchBestRecords(); await fetchBeginnerHistoryRecords();
-      closeRecordModal(); setTimeout(() => showResultModal('성공', '등반 기록이 저장되었습니다.', 'success'), 500);
-    } catch (error: any) {
-      closeRecordModal(); setTimeout(() => showResultModal('오류', error.response?.data?.message || '저장 실패', 'error'), 500);
-    }
+  // 랭킹 항목이 "나"인지 판별
+  // - memberId 있으면 id 비교 우선, 없으면 닉네임 비교
+  const checkIsMe = (item: any): boolean => {
+    if (myMemberId !== null && item.memberId != null) return Number(item.memberId) === myMemberId;
+    return item.name === myNickname;
   };
 
-  // ── 지구력 상태 ──
-  const [isEnduranceModalVisible, setEnduranceModalVisible] = useState(false);
-  const [enduranceLaps,    setEnduranceLaps]    = useState(0);
-  const [selectedMapNode,  setSelectedMapNode]  = useState<string | null>(null);
-  const [enduranceMin,     setEnduranceMin]     = useState('');
-  const [enduranceSec,     setEnduranceSec]     = useState('');
-  const [isTimerActive,    setIsTimerActive]    = useState(false);
-  const [timerRunning,  setTimerRunning]  = useState(false);
-  const [timerSeconds,  setTimerSeconds]  = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // 현재 탭/필터 조건에 맞게 랭킹 목록을 가공하는 메모이즈된 값
+  // - 초보벽: 색상 필터 → 사용자별 최고 기록만 남기기 → 점수/날짜 정렬
+  // - 지구력: 서버 rawRank 순 → 총점 보조 정렬
+  // - 연속: 점수 내림차순
+  // 최종 결과에 rank(1부터), isMe 필드 추가
+  const filteredList = useMemo(() => {
+    let list: any[] = [];
 
-  const openEnduranceModal = () => requireMembership(() => {
-    setEnduranceModalVisible(true); enduranceSnap.current = ENDURANCE_HALF_HEIGHT; enduranceHeightAnim.setValue(0);
-    Animated.timing(enduranceHeightAnim, { toValue: ENDURANCE_HALF_HEIGHT, duration: 300, useNativeDriver: false }).start();
-  });
+    if (mainTab === '초보벽') {
+      list = [...beginnerRankings];
+      // 색상 필터 적용 (전체일 경우 생략)
+      if (colorTab !== '전체') list = list.filter(r => r.colorName === colorTab);
 
-  const SPACING = 24; const GAP = 10; const BASE_X = 30; const BASE_Y = 40; const TEXT_OFFSET = 24;
-  const mapElements = useMemo(() => {
-    const elements: any[] = [];
-    for (let i = 0; i <= 12; i++) { const x = BASE_X + i * SPACING; const y = BASE_Y; elements.push({ type: 'text', id: `T2-${i}`, val: `2-${i}`, x, y: y - TEXT_OFFSET }); if (i > 0) elements.push({ type: 'box', id: `2-${i}`, color: i <= 4 ? '#58CCFF' : i <= 8 ? '#3A4CA8' : '#692498', x: x - SPACING / 2, y }); }
-    for (let i = 0; i <= 6; i++) { const x = BASE_X - GAP; const y = BASE_Y + GAP + (6 - i) * SPACING; elements.push({ type: 'text', id: `T1-${i}`, val: `1-${i}`, x: x - TEXT_OFFSET, y }); if (i > 0) elements.push({ type: 'box', id: `1-${i}`, color: i === 6 ? '#B96BC6' : '#FFFFFF', x, y: y + SPACING / 2 }); }
-    for (let i = 0; i <= 6; i++) { const x = BASE_X + 12 * SPACING + GAP; const y = BASE_Y + GAP + i * SPACING; elements.push({ type: 'text', id: `T3-${i}`, val: `3-${i}`, x: x + TEXT_OFFSET, y }); if (i > 0) elements.push({ type: 'box', id: `3-${i}`, color: '#666666', x, y: y - SPACING / 2 }); }
-    for (let i = 0; i <= 2; i++) { const x = BASE_X + 12 * SPACING + GAP - i * SPACING; const y = BASE_Y + GAP + 6 * SPACING + GAP; elements.push({ type: 'text', id: `T4-${i}`, val: `4-${i}`, x, y: y + TEXT_OFFSET }); if (i > 0) elements.push({ type: 'box', id: `4-${i}`, color: '#343434', x: x + SPACING / 2, y }); }
-    return elements;
-  }, []);
+      // 사용자별 최고 기록만 남기기 (동일 사용자의 여러 색상 기록 중 점수 최고)
+      const userMap = new Map<string, any>();
+      list.forEach(item => {
+        const key  = item.memberId != null ? `id_${item.memberId}` : `name_${item.name}`;
+        const prev = userMap.get(key);
+        if (!prev) {
+          userMap.set(key, item);
+        } else if (item.rawScore > prev.rawScore) {
+          // 더 높은 점수면 교체
+          userMap.set(key, item);
+        } else if (item.rawScore === prev.rawScore && item.achievedAt < prev.achievedAt) {
+          // 같은 점수면 더 먼저 달성한 기록을 우선
+          userMap.set(key, item);
+        }
+      });
+      list = Array.from(userMap.values());
+      list.sort((a, b) => b.rawScore !== a.rawScore ? b.rawScore - a.rawScore : a.achievedAt - b.achievedAt);
 
-  const effectiveSection = useMemo(() => {
-    if (!selectedMapNode) return null;
-    const [A, B] = selectedMapNode.split('-');
-    return enduranceLaps % 2 !== 0 ? `${A}-${parseInt(B, 10) - 1}` : selectedMapNode;
-  }, [selectedMapNode, enduranceLaps]);
-
-  const getBoxCoord = useCallback((id: string) => {
-    const node = mapElements.find(m => m.id === id);
-    return node ? { x: node.x, y: node.y } : { x: 0, y: 0 };
-  }, [mapElements]);
-
-  // 💡 완전히 애니메이션을 제거하고, 즉각 렌더링되도록 경로 데이터 최적화
-  const pathSegmentsData = useMemo(() => {
-    const segments: any[] = [];
-    const maxIdx = BOX_SEQUENCE.length - 1;
-
-    // 편도수가 수백 번이 넘어가도 버벅이지 않도록 
-    // 동일한 자리에 수없이 겹쳐 그려지는 과거의 선들은 생략하고 
-    // 직전 바퀴와 현재 바퀴 2개만 렌더링하여 최고의 속도를 냅니다.
-    const startLap = Math.max(0, enduranceLaps - 1);
-
-    for (let l = startLap; l <= enduranceLaps; l++) {
-      const color = rainbowColors[l % 7]; 
-      const offset = 0; // 선들이 완벽히 겹치도록 0으로 설정
-      const isEven = l % 2 === 0;
-      let startIdx: number, endIdx: number;
-      
-      if (l === enduranceLaps) {
-        if (!selectedMapNode) break;
-        const targetIdx = BOX_SEQUENCE.indexOf(selectedMapNode);
-        if (targetIdx === -1) break;
-        startIdx = isEven ? 0 : maxIdx; endIdx = targetIdx;
-      } else {
-        startIdx = isEven ? 0 : maxIdx; endIdx = isEven ? maxIdx : 0;
-      }
-      
-      const step = isEven ? 1 : -1;
-      for (let i = startIdx; i !== endIdx; i += step) {
-        const nextI = i + step;
-        const p1 = getBoxCoord(BOX_SEQUENCE[i]); const p2 = getBoxCoord(BOX_SEQUENCE[nextI]);
-        const length = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-        const angle  = (Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180) / Math.PI;
-        const cx = (p1.x + p2.x) / 2; const cy = (p1.y + p2.y) / 2;
-        segments.push({
-          key: `line-${l}-${i}`, 
-          left: cx - length / 2 + offset, top: cy - 2 + offset,
-          width: length, color, angle, zIndex: 5 + l
-        });
-      }
+    } else if (mainTab === '지구력') {
+      list = [...enduranceRankings];
+      list.sort((a, b) => a.rawRank !== b.rawRank ? a.rawRank - b.rawRank : b.totalScore - a.totalScore);
+    } else if (mainTab === '연속') {
+      list = [...consecutiveRankings];
+      list.sort((a, b) => b.score - a.score);
     }
-    return segments;
-  }, [enduranceLaps, selectedMapNode, getBoxCoord]);
 
-  const handleSaveEnduranceRecord = async () => {
-    if (!effectiveSection && enduranceLaps === 0) { showResultModal('알림', '기록할 바퀴 수나 지도 구간을 선택해주세요.', 'info'); return; }
-    const additionalBlocks = effectiveSection ? Math.max(0, BOX_SEQUENCE.indexOf(effectiveSection) + 1) : 0;
-    const timeSeconds = ((parseInt(enduranceMin, 10) || 0) * 60) + (parseInt(enduranceSec, 10) || 0);
+    // 각 항목에 화면 표시용 순위(rank)와 "나"여부(isMe) 추가
+    return list.map((item, idx) => ({
+      ...item,
+      rank: idx + 1,
+      isMe: checkIsMe(item),
+    }));
+  }, [mainTab, colorTab, beginnerRankings, enduranceRankings, consecutiveRankings, myNickname, myMemberId]);
 
-    const payload = { oneWayCount: Number(enduranceLaps), additionalBlocks: Number(additionalBlocks), timeSeconds: Number(timeSeconds), recordDate: getLocalDateStr() };
-    try {
-      const config = await getAuthHeader(); 
-      await axios.post(ENDURANCE_BASE_URL, payload, config);
-      await fetchEnduranceRecords(); closeEnduranceModal(); setTimeout(() => showResultModal('성공', '지구력 기록이 저장되었습니다.', 'success'), 500);
-    } catch (error: any) {
-      closeEnduranceModal(); setTimeout(() => showResultModal('오류', '지구력 기록 저장에 실패했습니다.', 'error'), 500);
-    }
-  };
-
-  const toggleTimer = () => {
-    if (timerRunning) { setTimerRunning(false); if (timerRef.current) clearInterval(timerRef.current); } 
-    else { setTimerRunning(true); if (timerRef.current) clearInterval(timerRef.current); timerRef.current = setInterval(() => setTimerSeconds(p => p + 1), 1000); }
-  };
-  const confirmStopTimer = () => { if (timerRunning) { setTimerRunning(false); if (timerRef.current) clearInterval(timerRef.current); } setShowTimerFinishConfirm(true); };
-  const stopTimerAndSave = () => {
-    setShowTimerFinishConfirm(false); setIsTimerActive(false);
-    if (timerRef.current) clearInterval(timerRef.current); setTimerRunning(false);
-    const [m, s] = formatTime(timerSeconds).split(':'); setEnduranceMin(m); setEnduranceSec(s);
-  };
-  const openTimerModal = () => { setTimerSeconds(0); setTimerRunning(false); setIsTimerActive(true); };
-  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
-
-  // ── 연속 완등 상태 ──
-  const [isConsecutiveModalVisible, setConsecutiveModalVisible] = useState(false);
-  const [selectedConsecutiveList, setSelectedConsecutiveList] = useState<any[]>([]);
-  const [showDetails, setShowDetails] = useState(false);
-
-  const openConsecutiveModal = () => requireMembership(() => {
-    setConsecutiveModalVisible(true); consecutiveSnap.current = CONSECUTIVE_MODAL_HEIGHT; consecutiveHeightAnim.setValue(0);
-    Animated.timing(consecutiveHeightAnim, { toValue: CONSECUTIVE_MODAL_HEIGHT, duration: 300, useNativeDriver: false }).start();
-  });
-
-  const removeConsecutiveItem = (idx: number) => setSelectedConsecutiveList(p => p.filter((_, i) => i !== idx));
-
-  const displayTotalScore = useMemo(() => {
-    const total = selectedConsecutiveList.reduce((acc, curr, index) => {
-      const baseScore = BASE_SCORES[curr.color] ?? 10;
-      return acc + (baseScore * (1.0 + (index * 0.1)));
-    }, 0);
-    return Math.round(total * 10) / 10;
-  }, [selectedConsecutiveList]);
-
-  const handleSaveConsecutiveRecord = async () => {
-    if (selectedConsecutiveList.length === 0) { showResultModal('알림', '연속으로 완등한 난이도를 입력해주세요.', 'info'); return; }
-    try {
-      const config = await getAuthHeader(); 
-      await axios.post(SERIES_BASE_URL, { sequenceLog: selectedConsecutiveList.map(i => KR_TO_ENUM[i.color] ?? 'WHITE'), recordDate: getLocalDateStr() }, config);
-      await fetchSeriesRecords(); closeConsecutiveModal(); setTimeout(() => showResultModal('성공', '기록이 저장되었습니다.', 'success'), 500);
-    } catch (error) { closeConsecutiveModal(); setTimeout(() => showResultModal('오류', '저장 실패', 'error'), 500); }
-  };
+  // 현재 필터 기준으로 내 순위 (없으면 '-' 표시)
+  const myCurrentRank = filteredList.find(r => r.isMe)?.rank ?? '-';
 
   return {
-    difficultyData, enduranceData, consecutiveData, 
-    refreshing, onRefresh, expandedSection, toggleSection,
-    beginnerHistoryData,
-    
-    resultModalVisible, resultModalConfig, closeResultModal: () => setResultModalVisible(false),
-    isDeleteModalVisible, confirmDelete, executeDelete, cancelDelete,
-
-    isRecordModalVisible, openRecordModal, closeRecordModal, beginnerHeightAnim, beginnerPanResponder, hasValidMembership,
-    selectedDifficulty, setSelectedDifficulty, selectedType, setSelectedType, selectedResult, setSelectedResult, holdCount, setHoldCount, currentMaxHolds, handleSaveBeginnerRecord,
-
-    isEnduranceModalVisible, openEnduranceModal, closeEnduranceModal, enduranceHeightAnim, endurancePanResponder,
-    enduranceLaps, setEnduranceLaps, selectedMapNode, setSelectedMapNode, enduranceMin, setEnduranceMin, enduranceSec, setEnduranceSec, effectiveSection,
-    mapElements, getBoxCoord, pathSegmentsData, handleSaveEnduranceRecord,
-    isTimerActive, setIsTimerActive, timerRunning, timerSeconds, showTimerFinishConfirm, setShowTimerFinishConfirm, toggleTimer, confirmStopTimer, stopTimerAndSave, openTimerModal,
-
-    isConsecutiveModalVisible, openConsecutiveModal, closeConsecutiveModal, consecutiveHeightAnim, consecutivePanResponder,
-    selectedConsecutiveList, setSelectedConsecutiveList, removeConsecutiveItem, showDetails, setShowDetails, displayTotalScore, handleSaveConsecutiveRecord,
+    hasValidMembership,
+    refreshing, onRefresh,
+    mainTab, setMainTab,
+    colorTab, setColorTab,
+    myNickname, myCurrentRank, myProfileImageUrl,
+    filteredList,
+    isDetailVisible, selectedUser, openDetailModal, closeDetailModal, detailHeightAnim, detailPanResponder,
+    alertConfig, setAlertConfig,
   };
 };
