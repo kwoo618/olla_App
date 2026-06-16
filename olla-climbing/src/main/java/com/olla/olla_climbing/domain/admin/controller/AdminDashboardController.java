@@ -10,7 +10,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/admin/dashboard")
@@ -30,5 +33,13 @@ public class AdminDashboardController {
     @Operation(summary = "대시보드 상단 핵심 요약 통계 조회")
     public ResponseEntity<ApiResponse<AdminDashboardSummaryResponse>> getDashboardSummary() {
         return ResponseEntity.ok(ApiResponse.success(adminDashboardService.getDashboardSummary()));
+    }
+
+    @GetMapping("/hourly")
+    @Operation(summary = "요일별 시간대 혼잡도 조회")
+    public ResponseEntity<ApiResponse<List<Long>>> getHourlyCongestion(
+            @RequestParam int dayOfWeek) {
+        return ResponseEntity.ok(ApiResponse.success(
+                adminDashboardService.getHourlyCongestionByDay(dayOfWeek)));
     }
 }

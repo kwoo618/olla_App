@@ -111,4 +111,23 @@ public class AdminDashboardService {
                 .expiringMembers(expiringDtoList)
                 .build();
     }
+
+    @Transactional(readOnly = true)
+    public List<Long> getHourlyCongestionByDay(int dayOfWeek) {
+        List<VisitLog> logs = visitLogRepository.findByCreatedAtAfter(LocalDateTime.now().minusDays(30));
+
+        long[] hourly = new long[24];
+        for (VisitLog log : logs) {
+            if (log.getCreatedAt().getDayOfWeek().getValue() == dayOfWeek) {
+                hourly[log.getCreatedAt().getHour()]++;
+            }
+        }
+
+        List<Long> result = new ArrayList<>();
+        int endHour = (dayOfWeek == 6) ? 19 : 22; // 토요일 13~19시(7개), 평일 13~22시(10개)
+        for (int h = 13; h <= endHour; h++) {
+            result.add(hourly[h]);
+        }
+        return result;
+    }
 }
