@@ -87,10 +87,8 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
 
         config.setAllowedOrigins(List.of(
-                "http://localhost:3000",
-                "http://localhost:8081",
-                "http://localhost",
-                "https://ollagaja.com"
+                "https://ollagaja.com",
+                "https://api.ollagaja.com"
         ));
 
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
