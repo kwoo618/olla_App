@@ -109,7 +109,7 @@ bin/
 **/.xcode.env.local
 **/vendor/bundle/
 
-#ios API key 포함 정보 
+#ios API key 포함 정보
 ios/olla_react/GoogleService-Info.plist
 ios/olla_react/olla_react.entitlements
 
@@ -139,3 +139,21 @@ Thumbs.db
 olla_frontend/android/build/
 olla_frontend/android/app/build/
 olla_frontend/android/.gradle/
+
+# ==========================================
+# 추가 보완 항목
+# ==========================================
+
+# SSH 키 (서버 접속용 - 절대 커밋 금지)
+**/*.pem
+**/*.ppk
+
+# 백엔드 로컬 설정 (DB 비번 포함)
+**/application-local.yml
+
+# 기타 인증서 형식
+**/*.p12
+**/*.jks
+
+# 로그 파일
+**/*.log
