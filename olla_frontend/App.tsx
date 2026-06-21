@@ -8,59 +8,13 @@ import axios from 'axios';
 import { API_BASE_URL } from './src/constants/Config';
 import messaging from '@react-native-firebase/messaging';
 
-export const SESSION_EXPIRED_EVENT = 'SESSION_EXPIRED';
+// ─── Step 0: axios 인터셉터 + 세션만료 이벤트는 apiClient.ts로 이전됨 ───
+// 이 import 한 줄로 axios.interceptors.response.use(...)가 등록됩니다.
+import './src/constants/api/apiClient';
+import { SESSION_EXPIRED_EVENT, resetSessionExpiredFlag } from './src/constants/api/apiClient';
 
-let _sessionExpiredFired = false;
-let _isReissuing = false;
-
-axios.interceptors.response.use(
-  response => response,
-  async error => {
-    const status = error.response?.status;
-    const url: string = error.config?.url ?? '';
-    const isLoginRequest = url.includes('/auth/login') || url.includes('/members/login');
-    const isReissueRequest = url.includes('/auth/reissue');
-
-    if (status === 401 && (isLoginRequest || isReissueRequest)) {
-      if (!_sessionExpiredFired) {
-        _sessionExpiredFired = true;
-        await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole', 'fcmToken']);
-        DeviceEventEmitter.emit(SESSION_EXPIRED_EVENT);
-      }
-      return Promise.reject(error);
-    }
-
-    if (status === 401 && !_isReissuing && !_sessionExpiredFired) {
-      _isReissuing = true;
-      try {
-        const refreshToken = await AsyncStorage.getItem('refreshToken');
-        if (!refreshToken) throw new Error('NO_REFRESH_TOKEN');
-
-        const reissueRes = await axios.post(`${API_BASE_URL}/auth/reissue`, { refreshToken });
-
-        const newAccessToken =
-          reissueRes.data?.data?.accessToken ?? reissueRes.data?.accessToken;
-        if (!newAccessToken) throw new Error('NO_ACCESS_TOKEN');
-
-        await AsyncStorage.setItem('userToken', newAccessToken);
-
-        error.config.headers['Authorization'] = `Bearer ${newAccessToken}`;
-        return axios(error.config);
-      } catch {
-        if (!_sessionExpiredFired) {
-          _sessionExpiredFired = true;
-          await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole', 'fcmToken']);
-          DeviceEventEmitter.emit(SESSION_EXPIRED_EVENT);
-        }
-        return Promise.reject(error);
-      } finally {
-        _isReissuing = false;
-      }
-    }
-
-    return Promise.reject(error);
-  }
-);
+// ─── Step 2 (App.tsx 부분): 회원권 체크 로직을 membership.ts로 통합 ───
+import { fetchHasMembership } from './src/constants/api/membership';
 
 type RootParamList = {
   Login: undefined; Signup: undefined; PersonalInfo: undefined; Loading: undefined;
@@ -252,45 +206,16 @@ const AppContent = () => {
   const [hasMembership, setHasMembership] = useState(false);
 
   useEffect(() => {
-    const fetchMembership = async () => {
-      try {
-        const userToken = await AsyncStorage.getItem('userToken');
-        if (!userToken) { setHasMembership(false); return; }
-        const res = await axios.get(`${API_BASE_URL}/memberships/me`, {
-          headers: { Authorization: `Bearer ${userToken}` },
-        });
-        const rawData = res.data.data;
-        const dataList: any[] = Array.isArray(rawData) ? rawData : (rawData?.content || []);
-
-        const today = new Date(); today.setHours(0, 0, 0, 0);
-        const active = dataList.filter((m: any) => {
-          const status = String(m.membershipStatus || m.status || '').toUpperCase();
-          if (status === 'DELETED' || status === 'INACTIVE') return false;
-          if (m.startDate) {
-            const s = new Date(m.startDate); s.setHours(0,0,0,0);
-            if (s > today) return false;
-          }
-          return true;
-        });
-        const hasPeriod = active.some((m: any) => {
-          const t = String(m.membershipType ?? '').toUpperCase();
-          const isCountType = t.includes('COUNT') || t.includes('횟수') || t.includes('일일');
-          if (isCountType) return false;
-          if (!m.endDate) return false;
-          const end = new Date(m.endDate); end.setHours(23, 59, 59, 999);
-          return end.getTime() >= Date.now();
-        });
-        setHasMembership(hasPeriod);
-      } catch {
-        setHasMembership(false);
-      }
+    const checkMembership = async () => {
+      const result = await fetchHasMembership();
+      setHasMembership(result);
     };
-    if (initialRoute === 'Home') fetchMembership();
+    if (initialRoute === 'Home') checkMembership();
   }, [initialRoute]);
 
   const handleSessionExpiredConfirm = () => {
     setSessionExpiredVisible(false);
-    _sessionExpiredFired = false;
+    resetSessionExpiredFlag();
     navigationRef.reset({
       index: 0,
       routes: [{ name: 'Login' }],
@@ -646,30 +571,30 @@ const styles = StyleSheet.create({
   bottomNavItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   navIcon: { width: 20, height: 20, marginBottom: 3, resizeMode: 'contain' },
   bottomNavText: { fontSize: 9, color: '#7D7D7D' },
-  
+
   // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  deleteModalBox: { 
-    width: '90%', 
-    backgroundColor: '#212121', 
-    borderRadius: 25, 
-    paddingVertical: 45, 
-    paddingHorizontal: 35, 
-    alignItems: 'center' 
+  deleteModalBox: {
+    width: '90%',
+    backgroundColor: '#212121',
+    borderRadius: 25,
+    paddingVertical: 45,
+    paddingHorizontal: 35,
+    alignItems: 'center'
   },
-  modalTitle: { 
-    fontSize: 28, 
-    fontWeight: 'bold', 
+  modalTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
     marginBottom: 8,
     textAlign: 'center'
   },
-  modalMessage: { 
-    color: '#ffffff', 
-    fontSize: 18, 
-    fontWeight: 'bold', 
-    marginBottom: 25, 
-    textAlign: 'center', 
-    lineHeight: 24 
+  modalMessage: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 25,
+    textAlign: 'center',
+    lineHeight: 24
   },
   modalBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
   btnConfirm: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },

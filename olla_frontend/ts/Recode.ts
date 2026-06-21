@@ -14,12 +14,12 @@ import { Animated, PanResponder, Dimensions, Keyboard } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../src/constants/Config';
+import { fetchHasMembership } from '../src/constants/api/membership';
 
 // ─────────────────────────── 상수 및 유틸 ───────────────────────────
 // API 엔드포인트 상수
 const ENDURANCE_BASE_URL = `${API_BASE_URL}/records/endurance`; // 지구력 기록 API
 const SERIES_BASE_URL    = `${API_BASE_URL}/records/series`;    // 연속 완등 기록 API
-const MEMBERSHIP_URL     = `${API_BASE_URL}/memberships/me`;    // 내 회원권 목록 API
 
 // 색상별 최대 홀드 수 (완등 판정 기준)
 export const MAX_HOLDS: Record<string, number> = {
@@ -135,48 +135,10 @@ export const useRecode = ({ route, navigation }: any) => {
   }, []);
 
   // 기록 작성/삭제가 가능한 기간권 보유 여부 확인
-  // - 일일권/횟수권(COUNT)은 제외, 기간권(PERIOD) 중 만료일이 현재 이후인 것이 있으면 유효 처리
+  // membership.ts의 hasActivePeriodMembership 사용 (isStarted 체크 포함 — 시작일이 미래인 이용권은 제외됨)
   const checkMembership = async () => {
-    try {
-      const config = await getAuthHeader();
-      const res = await axios.get(MEMBERSHIP_URL, config);
-      const rawData = res.data.data;
-      if (rawData) {
-        const memberships = Array.isArray(rawData) ? rawData : [rawData];
-        let isValid = false;
-        for (const m of memberships) {
-          if (!m) continue;
-          const status = String(m.membershipStatus || m.status || '').toUpperCase();
-          if (status === 'DELETED' || status === 'INACTIVE') continue;
-          if (status !== 'ACTIVE' && status !== '') continue;
-          const typeStr = String(m.membershipType ?? '').toUpperCase();
-
-          // ✅ 일일권(COUNT/횟수/일일) 제외 — 기간권만 허용
-          const isCountType =
-            typeStr.includes('COUNT') ||
-            typeStr.includes('횟수') ||
-            typeStr.includes('일일');
-          if (isCountType) continue;
-
-          // 기간권 유효성 검사
-          if (typeStr.includes('PERIOD') || typeStr.includes('기간') || m.endDate) {
-            if (m.endDate) {
-              const end = new Date(m.endDate);
-              end.setHours(23, 59, 59, 999);
-              if (end.getTime() >= Date.now()) {
-                isValid = true;
-                break;
-              }
-            }
-          }
-        }
-        setHasValidMembership(isValid);
-      } else {
-        setHasValidMembership(false);
-      }
-    } catch {
-      setHasValidMembership(false);
-    }
+    const isValid = await fetchHasMembership();
+    setHasValidMembership(isValid);
   };
 
   // 기간권 보유 시에만 전달된 액션을 실행, 없으면 구매 안내 모달 표시
