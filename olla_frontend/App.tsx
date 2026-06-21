@@ -126,7 +126,6 @@ const registerFcmToken = async () => {
     const savedToken = await AsyncStorage.getItem('fcmToken');
     if (savedToken === fcmToken) return;
 
-    // ─── 💡 axios.post(`${API_BASE_URL}/...`, ..., { headers: Authorization }) → apiClient.post로 교체 ───
     await apiClient.post('/members/me/fcm-token', { deviceToken: fcmToken });
 
     await AsyncStorage.setItem('fcmToken', fcmToken);
@@ -174,27 +173,6 @@ const AppContent = () => {
   const lastAlertId = useRef<number | null>(null);
 
   const [sessionExpiredVisible, setSessionExpiredVisible] = useState(false);
-
-  // ─── 🔍 임시 디버그 모달 (토큰 만료/네트워크 이슈 원인 파악용, 릴리즈에서도 보임) ───
-  const [debugModalVisible, setDebugModalVisible] = useState(false);
-  const [debugInfo, setDebugInfo] = useState('');
-
-  // ─── 🔍 토큰 강제 조작용 디버그 (로고 5번 탭으로 호출) ───
-  const [tokenDebugVisible, setTokenDebugVisible] = useState(false);
-  const [tokenDebugInfo, setTokenDebugInfo] = useState('버튼을 눌러 토큰을 조작해보세요.');
-  const logoTapCount = useRef(0);
-  const logoTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleLogoTap = () => {
-    logoTapCount.current += 1;
-    if (logoTapTimer.current) clearTimeout(logoTapTimer.current);
-    if (logoTapCount.current >= 5) {
-      logoTapCount.current = 0;
-      setTokenDebugVisible(true);
-      return;
-    }
-    logoTapTimer.current = setTimeout(() => { logoTapCount.current = 0; }, 1000);
-  };
 
   const [profileData, setProfileData] = useState({ name: '권클라이밍', phone: '010-1234-5678', age: '25', height: '175', weight: '70', arm: '180', shoe: '260' });
   const [profileToggles, setProfileToggles] = useState({ showName: true, showPhone: false, showAge: true, showHeight: true, showWeight: true, showArm: true, showShoe: true });
@@ -351,16 +329,6 @@ const AppContent = () => {
             await AsyncStorage.removeItem('fcmToken');
             setInitialRoute('Home');
           } catch (apiError: any) {
-            // 🔍 디버그: 릴리즈 빌드에서도 원인을 눈으로 확인하기 위해 모달로 표시
-            setDebugInfo(
-              `[checkLoginStatus]\n` +
-              `status: ${apiError?.response?.status}\n` +
-              `code: ${apiError?.code}\n` +
-              `message: ${apiError?.message}\n` +
-              `hasResponse: ${!!apiError?.response}\n` +
-              `hasRequest: ${!!apiError?.request}`
-            );
-            setDebugModalVisible(true);
 
             // apiClient의 401 인터셉터가 이미 재발급을 시도했고
             // 실패해서 여기까지 전파된 상태이므로, 다시 토큰 유무를 확인해서
@@ -427,9 +395,7 @@ const AppContent = () => {
                       <Text style={styles.backBtnText}>←</Text>
                     </TouchableOpacity>
                   ) : (
-                    <TouchableOpacity onPress={handleLogoTap} activeOpacity={1} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                      <Text style={styles.logoText}>olla</Text>
-                    </TouchableOpacity>
+                    <Text style={styles.logoText}>olla</Text>
                   )}
                   {routeName !== 'Notice' && routeName !== 'Notification' ? (
                     <TouchableOpacity onPress={() => navigationRef.navigate('Notification')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -561,72 +527,6 @@ const AppContent = () => {
           </View>
         </View>
       </Modal>
-
-      {/* ─── 🔍 임시 디버그 모달 (원인 파악 끝나면 통째로 삭제) ─── */}
-      <Modal visible={debugModalVisible} animationType="fade" transparent={true}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.deleteModalBox}>
-            <Text style={[styles.modalTitle, { color: '#FFD23F', fontSize: 20 }]}>DEBUG</Text>
-            <Text style={[styles.modalMessage, { fontSize: 13, textAlign: 'left', fontWeight: 'normal' }]} selectable>
-              {debugInfo}
-            </Text>
-            <TouchableOpacity style={styles.btnConfirm} onPress={() => setDebugModalVisible(false)}>
-              <Text style={styles.btnTextBlack}>확인</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ─── 🔍 토큰 강제 조작 디버그 모달: 평소엔 안 보임, 로고 5번 탭으로 호출 ─── */}
-      <Modal visible={tokenDebugVisible} animationType="fade" transparent={true}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.deleteModalBox}>
-            <Text style={[styles.modalTitle, { color: '#A1BE44', fontSize: 18 }]}>TOKEN DEBUG</Text>
-            <Text style={[styles.modalMessage, { fontSize: 12, textAlign: 'left', fontWeight: 'normal' }]} selectable>
-              {tokenDebugInfo}
-            </Text>
-
-            <TouchableOpacity
-              style={[styles.btnConfirm, { marginBottom: 10 }]}
-              onPress={async () => {
-                // 액세스 토큰만 깨뜨림 → 다음 API 호출에서 401 → 인터셉터가 reissue 시도
-                await AsyncStorage.setItem('userToken', 'invalid_access_token_for_test');
-                setTokenDebugInfo('액세스 토큰을 깨뜻습니다.\n이제 화면을 새로고침(pull-to-refresh)하거나\n탭을 이동해서 API를 호출해보세요.\n→ reissue가 성공하면 정상 동작,\n   화면이 빈칸 되면 버그 재현됨.');
-              }}
-            >
-              <Text style={styles.btnTextBlack}>액세스 토큰만 깨기 (reissue 테스트)</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.btnConfirm, { marginBottom: 10, backgroundColor: '#FF4D4D' }]}
-              onPress={async () => {
-                // 리프레시 토큰까지 깨뜨림 → reissue 자체가 실패 → 세션 만료 모달이 떠야 정상
-                await AsyncStorage.setItem('userToken', 'invalid_access_token_for_test');
-                await AsyncStorage.setItem('refreshToken', 'invalid_refresh_token_for_test');
-                setTokenDebugInfo('액세스+리프레시 토큰 모두 깨뜻습니다.\n이제 화면을 새로고침하거나 탭 이동해보세요.\n→ "세션 만료" 모달이 떠야 정상.\n→ 안 뜨고 데이터만 빈칸이면 버그 재현됨.');
-              }}
-            >
-              <Text style={styles.btnTextBlack}>리프레시 토큰까지 깨기 (세션만료 테스트)</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.btnConfirm}
-              onPress={async () => {
-                const t = await AsyncStorage.getItem('userToken');
-                const r = await AsyncStorage.getItem('refreshToken');
-                setTokenDebugInfo(`현재 저장된 값:\nuserToken: ${t?.slice(0, 30)}...\nrefreshToken: ${r?.slice(0, 30)}...`);
-              }}
-            >
-              <Text style={styles.btnTextBlack}>현재 토큰 값 보기</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.btnNo, { marginTop: 10, width: '100%' }]} onPress={() => setTokenDebugVisible(false)}>
-              <Text style={styles.btnTextWhite}>닫기</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
       {/* ─── 관리자 모드 종료 모달 ─── */}
       <Modal visible={isExitModalVisible} animationType="fade" transparent={true}>
         <View style={styles.modalOverlay}>
