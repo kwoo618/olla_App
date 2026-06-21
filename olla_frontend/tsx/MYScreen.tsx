@@ -35,7 +35,7 @@ const MYScreen = ({ navigation }: any) => {
     notiState, updateMultipleNotiSettings,
     resultModalVisible, setResultModalVisible, resultModalConfig,
     isProfileModalVisible, openProfileModal, closeProfileModal, profileHeightAnim, profilePanResponder,
-    isImageUploading, handleSelectImage, handleSaveProfile,                                        
+    isImageUploading, handleSelectImage, handleSaveProfile, handleResetProfileImage,                    
     isChangePwModalVisible, setChangePwModalVisible, oldPassword, setOldPassword, newPassword, setNewPassword, newPasswordConfirm, setNewPasswordConfirm, pwError, setPwError, isChangingPw, handleChangePassword,
     isPauseModalVisible, openPauseModal, closePauseModal, handleInquireClick, pauseSlideAnim,
     isContactModalVisible, closeContactModal, contactSlideAnim,
@@ -333,7 +333,7 @@ const MYScreen = ({ navigation }: any) => {
 
                   <TouchableOpacity 
                     style={styles.resetProfileBtn} 
-                    onPress={() => setProfileData({ ...profileData, profileImageUrl: null })}
+                    onPress={handleResetProfileImage}
                     disabled={isImageUploading}
                   >
                     <Text style={styles.resetProfileBtnText}>기본 프로필로 돌아가기</Text>

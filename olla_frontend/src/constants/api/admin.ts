@@ -5,10 +5,6 @@ import apiClient from './apiClient';
 export const getDashboardStats = () => apiClient.get('/admin/dashboard');
 export const getDashboardSummary = () => apiClient.get('/admin/dashboard/summary');
 
-// ⚠️ 백엔드(AdminDashboardController)에 해당 매핑이 안 보임 — 위 "확인 필요" 2번 참고
-export const getHourlyCongestion = (dayOfWeek: number) =>
-  apiClient.get('/admin/dashboard/hourly', { params: { dayOfWeek } });
-
 // ── 회원 관리 ──
 export const getAdminMembers = (params: any) =>
   apiClient.get('/admin/memberships/members', { params });
@@ -67,7 +63,7 @@ export const scanVisitQr = (qrToken: string, deductionCount = 1) =>
   apiClient.post('/admin/visits/scan', { qrToken, deductionCount });
 
 // ── 공용 이미지 업로드 ──
-// ⚠️ ImageController는 도메인 전용이 아닌 범용 엔드포인트지만, 현재 ManagerNotice.ts(관리자
+// ImageController는 도메인 전용이 아닌 범용 엔드포인트지만, 현재 ManagerNotice.ts(관리자
 //    공지 이미지)에서만 쓰여서 일단 여기 배치. 다른 도메인에서도 쓰게 되면 분리 권장.
 export const uploadImage = (formData: FormData) =>
   apiClient.post('/images', formData, { timeout: 30000 });

@@ -24,12 +24,13 @@ export interface NotificationItem {
 }
 
 // 만료 임박 회원권 단건 데이터 타입
+// 백엔드 MembershipResponse.java 기준: id/name 필드 없음 — membershipType만 존재
 export interface MyMembership {
-  id: number;
-  name: string;       // 회원권 이름 (예: "1개월 이용권")
-  endDate: string;    // 만료일 (YYYY-MM-DD)
-  dDay: number;       // 오늘 기준 남은 일수 (0 = 오늘 만료)
-  status: string;     // 회원권 상태 (ACTIVE 등)
+  id: string;          // 백엔드에 식별자가 없어 endDate+membershipType으로 합성한 키
+  name: string;         // membershipType을 그대로 표시 (예: "회원권", "일일권", "회원권+일일권")
+  endDate: string;      // 만료일 (YYYY-MM-DD)
+  dDay: number;         // 오늘 기준 남은 일수 (0 = 오늘 만료)
+  status: string;       // 회원권 상태 (ACTIVE 등)
 }
 
 export const useNotification = (navigation: any) => {
@@ -86,7 +87,7 @@ export const useNotification = (navigation: any) => {
       today.setHours(0, 0, 0, 0);
 
       const expiring: MyMembership[] = list
-        .map((m: any) => {
+        .map((m: any, idx: number) => {
           const endDate = m.endDate ?? m.end_date ?? null;
           if (!endDate) return null;
           
@@ -96,9 +97,12 @@ export const useNotification = (navigation: any) => {
           // 소수점 올림: 오늘 만료면 0, 내일 만료면 1
           const dDay = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
           
+          // 백엔드 응답(MembershipResponse)엔 id가 없으므로 endDate+타입+인덱스로 고유 키 생성
+          const membershipType = m.membershipType ?? m.type ?? '이용권';
+          
           return {
-            id: m.id ?? 0,
-            name: m.name ?? m.membershipName ?? m.type ?? '이용권',
+            id: `${membershipType}_${endDate}_${idx}`,
+            name: membershipType,
             endDate,
             dDay,
             status: m.status ?? 'ACTIVE',
@@ -122,15 +126,11 @@ export const useNotification = (navigation: any) => {
     try {
       const response = await getMyNotifications({ page: 0, size: 50 });
 
-      // 서버 응답 구조가 다양하므로 여러 경로를 순서대로 시도
-      let list: NotificationItem[] = [];
-      if (response.data) {
-        const dataObj = response.data.data || response.data;
-        list = dataObj.content || dataObj.data?.content || dataObj.data || dataObj;
-        if (!Array.isArray(list)) list = [];
-      }
+      // NotificationController가 ApiResponse<Page<MemberNotificationResponse>>를 반환하므로
+      // 항상 response.data.data.content 경로로 옴 (Page 직렬화 시 content 배열 필드 고정)
+      const list: NotificationItem[] = response.data?.data?.content ?? [];
 
-      setNotifications(list);
+      setNotifications(Array.isArray(list) ? list : []);
     } catch (error: any) {
     // 401(세션 만료)은 apiClient 인터셉터가 전역으로 처리하므로 여기선 일반 에러만 안내
     const errorMessage = error.response?.data?.message || '네트워크 연결을 확인해주세요.';

@@ -16,7 +16,6 @@ import { API_BASE_URL } from '../src/constants/Config'; // resolveImageUrl에서
 import {
   getDashboardStats,
   getDashboardSummary,
-  getHourlyCongestion,
   getAdminNotices,
   getAdminMembers,
   getTodayVisitDashboard,
@@ -163,8 +162,9 @@ export const useManagerDashboard = (navigation: any) => {
 
   // 차트 데이터
   const [weeklyCongestionRate, setWeeklyCongestionRate]   = useState<number[]>([]);           // 요일별 혼잡도 비율 (0~100)
-  const [hourlyCongestionByDay, setHourlyCongestionByDay] = useState<Record<number, number[]>>({}); // 요일별 시간대 혼잡도 캐시
-  const [hourlyData, setHourlyData]                       = useState<number[]>([]);            // 현재 선택된 요일의 시간대 혼잡도
+  const [hourlyCongestionByDay, setHourlyCongestionByDay] = useState<Record<number, number[]>>({}); // 요일별 시간대 혼잡도 캐시 (렌더링용)
+  const hourlyCongestionByDayRef = useRef<Record<number, number[]>>({}); // fetchHourlyByDay가 stale closure 없이 즉시 최신값을 읽기 위한 ref
+  const [hourlyData, setHourlyData]                       = useState<number[]>([]);            // 현재 선택된 요일의 영업시간 혼잡도
 
   // 결과 안내 모달 상태
   const [resultModalVisible, setResultModalVisible] = useState(false);
@@ -263,6 +263,8 @@ export const useManagerDashboard = (navigation: any) => {
           const day = Number(k);
           if (day !== 7) normalized[day] = Array.isArray(v) ? (v as unknown[]).map(Number) : [];
         });
+        // ref는 동기적으로 즉시 반영되므로, 바로 이어서 fetchHourlyByDay를 호출해도 최신 데이터를 읽을 수 있음
+        hourlyCongestionByDayRef.current = normalized;
         setHourlyCongestionByDay(normalized);
       }
 
@@ -295,27 +297,24 @@ export const useManagerDashboard = (navigation: any) => {
   // - 캐시(hourlyCongestionByDay)에 데이터가 있으면 먼저 화면에 표시 후 서버 재조회
   // - 일요일(7)은 영업 안 함으로 스킵
   // - 데이터 없을 때 요일별 기본값으로 폴백
-  const fetchHourlyByDay = useCallback(async (dayOfWeek: number) => {
+  const fetchHourlyByDay = useCallback((dayOfWeek: number) => {
     if (dayOfWeek === 7) return;
 
-    // 캐시에 데이터가 있으면 즉시 표시 (서버 응답 전 빠른 UI 반영)
-    setHourlyCongestionByDay(prev => {
-      if (prev[dayOfWeek]?.length > 0) setHourlyData(prev[dayOfWeek]);
-      return prev;
-    });
+    // 별도 API 호출 없음 — fetchDashboardMain()이 채워둔 ref(stale closure 없이 항상 최신값)를 읽음
+    // 백엔드 배열은 항상 9시~23시(15칸) 고정이므로, 실제 영업시간(13시~)에 해당하는
+    // 구간만 정확히 잘라내야 x축 라벨(getHourRange)과 칸이 어긋나지 않음
+    const fullDayData = hourlyCongestionByDayRef.current[dayOfWeek];
+    const hourRange   = getHourRange(dayOfWeek);
+    const startIndex  = hourRange[0] - 9; // 배열의 0번 인덱스가 9시이므로 보정
 
-    try {
-      // 백엔드에 GET /admin/dashboard/hourly 매핑이 안 보임 — 인수인계서 미해결 이슈 2 참고, 404 가능성 있음
-      const res = await getHourlyCongestion(dayOfWeek);
-      const list = (extractData(res) ?? []).map(Number) as number[];
-      // 캐시 업데이트
-      setHourlyCongestionByDay(prev => ({ ...prev, [dayOfWeek]: list }));
-      // 기본값: 토요일 7개, 평일 10개
-      const fallback = dayOfWeek === 6 ? [10, 20, 35, 60, 80, 55, 30] : [10, 20, 30, 50, 70, 90, 100, 80, 60, 40];
-      setHourlyData(list.length > 0 ? list : fallback);
-    } catch (e: any) {
-      console.log('시간대별 혼잡도 로드 실패:', e.response?.data?.message ?? e.message);
-    }
+    const sliced = fullDayData && fullDayData.length >= startIndex + hourRange.length
+      ? fullDayData.slice(startIndex, startIndex + hourRange.length)
+      : null;
+
+    const fallback = dayOfWeek === 6
+      ? [10, 20, 35, 60, 80, 55, 30]
+      : [10, 20, 30, 50, 70, 90, 100, 80, 60, 40];
+    setHourlyData(sliced && sliced.length > 0 ? sliced : fallback);
   }, []);
 
   // 공지사항 최신 2건 조회 (최신 id 내림차순)
@@ -453,6 +452,10 @@ export const useManagerDashboard = (navigation: any) => {
         fetchVisits(),
         fetchActiveMemberships(),
       ]);
+      // fetchDashboardMain()이 캐시(hourlyCongestionByDay)만 갱신하고
+      // 화면에 그려지는 hourlyData는 갱신하지 않으므로, 캐시가 다 채워진 뒤
+      // 현재 선택된 요일 기준으로 한 번 더 반영해줘야 함
+      fetchHourlyByDay(dashboardStats.selectedDay);
     } catch (e: any) {
       console.log('데이터 로딩 실패:', e.response?.data?.message ?? e.message);
     } finally {
@@ -468,6 +471,8 @@ export const useManagerDashboard = (navigation: any) => {
     fetchMembers,
     fetchVisits,
     fetchActiveMemberships,
+    fetchHourlyByDay,
+    dashboardStats.selectedDay,
   ]);
 
   // pull-to-refresh 처리

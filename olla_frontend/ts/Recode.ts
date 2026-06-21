@@ -11,8 +11,6 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Animated, PanResponder, Dimensions, Keyboard } from 'react-native';
-import axios from 'axios';
-
 import {
   getBeginnerBestRecords,
   getBeginnerHistory,

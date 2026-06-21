@@ -43,16 +43,21 @@ apiClient.interceptors.response.use(
     const status = error.response?.status;
     const url: string = error.config?.url ?? '';
 
-    // 로그인/재발급 요청 자체가 401이면 세션 만료로 처리
+    // Spring Security가 인증 실패 시 401이 아니라 403을 반환하는 경우가 있어
+    // (JwtAuthenticationFilter가 SecurityContext를 못 채우면 anyRequest().authenticated()에서 403 발생)
+    // 401과 403 모두 인증 실패로 간주해서 동일하게 처리
+    const isAuthError = status === 401 || status === 403;
+
+    // 로그인/재발급 요청 자체가 인증 실패면 바로 세션 만료로 처리
     const isLoginRequest = url.includes('/auth/login') || url.includes('/members/login');
     const isReissueRequest = url.includes('/auth/reissue');
 
-    if (status === 401 && (isLoginRequest || isReissueRequest)) {
+    if (isAuthError && (isLoginRequest || isReissueRequest)) {
       await handleSessionExpired();
       return Promise.reject(error);
     }
 
-    if (status === 401 && !_sessionExpiredFired) {
+    if (isAuthError && !_sessionExpiredFired) {
       // 동시 401이 여러 개 와도 재발급은 1번만
       // _refreshPromise가 있으면 기존 프로미스 재사용, 없으면 새로 생성
       if (!_refreshPromise) {

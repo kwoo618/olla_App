@@ -67,10 +67,6 @@ export const updateNotificationSettings = (requestBody: any) =>
 export const registerFcmToken = (deviceToken: string) =>
   apiClient.post('/members/me/fcm-token', { deviceToken });
 
-// ⚠️ 백엔드에 DELETE /members/me/fcm-token 매핑이 없음 — 인수인계서 이슈 1 참고
-export const deleteFcmToken = (token: string) =>
-  apiClient.delete('/members/me/fcm-token', { data: { token }, timeout: 3000 });
-
 // ── 출석/방문 ──
 export const getQrToken = () => apiClient.get('/visit/qr');
 
