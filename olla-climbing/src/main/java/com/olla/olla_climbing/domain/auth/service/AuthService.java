@@ -187,7 +187,10 @@ public class AuthService {
         }
 
         // 2. DB에 저장된 토큰과 일치하는지 확인 (탈취/재사용 방지)
-        RefreshToken savedToken = refreshTokenRepository.findByToken(refreshToken)
+        // findByToken → findByLoginId로 변경 (동시 요청 경합 방지)
+        String loginIdFromToken = jwtTokenProvider.getLoginId(refreshToken);
+
+        RefreshToken savedToken = refreshTokenRepository.findByLoginId(loginIdFromToken)
                 .orElseThrow(() -> new IllegalArgumentException("등록되지 않은 리프레시 토큰입니다. 다시 로그인해주세요."));
 
         Member member = memberRepository.findByLoginId(savedToken.getLoginId())
