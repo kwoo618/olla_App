@@ -206,7 +206,9 @@ const ManagerDashboard = ({ navigation }: any) => {
     const selectedDay = dash.dashboardStats.selectedDay;
     const hourRange   = getHourRange(selectedDay);
     const CHART_H     = 150;
-    const displayData = dash.hourlyData.slice(0, hourRange.length);
+    // dash.hourlyData는 훅에서 이미 selectedDay의 영업시간(hourRange)에 맞게 잘라서 내려줌
+    // (예전엔 9~23시 15칸 원본을 앞에서부터 N개만 잘라써서 13시 라벨에 9시 데이터가 붙는 버그가 있었음)
+    const displayData = dash.hourlyData;
     const maxVal      = Math.max(...displayData, 1);
     const count       = displayData.length;
 

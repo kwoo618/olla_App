@@ -11,18 +11,11 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Animated, PanResponder, Dimensions } from 'react-native';
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL } from '../src/constants/Config';
 
-// ── API 엔드포인트 상수 ──
-const RANKING_BEGINNER_URL  = `${API_BASE_URL}/rankings/beginner`;       // 초보벽 랭킹
-const RANKING_ENDURANCE_URL = `${API_BASE_URL}/rankings/endurance/distance`; // 지구력 랭킹 (거리 기준)
-const RANKING_SERIES_URL    = `${API_BASE_URL}/rankings/series`;          // 연속 완등 랭킹
-const MY_PROFILE_URL        = `${API_BASE_URL}/members/me`;              // 내 프로필
-const MY_BEGINNER_BEST_URL  = `${API_BASE_URL}/records/beginner/best`;   // 내 초보벽 최고 기록
-const PROFILE_API_URL       = `${API_BASE_URL}/members`;                 // 다른 사용자 프로필
-const MEMBERSHIP_URL        = `${API_BASE_URL}/memberships/me`;          // 내 회원권 목록
+import { API_BASE_URL } from '../src/constants/Config'; // getFullImageUrl용으로 유지
+import { getMyProfile, getOtherMemberProfile, fetchHasMembership } from '../src/constants/api/member';
+import { getBeginnerRanking, getEnduranceDistanceRanking, getSeriesRanking } from '../src/constants/api/ranking';
+import { getBeginnerBestRecords } from '../src/constants/api/record';
 
 // 서버 이미지 상대경로를 절대 URL로 변환
 export const getFullImageUrl = (path?: string | null): string | null => {
@@ -208,55 +201,11 @@ export const useRanking = (route: any) => {
     setAlertConfig({ visible: true, title, message });
   };
 
-  // AsyncStorage에서 JWT 토큰을 읽어 Authorization 헤더 객체로 반환
-  // 토큰 없으면 빈 객체 반환 (비로그인 허용)
-  const getAuthHeader = async () => {
-    const token = await AsyncStorage.getItem('userToken');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
   // 랭킹 접근 가능한 기간권 보유 여부 확인
   // - 일일권(COUNT/횟수/일일 타입)은 제외
   // - 기간권(PERIOD/기간 타입 또는 endDate 있는 것) 중 만료일이 현재 이후인 것이 있으면 true
   const checkRankingMembership = async () => {
-    try {
-      const headers = await getAuthHeader();
-      const res = await axios.get(MEMBERSHIP_URL, { headers });
-      const rawData = res.data.data;
-      const memberships: any[] = Array.isArray(rawData) ? rawData : (rawData ? [rawData] : []);
-
-      let isValid = false;
-      for (const m of memberships) {
-        if (!m) continue;
-        const status = String(m.membershipStatus || m.status || '').toUpperCase();
-        // 삭제/비활성 상태 제외
-        if (status === 'DELETED' || status === 'INACTIVE') continue;
-        if (status !== 'ACTIVE' && status !== '') continue;
-
-        const typeStr = String(m.membershipType ?? '').toUpperCase();
-
-        // 일일권/횟수권은 랭킹 접근 불가 → 건너뜀
-        const isCountType =
-        typeStr.includes('COUNT') || typeStr.includes('횟수') || typeStr.includes('일일');
-        if (isCountType) continue;
-
-        // 기간권이고 만료일이 현재 이후면 유효한 기간권으로 판단
-        if (typeStr.includes('PERIOD') || typeStr.includes('기간') || m.endDate) {
-          if (m.endDate) {
-            const end = new Date(m.endDate);
-            end.setHours(23, 59, 59, 999);
-            if (end.getTime() >= Date.now()) {
-              isValid = true;
-              break;
-            }
-          }
-        }
-      }
-      setHasValidMembership(isValid);
-    } catch {
-      // 회원권 조회 실패 시 접근 불가로 처리
-      setHasValidMembership(false);
-    }
+    setHasValidMembership(await fetchHasMembership());
   };
 
   // 다른 사용자의 프로필 상세 조회 후 하단 모달로 표시
@@ -264,8 +213,7 @@ export const useRanking = (route: any) => {
   // - 성공 시 애니메이션으로 모달 슬라이드 업
   const openDetailModal = async (memberId: number, fallbackName: string) => {
     try {
-      const headers = await getAuthHeader();
-      const response = await axios.get(`${PROFILE_API_URL}/${memberId}/profile`, { headers });
+      const response = await getOtherMemberProfile(memberId);
       const d = response.data.data;
 
       if (!d) {
@@ -309,8 +257,7 @@ export const useRanking = (route: any) => {
   // 반환값을 초보벽 랭킹 조회 시 "내 기록" 병합에 활용
   const fetchMyProfile = async () => {
     try {
-      const headers = await getAuthHeader();
-      const res = await axios.get(MY_PROFILE_URL, { headers });
+      const res = await getMyProfile();
       const data = res.data.data;
 
       if (data) {
@@ -335,19 +282,17 @@ export const useRanking = (route: any) => {
   // - 최종 데이터는 setBeginnerRankings로 저장 (색상 모두 합친 배열)
   const fetchBeginnerRankings = async (userData: any) => {
     try {
-      const headers = await getAuthHeader();
-      // 8가지 색상 랭킹 병렬 요청 (실패해도 빈 배열로 처리)
       const rankResponses = await Promise.all(
         colors.map(c =>
-          axios.get(`${RANKING_BEGINNER_URL}?difficulty=${c.enum}`, { headers })
-               .catch(() => ({ data: { data: [] } }))
+          getBeginnerRanking(c.enum)
+              .catch(() => ({ data: { data: [] } }))
         )
       );
 
       // 내 최고 기록 별도 조회
       let myBestList: any[] = [];
       try {
-        const res = await axios.get(MY_BEGINNER_BEST_URL, { headers });
+        const res = await getBeginnerBestRecords();
         const raw = res.data.data;
         myBestList = Array.isArray(raw) ? raw : (Array.isArray(raw?.list) ? raw.list : []);
       } catch (error: any) {
@@ -447,8 +392,7 @@ export const useRanking = (route: any) => {
   // - 편도 수(laps), 시간(time), 구간 레이블(section), 총점(totalScore) 변환
   const fetchEnduranceRankings = async () => {
     try {
-      const headers = await getAuthHeader();
-      const res     = await axios.get(RANKING_ENDURANCE_URL, { headers });
+      const res = await getEnduranceDistanceRanking();
       const rawList = extractList(res.data.data);
 
       const mapped = rawList.map((item: any, i: number) => ({
@@ -476,8 +420,7 @@ export const useRanking = (route: any) => {
   // - 점수 = Σ (색상 기본점수 * (1.0 + 인덱스 * 0.1)) → 연속할수록 점수 증가
   const fetchConsecutiveRankings = async () => {
     try {
-      const headers = await getAuthHeader();
-      const res     = await axios.get(RANKING_SERIES_URL, { headers });
+      const res = await getSeriesRanking();
       const rawList = extractList(res.data.data);
 
       const mapped = rawList.map((item: any, i: number) => {

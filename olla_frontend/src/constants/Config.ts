@@ -1,1 +1,2 @@
+// Api_base_url 
 export const API_BASE_URL = 'https://api.ollagaja.com:8443/api/v1'; 

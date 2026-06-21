@@ -13,12 +13,20 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Dimensions, Animated, PanResponder, Platform } from 'react-native';
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // notiSettings 캐시, 로그아웃/탈퇴 시 토큰 정리용으로 계속 사용
 import { useIsFocused } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
-import { API_BASE_URL } from '../src/constants/Config';
-import messaging from '@react-native-firebase/messaging';
+import { API_BASE_URL } from '../src/constants/Config'; // getFullImageUrl에서 계속 사용
+import {
+  getMyProfile,
+  getMyMemberships,
+  updateMyInfo,
+  uploadProfileImage,
+  getNotificationSettings,
+  updateNotificationSettings,
+  withdrawMember,
+} from '../src/constants/api/member';
+import { changePassword, logout } from '../src/constants/api/auth';
 
 // ─── 유틸 함수 ────────────────────────────────────────────────────────────────
 
@@ -131,6 +139,7 @@ export const useMyPage = (navigation: any) => {
   const pendingImageUri   = useRef<string | null>(null); // 선택된 로컬 이미지 URI (미리보기용)
   const pendingImageAsset = useRef<any>(null);           // 선택된 이미지 asset 객체 (업로드용)
   const originalImageUrl  = useRef<string>('');          // 모달 열기 전 원본 이미지 URL (취소 시 복구용)
+  const pendingImageReset = useRef(false);               // 기본 이미지로 돌아가기      
 
   // ─── 프로필 바텀시트 애니메이션 설정 ──────────────────────────────────────
   const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -194,11 +203,12 @@ export const useMyPage = (navigation: any) => {
     try {
       const userToken = await AsyncStorage.getItem('userToken');
       if (!userToken) return;
-      const notiRes = await axios.get(`${API_BASE_URL}/members/me/notifications/settings`, { headers: { Authorization: `Bearer ${userToken}` } });
+      const notiRes = await getNotificationSettings();
       if (notiRes.data.data) {
         setNotiState(notiRes.data.data);
         await AsyncStorage.setItem('notiSettings', JSON.stringify(notiRes.data.data));
       }
+      
     } catch (e) {
       console.log('알림 설정 로드 실패');
     }
@@ -207,12 +217,8 @@ export const useMyPage = (navigation: any) => {
   // ─── API: 내 정보 조회 (프로필 + 이용권) ─────────────────────────────────
   const fetchMyInfo = useCallback(async () => {
     try {
-      const userToken = await AsyncStorage.getItem('userToken');
-      if (!userToken) { navigation.replace('Login'); return; }
-      const headers = { Authorization: `Bearer ${userToken}` };
-
-      // 1. 내 기본 정보 조회 (/members/me)
-      const userRes = await axios.get(`${API_BASE_URL}/members/me`, { headers });
+      // 내 기본 정보 조회 (/members/me)
+      const userRes = await getMyProfile();
       const data    = userRes.data.data;
 
       if (data) {
@@ -244,8 +250,8 @@ export const useMyPage = (navigation: any) => {
         });
       }
 
-      // 2. 이용권 상태 조회 (/memberships/me)
-      const memRes     = await axios.get(`${API_BASE_URL}/memberships/me`, { headers });
+      // 이용권 상태 조회 (/memberships/me)
+      const memRes     = await getMyMemberships();
       const rawMemData = memRes.data.data;
       const dataList: any[] = Array.isArray(rawMemData) ? rawMemData : (rawMemData?.content || []);
 
@@ -307,7 +313,7 @@ export const useMyPage = (navigation: any) => {
     } finally {
       setLoading(false);
     }
-  }, [navigation]);
+  }, []);
 
   // 화면 포커스 시마다 프로필 + 알림 설정 재조회 (다른 화면에서 수정 후 돌아올 때 반영)
   useEffect(() => {
@@ -332,7 +338,6 @@ export const useMyPage = (navigation: any) => {
     setNotiState(optimisticState); // 낙관적 업데이트
 
     try {
-      const userToken = await AsyncStorage.getItem('userToken');
       // 서버는 camelCase와 snake_case 양쪽 필드명을 모두 받는 경우를 대비해 중복 전송
       const requestBody = {
         ...optimisticState,
@@ -342,9 +347,7 @@ export const useMyPage = (navigation: any) => {
         crewNotificationOn:       optimisticState.isCrewNotificationOn,
         noticeNotificationOn:     optimisticState.isNoticeNotificationOn,
       };
-      const res        = await axios.patch(`${API_BASE_URL}/members/me/notifications/settings`, requestBody, {
-        headers: { Authorization: `Bearer ${userToken}` }
-      });
+      const res        = await updateNotificationSettings(requestBody);
       // 서버 응답값으로 최종 상태 동기화
       const finalState = res.data.data ? { ...optimisticState, ...res.data.data } : optimisticState;
       setNotiState(finalState);
@@ -364,12 +367,22 @@ export const useMyPage = (navigation: any) => {
       if (response.assets && response.assets.length > 0) {
         const asset = response.assets[0];
         pendingImageAsset.current = asset;                // 저장 시 업로드할 asset 보관
+        pendingImageReset.current = false;                // 새 이미지를 골랐으니 '기본으로 돌아가기' 요청은 취소
         const localUri = asset.uri ?? null;
         pendingImageUri.current = localUri;
         // 미리보기만 로컬 URI로 업데이트 (서버 업로드 전)
         setProfileData((prev: any) => ({ ...prev, profileImageUrl: localUri ?? prev.profileImageUrl }));
       }
     });
+  };
+
+  // ─── 프로필 이미지 기본값으로 초기화 ────────────────────────────────────
+  // 갤러리 선택과 동일하게 저장 전까지는 미리보기만 반영하고, 실제 반영은 저장 시 'DEFAULT' 전송으로 처리
+  const handleResetProfileImage = () => {
+    pendingImageAsset.current = null;   // 새로 골랐던 이미지가 있었다면 취소
+    pendingImageUri.current = null;
+    pendingImageReset.current = true;   // 저장 시 서버에 기본 이미지로 반영하라는 표시
+    setProfileData((prev: any) => ({ ...prev, profileImageUrl: null }));
   };
 
   // ─── 프로필 저장 (이미지 업로드 + 신체 정보 수정) ────────────────────────
@@ -379,9 +392,9 @@ export const useMyPage = (navigation: any) => {
   const handleSaveProfile = async () => {
     setIsImageUploading(true);
     try {
-      const userToken   = await AsyncStorage.getItem('userToken');
       let finalImageUrl = profileData.profileImageUrl;
-      
+      let imageUrlForServer: string | undefined; // 변경이 있을 때만 채워서 PATCH 바디에 포함
+
       if (pendingImageAsset.current) {
         // 새 이미지가 선택된 경우 업로드 실행
         const asset    = pendingImageAsset.current;
@@ -393,23 +406,24 @@ export const useMyPage = (navigation: any) => {
           name: asset.fileName || `profile_${Date.now()}.jpg`,
         } as any);
 
-        const uploadRes = await axios.post(`${API_BASE_URL}/members/me/profile-image`, formData, {
-          headers: {
-            Authorization:  `Bearer ${userToken}`,
-            'Content-Type': 'multipart/form-data',
-          },
-          timeout: 30000
-        });
+        const uploadRes = await uploadProfileImage(formData);
 
         // 서버 응답에서 최종 이미지 URL 추출
         finalImageUrl = uploadRes.data.data.imageUrl || uploadRes.data.data.profileImageUrl;
+        imageUrlForServer = finalImageUrl;
         pendingImageAsset.current = null;
         pendingImageUri.current   = null;
+        pendingImageReset.current = false;
+      } else if (pendingImageReset.current) {
+        // '기본 프로필로 돌아가기'가 눌린 경우 → 서버에 DEFAULT로 알려서 프로필 이미지 초기화
+        imageUrlForServer = 'DEFAULT';
+        finalImageUrl = null;
+        pendingImageReset.current = false;
       }
 
       // 신체 정보 + 공개 설정 PATCH
       // 서버 필드명 이중 전송 (isXxxPublic / xxxPublic 양쪽 대응)
-      const requestBody = {
+      const requestBody: any = {
         height:          profileData.height ? parseFloat(profileData.height) : null,
         weight:          profileData.weight ? parseFloat(profileData.weight) : null,
         armSpan:         profileData.arm    ? parseFloat(profileData.arm)    : null,
@@ -419,13 +433,14 @@ export const useMyPage = (navigation: any) => {
         isArmSpanPublic: profileToggles.showArm,     armSpanPublic: profileToggles.showArm,
         isFootSizePublic:profileToggles.showShoe,    footSizePublic:profileToggles.showShoe,
       };
+      if (imageUrlForServer !== undefined) {
+        requestBody.profileImageUrl = imageUrlForServer; // 'DEFAULT' 또는 새 업로드 URL일 때만 포함
+      }
 
-      await axios.patch(`${API_BASE_URL}/members/me/info`, requestBody, {
-        headers: { Authorization: `Bearer ${userToken}` }
-      });
+      await updateMyInfo(requestBody);
 
       // 저장 성공 후 원본 참조값도 최신으로 갱신 (취소 시 복구 기준점 업데이트)
-      originalImageUrl.current = finalImageUrl;
+      originalImageUrl.current = finalImageUrl ?? '';
       setProfileData((prev: any) => ({ ...prev, profileImageUrl: finalImageUrl }));
 
       // 모달 닫기 → 데이터 재조회 → 결과 안내
@@ -436,7 +451,8 @@ export const useMyPage = (navigation: any) => {
     } catch (e: any) {
       // 이미지 관련 pending 상태 정리
       pendingImageAsset.current = null;
-      pendingImageUri.current   = null;                                  
+      pendingImageUri.current   = null;    
+      pendingImageReset.current = false;                              
 
       if (!e.response) {
         // 네트워크 오류
@@ -460,9 +476,9 @@ export const useMyPage = (navigation: any) => {
     if (newPassword !== newPasswordConfirm) return setPwError('새 비밀번호가 일치하지 않습니다.');
 
     setIsChangingPw(true);
+    setIsChangingPw(true);
     try {
-      const userToken = await AsyncStorage.getItem('userToken');
-      await axios.patch(`${API_BASE_URL}/auth/password`, { oldPassword, newPassword }, { headers: { Authorization: `Bearer ${userToken}` } });
+      await changePassword(oldPassword, newPassword);
 
       // 성공 → 모달 닫기 + 입력값 초기화 + 결과 안내
       setChangePwModalVisible(false);
@@ -480,26 +496,13 @@ export const useMyPage = (navigation: any) => {
   // FCM 토큰 삭제 시도(실패해도 무시) → 서버 로그아웃 → 로컬 토큰 전체 삭제 → 로그인 화면으로
   const executeLogout = async () => {
     try {
-      const token        = await AsyncStorage.getItem('userToken');
       const refreshToken = await AsyncStorage.getItem('refreshToken');
 
-      // FCM 토큰 삭제 (서버에서 해당 기기로 더 이상 알림 안 보내도록)
-      try {
-        const fcmToken = await messaging().getToken();
-        if (token && fcmToken) {
-          await axios.delete(`${API_BASE_URL}/members/me/fcm-token`, {
-            headers: { Authorization: `Bearer ${token}` },
-            data:    { token: fcmToken },
-            timeout: 3000, // 실패해도 로그아웃은 계속 진행
-          });
-        }
-      } catch (fcmError) {
-        console.log('FCM 토큰 삭제 실패 (무시):', fcmError);
-      }
-
       // 서버 로그아웃 (refreshToken 무효화)
-      if (token && refreshToken) {
-        await axios.post(`${API_BASE_URL}/auth/logout`, { refreshToken }, { headers: { Authorization: `Bearer ${token}` }, timeout: 3000 });
+      // → AuthService.logout()이 내부적으로 member.updateFcmToken(null) 처리까지 해줌
+      //   (프론트에서 별도로 FCM 토큰을 삭제할 필요 없음)
+      if (refreshToken) {
+        await logout(refreshToken);
       }
     } catch (e) { } finally {
       // 로컬 저장소에서 인증 정보 전체 삭제
@@ -514,8 +517,7 @@ export const useMyPage = (navigation: any) => {
   // 서버에 탈퇴 요청 → 로컬 토큰 삭제 → 결과 안내 → 로그인 화면으로
   const executeDeleteAccount = async () => {
     try {
-      const token = await AsyncStorage.getItem('userToken');
-      await axios.delete(`${API_BASE_URL}/members/me`, { headers: { Authorization: `Bearer ${token}` } });
+      await withdrawMember();
       await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole']);
       setDeleteModalVisible(false);
       setTimeout(() => {
@@ -534,6 +536,7 @@ export const useMyPage = (navigation: any) => {
   const openProfileModal = () => {
     pendingImageAsset.current = null;
     pendingImageUri.current   = null;
+    pendingImageReset.current = false;
     originalImageUrl.current  = profileData.profileImageUrl; // 취소 시 복구용 백업
     setProfileModalVisible(true);
     currentProfileSnap.current = FULL_SCREEN;
@@ -549,6 +552,7 @@ export const useMyPage = (navigation: any) => {
       // 저장하지 않고 닫으면 미리보기를 원본으로 되돌림
       pendingImageAsset.current = null;
       pendingImageUri.current   = null;
+      pendingImageReset.current = false;
       setProfileData((prev: any) => ({ ...prev, profileImageUrl: originalImageUrl.current }));
     }
     Animated.timing(profileHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
@@ -601,7 +605,7 @@ export const useMyPage = (navigation: any) => {
     notiState, updateMultipleNotiSettings,
     resultModalVisible, setResultModalVisible, resultModalConfig,
     isProfileModalVisible, openProfileModal, closeProfileModal, profileHeightAnim, profilePanResponder,
-    isImageUploading, handleSelectImage, handleSaveProfile,                                             
+    isImageUploading, handleSelectImage, handleSaveProfile, handleResetProfileImage,                           
     isChangePwModalVisible, setChangePwModalVisible, oldPassword, setOldPassword, newPassword, setNewPassword, newPasswordConfirm, setNewPasswordConfirm, pwError, setPwError, isChangingPw, handleChangePassword,
     isPauseModalVisible, openPauseModal, closePauseModal, handleInquireClick, pauseSlideAnim,
     isContactModalVisible, closeContactModal, contactSlideAnim,

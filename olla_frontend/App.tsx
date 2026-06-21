@@ -4,63 +4,11 @@ import { NavigationContainer, useNavigationContainerRef } from '@react-navigatio
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
-import { API_BASE_URL } from './src/constants/Config';
 import messaging from '@react-native-firebase/messaging';
 
-export const SESSION_EXPIRED_EVENT = 'SESSION_EXPIRED';
-
-let _sessionExpiredFired = false;
-let _isReissuing = false;
-
-axios.interceptors.response.use(
-  response => response,
-  async error => {
-    const status = error.response?.status;
-    const url: string = error.config?.url ?? '';
-    const isLoginRequest = url.includes('/auth/login') || url.includes('/members/login');
-    const isReissueRequest = url.includes('/auth/reissue');
-
-    if (status === 401 && (isLoginRequest || isReissueRequest)) {
-      if (!_sessionExpiredFired) {
-        _sessionExpiredFired = true;
-        await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole', 'fcmToken']);
-        DeviceEventEmitter.emit(SESSION_EXPIRED_EVENT);
-      }
-      return Promise.reject(error);
-    }
-
-    if (status === 401 && !_isReissuing && !_sessionExpiredFired) {
-      _isReissuing = true;
-      try {
-        const refreshToken = await AsyncStorage.getItem('refreshToken');
-        if (!refreshToken) throw new Error('NO_REFRESH_TOKEN');
-
-        const reissueRes = await axios.post(`${API_BASE_URL}/auth/reissue`, { refreshToken });
-
-        const newAccessToken =
-          reissueRes.data?.data?.accessToken ?? reissueRes.data?.accessToken;
-        if (!newAccessToken) throw new Error('NO_ACCESS_TOKEN');
-
-        await AsyncStorage.setItem('userToken', newAccessToken);
-
-        error.config.headers['Authorization'] = `Bearer ${newAccessToken}`;
-        return axios(error.config);
-      } catch {
-        if (!_sessionExpiredFired) {
-          _sessionExpiredFired = true;
-          await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole', 'fcmToken']);
-          DeviceEventEmitter.emit(SESSION_EXPIRED_EVENT);
-        }
-        return Promise.reject(error);
-      } finally {
-        _isReissuing = false;
-      }
-    }
-
-    return Promise.reject(error);
-  }
-);
+// ─── axios 직접 호출 + 인터셉터를 apiClient.ts로 이전 ───
+// apiClient: baseURL(API_BASE_URL) + 토큰 자동 주입 + 401 재발급/세션만료 처리가 포함된 axios 인스턴스라고 가정
+import apiClient, { SESSION_EXPIRED_EVENT, resetSessionFlag } from './src/constants/api/apiClient';
 
 type RootParamList = {
   Login: undefined; Signup: undefined; PersonalInfo: undefined; Loading: undefined;
@@ -178,11 +126,8 @@ const registerFcmToken = async () => {
     const savedToken = await AsyncStorage.getItem('fcmToken');
     if (savedToken === fcmToken) return;
 
-    await axios.post(
-      `${API_BASE_URL}/members/me/fcm-token`,
-      { deviceToken: fcmToken },
-      { headers: { Authorization: `Bearer ${userToken}` } },
-    );
+    // ─── 💡 axios.post(`${API_BASE_URL}/...`, ..., { headers: Authorization }) → apiClient.post로 교체 ───
+    await apiClient.post('/members/me/fcm-token', { deviceToken: fcmToken });
 
     await AsyncStorage.setItem('fcmToken', fcmToken);
   } catch (e) {}
@@ -230,6 +175,27 @@ const AppContent = () => {
 
   const [sessionExpiredVisible, setSessionExpiredVisible] = useState(false);
 
+  // ─── 🔍 임시 디버그 모달 (토큰 만료/네트워크 이슈 원인 파악용, 릴리즈에서도 보임) ───
+  const [debugModalVisible, setDebugModalVisible] = useState(false);
+  const [debugInfo, setDebugInfo] = useState('');
+
+  // ─── 🔍 토큰 강제 조작용 디버그 (로고 5번 탭으로 호출) ───
+  const [tokenDebugVisible, setTokenDebugVisible] = useState(false);
+  const [tokenDebugInfo, setTokenDebugInfo] = useState('버튼을 눌러 토큰을 조작해보세요.');
+  const logoTapCount = useRef(0);
+  const logoTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleLogoTap = () => {
+    logoTapCount.current += 1;
+    if (logoTapTimer.current) clearTimeout(logoTapTimer.current);
+    if (logoTapCount.current >= 5) {
+      logoTapCount.current = 0;
+      setTokenDebugVisible(true);
+      return;
+    }
+    logoTapTimer.current = setTimeout(() => { logoTapCount.current = 0; }, 1000);
+  };
+
   const [profileData, setProfileData] = useState({ name: '권클라이밍', phone: '010-1234-5678', age: '25', height: '175', weight: '70', arm: '180', shoe: '260' });
   const [profileToggles, setProfileToggles] = useState({ showName: true, showPhone: false, showAge: true, showHeight: true, showWeight: true, showArm: true, showShoe: true });
   const [difficultyData, setDifficultyData] = useState([
@@ -256,9 +222,8 @@ const AppContent = () => {
       try {
         const userToken = await AsyncStorage.getItem('userToken');
         if (!userToken) { setHasMembership(false); return; }
-        const res = await axios.get(`${API_BASE_URL}/memberships/me`, {
-          headers: { Authorization: `Bearer ${userToken}` },
-        });
+        // ─── 💡 axios.get(`${API_BASE_URL}/memberships/me`, { headers }) → apiClient.get로 교체 ───
+        const res = await apiClient.get('/memberships/me');
         const rawData = res.data.data;
         const dataList: any[] = Array.isArray(rawData) ? rawData : (rawData?.content || []);
 
@@ -290,7 +255,8 @@ const AppContent = () => {
 
   const handleSessionExpiredConfirm = () => {
     setSessionExpiredVisible(false);
-    _sessionExpiredFired = false;
+    // ─── 💡 _sessionExpiredFired = false 직접 조작 → apiClient의 resetSessionFlag() 호출로 교체 ───
+    resetSessionFlag();
     navigationRef.reset({
       index: 0,
       routes: [{ name: 'Login' }],
@@ -342,13 +308,12 @@ const AppContent = () => {
         const userToken = await AsyncStorage.getItem('userToken');
         if (!userToken) return;
 
+        // ─── 💡 API_BASE_URL 접두사 제거, axios → apiClient로 교체 ───
         const endpoint = isAdminMode
-          ? `${API_BASE_URL}/admin/alerts?page=0&size=50`
-          : `${API_BASE_URL}/notifications?page=0&size=50`;
+          ? '/admin/alerts?page=0&size=50'
+          : '/notifications?page=0&size=50';
 
-        const response = await axios.get(endpoint, {
-          headers: { Authorization: `Bearer ${userToken}` },
-        });
+        const response = await apiClient.get(endpoint);
 
         const raw = response.data?.data;
         const list: any[] = Array.isArray(raw)
@@ -381,25 +346,27 @@ const AppContent = () => {
         const userToken = await AsyncStorage.getItem('userToken');
         if (userToken) {
           try {
-            await axios.get(`${API_BASE_URL}/members/me`, {
-              headers: { Authorization: `Bearer ${userToken}` },
-            });
+            // ─── 💡 axios.get(`${API_BASE_URL}/members/me`, { headers }) → apiClient.get로 교체 ───
+            await apiClient.get('/members/me');
             await AsyncStorage.removeItem('fcmToken');
             setInitialRoute('Home');
           } catch (apiError: any) {
-            const status = apiError?.response?.status;
+            // 🔍 디버그: 릴리즈 빌드에서도 원인을 눈으로 확인하기 위해 모달로 표시
+            setDebugInfo(
+              `[checkLoginStatus]\n` +
+              `status: ${apiError?.response?.status}\n` +
+              `code: ${apiError?.code}\n` +
+              `message: ${apiError?.message}\n` +
+              `hasResponse: ${!!apiError?.response}\n` +
+              `hasRequest: ${!!apiError?.request}`
+            );
+            setDebugModalVisible(true);
 
-            if (status === 401) {
-              const stillHasToken = await AsyncStorage.getItem('userToken');
-              if (stillHasToken) {
-                setInitialRoute('Home');
-              } else {
-                setInitialRoute('Login');
-              }
-            } else {
-              await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole']);
-              setInitialRoute('Login');
-            }
+            // apiClient의 401 인터셉터가 이미 재발급을 시도했고
+            // 실패해서 여기까지 전파된 상태이므로, 다시 토큰 유무를 확인해서
+            // Home으로 보내는 분기는 제거 — 인터셉터가 이미 토큰을 지웠다고 보고 무조건 로그인으로
+            await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole', 'fcmToken']);
+            setInitialRoute('Login');
           }
         } else {
           setInitialRoute('Login');
@@ -460,7 +427,9 @@ const AppContent = () => {
                       <Text style={styles.backBtnText}>←</Text>
                     </TouchableOpacity>
                   ) : (
-                    <Text style={styles.logoText}>olla</Text>
+                    <TouchableOpacity onPress={handleLogoTap} activeOpacity={1} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                      <Text style={styles.logoText}>olla</Text>
+                    </TouchableOpacity>
                   )}
                   {routeName !== 'Notice' && routeName !== 'Notification' ? (
                     <TouchableOpacity onPress={() => navigationRef.navigate('Notification')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -580,7 +549,7 @@ const AppContent = () => {
         )}
       </NavigationContainer>
 
-      {/* ─── 💡 세션 만료 모달 (OLLA 표준 규격 적용) ─── */}
+      {/* ─── 세션 만료 모달 ─── */}
       <Modal visible={sessionExpiredVisible} animationType="fade" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.deleteModalBox}>
@@ -593,7 +562,72 @@ const AppContent = () => {
         </View>
       </Modal>
 
-      {/* ─── 💡 관리자 모드 종료 모달 (OLLA 표준 규격 적용) ─── */}
+      {/* ─── 🔍 임시 디버그 모달 (원인 파악 끝나면 통째로 삭제) ─── */}
+      <Modal visible={debugModalVisible} animationType="fade" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.deleteModalBox}>
+            <Text style={[styles.modalTitle, { color: '#FFD23F', fontSize: 20 }]}>DEBUG</Text>
+            <Text style={[styles.modalMessage, { fontSize: 13, textAlign: 'left', fontWeight: 'normal' }]} selectable>
+              {debugInfo}
+            </Text>
+            <TouchableOpacity style={styles.btnConfirm} onPress={() => setDebugModalVisible(false)}>
+              <Text style={styles.btnTextBlack}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── 🔍 토큰 강제 조작 디버그 모달: 평소엔 안 보임, 로고 5번 탭으로 호출 ─── */}
+      <Modal visible={tokenDebugVisible} animationType="fade" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.deleteModalBox}>
+            <Text style={[styles.modalTitle, { color: '#A1BE44', fontSize: 18 }]}>TOKEN DEBUG</Text>
+            <Text style={[styles.modalMessage, { fontSize: 12, textAlign: 'left', fontWeight: 'normal' }]} selectable>
+              {tokenDebugInfo}
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.btnConfirm, { marginBottom: 10 }]}
+              onPress={async () => {
+                // 액세스 토큰만 깨뜨림 → 다음 API 호출에서 401 → 인터셉터가 reissue 시도
+                await AsyncStorage.setItem('userToken', 'invalid_access_token_for_test');
+                setTokenDebugInfo('액세스 토큰을 깨뜻습니다.\n이제 화면을 새로고침(pull-to-refresh)하거나\n탭을 이동해서 API를 호출해보세요.\n→ reissue가 성공하면 정상 동작,\n   화면이 빈칸 되면 버그 재현됨.');
+              }}
+            >
+              <Text style={styles.btnTextBlack}>액세스 토큰만 깨기 (reissue 테스트)</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.btnConfirm, { marginBottom: 10, backgroundColor: '#FF4D4D' }]}
+              onPress={async () => {
+                // 리프레시 토큰까지 깨뜨림 → reissue 자체가 실패 → 세션 만료 모달이 떠야 정상
+                await AsyncStorage.setItem('userToken', 'invalid_access_token_for_test');
+                await AsyncStorage.setItem('refreshToken', 'invalid_refresh_token_for_test');
+                setTokenDebugInfo('액세스+리프레시 토큰 모두 깨뜻습니다.\n이제 화면을 새로고침하거나 탭 이동해보세요.\n→ "세션 만료" 모달이 떠야 정상.\n→ 안 뜨고 데이터만 빈칸이면 버그 재현됨.');
+              }}
+            >
+              <Text style={styles.btnTextBlack}>리프레시 토큰까지 깨기 (세션만료 테스트)</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.btnConfirm}
+              onPress={async () => {
+                const t = await AsyncStorage.getItem('userToken');
+                const r = await AsyncStorage.getItem('refreshToken');
+                setTokenDebugInfo(`현재 저장된 값:\nuserToken: ${t?.slice(0, 30)}...\nrefreshToken: ${r?.slice(0, 30)}...`);
+              }}
+            >
+              <Text style={styles.btnTextBlack}>현재 토큰 값 보기</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.btnNo, { marginTop: 10, width: '100%' }]} onPress={() => setTokenDebugVisible(false)}>
+              <Text style={styles.btnTextWhite}>닫기</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── 관리자 모드 종료 모달 ─── */}
       <Modal visible={isExitModalVisible} animationType="fade" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.deleteModalBox}>
@@ -646,30 +680,30 @@ const styles = StyleSheet.create({
   bottomNavItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   navIcon: { width: 20, height: 20, marginBottom: 3, resizeMode: 'contain' },
   bottomNavText: { fontSize: 9, color: '#7D7D7D' },
-  
+
   // ─────────────────────────── 💡 OLLA 모달창 표준 디자인 스타일 통일 적용 ───────────────────────────
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  deleteModalBox: { 
-    width: '90%', 
-    backgroundColor: '#212121', 
-    borderRadius: 25, 
-    paddingVertical: 45, 
-    paddingHorizontal: 35, 
-    alignItems: 'center' 
+  deleteModalBox: {
+    width: '90%',
+    backgroundColor: '#212121',
+    borderRadius: 25,
+    paddingVertical: 45,
+    paddingHorizontal: 35,
+    alignItems: 'center'
   },
-  modalTitle: { 
-    fontSize: 28, 
-    fontWeight: 'bold', 
+  modalTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
     marginBottom: 8,
     textAlign: 'center'
   },
-  modalMessage: { 
-    color: '#ffffff', 
-    fontSize: 18, 
-    fontWeight: 'bold', 
-    marginBottom: 25, 
-    textAlign: 'center', 
-    lineHeight: 24 
+  modalMessage: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 25,
+    textAlign: 'center',
+    lineHeight: 24
   },
   modalBtnRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
   btnConfirm: { width: '100%', backgroundColor: '#A1BE44', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },

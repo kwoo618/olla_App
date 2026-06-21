@@ -57,6 +57,7 @@ public class SecurityConfig {
                         // 인증 없이 허용
                         .requestMatchers("/api/v1/auth/**").permitAll()
                         .requestMatchers("/images/**").permitAll()
+                        .requestMatchers("/account-deletion.html").permitAll()
 
                         // Swagger: 운영(prod) 환경에서는 차단, 나머지는 허용
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**")

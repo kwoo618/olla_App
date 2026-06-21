@@ -12,16 +12,14 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Platform, Dimensions, Animated, PanResponder, Keyboard } from 'react-native';
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL } from '../src/constants/Config';
-
-// 회원 목록 API (이용권 포함)
-const MEMBER_LIST_API      = `${API_BASE_URL}/admin/memberships/members`;
-// 이용권 부여 API
-const MEMBERSHIP_GRANT_API = `${API_BASE_URL}/admin/memberships/grant`;
-// 이용권 단건 제어 API (pause/unpause/delete)
-const MEMBERSHIP_BASE_API  = `${API_BASE_URL}/admin/memberships`;
+import AsyncStorage from '@react-native-async-storage/async-storage'; // 관리자 권한(role) 체크용으로 계속 사용
+import {
+  getAdminMembers,
+  grantMembership,
+  pauseMembership,
+  unpauseMembership,
+  deleteMembership,
+} from '../src/constants/api/admin'; // 실제 경로에 맞게 조정 필요
 
 // iOS 모달 중첩 시 앱 멈춤 방지를 위한 안전 딜레이
 // iOS는 모달 애니메이션 완료까지 400ms, Android는 150ms
@@ -385,19 +383,16 @@ export const useManagerTicket = (navigation: any) => {
   }, []);
 
   // ─── API: 회원 목록 조회 ───────────────────────────────────────────────────
-  const fetchUsers = useCallback(async (token: string) => {
-    try {
-      const response = await axios.get(MEMBER_LIST_API, {
-        headers: { Authorization: `Bearer ${token}` },
-        params:  { size: 1000, sort: 'id,desc' },
-      });
-      
-      const raw = response.data.data.content ?? [];
-      setUsers(Array.isArray(raw) ? raw : []);
-    } catch (error: any) {
-      showResultModal('오류', error.response?.data?.message ?? '회원 목록을 불러오는데 실패했습니다.', 'error');
-    }
-  }, [showResultModal]);
+  const fetchUsers = useCallback(async () => {
+      try {
+        const response = await getAdminMembers({ size: 1000, sort: 'id,desc' });
+        
+        const raw = response.data.data.content ?? [];
+        setUsers(Array.isArray(raw) ? raw : []);
+      } catch (error: any) {
+        showResultModal('오류', error.response?.data?.message ?? '회원 목록을 불러오는데 실패했습니다.', 'error');
+      }
+    }, [showResultModal]);
 
   // 관리자 권한 확인 후 회원 목록 조회 (비관리자 접근 차단)
   const checkAdminAndFetchUsers = useCallback(async () => {
@@ -408,7 +403,7 @@ export const useManagerTicket = (navigation: any) => {
         showResultModal('권한 오류', '관리자만 접근할 수 있는 페이지입니다.', 'error', () => navigation.goBack());
         return;
       }
-      await fetchUsers(token);
+      await fetchUsers();
     } catch (error) {
       console.error('인증 에러:', error);
     } finally {
@@ -542,7 +537,6 @@ export const useManagerTicket = (navigation: any) => {
     }
 
     try {
-      const token    = await AsyncStorage.getItem('userToken');
       const memberId = selectedUser.memberId || selectedUser.id;
       
       const requestBody = {
@@ -552,14 +546,12 @@ export const useManagerTicket = (navigation: any) => {
         addCount:  editType === 'COUNT'  ? numericAddValue : 0, // 일일권: 횟수
       };
 
-      await axios.post(MEMBERSHIP_GRANT_API, requestBody, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await grantMembership(requestBody);
 
       // 등록 성공 → 시트 닫기 → 결과 모달 표시 → 목록 갱신
       closeEditModal(() => {
         showResultModal('성공', '이용권이 성공적으로 등록되었습니다.', 'success');
-        fetchUsers(token!);
+        fetchUsers();
       });
     } catch (error: any) {
       const serverMessage = error.response?.data?.message ?? '이용권 등록에 실패했습니다.';
@@ -579,19 +571,19 @@ export const useManagerTicket = (navigation: any) => {
     if (!membershipId) { showResultModal('오류', '이용권 ID를 확인할 수 없습니다.', 'error'); return; }
     const isCurrentlyHolding = String(currentStatus).toUpperCase() === 'HOLDING';
     const actionText = isCurrentlyHolding ? '정지 해제' : '일시정지';
-    const endpoint   = isCurrentlyHolding ? 'unpause' : 'pause'; // PATCH /memberships/{id}/pause or unpause
 
     closeManageModal(() => {
       showConfirmModal(`해당 내역을 ${actionText} 하시겠습니까?`, async () => {
         setConfirmModalVisible(false);
         try {
-          const token = await AsyncStorage.getItem('userToken');
-          await axios.patch(`${MEMBERSHIP_BASE_API}/${membershipId}/${endpoint}`, {}, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
+          if (isCurrentlyHolding) {
+            await unpauseMembership(membershipId);
+          } else {
+            await pauseMembership(membershipId);
+          }
           
           showResultModal('성공', `이용권이 ${actionText} 되었습니다.`, 'success');
-          fetchUsers(token!);
+          fetchUsers();
         } catch (error: any) {
           showResultModal('오류', error.response?.data?.message ?? '상태 변경에 실패했습니다.', 'error');
         }
@@ -604,13 +596,9 @@ export const useManagerTicket = (navigation: any) => {
   // 실제 삭제 API 호출 → 성공 시 목록 갱신
   const executeDeleteTicket = useCallback(async (membershipId: number) => {
     try {
-      const token = await AsyncStorage.getItem('userToken');
-      if (!token) return;
-      await axios.delete(`${MEMBERSHIP_BASE_API}/${membershipId}`, {
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      });
+      await deleteMembership(membershipId);
       showResultModal('성공', '해당 내역 1건이 성공적으로 삭제되었습니다.', 'success', async () => {
-        await fetchUsers(token);
+        await fetchUsers();
       });
     } catch (error: any) {
       const errorMessage = error.response?.data?.message ?? '이용권 삭제에 실패했습니다.';

@@ -9,20 +9,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Keyboard, Platform } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
+import {
+  getPosts, getPostDetail, deletePost, getComments, createComment, deleteComment,
+} from '../src/constants/api/community';
+import { getMyProfile, getOtherMemberProfile } from '../src/constants/api/member';
 import { API_BASE_URL } from '../src/constants/Config';
-
-// API 기본 경로 상수
-const BASE    = `${API_BASE_URL}`;
-const POSTS   = `${API_BASE_URL}/posts`;
-const MEMBERS = `${BASE}/members`;
-
-// JWT 토큰을 AsyncStorage에서 꺼내 Authorization 헤더 객체로 반환
-export const authHeader = async () => {
-  const token = await AsyncStorage.getItem('userToken');
-  return { Authorization: `Bearer ${token}` };
-};
 
 // 숫자를 2자리 문자열로 패딩 (예: 1 → "01")
 export const p = (n: number) => String(n).padStart(2, '0');
@@ -140,8 +131,7 @@ export const useManagerCommunityData = (currentFilter: string, isFocused: boolea
   // 내 프로필(관리자 정보) 조회
   const fetchMyInfo = async () => {
     try {
-      const headers = await authHeader();
-      const res = await axios.get(`${MEMBERS}/me`, { headers });
+      const res = await getMyProfile();
       const d = extractData(res);
       if (d) {
         setMyUserId(d.id ?? d.memberId ?? null);
@@ -160,8 +150,7 @@ export const useManagerCommunityData = (currentFilter: string, isFocused: boolea
   const fetchPosts = async () => {
     try {
       setLoading(true);
-      const headers = await authHeader();
-      const res = await axios.get(`${POSTS}?page=0&size=100`, { headers });
+      const res = await getPosts({ page: 0, size: 100 });
       const list = extractList(res);
 
       const mappedList = list.map((item: any) => {
@@ -235,8 +224,7 @@ export const useManagerCommunityData = (currentFilter: string, isFocused: boolea
   const executeDelete = async () => {
     if (deleteTarget === null) return;
     try {
-      const headers = await authHeader();
-      await axios.delete(`${POSTS}/${deleteTarget}`, { headers });
+      await deletePost(deleteTarget);
       showResultModal('성공', '게시글이 삭제되었습니다.', 'success');
       setPosts(prev => prev.filter(post => post.id !== deleteTarget));
     } catch (error: any) {
@@ -253,8 +241,7 @@ export const useManagerCommunityData = (currentFilter: string, isFocused: boolea
   // - 프로필 이미지 URL 변환 적용
   const loadUserDetail = async (authorId: number, authorName: string) => {
     try {
-      const headers = await authHeader();
-      const res = await axios.get(`${MEMBERS}/${authorId}/profile`, { headers });
+      const res = await getOtherMemberProfile(authorId);
       const d = extractData(res);
 
       if (!d) {
@@ -286,8 +273,7 @@ export const useManagerCommunityData = (currentFilter: string, isFocused: boolea
   // 특정 게시글의 댓글 목록 조회 (최대 100개)
   const fetchComments = async (postId: number) => {
     try {
-      const headers = await authHeader();
-      const res = await axios.get(`${POSTS}/${postId}/comments?page=0&size=100`, { headers });
+      const res = await getComments(postId, { page: 0, size: 100 });
       setComments(extractList(res));
     } catch (e: any) {
       console.log('댓글 조회 실패:', e.response?.data?.message ?? e.message);
@@ -314,12 +300,11 @@ export const useManagerCommunityData = (currentFilter: string, isFocused: boolea
     }
     
     try {
-      const headers = await authHeader();
       const payload = {
         content:  commentInput.trim(),
         parentId: replyingTo ? replyingTo.id : null, // 대댓글이면 부모 댓글 id 전송
       };
-      await axios.post(`${POSTS}/${selectedPost.id}/comments`, payload, { headers });
+      await createComment(selectedPost.id, payload.content, payload.parentId);
       // 입력창 초기화 및 키보드 닫기
       setCommentInput('');
       setReplyingTo(null);
@@ -337,8 +322,7 @@ export const useManagerCommunityData = (currentFilter: string, isFocused: boolea
   const executeCommentDelete = async () => {
     if (commentDeleteTarget === null || !selectedPost) return;
     try {
-      const headers = await authHeader();
-      await axios.delete(`${POSTS}/${selectedPost.id}/comments/${commentDeleteTarget}`, { headers });
+      await deleteComment(selectedPost.id, commentDeleteTarget);
       // 댓글 목록 갱신
       await fetchComments(selectedPost.id);
       setTimeout(

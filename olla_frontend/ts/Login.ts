@@ -11,8 +11,8 @@
 import { useState } from 'react';
 import { Keyboard, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
-import { API_BASE_URL } from '../src/constants/Config';
+import { registerFcmToken } from '../src/constants/api/member'
+import { findId, findPassword, login } from '../src/constants/api/auth'; // 실제 경로명에 맞게
 
 export const useLogin = (navigation: any) => {
   // 로그인 입력 필드 상태
@@ -74,9 +74,7 @@ export const useLogin = (navigation: any) => {
       return;
     }
     try {
-      const response = await axios.post(`${API_BASE_URL}/auth/find-id`, null, {
-        params: { name: findIdName, phone: findIdPhone }
-      });
+      const response = await findId(findIdName, findIdPhone);
       setFindIdModalVisible(false);
       // iOS에서는 모달 닫힘 애니메이션 후 결과 표시를 위해 딜레이 추가
       setTimeout(() => {
@@ -104,9 +102,7 @@ export const useLogin = (navigation: any) => {
       return;
     }
     try {
-      await axios.post(`${API_BASE_URL}/auth/find-password`, null, {
-        params: { loginId: findPwLoginId, email: findPwEmail }
-      });
+      await findPassword(findPwLoginId, findPwEmail);
       setFindPwModalVisible(false);
       setTimeout(() => {
         showResultModal('비밀번호 발송', '임시 비밀번호가 등록된 이메일로 발송되었습니다.', 'success');
@@ -136,11 +132,7 @@ export const useLogin = (navigation: any) => {
     }
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/auth/login`, {
-        loginId,
-        password,
-      });
-
+      const response = await login(loginId, password);
       const token = response.data.data.accessToken;
       const refreshToken = response.data.data.refreshToken;
       const role = response.data.data.role;
@@ -160,11 +152,7 @@ export const useLogin = (navigation: any) => {
           const fcmToken = await messaging().getToken();
           if (fcmToken) {
             // 서버에 FCM 토큰 등록 (이 기기로 푸시 알림 수신 가능하도록)
-            await axios.post(
-              `${API_BASE_URL}/members/me/fcm-token`,
-              { deviceToken: fcmToken },
-              { headers: { Authorization: `Bearer ${token}` } }
-            );
+            await registerFcmToken(fcmToken);
             await AsyncStorage.setItem('fcmToken', fcmToken);
           }
         } catch (e) {

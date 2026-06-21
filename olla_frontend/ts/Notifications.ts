@@ -9,9 +9,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { DeviceEventEmitter } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
-import { API_BASE_URL } from '../src/constants/Config';
+
+import { getMyMemberships, getMyNotifications, markNotificationAsRead } from '../src/constants/api/member';
 
 // 알림 단건 데이터 타입
 export interface NotificationItem {
@@ -25,12 +24,13 @@ export interface NotificationItem {
 }
 
 // 만료 임박 회원권 단건 데이터 타입
+// 백엔드 MembershipResponse.java 기준: id/name 필드 없음 — membershipType만 존재
 export interface MyMembership {
-  id: number;
-  name: string;       // 회원권 이름 (예: "1개월 이용권")
-  endDate: string;    // 만료일 (YYYY-MM-DD)
-  dDay: number;       // 오늘 기준 남은 일수 (0 = 오늘 만료)
-  status: string;     // 회원권 상태 (ACTIVE 등)
+  id: string;          // 백엔드에 식별자가 없어 endDate+membershipType으로 합성한 키
+  name: string;         // membershipType을 그대로 표시 (예: "회원권", "일일권", "회원권+일일권")
+  endDate: string;      // 만료일 (YYYY-MM-DD)
+  dDay: number;         // 오늘 기준 남은 일수 (0 = 오늘 만료)
+  status: string;       // 회원권 상태 (ACTIVE 등)
 }
 
 export const useNotification = (navigation: any) => {
@@ -70,22 +70,13 @@ export const useNotification = (navigation: any) => {
     setResultModalVisible(true);
   }, []);
 
-  // AsyncStorage에서 JWT 토큰을 읽어 Authorization 헤더 객체로 반환
-  // 토큰이 없으면 NO_TOKEN 에러를 throw해 호출부에서 분기 처리
-  const getAuthHeader = async () => {
-    const token = await AsyncStorage.getItem('userToken');
-    if (!token) throw new Error('NO_TOKEN');
-    return { Authorization: `Bearer ${token}` };
-  };
-
   // 내 회원권 목록 조회 후 만료 임박(D-7 이내) 활성 회원권만 필터링
   // - 만료일이 없는 항목은 제외
   // - dDay < 0 (이미 만료) 또는 dDay > 7 (여유 있음)은 제외
   // - status가 ACTIVE인 것만 포함
   const fetchMyMemberships = useCallback(async () => {
     try {
-      const headers = await getAuthHeader();
-      const response = await axios.get(`${API_BASE_URL}/memberships/me`, { headers });
+      const response = await getMyMemberships();
 
       // 서버 응답 구조 유연하게 처리 (배열 / data.content / data.memberships)
       const data = response.data?.data ?? response.data ?? {};
@@ -96,7 +87,7 @@ export const useNotification = (navigation: any) => {
       today.setHours(0, 0, 0, 0);
 
       const expiring: MyMembership[] = list
-        .map((m: any) => {
+        .map((m: any, idx: number) => {
           const endDate = m.endDate ?? m.end_date ?? null;
           if (!endDate) return null;
           
@@ -106,9 +97,12 @@ export const useNotification = (navigation: any) => {
           // 소수점 올림: 오늘 만료면 0, 내일 만료면 1
           const dDay = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
           
+          // 백엔드 응답(MembershipResponse)엔 id가 없으므로 endDate+타입+인덱스로 고유 키 생성
+          const membershipType = m.membershipType ?? m.type ?? '이용권';
+          
           return {
-            id: m.id ?? 0,
-            name: m.name ?? m.membershipName ?? m.type ?? '이용권',
+            id: `${membershipType}_${endDate}_${idx}`,
+            name: membershipType,
             endDate,
             dDay,
             status: m.status ?? 'ACTIVE',
@@ -119,8 +113,6 @@ export const useNotification = (navigation: any) => {
 
       setMyMemberships(expiring);
     } catch (error: any) {
-      // 비로그인 상태면 조용히 종료
-      if (error.message === 'NO_TOKEN') return;
       console.log('회원권 조회 실패:', error);
     } finally {
       setMembershipLoading(false);
@@ -132,29 +124,21 @@ export const useNotification = (navigation: any) => {
   // - 그 외 에러는 결과 모달로 안내
   const fetchNotifications = useCallback(async () => {
     try {
-      const headers = await getAuthHeader();
-      const response = await axios.get(`${API_BASE_URL}/notifications?page=0&size=50`, { headers });
+      const response = await getMyNotifications({ page: 0, size: 50 });
 
-      // 서버 응답 구조가 다양하므로 여러 경로를 순서대로 시도
-      let list: NotificationItem[] = [];
-      if (response.data) {
-        const dataObj = response.data.data || response.data;
-        list = dataObj.content || dataObj.data?.content || dataObj.data || dataObj;
-        if (!Array.isArray(list)) list = [];
-      }
+      // NotificationController가 ApiResponse<Page<MemberNotificationResponse>>를 반환하므로
+      // 항상 response.data.data.content 경로로 옴 (Page 직렬화 시 content 배열 필드 고정)
+      const list: NotificationItem[] = response.data?.data?.content ?? [];
 
-      setNotifications(list);
+      setNotifications(Array.isArray(list) ? list : []);
     } catch (error: any) {
-      if (error.message === 'NO_TOKEN') {
-        showResultModal('인증 오류', '로그인 정보가 없습니다.', 'error', () => navigation.navigate('Login'));
-        return;
-      }
-      const errorMessage = error.response?.data?.message || '네트워크 연결을 확인해주세요.';
-      showResultModal('오류', errorMessage, 'error');
-    } finally {
-      setLoading(false);
-    }
-  }, [navigation, showResultModal]);
+    // 401(세션 만료)은 apiClient 인터셉터가 전역으로 처리하므로 여기선 일반 에러만 안내
+    const errorMessage = error.response?.data?.message || '네트워크 연결을 확인해주세요.';
+    showResultModal('오류', errorMessage, 'error');
+  } finally {
+    setLoading(false);
+  }
+  }, [showResultModal]);
 
   // 컴포넌트 마운트 시 알림 목록 + 만료 임박 회원권 동시 로드
   useEffect(() => {
@@ -186,8 +170,7 @@ export const useNotification = (navigation: any) => {
     // 새로 펼치는 동작이고 아직 읽지 않은 경우에만 읽음 처리
     if (!isCurrentlyExpanded && !isItemRead) {
       try {
-        const headers = await getAuthHeader();
-        await axios.patch(`${API_BASE_URL}/notifications/${item.id}/read`, {}, { headers });
+        await markNotificationAsRead(item.id);
         
         // 로컬 상태에서 해당 알림의 읽음 플래그 업데이트 (재조회 없이 즉시 반영)
         setNotifications(prev =>

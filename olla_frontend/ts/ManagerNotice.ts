@@ -12,30 +12,16 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Platform, Dimensions, Animated, PanResponder } from 'react-native';
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { launchImageLibrary } from 'react-native-image-picker';
-import { API_BASE_URL } from '../src/constants/Config';
-
-// 공지사항 CRUD API 엔드포인트
-const NOTICE_API = `${API_BASE_URL}/admin/notices`;
-
-// ─── axios 인터셉터 ────────────────────────────────────────────────────────────
-// 앱 전역에서 한 번만 등록되도록 훅 외부(모듈 최상단)에 선언
-// 모든 axios 요청 전에 AsyncStorage에서 토큰을 꺼내 Authorization 헤더에 자동 주입
-axios.interceptors.request.use(
-  async (config) => {
-    try {
-      const token = await AsyncStorage.getItem('userToken');
-      console.log('토큰:', token);
-      if (token) config.headers.Authorization = `Bearer ${token}`;
-    } catch (e) {
-      console.error('토큰 가져오기 실패:', e);
-    }
-    return config;
-  },
-  (error) => Promise.reject(error),
-);
+import { API_BASE_URL } from '../src/constants/Config'; // resolveImageUrl에서 계속 사용하므로 유지
+import {
+  getAdminNotices,
+  getAdminNoticeDetail,
+  createNotice,
+  updateNotice,
+  deleteNotice,
+  uploadImage,
+} from '../src/constants/api/admin';
 
 // ─── 타입 정의 ────────────────────────────────────────────────────────────────
 
@@ -238,9 +224,7 @@ export const useManagerNotice = (navigation: any, route: any) => {
   const fetchNotices = useCallback(async (isRefresh = false) => {
     try {
       if (!isRefresh) setLoading(true);
-      const res = await axios.get(NOTICE_API, {
-        params: { page: 0, size: 100, sort: 'createdAt,desc' },
-      });
+      const res = await getAdminNotices({ page: 0, size: 100, sort: 'createdAt,desc' });
       const list: Notice[] = res.data.data.content ?? [];
       setNotices(list);
     } catch (error: any) {
@@ -254,7 +238,7 @@ export const useManagerNotice = (navigation: any, route: any) => {
   // 상세 모달 및 수정 모달 진입 시 최신 데이터 보장을 위해 별도 호출
   const fetchNoticeDetail = useCallback(async (id: number): Promise<Notice | null> => {
     try {
-      const res = await axios.get(`${NOTICE_API}/${id}`);
+      const res = await getAdminNoticeDetail(id);
       return res.data.data ?? null;
     } catch (error: any) {
       showResultModal('오류', error.response?.data?.message ?? '공지 정보를 불러오는데 실패했습니다.', 'error');
@@ -395,9 +379,7 @@ export const useManagerNotice = (navigation: any, route: any) => {
           name: asset.fileName || `notice_${Date.now()}.jpg`,
         } as any);
 
-        const uploadRes = await axios.post(`${API_BASE_URL}/images`, formData, {
-          timeout: 30000,
-        });
+        const uploadRes = await uploadImage(formData);
 
         // 서버 응답 형태가 string / object 양쪽 모두 대응
         const dataObj = uploadRes.data?.data;
@@ -447,9 +429,8 @@ export const useManagerNotice = (navigation: any, route: any) => {
     setSaving(true);
 
     try {
-      const token = await AsyncStorage.getItem('userToken');
 
-      if (modalMode === 'create') {
+       if (modalMode === 'create') {
         // 작성 모드: multipart/form-data로 전송
         // React Native에서 @RequestPart가 JSON을 인식하도록 type: 'application/json' 명시
         const formData = new FormData();
@@ -464,22 +445,15 @@ export const useManagerNotice = (navigation: any, route: any) => {
           name: 'request',
         } as any);
 
-        await axios.post(NOTICE_API, formData, {
-          headers: {
-            Authorization:  `Bearer ${token}`,
-            'Content-Type': 'multipart/form-data',
-          },
-        });
+        await createNotice(formData);
 
       } else {
         // 수정 모드: JSON body로 PUT 요청
-        await axios.put(`${NOTICE_API}/${selectedNoticeId}`, {
+        await updateNotice(selectedNoticeId as number, {
           title:       newTitle.trim(),
           content:     newContent.trim(),
           imageUrl:    uploadedImageUrl,
           isImportant: isImportant,
-        }, {
-          headers: { Authorization: `Bearer ${token}` },
         });
       }
 
@@ -520,7 +494,7 @@ export const useManagerNotice = (navigation: any, route: any) => {
   const executeDelete = useCallback(async () => {
     if (noticeToDelete === null) return;
     try {
-      await axios.delete(`${NOTICE_API}/${noticeToDelete}`);
+      await deleteNotice(noticeToDelete as number);
       cancelDelete();
       await fetchNotices(true);
       setTimeout(() => showResultModal('성공', '공지사항이 삭제되었습니다.', 'success'), 300);
