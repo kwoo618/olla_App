@@ -1,81 +1,90 @@
-// 프로필·FCM·알림설정 API
-/**
- * src/api/member.ts
- *
- * 회원 프로필 조회·수정, FCM 토큰, 알림 설정 등 /members/* API 함수 모듈입니다.
- */
+// /members/**, /memberships/**, /visit/**, /notices, /notifications 엔드포인트 모음
+// 회원 개인 출석 데이터
+// 공개 공지/사용자 알림
+// (관리자용 /admin/notices, /admin/alerts와는 다른 엔드포인트이니 혼동 주의)
+import apiClient from './apiClient';
 
-import axios from 'axios';
-import { authHeader } from './apiClient';
-import { API_BASE_URL } from '../Config';
+// ── 프로필 ──
+export const getMyProfile = () => apiClient.get('/members/me');
 
-// ─── API 함수 ─────────────────────────────────────────────────────────────────
+export const updateMyInfo = (requestBody: any) =>
+  apiClient.patch('/members/me/info', requestBody);
 
-/** 내 프로필 조회 */
-export const fetchMyProfile = async () => {
-  const headers = await authHeader();
-  const res = await axios.get(`${API_BASE_URL}/members/me`, { headers });
-  return res.data.data;
-};
+export const getOtherMemberProfile = (memberId: number) =>
+  apiClient.get(`/members/${memberId}/profile`);
 
-/** 타 회원 프로필 조회 */
-export const fetchOtherProfile = async (memberId: number) => {
-  const headers = await authHeader();
-  const res = await axios.get(`${API_BASE_URL}/members/${memberId}/profile`, { headers });
-  return res.data.data;
-};
-
-/** 내 기본 정보 수정 (PATCH /members/me/info) */
-export const updateMyInfo = async (body: Record<string, unknown>) => {
-  const headers = await authHeader();
-  await axios.patch(`${API_BASE_URL}/members/me/info`, body, { headers });
-};
-
-/** 프로필 이미지 업로드 */
-export const uploadProfileImage = async (formData: FormData): Promise<string> => {
-  const headers = await authHeader();
-  const res = await axios.post(`${API_BASE_URL}/members/me/profile-image`, formData, {
-    headers: { ...headers, 'Content-Type': 'multipart/form-data' },
+export const uploadProfileImage = (formData: FormData) =>
+  apiClient.post('/members/me/profile-image', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 30000,
   });
-  return res.data.data?.imageUrl ?? res.data.data?.profileImageUrl ?? '';
+
+// ── 이용권 ──
+export const getMyMemberships = () => apiClient.get('/memberships/me');
+
+// ── 회원권 보유 여부 확인 (기간권만 인정, 일일권/횟수권 제외) ──
+// 기록 작성/삭제(Recode.ts), 추후 다른 화면에서도 공용으로 사용
+export const fetchHasMembership = async (): Promise<boolean> => {
+  try {
+    const res: { data: { data: any } } = await getMyMemberships();
+    const rawData = res.data.data;
+    const dataList: any[] = Array.isArray(rawData) ? rawData : (rawData?.content || []);
+
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const active = dataList.filter((m: any) => {
+      const status = String(m.membershipStatus || m.status || '').toUpperCase();
+      if (status === 'DELETED' || status === 'INACTIVE') return false;
+      if (m.startDate) {
+        const s = new Date(m.startDate); s.setHours(0, 0, 0, 0);
+        if (s > today) return false; // 시작일이 미래인 이용권 제외
+      }
+      return true;
+    });
+
+    return active.some((m: any) => {
+      const t = String(m.membershipType ?? '').toUpperCase();
+      const isCountType = t.includes('COUNT') || t.includes('횟수') || t.includes('일일');
+      if (isCountType) return false; // 일일권/횟수권 제외
+      if (!m.endDate) return false;
+      const end = new Date(m.endDate); end.setHours(23, 59, 59, 999);
+      return end.getTime() >= Date.now();
+    });
+  } catch {
+    return false;
+  }
 };
 
-/** FCM 토큰 서버 등록 */
-export const registerFcmTokenApi = async (deviceToken: string): Promise<void> => {
-  const headers = await authHeader();
-  await axios.post(
-    `${API_BASE_URL}/members/me/fcm-token`,
-    { deviceToken },
-    { headers },
-  );
-};
+export const withdrawMember = () => apiClient.delete('/members/me');
 
-/** 알림 설정 조회 */
-export const fetchNotificationSettings = async () => {
-  const headers = await authHeader();
-  const res = await axios.get(
-    `${API_BASE_URL}/members/me/notifications/settings`,
-    { headers },
-  );
-  return res.data.data;
-};
+// ── 알림 설정 ──
+export const getNotificationSettings = () =>
+  apiClient.get('/members/me/notifications/settings');
 
-/** 알림 설정 변경 */
-export const updateNotificationSettings = async (
-  body: Record<string, boolean>,
-) => {
-  const headers = await authHeader();
-  const res = await axios.patch(
-    `${API_BASE_URL}/members/me/notifications/settings`,
-    body,
-    { headers },
-  );
-  return res.data.data;
-};
+export const updateNotificationSettings = (requestBody: any) =>
+  apiClient.patch('/members/me/notifications/settings', requestBody);
 
-/** 회원 탈퇴 */
-export const withdrawMemberApi = async (): Promise<void> => {
-  const headers = await authHeader();
-  await axios.delete(`${API_BASE_URL}/members/me`, { headers });
-};
+// ── FCM 토큰 ──
+export const registerFcmToken = (deviceToken: string) =>
+  apiClient.post('/members/me/fcm-token', { deviceToken });
+
+// ⚠️ 백엔드에 DELETE /members/me/fcm-token 매핑이 없음 — 인수인계서 이슈 1 참고
+export const deleteFcmToken = (token: string) =>
+  apiClient.delete('/members/me/fcm-token', { data: { token }, timeout: 3000 });
+
+// ── 출석/방문 ──
+export const getQrToken = () => apiClient.get('/visit/qr');
+
+export const getMyVisitHistory = (yearMonth: string) =>
+  apiClient.get('/visit/my-history', { params: { yearMonth } });
+
+// ── 공지사항 (공개) ──
+// 관리자용 /admin/notices(admin.ts)와 다른, 비로그인도 조회 가능한 일반 공지 목록
+export const getNotices = (params?: any) => apiClient.get('/notices', { params });
+
+// ── 알림 (사용자) ──
+// 관리자용 /admin/alerts(admin.ts)와 다른, 사용자 본인 알림함
+export const getMyNotifications = (params?: any) =>
+  apiClient.get('/notifications', { params });
+
+export const markNotificationAsRead = (id: number) =>
+  apiClient.patch(`/notifications/${id}/read`, {});

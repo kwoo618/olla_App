@@ -12,20 +12,10 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Dimensions, Animated, PanResponder, Keyboard, Platform } from 'react-native';
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL } from '../src/constants/Config';
-
-// 이용권 포함 회원 목록 API
-const MEMBER_LIST_API = `${API_BASE_URL}/admin/memberships/members`; 
-// 오프라인 신규 회원 등록 API
-const OFFLINE_REGISTER_API = `${API_BASE_URL}/admin/members/offline`; 
-// 회원 삭제 API
-const MEMBER_DELETE_API = `${API_BASE_URL}/admin/members`; 
-// 회원 상세 프로필 조회 API
-const PROFILE_API = `${API_BASE_URL}/members`;
-// 개별 회원 알림 발송 API
-const ALERT_SEND_API_URL = `${API_BASE_URL}/admin/alerts/send`; 
+import AsyncStorage from '@react-native-async-storage/async-storage'; // 관리자 권한(role) 체크용으로 계속 사용
+import { API_BASE_URL } from '../src/constants/Config'; // getFullImageUrl에서 계속 사용
+import { getAdminMembers, registerOfflineMember, deleteMember, sendAlertToMember } from '../src/constants/api/admin';
+import { getOtherMemberProfile } from '../src/constants/api/member';
 
 // ─── 유틸 함수 ────────────────────────────────────────────────────────────────
 
@@ -206,12 +196,9 @@ export const useManagerUser = (navigation: any) => {
   ).current;
 
   // ─── API: 회원 목록 조회 ───────────────────────────────────────────────────
-  const fetchUsers = useCallback(async (token: string) => {
+  const fetchUsers = useCallback(async () => {
     try {
-      const response = await axios.get(MEMBER_LIST_API, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: { size: 1000, sort: 'id,desc' } 
-      });
+      const response = await getAdminMembers({ size: 1000, sort: 'id,desc' });
       
       const raw = response.data.data.content || [];
       setUsers(Array.isArray(raw) ? raw : []);
@@ -231,7 +218,7 @@ export const useManagerUser = (navigation: any) => {
         showResultModal("권한 오류", "관리자만 접근할 수 있습니다.", "error", () => navigation.goBack());
         return;
       }
-      await fetchUsers(token);
+      await fetchUsers();
     } catch (error) {
       console.error("인증 확인 실패:", error);
     } finally {
@@ -296,7 +283,6 @@ export const useManagerUser = (navigation: any) => {
       return;
     }
     try {
-      const token = await AsyncStorage.getItem('userToken');
       const requestBody = {
         name:      newName,
         phone:     newPhone,
@@ -306,13 +292,13 @@ export const useManagerUser = (navigation: any) => {
         height:    newHeight ? parseFloat(newHeight) : null,
         weight:    newWeight ? parseFloat(newWeight) : null,
       };
-      await axios.post(OFFLINE_REGISTER_API, requestBody, { headers: { Authorization: `Bearer ${token}` } });
+      await registerOfflineMember(requestBody);
       
       // 모달 닫기 → 딜레이 후 결과 안내 → 목록 갱신
       closeAddModal(() => {
         setTimeout(() => showResultModal("성공", "신규 회원이 등록되었습니다.", "success"), 300);
       });
-      fetchUsers(token!); 
+      fetchUsers(); 
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || "등록 실패";
       closeAddModal(() => {
@@ -326,10 +312,9 @@ export const useManagerUser = (navigation: any) => {
   // 실제 삭제 API 호출 → 결과 모달 표시 → 목록 갱신
   const executeDelete = async (memberId: number | string) => {
     try {
-      const token = await AsyncStorage.getItem('userToken');
-      await axios.delete(`${MEMBER_DELETE_API}/${memberId}`, { headers: { Authorization: `Bearer ${token}` } });
+      await deleteMember(memberId as number);
       setTimeout(() => showResultModal("성공", "삭제되었습니다.", "success"), 300);
-      fetchUsers(token!); 
+      fetchUsers(); 
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || "삭제 실패";
       setTimeout(() => showResultModal("오류", errorMessage, "error"), 300);
@@ -353,14 +338,7 @@ export const useManagerUser = (navigation: any) => {
     }
     setIsProcessing(true);
     try {
-      const token = await AsyncStorage.getItem('userToken');
-      await axios.post(ALERT_SEND_API_URL, {
-        memberId: selectedUser?.memberId,
-        title:    alertTitle,
-        content:  alertContent
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await sendAlertToMember(selectedUser?.memberId, alertTitle, alertContent);
       closeAlertModal(() => {
         setTimeout(() => showResultModal("발송 성공", `${selectedUser?.name}님에게 알림을 발송했습니다.`, "success"), 300);
       });
@@ -376,9 +354,8 @@ export const useManagerUser = (navigation: any) => {
   const openDetailModal = async (memberId: number, fallbackName: string, fallbackPhone: string) => {
     try {
       Keyboard.dismiss();
-      const token    = await AsyncStorage.getItem('userToken');
-      const response = await axios.get(`${PROFILE_API}/${memberId}/profile`, { headers: { Authorization: `Bearer ${token}` } });
-      const d        = response.data.data; 
+      const response = await getOtherMemberProfile(memberId);
+      const d        = response.data.data;
       if (!d) return;
       
       // 서버 성별 코드(MALE/FEMALE 또는 남/여)를 한글 표시값으로 변환

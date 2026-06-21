@@ -9,9 +9,9 @@
 
 import { useState } from 'react';
 import { Keyboard, Platform } from 'react-native';
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL } from '../src/constants/Config';
+
+import AsyncStorage from '@react-native-async-storage/async-storage'; // 토큰 저장용으로 계속 필요, 유지
+import { signup } from '../src/constants/api/auth';
 
 export const usePersonal = (navigation: any, route: any) => {
   // 이전 화면(계정 정보 입력)에서 넘겨준 계정 데이터 (이메일/비밀번호/닉네임 등)
@@ -65,7 +65,6 @@ export const usePersonal = (navigation: any, route: any) => {
   // 3. 성공 시 응답에서 accessToken/role 저장 후 Loading 화면으로 이동
   // 4. 실패 시 에러 종류별로 구분해 결과 모달에 안내 메시지 표시
   const handleFinalSignup = async () => {
-    console.log("✅ 버튼 클릭됨! accountData 확인:", accountData);
 
     // 이전 화면에서 넘겨받은 계정 데이터가 없으면 진행 불가
     if (!accountData) {
@@ -100,10 +99,8 @@ export const usePersonal = (navigation: any, route: any) => {
         }
       };
 
-      console.log("🚀 백엔드 요청 주소:", `${API_BASE_URL}/auth/signup`);
-
-      // 회원가입 API 호출 (타임아웃 5초)
-      const signupResponse = await axios.post(`${API_BASE_URL}/auth/signup`, requestBody, { timeout: 5000 });
+      // 회원가입 API 호출 (타임아웃 5초는 auth.ts의 signup 함수에 내장됨)
+      const signupResponse = await signup(requestBody);
 
       // 응답 구조가 data.data 또는 data 두 가지인 경우를 모두 처리
       const accessToken = signupResponse.data?.data?.accessToken || signupResponse.data?.accessToken;

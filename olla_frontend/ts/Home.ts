@@ -10,8 +10,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
-import { API_BASE_URL } from '../src/constants/Config';
+import {
+  getQrToken, getMyProfile, getNotices, getMyMemberships, getMyVisitHistory,
+} from '../src/constants/api/member';
+import { getEnduranceDistanceRanking } from '../src/constants/api/ranking'
+import { getBeginnerBestRecords, getBeginnerHistory } from '../src/constants/api/record'
 
 // 색상별 최대 홀드 수 (난이도 기록 계산에 사용)
 const MAX_HOLDS: { [key: string]: number } = { 
@@ -161,11 +164,7 @@ export const HomeData = () => {
   // 출석 체크용 QR 토큰 발급 API 호출
   const fetchQrToken = async () => {
     try {
-      const userToken = await AsyncStorage.getItem('userToken');
-      if (!userToken) return;
-      const response = await axios.get(`${API_BASE_URL}/visit/qr`, {
-        headers: { Authorization: `Bearer ${userToken}` }
-      });
+      const response = await getQrToken();
       const qrData = response.data.data; 
       if (qrData) setQrToken(qrData);
     } catch (error: any) {
@@ -200,9 +199,9 @@ export const HomeData = () => {
       let nickname = '';
       let memberId: number | null = null;
       
-      // 1. 내 프로필 조회
+      // 내 프로필 조회
       try {
-        const profileRes = await axios.get(`${API_BASE_URL}/members/me`, config);
+        const profileRes = await getMyProfile();
         const pData = profileRes.data.data;
         if (pData) {
           nickname = pData.nickname || pData.name || '';
@@ -212,9 +211,9 @@ export const HomeData = () => {
         }
       } catch (error) { console.error('프로필 로드 실패'); }
 
-      // 2. 공지사항 조회 (중요 공지 우선, 없으면 최신 공지 1건)
+      // 공지사항 조회 (중요 공지 우선, 없으면 최신 공지 1건)
       try {
-        const noticeResponse = await axios.get(`${API_BASE_URL}/notices`, config);
+        const noticeResponse = await getNotices();
         const responseData = noticeResponse.data.data;
         const noticeList = Array.isArray(responseData) ? responseData : (responseData?.content || []);
 
@@ -239,9 +238,9 @@ export const HomeData = () => {
         setNotice({ title: '공지사항을 불러올 수 없습니다.', content: '', important: false }); 
       }
 
-      // 3. 이용권 상태 조회
+      // 이용권 상태 조회
       try {
-        const memResponse = await axios.get(`${API_BASE_URL}/memberships/me`, config);
+        const memResponse = await getMyMemberships();
         const rawData = memResponse.data.data || [];
         const dataList: any[] = Array.isArray(rawData) ? rawData : (rawData?.content || []);
 
@@ -332,11 +331,11 @@ export const HomeData = () => {
         }
       } catch (error) { setMembership(prev => ({ ...prev, isLoading: false })); }
 
-      // 4. 랭킹 및 난이도 기록 조회 (프로필 로드 성공 시에만)
+      // 랭킹 및 난이도 기록 조회 (프로필 로드 성공 시에만)
       if (nickname || memberId !== null) {
         try {
-          // 4-1. 지구력 랭킹 (거리 기준) 조회
-          const endRes = await axios.get(`${API_BASE_URL}/rankings/endurance/distance`, config);
+          // 지구력 랭킹 (거리 기준) 조회
+          const endRes = await getEnduranceDistanceRanking();
           const endList = endRes.data.data || [];
           
           let myEndRank = 0, myEndMin = 0, myEndSec = 0;
@@ -351,8 +350,8 @@ export const HomeData = () => {
 
           // 4-2. 난이도 기록 조회 (최고 기록 + 히스토리 병렬 요청)
           const [bestRes, historyRes] = await Promise.all([
-            axios.get(`${API_BASE_URL}/records/beginner/best`, config).catch(() => null),
-            axios.get(`${API_BASE_URL}/records/beginner/history`, config).catch(() => null),
+            getBeginnerBestRecords().catch(() => null),
+            getBeginnerHistory().catch(() => null),
           ]);
           
           let myRealBestRecords: any[] = [];
@@ -407,9 +406,7 @@ export const HomeData = () => {
       // "YYYY-MM" 형식으로 변환
       const yearMonth = `${viewDate.getFullYear()}-${String(viewDate.getMonth() + 1).padStart(2, '0')}`;
       
-      const response = await axios.get(`${API_BASE_URL}/visit/my-history?yearMonth=${yearMonth}`, { 
-        headers: { Authorization: `Bearer ${userToken}` } 
-      });
+      const response = await getMyVisitHistory(yearMonth);
       
       const rawData = response.data.data || [];
       // 날짜 문자열(YYYY-MM-DD)에서 일(day) 숫자만 추출

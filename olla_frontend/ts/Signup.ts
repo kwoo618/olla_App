@@ -10,8 +10,13 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { Keyboard, TextInput } from 'react-native';
-import axios from 'axios';
-import { API_BASE_URL } from '../src/constants/Config';
+
+import {
+  checkDuplicateId as checkDuplicateIdApi,
+  requestEmailVerification,
+  verifyEmailCode as verifyEmailCodeApi,
+  checkDuplicatePhone,
+} from '../src/constants/api/auth';
 
 export const useSignup = (navigation: any) => {
   // ── 입력 데이터 상태 ──
@@ -228,7 +233,7 @@ export const useSignup = (navigation: any) => {
     if (idError) { showResultModal('알림', '아이디 형식을 확인해주세요.', 'info'); return; }
 
     try {
-      const response = await axios.get(`${API_BASE_URL}/auth/check-id`, { params: { loginId: id } });
+      const response = await checkDuplicateIdApi(id);
       const isDuplicate = response.data.data.isDuplicate;
 
       if (isDuplicate) {
@@ -265,7 +270,7 @@ export const useSignup = (navigation: any) => {
 
     setIsSendingEmail(true);
     try {
-      await axios.post(`${API_BASE_URL}/auth/email/request`, null, { params: { email } });
+      await requestEmailVerification(email);
       setIsEmailSent(true);
       setEmailSuccess('인증코드가 발송되었습니다.');
       // 재발송 시 이전 인증코드 입력값 및 결과 초기화
@@ -289,7 +294,7 @@ export const useSignup = (navigation: any) => {
 
     setIsVerifyingEmail(true);
     try {
-      const response = await axios.post(`${API_BASE_URL}/auth/email/verify`, null, { params: { email, code: emailCode } });
+      const response = await verifyEmailCodeApi(email, emailCode);
 
       if (response.data.status === 200) {
         setEmailCodeError(''); setEmailCodeSuccess('이메일 인증이 완료되었습니다.'); setIsEmailVerified(true);
@@ -337,7 +342,7 @@ export const useSignup = (navigation: any) => {
 
     // 전화번호 중복 확인 (다음 단계 직전에 서버 요청)
     try {
-      const phoneRes = await axios.get(`${API_BASE_URL}/auth/check-phone`, { params: { phone } });
+      const phoneRes = await checkDuplicatePhone(phone);
       const isPhoneDup = phoneRes.data.data.isDuplicate;
 
       if (isPhoneDup) {

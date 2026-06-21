@@ -4,17 +4,11 @@ import { NavigationContainer, useNavigationContainerRef } from '@react-navigatio
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
-import { API_BASE_URL } from './src/constants/Config';
 import messaging from '@react-native-firebase/messaging';
 
-// ─── Step 0: axios 인터셉터 + 세션만료 이벤트는 apiClient.ts로 이전됨 ───
-// 이 import 한 줄로 axios.interceptors.response.use(...)가 등록됩니다.
-import './src/constants/api/apiClient';
-import { SESSION_EXPIRED_EVENT, resetSessionExpiredFlag } from './src/constants/api/apiClient';
-
-// ─── Step 2 (App.tsx 부분): 회원권 체크 로직을 membership.ts로 통합 ───
-import { fetchHasMembership } from './src/constants/api/membership';
+// ─── axios 직접 호출 + 인터셉터를 apiClient.ts로 이전 ───
+// apiClient: baseURL(API_BASE_URL) + 토큰 자동 주입 + 401 재발급/세션만료 처리가 포함된 axios 인스턴스라고 가정
+import apiClient, { SESSION_EXPIRED_EVENT, resetSessionFlag } from './src/constants/api/apiClient';
 
 type RootParamList = {
   Login: undefined; Signup: undefined; PersonalInfo: undefined; Loading: undefined;
@@ -132,11 +126,8 @@ const registerFcmToken = async () => {
     const savedToken = await AsyncStorage.getItem('fcmToken');
     if (savedToken === fcmToken) return;
 
-    await axios.post(
-      `${API_BASE_URL}/members/me/fcm-token`,
-      { deviceToken: fcmToken },
-      { headers: { Authorization: `Bearer ${userToken}` } },
-    );
+    // ─── 💡 axios.post(`${API_BASE_URL}/...`, ..., { headers: Authorization }) → apiClient.post로 교체 ───
+    await apiClient.post('/members/me/fcm-token', { deviceToken: fcmToken });
 
     await AsyncStorage.setItem('fcmToken', fcmToken);
   } catch (e) {}
@@ -206,16 +197,45 @@ const AppContent = () => {
   const [hasMembership, setHasMembership] = useState(false);
 
   useEffect(() => {
-    const checkMembership = async () => {
-      const result = await fetchHasMembership();
-      setHasMembership(result);
+    const fetchMembership = async () => {
+      try {
+        const userToken = await AsyncStorage.getItem('userToken');
+        if (!userToken) { setHasMembership(false); return; }
+        // ─── 💡 axios.get(`${API_BASE_URL}/memberships/me`, { headers }) → apiClient.get로 교체 ───
+        const res = await apiClient.get('/memberships/me');
+        const rawData = res.data.data;
+        const dataList: any[] = Array.isArray(rawData) ? rawData : (rawData?.content || []);
+
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const active = dataList.filter((m: any) => {
+          const status = String(m.membershipStatus || m.status || '').toUpperCase();
+          if (status === 'DELETED' || status === 'INACTIVE') return false;
+          if (m.startDate) {
+            const s = new Date(m.startDate); s.setHours(0,0,0,0);
+            if (s > today) return false;
+          }
+          return true;
+        });
+        const hasPeriod = active.some((m: any) => {
+          const t = String(m.membershipType ?? '').toUpperCase();
+          const isCountType = t.includes('COUNT') || t.includes('횟수') || t.includes('일일');
+          if (isCountType) return false;
+          if (!m.endDate) return false;
+          const end = new Date(m.endDate); end.setHours(23, 59, 59, 999);
+          return end.getTime() >= Date.now();
+        });
+        setHasMembership(hasPeriod);
+      } catch {
+        setHasMembership(false);
+      }
     };
-    if (initialRoute === 'Home') checkMembership();
+    if (initialRoute === 'Home') fetchMembership();
   }, [initialRoute]);
 
   const handleSessionExpiredConfirm = () => {
     setSessionExpiredVisible(false);
-    resetSessionExpiredFlag();
+    // ─── 💡 _sessionExpiredFired = false 직접 조작 → apiClient의 resetSessionFlag() 호출로 교체 ───
+    resetSessionFlag();
     navigationRef.reset({
       index: 0,
       routes: [{ name: 'Login' }],
@@ -267,13 +287,12 @@ const AppContent = () => {
         const userToken = await AsyncStorage.getItem('userToken');
         if (!userToken) return;
 
+        // ─── 💡 API_BASE_URL 접두사 제거, axios → apiClient로 교체 ───
         const endpoint = isAdminMode
-          ? `${API_BASE_URL}/admin/alerts?page=0&size=50`
-          : `${API_BASE_URL}/notifications?page=0&size=50`;
+          ? '/admin/alerts?page=0&size=50'
+          : '/notifications?page=0&size=50';
 
-        const response = await axios.get(endpoint, {
-          headers: { Authorization: `Bearer ${userToken}` },
-        });
+        const response = await apiClient.get(endpoint);
 
         const raw = response.data?.data;
         const list: any[] = Array.isArray(raw)
@@ -306,9 +325,8 @@ const AppContent = () => {
         const userToken = await AsyncStorage.getItem('userToken');
         if (userToken) {
           try {
-            await axios.get(`${API_BASE_URL}/members/me`, {
-              headers: { Authorization: `Bearer ${userToken}` },
-            });
+            // ─── 💡 axios.get(`${API_BASE_URL}/members/me`, { headers }) → apiClient.get로 교체 ───
+            await apiClient.get('/members/me');
             await AsyncStorage.removeItem('fcmToken');
             setInitialRoute('Home');
           } catch (apiError: any) {
@@ -505,7 +523,7 @@ const AppContent = () => {
         )}
       </NavigationContainer>
 
-      {/* ─── 💡 세션 만료 모달 (OLLA 표준 규격 적용) ─── */}
+      {/* ─── 세션 만료 모달 ─── */}
       <Modal visible={sessionExpiredVisible} animationType="fade" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.deleteModalBox}>
@@ -518,7 +536,7 @@ const AppContent = () => {
         </View>
       </Modal>
 
-      {/* ─── 💡 관리자 모드 종료 모달 (OLLA 표준 규격 적용) ─── */}
+      {/* ─── 관리자 모드 종료 모달 ─── */}
       <Modal visible={isExitModalVisible} animationType="fade" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={styles.deleteModalBox}>

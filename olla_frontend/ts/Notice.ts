@@ -8,9 +8,8 @@
 // ============================================================
 
 import { useState, useEffect, useCallback } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
-import { API_BASE_URL } from '../src/constants/Config';
+import { API_BASE_URL } from '../src/constants/Config'; // getFullImageUrl에서 계속 사용하므로 유지
+import { getNotices } from '../src/constants/api/member'; // 실제 경로에 맞게 조정 필요
 
 // 서버에서 받아온 이미지 경로를 완전한 URL로 변환하는 유틸 함수
 // - null/undefined/'null'/'undefined' 문자열이면 null 반환
@@ -90,17 +89,7 @@ export const useNotice = (navigation: any) => {
   // - 중요 공지(important: true)를 앞으로, 같은 그룹 내에서는 최신순 정렬
   const fetchNotices = useCallback(async () => {
     try {
-      // 토큰 조회 실패해도 비로그인 상태로 계속 진행
-      let token: string | null = null;
-      try {
-        token = await AsyncStorage.getItem('userToken');
-      } catch (e) {
-        // AsyncStorage 초기화 전 에러 → 토큰 없이 진행
-      }
-
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-
-      const response = await axios.get(`${API_BASE_URL}/notices`, { headers });
+      const response = await getNotices();
 
       // 서버 응답 구조: response.data.data.content (페이지네이션 형태)
       const raw = response.data.data.content || [];

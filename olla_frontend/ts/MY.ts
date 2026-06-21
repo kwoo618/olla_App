@@ -13,12 +13,22 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Dimensions, Animated, PanResponder, Platform } from 'react-native';
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // notiSettings 캐시, 로그아웃/탈퇴 시 토큰 정리용으로 계속 사용
 import { useIsFocused } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
-import { API_BASE_URL } from '../src/constants/Config';
+import { API_BASE_URL } from '../src/constants/Config'; // getFullImageUrl에서 계속 사용
 import messaging from '@react-native-firebase/messaging';
+import {
+  getMyProfile,
+  getMyMemberships,
+  updateMyInfo,
+  uploadProfileImage,
+  getNotificationSettings,
+  updateNotificationSettings,
+  deleteFcmToken,
+  withdrawMember,
+} from '../src/constants/api/member';
+import { changePassword, logout } from '../src/constants/api/auth';
 
 // ─── 유틸 함수 ────────────────────────────────────────────────────────────────
 
@@ -194,11 +204,12 @@ export const useMyPage = (navigation: any) => {
     try {
       const userToken = await AsyncStorage.getItem('userToken');
       if (!userToken) return;
-      const notiRes = await axios.get(`${API_BASE_URL}/members/me/notifications/settings`, { headers: { Authorization: `Bearer ${userToken}` } });
+      const notiRes = await getNotificationSettings();
       if (notiRes.data.data) {
         setNotiState(notiRes.data.data);
         await AsyncStorage.setItem('notiSettings', JSON.stringify(notiRes.data.data));
       }
+      
     } catch (e) {
       console.log('알림 설정 로드 실패');
     }
@@ -207,12 +218,8 @@ export const useMyPage = (navigation: any) => {
   // ─── API: 내 정보 조회 (프로필 + 이용권) ─────────────────────────────────
   const fetchMyInfo = useCallback(async () => {
     try {
-      const userToken = await AsyncStorage.getItem('userToken');
-      if (!userToken) { navigation.replace('Login'); return; }
-      const headers = { Authorization: `Bearer ${userToken}` };
-
-      // 1. 내 기본 정보 조회 (/members/me)
-      const userRes = await axios.get(`${API_BASE_URL}/members/me`, { headers });
+      // 내 기본 정보 조회 (/members/me)
+      const userRes = await getMyProfile();
       const data    = userRes.data.data;
 
       if (data) {
@@ -244,8 +251,8 @@ export const useMyPage = (navigation: any) => {
         });
       }
 
-      // 2. 이용권 상태 조회 (/memberships/me)
-      const memRes     = await axios.get(`${API_BASE_URL}/memberships/me`, { headers });
+      // 이용권 상태 조회 (/memberships/me)
+      const memRes     = await getMyMemberships();
       const rawMemData = memRes.data.data;
       const dataList: any[] = Array.isArray(rawMemData) ? rawMemData : (rawMemData?.content || []);
 
@@ -307,7 +314,7 @@ export const useMyPage = (navigation: any) => {
     } finally {
       setLoading(false);
     }
-  }, [navigation]);
+  }, []);
 
   // 화면 포커스 시마다 프로필 + 알림 설정 재조회 (다른 화면에서 수정 후 돌아올 때 반영)
   useEffect(() => {
@@ -332,7 +339,6 @@ export const useMyPage = (navigation: any) => {
     setNotiState(optimisticState); // 낙관적 업데이트
 
     try {
-      const userToken = await AsyncStorage.getItem('userToken');
       // 서버는 camelCase와 snake_case 양쪽 필드명을 모두 받는 경우를 대비해 중복 전송
       const requestBody = {
         ...optimisticState,
@@ -342,9 +348,7 @@ export const useMyPage = (navigation: any) => {
         crewNotificationOn:       optimisticState.isCrewNotificationOn,
         noticeNotificationOn:     optimisticState.isNoticeNotificationOn,
       };
-      const res        = await axios.patch(`${API_BASE_URL}/members/me/notifications/settings`, requestBody, {
-        headers: { Authorization: `Bearer ${userToken}` }
-      });
+      const res        = await updateNotificationSettings(requestBody);
       // 서버 응답값으로 최종 상태 동기화
       const finalState = res.data.data ? { ...optimisticState, ...res.data.data } : optimisticState;
       setNotiState(finalState);
@@ -379,7 +383,6 @@ export const useMyPage = (navigation: any) => {
   const handleSaveProfile = async () => {
     setIsImageUploading(true);
     try {
-      const userToken   = await AsyncStorage.getItem('userToken');
       let finalImageUrl = profileData.profileImageUrl;
       
       if (pendingImageAsset.current) {
@@ -393,13 +396,7 @@ export const useMyPage = (navigation: any) => {
           name: asset.fileName || `profile_${Date.now()}.jpg`,
         } as any);
 
-        const uploadRes = await axios.post(`${API_BASE_URL}/members/me/profile-image`, formData, {
-          headers: {
-            Authorization:  `Bearer ${userToken}`,
-            'Content-Type': 'multipart/form-data',
-          },
-          timeout: 30000
-        });
+        const uploadRes = await uploadProfileImage(formData);
 
         // 서버 응답에서 최종 이미지 URL 추출
         finalImageUrl = uploadRes.data.data.imageUrl || uploadRes.data.data.profileImageUrl;
@@ -420,9 +417,7 @@ export const useMyPage = (navigation: any) => {
         isFootSizePublic:profileToggles.showShoe,    footSizePublic:profileToggles.showShoe,
       };
 
-      await axios.patch(`${API_BASE_URL}/members/me/info`, requestBody, {
-        headers: { Authorization: `Bearer ${userToken}` }
-      });
+      await updateMyInfo(requestBody);
 
       // 저장 성공 후 원본 참조값도 최신으로 갱신 (취소 시 복구 기준점 업데이트)
       originalImageUrl.current = finalImageUrl;
@@ -460,9 +455,9 @@ export const useMyPage = (navigation: any) => {
     if (newPassword !== newPasswordConfirm) return setPwError('새 비밀번호가 일치하지 않습니다.');
 
     setIsChangingPw(true);
+    setIsChangingPw(true);
     try {
-      const userToken = await AsyncStorage.getItem('userToken');
-      await axios.patch(`${API_BASE_URL}/auth/password`, { oldPassword, newPassword }, { headers: { Authorization: `Bearer ${userToken}` } });
+      await changePassword(oldPassword, newPassword);
 
       // 성공 → 모달 닫기 + 입력값 초기화 + 결과 안내
       setChangePwModalVisible(false);
@@ -480,26 +475,22 @@ export const useMyPage = (navigation: any) => {
   // FCM 토큰 삭제 시도(실패해도 무시) → 서버 로그아웃 → 로컬 토큰 전체 삭제 → 로그인 화면으로
   const executeLogout = async () => {
     try {
-      const token        = await AsyncStorage.getItem('userToken');
       const refreshToken = await AsyncStorage.getItem('refreshToken');
 
       // FCM 토큰 삭제 (서버에서 해당 기기로 더 이상 알림 안 보내도록)
       try {
         const fcmToken = await messaging().getToken();
-        if (token && fcmToken) {
-          await axios.delete(`${API_BASE_URL}/members/me/fcm-token`, {
-            headers: { Authorization: `Bearer ${token}` },
-            data:    { token: fcmToken },
-            timeout: 3000, // 실패해도 로그아웃은 계속 진행
-          });
+        if (fcmToken) {
+          // 백엔드에 DELETE 매핑이 없을 수 있음 — 실패해도 로그아웃은 계속 진행
+          await deleteFcmToken(fcmToken);
         }
       } catch (fcmError) {
         console.log('FCM 토큰 삭제 실패 (무시):', fcmError);
       }
 
       // 서버 로그아웃 (refreshToken 무효화)
-      if (token && refreshToken) {
-        await axios.post(`${API_BASE_URL}/auth/logout`, { refreshToken }, { headers: { Authorization: `Bearer ${token}` }, timeout: 3000 });
+      if (refreshToken) {
+        await logout(refreshToken);
       }
     } catch (e) { } finally {
       // 로컬 저장소에서 인증 정보 전체 삭제
@@ -514,8 +505,7 @@ export const useMyPage = (navigation: any) => {
   // 서버에 탈퇴 요청 → 로컬 토큰 삭제 → 결과 안내 → 로그인 화면으로
   const executeDeleteAccount = async () => {
     try {
-      const token = await AsyncStorage.getItem('userToken');
-      await axios.delete(`${API_BASE_URL}/members/me`, { headers: { Authorization: `Bearer ${token}` } });
+      await withdrawMember();
       await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userRole']);
       setDeleteModalVisible(false);
       setTimeout(() => {

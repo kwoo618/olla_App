@@ -7,9 +7,7 @@
 // ============================================================
 
 import { useState, useEffect, useCallback } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
-import { API_BASE_URL } from '../src/constants/Config';
+import { getDashboardStats, getAdminAlerts, markAdminAlertAsRead } from '../src/constants/api/admin';
 
 // 관리자 알림 항목 하나의 타입 정의
 export interface AdminAlertItem {
@@ -69,20 +67,10 @@ export const useAdminNotification = (navigation: any) => {
     }
   };
 
-  // AsyncStorage에서 JWT 토큰을 꺼내 Authorization 헤더 객체로 반환
-  // 토큰이 없으면 에러를 던져 호출부에서 처리하도록 함
-  const getAuthHeader = async () => {
-    const token = await AsyncStorage.getItem('userToken');
-    if (!token) throw new Error('NO_TOKEN');
-    return { Authorization: `Bearer ${token}` };
-  };
-
   // 만료 임박 회원 목록을 서버에서 불러오는 함수
   const fetchExpiringMembers = async () => {
     try {
-      const headers = await getAuthHeader();
-      // 관리자 대시보드 API에서 만료 임박 회원 정보를 포함한 데이터를 받아옴
-      const response = await axios.get(`${API_BASE_URL}/admin/dashboard`, { headers });
+      const response = await getDashboardStats();
 
       // 응답 데이터 내 expiringMembers 배열 추출 (없으면 빈 배열)
       const rawExpiring = response.data.data.expiringMembers || [];
@@ -100,8 +88,8 @@ export const useAdminNotification = (navigation: any) => {
 
       setExpiringMembers(parsed);
     } catch (error: any) {
-      // 토큰 없음 에러는 무시 (비로그인 상태)
-      if (error.message === 'NO_TOKEN') return;
+      // 인증 안 된 상태(401)는 무시 (비로그인 상태)
+      if (error.response?.status === 401) return;
       console.log('만료 임박 회원 로드 실패:', error);
     } finally {
       setExpiringLoading(false);
@@ -111,9 +99,8 @@ export const useAdminNotification = (navigation: any) => {
   // 관리자 알림 목록을 서버에서 불러오는 함수
   const fetchAdminAlerts = async () => {
     try {
-      const headers = await getAuthHeader();
       // 페이지 0, 사이즈 30으로 알림 목록 조회
-      const response = await axios.get(`${API_BASE_URL}/admin/alerts?page=0&size=30`, { headers });
+      const response = await getAdminAlerts(0, 30);
 
       // 페이징 응답에서 content 배열 추출
       const list = response.data.data.content || [];
@@ -121,7 +108,7 @@ export const useAdminNotification = (navigation: any) => {
       setAlerts(list);
     } catch (error: any) {
       // 토큰 없음 → 로그인 화면으로 이동
-      if (error.message === 'NO_TOKEN') {
+      if (error.response?.status === 401) {
         showResultModal('인증 오류', '로그인 정보가 없습니다.', 'error', () => navigation.navigate('Login'));
         return;
       }
@@ -160,9 +147,8 @@ export const useAdminNotification = (navigation: any) => {
     // 새로 열리는 경우이고 아직 읽지 않은 경우에만 읽음 처리 API 호출
     if (!isCurrentlyExpanded && !isItemRead) {
       try {
-        const headers = await getAuthHeader();
         // PATCH 요청으로 해당 알림을 읽음 상태로 변경
-        await axios.patch(`${API_BASE_URL}/admin/alerts/${item.id}/read`, {}, { headers });
+        await markAdminAlertAsRead(item.id);
         // 로컬 상태도 즉시 업데이트 (서버 재조회 없이 UI 반영)
         setAlerts(prev =>
           prev.map(alert => alert.id === item.id ? { ...alert, read: true, isRead: true } : alert)

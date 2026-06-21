@@ -11,27 +11,31 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { Platform } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
-import { API_BASE_URL } from '../src/constants/Config';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // 관리자 권한(role) 체크용으로 계속 사용
+import { API_BASE_URL } from '../src/constants/Config'; // resolveImageUrl에서 계속 사용
+import {
+  getDashboardStats,
+  getDashboardSummary,
+  getHourlyCongestion,
+  getAdminNotices,
+  getAdminMembers,
+  getTodayVisitDashboard,
+  deleteNotice,
+  sendAlertToMember,
+  scanVisitQr,
+} from '../src/constants/api/admin'; // 실제 경로에 맞게 조정 필요
+import { getPosts, deletePost } from '../src/constants/api/community';
+import { getOtherMemberProfile } from '../src/constants/api/member';
 
-// API 기본 경로 상수
-const BASE    = API_BASE_URL;
-const ADMIN   = `${BASE}/admin`;
-const MEMBERS = `${BASE}/members`;
+// API 기본 경로 상수 (resolveImageUrl에서만 사용)
+const BASE = API_BASE_URL;
 
 // 응답 파싱 헬퍼: response.data.data 바로 반환
 const extractData = (res: any): any   => res.data.data;
 // 응답 파싱 헬퍼: 페이징 응답의 content 배열 반환
 const extractList = (res: any): any[] => res.data.data.content;
 
-// JWT 토큰을 AsyncStorage에서 꺼내 Authorization 헤더 객체로 반환
-export const authHeader = async () => {
-  const token = await AsyncStorage.getItem('userToken');
-  return { Authorization: `Bearer ${token}` };
-};
-
-// AsyncStorage에서 userToken만 반환 (헤더 객체 없이 토큰 문자열만 필요한 경우 사용)
+// AsyncStorage에서 userToken만 반환 (관리자 권한 체크용으로 계속 사용)
 const getToken = () => AsyncStorage.getItem('userToken');
 
 // 현재 날짜시각을 "YYYY/MM/DD HH:mm:ss" 형식으로 반환 (마지막 업데이트 시각 표시용)
@@ -219,8 +223,7 @@ export const useManagerDashboard = (navigation: any) => {
   // - 신규 가입자, 만료 임박 회원, 요일별/시간대별 혼잡도, 전체 회원 수 포함
   const fetchDashboardMain = useCallback(async () => {
     try {
-      const headers = await authHeader();
-      const res  = await axios.get(`${ADMIN}/dashboard`, { headers });
+      const res  = await getDashboardStats();
       const data = extractData(res);
 
       // 만료 임박 회원 파싱 (dDay가 0이면 '1'로 보정 — 당일 만료 표시 이슈 방어)
@@ -273,8 +276,7 @@ export const useManagerDashboard = (navigation: any) => {
   // 대시보드 요약 통계 조회 (오늘 방문자, 3일 내 만료, 이번 주 신규 가입)
   const fetchDashboardSummary = useCallback(async () => {
     try {
-      const headers = await authHeader();
-      const res  = await axios.get(`${ADMIN}/dashboard/summary`, { headers });
+      const res  = await getDashboardSummary();
       const data = extractData(res);
 
       setDashboardSummary({
@@ -303,8 +305,8 @@ export const useManagerDashboard = (navigation: any) => {
     });
 
     try {
-      const headers = await authHeader();
-      const res = await axios.get(`${ADMIN}/dashboard/hourly`, { headers, params: { dayOfWeek } });
+      // 백엔드에 GET /admin/dashboard/hourly 매핑이 안 보임 — 인수인계서 미해결 이슈 2 참고, 404 가능성 있음
+      const res = await getHourlyCongestion(dayOfWeek);
       const list = (extractData(res) ?? []).map(Number) as number[];
       // 캐시 업데이트
       setHourlyCongestionByDay(prev => ({ ...prev, [dayOfWeek]: list }));
@@ -319,8 +321,7 @@ export const useManagerDashboard = (navigation: any) => {
   // 공지사항 최신 2건 조회 (최신 id 내림차순)
   const fetchNotices = useCallback(async () => {
     try {
-      const headers = await authHeader();
-      const res = await axios.get(`${ADMIN}/notices`, { headers, params: { page: 0, size: 2, sort: 'id,desc' } });
+      const res = await getAdminNotices({ page: 0, size: 2, sort: 'id,desc' });
       setNotices(extractList(res));
     } catch (e: any) {
       console.log('공지사항 로드 실패:', e.response?.data?.message ?? e.message);
@@ -333,8 +334,7 @@ export const useManagerDashboard = (navigation: any) => {
   // - 대시보드에는 최신 2건만 표시, 전체 수는 metrics에 반영
   const fetchPosts = useCallback(async () => {
     try {
-      const headers = await authHeader();
-      const res  = await axios.get(`${BASE}/posts`, { headers, params: { page: 0, size: 20, sort: 'id,desc' } });
+      const res  = await getPosts({ page: 0, size: 20, sort: 'id,desc' });
       const list = extractList(res);
       const totalElements = res.data.data.totalElements ?? list.length;
 
@@ -361,8 +361,7 @@ export const useManagerDashboard = (navigation: any) => {
   // - 프로필 이미지 URL 변환 적용
   const fetchMembers = useCallback(async () => {
     try {
-      const headers = await authHeader();
-      const res  = await axios.get(`${ADMIN}/memberships/members`, { headers, params: { page: 0, size: 1000, sort: 'id,desc' } });
+      const res  = await getAdminMembers({ page: 0, size: 1000, sort: 'id,desc' });
       const list = extractList(res);
 
       // 탈퇴 처리된 회원 제외
@@ -387,8 +386,7 @@ export const useManagerDashboard = (navigation: any) => {
   // - 방문 로그에서 회원 이름 Set으로 추출 (중복 제거)
   const fetchVisits = useCallback(async () => {
     try {
-      const headers = await authHeader();
-      const res  = await axios.get(`${ADMIN}/visits/today`, { headers });
+      const res  = await getTodayVisitDashboard();
       const data = extractData(res);
 
       setMetrics(prev => ({ ...prev, todayVisitors: data?.totalVisitsToday ?? prev.todayVisitors }));
@@ -407,8 +405,7 @@ export const useManagerDashboard = (navigation: any) => {
   // - memberships 배열이 중첩된 경우와 단일 activeMembership 필드 두 구조 모두 대응
   const fetchActiveMemberships = useCallback(async () => {
     try {
-      const headers = await authHeader();
-      const res = await axios.get(`${ADMIN}/memberships/members`, { headers, params: { page: 0, size: 2000 } });
+      const res = await getAdminMembers({ page: 0, size: 2000 });
       const usersList = extractList(res);
 
       let activeCount = 0;
@@ -501,13 +498,12 @@ export const useManagerDashboard = (navigation: any) => {
   const executeDelete = useCallback(async () => {
     if (!itemToDelete) return;
     try {
-      const headers = await authHeader();
       if (itemToDelete.type === 'notice') {
-        await axios.delete(`${ADMIN}/notices/${itemToDelete.id}`, { headers });
+        await deleteNotice(itemToDelete.id);
         showResultModal('성공', '공지사항이 삭제되었습니다.', 'success');
         fetchNotices();
       } else {
-        await axios.delete(`${BASE}/posts/${itemToDelete.id}`, { headers });
+        await deletePost(itemToDelete.id);
         showResultModal('성공', '게시글이 삭제되었습니다.', 'success');
         fetchPosts();
       }
@@ -526,8 +522,7 @@ export const useManagerDashboard = (navigation: any) => {
   // - 알림 발송 시 selectedUser.memberId가 필요하므로 memberId도 저장
   const loadUserDetail = useCallback(async (memberId: number, fallbackName: string, fallbackPhone: string) => {
     try {
-      const headers = await authHeader();
-      const res  = await axios.get(`${MEMBERS}/${memberId}/profile`, { headers });
+      const res  = await getOtherMemberProfile(memberId);
       const d    = extractData(res);
       if (!d) {
         showResultModal('프로필 조회 불가', '상세 정보를 불러올 수 없습니다.', 'error');
@@ -569,12 +564,7 @@ export const useManagerDashboard = (navigation: any) => {
     }
     setIsProcessing(true);
     try {
-      const headers = await authHeader();
-      await axios.post(
-        `${ADMIN}/alerts/send`,
-        { memberId: selectedUser.memberId, title: alertTitle, content: alertContent },
-        { headers },
-      );
+      await sendAlertToMember(selectedUser.memberId, alertTitle, alertContent);
       setSendAlertModalVisible(false);
       setTimeout(() => {
         showResultModal('발송 성공', `${selectedUser.name}님에게 알림을 발송했습니다.`, 'success');
@@ -633,9 +623,8 @@ export const useManagerDashboard = (navigation: any) => {
     };
 
     try {
-      const headers = await authHeader();
       // 출석 처리 API 호출 (deductionCount: 1 = 일일권 1회 차감)
-      const res    = await axios.post(`${ADMIN}/visits/scan`, { qrToken: qrData, deductionCount: 1 }, { headers });
+      const res    = await scanVisitQr(qrData, 1);
       const result = extractData(res);
       const { statusCode = '', memberName = '회원', remainingInfo = '', message = '' } = result ?? {};
 

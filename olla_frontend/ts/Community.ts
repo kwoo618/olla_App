@@ -10,20 +10,14 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Keyboard, Platform } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
+import {
+  getPosts, getMyPosts, getMyAppliedPosts, searchPosts as searchPostsApi,
+  getPostDetail, createPost, updatePost as updatePostApi, deletePost, closePost,
+  toggleLike as toggleLikeApi, joinPost, cancelJoinPost,
+  getComments, createComment, deleteComment,
+} from '../src/constants/api/community';
+import { getMyProfile, fetchHasMembership, getOtherMemberProfile } from '../src/constants/api/member';
 import { API_BASE_URL } from '../src/constants/Config';
-
-// API 기본 경로 상수
-const BASE = `${API_BASE_URL}`;
-const POSTS = `${API_BASE_URL}/posts`;
-const MEMBERS = `${BASE}/members`;
-
-// JWT 토큰을 AsyncStorage에서 꺼내 Authorization 헤더 객체로 반환
-export const authHeader = async () => {
-  const token = await AsyncStorage.getItem('userToken');
-  return { Authorization: `Bearer ${token}` };
-};
 
 // 숫자를 2자리 문자열로 패딩 (예: 1 → "01")
 export const p = (n: number) => String(n).padStart(2, '0');
@@ -76,41 +70,6 @@ export interface CommentType {
   createdAt: string;
   children: CommentType[]; // 대댓글 목록
 }
-
-// ─── 회원권 활성 여부 판단 헬퍼 ────────────────────────────────────────────
-
-// 오늘 날짜 00:00:00 기준의 Date 객체 반환
-const getTodayDate = () => {
-  const d = new Date(); d.setHours(0, 0, 0, 0); return d;
-};
-
-// 회원권의 시작일이 오늘 이전인지 확인 (시작일 미정이면 true)
-const isStarted = (startDate: string): boolean => {
-  if (!startDate) return true;
-  const start = new Date(startDate); start.setHours(0, 0, 0, 0);
-  return start <= getTodayDate();
-};
-
-// 기간권 보유 여부 확인 (일일권/횟수권 제외)
-// DELETED/INACTIVE 상태 및 아직 시작 안 한 회원권은 제외
-// COUNT/횟수/일일 타입은 false
-const checkActiveMembership = (dataList: any[]): boolean => {
-  if (!Array.isArray(dataList) || dataList.length === 0) return false;
-  const activeList = dataList.filter(m => {
-  const status = String(m.membershipStatus || m.status || '').toUpperCase();
-  if (status === 'DELETED' || status === 'INACTIVE') return false;
-    return isStarted(m.startDate);
-  });
-  return activeList.some(m => {
-    const t = String(m.membershipType ?? '').toUpperCase();
-    const isCountType = t.includes('COUNT') || t.includes('횟수') || t.includes('일일');
-    if (isCountType) return false;
-    if (!m.endDate) return false;
-    // 만료일이 현재 시각 이후인 경우만 true
-    const end = new Date(m.endDate); end.setHours(23, 59, 59, 999);
-    return end.getTime() >= Date.now();
-  });
-};
 
 export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
   // pull-to-refresh 상태
@@ -218,8 +177,7 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
   const initData = async (filterToUse: string) => {
     let uName = '', uNick = '', uId = null;
     try {
-      const headers = await authHeader();
-      const { data } = await axios.get(`${MEMBERS}/me`, { headers });
+      const { data } = await getMyProfile();
       const d = data.data;
       if (d) {
         uName = d.name || '';
@@ -240,16 +198,7 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
 
     // 로그인된 경우에만 회원권 조회
     if (uId !== null) {
-      try {
-        const headers = await authHeader();
-        const memRes = await axios.get(`${API_BASE_URL}/memberships/me`, { headers });
-        const rawData = memRes.data.data;
-        // 배열 또는 페이징 객체 양쪽 대응
-        const dataList: any[] = Array.isArray(rawData) ? rawData : (rawData?.content || []);
-        setHasMembership(checkActiveMembership(dataList));
-      } catch (e) {
-        setHasMembership(false);
-      }
+      setHasMembership(await fetchHasMembership());
     } else {
       // 비로그인이면 회원권 없음 처리
       setHasMembership(false);
@@ -289,12 +238,11 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
   const fetchPosts = async (uName: string, uNick: string, uId: number | null, filterToUse: string) => {
     try {
       setLoading(true);
-      const headers = await authHeader();
-      // 필터별 API URL 매핑
-      const urlMap: any = { MY_WRITTEN: `${POSTS}/me`, MY_APPLIED: `${POSTS}/me/applied` };
-      const url = `${urlMap[filterToUse] || POSTS}?page=0&size=100`;
-
-      const { data } = await axios.get(url, { headers });
+      const params = { page: 0, size: 100 };
+      const { data } =
+        filterToUse === 'MY_WRITTEN' ? await getMyPosts(params) :
+        filterToUse === 'MY_APPLIED' ? await getMyAppliedPosts(params) :
+        await getPosts(params);
 
       const resData = data.data || {};
       let list = Array.isArray(resData) ? resData : (resData.content || []);
@@ -361,17 +309,16 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
     setIsSearching(true);
     const kw = searchKeyword.trim().toLowerCase();
     try {
-      const headers = await authHeader();
       let backendRes: any[] = [];
       try {
         // 서버 측 키워드 검색
-        const { data } = await axios.get(`${POSTS}/search?keyword=${encodeURIComponent(searchKeyword)}&page=0&size=100`, { headers });
+        const { data } = await searchPostsApi(searchKeyword, { page: 0, size: 100 });
         const resData1 = data.data || {};
         backendRes = Array.isArray(resData1) ? resData1 : (resData1.content || []);
       } catch (e) {}
 
       // 전체 목록 가져와서 클라이언트 필터링
-      const { data: allData } = await axios.get(`${POSTS}?page=0&size=100`, { headers });
+      const { data: allData } = await getPosts({ page: 0, size: 100 });
       const resData2 = allData?.data || {};
       const all: any[] = Array.isArray(resData2) ? resData2 : (resData2.content || []);
 
@@ -421,8 +368,7 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
     showResultModal('알림', !liked ? '해당 게시물에 좋아요를 눌렀습니다.' : '좋아요를 취소했습니다.', 'success');
 
     try {
-      const headers = await authHeader();
-      await axios.post(`${POSTS}/${id}/like`, {}, { headers });
+      await toggleLikeApi(id);
     } catch (e: any) {
       // 서버 실패 시 롤백
       updatePost(id, { isLiked: liked, likeCount: (post: any) => liked ? post.likeCount + 1 : Math.max(post.likeCount - 1, 0) });
@@ -446,10 +392,8 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
     // 즉시 UI 반영
     updatePeople(id, !joined);
     try {
-      const headers = await authHeader();
-      // 취소: DELETE, 참여: POST
-      if (joined) await axios.delete(`${POSTS}/${id}/participants`, { headers });
-      else await axios.post(`${POSTS}/${id}/participants`, {}, { headers });
+      if (joined) await cancelJoinPost(id);
+      else await joinPost(id);
     } catch (e: any) {
       // 서버 실패 시 롤백
       updatePeople(id, joined);
@@ -461,8 +405,8 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
   const executeDelete = async () => {
     if (deleteTarget === null) return;
     try {
-      const headers = await authHeader();
-      await axios.delete(`${POSTS}/${deleteTarget}`, { headers });
+      await deletePost(deleteTarget);
+      
       // 삭제 성공 시 로컬 목록에서도 제거
       setPosts(prev => prev.filter(post => post.id !== deleteTarget));
       setDeleteTarget(null);
@@ -477,8 +421,7 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
   const executeClose = async () => {
     if (closeTarget === null) return;
     try {
-      const headers = await authHeader();
-      await axios.patch(`${POSTS}/${closeTarget}/close`, {}, { headers });
+      await closePost(closeTarget);
       // 마감 성공 시 해당 글의 isPast를 true로 변경 후 재정렬
       setPosts(prev => sortPosts([...prev].map(post => post.id === closeTarget ? { ...post, isPast: true } : post)));
       setCloseTarget(null);
@@ -494,9 +437,7 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
   const loadUserDetail = async (authorId: number, authorName: string, isMine: boolean) => {
     try {
       Keyboard.dismiss();
-      const headers = await authHeader();
-      const url = isMine ? `${MEMBERS}/me` : `${MEMBERS}/${authorId}/profile`;
-      const { data } = await axios.get(url, { headers });
+      const { data } = isMine ? await getMyProfile() : await getOtherMemberProfile(authorId);
       const d = data.data;
       if (!d) throw new Error('정보를 불러올 수 없습니다.');
 
@@ -532,15 +473,14 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
     if (post.isPast) return false;
     setIsPostLoading(true);
 
-    // 조회수를 미리 +1 표시 (낙관적 업데이트)
+    // 조회수를 미리 +1 표시 
     setSelectedPost({ ...post, viewCount: post.viewCount + 1 });
     try {
-      const headers = await authHeader();
-      // 조회수 올리기 (GET 요청)
-      await axios.get(`${POSTS}/${post.id}`, { headers });
+      // 조회수 올리기
+      await getPostDetail(post.id);
       updatePost(post.id, { viewCount: (p: any) => p.viewCount + 1 });
       // 댓글 목록 조회
-      const { data } = await axios.get(`${POSTS}/${post.id}/comments?page=0&size=100`, { headers });
+      const { data } = await getComments(post.id, { page: 0, size: 100 });
       setComments(data.data.content ?? []);
       return true;
     } catch (e) {
@@ -568,18 +508,15 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
     const parentId = replyingTo ? replyingTo.id : null; // 대댓글이면 부모 댓글 id 전송
 
     try {
-      const headers = await authHeader();
-      const payload = { content: trimmed, parentId };
-
       // 입력창 초기화 및 키보드 닫기
       setCommentInput('');
       setReplyingTo(null);
       Keyboard.dismiss();
 
-      await axios.post(`${POSTS}/${postId}/comments`, payload, { headers });
+      await createComment(postId, trimmed, parentId);
 
       // 댓글 목록 갱신
-      const { data } = await axios.get(`${POSTS}/${postId}/comments?page=0&size=100`, { headers });
+      const { data } = await getComments(postId, { page: 0, size: 100 });
       setComments(data.data.content ?? []);
     } catch (e: any) {
       showResultModal('오류', e.response?.data?.message || '댓글을 작성할 수 없습니다.', 'error');
@@ -591,11 +528,10 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
   const executeCommentDelete = async () => {
     if (commentDeleteTarget === null || !selectedPost) return;
     try {
-      const headers = await authHeader();
-      await axios.delete(`${POSTS}/${selectedPost.id}/comments/${commentDeleteTarget}`, { headers });
+      await deleteComment(selectedPost.id, commentDeleteTarget);
       setCommentDeleteTarget(null);
       // 댓글 목록 갱신
-      const { data } = await axios.get(`${POSTS}/${selectedPost.id}/comments?page=0&size=100`, { headers });
+      const { data } = await getComments(selectedPost.id, { page: 0, size: 100 });
       setComments(data.data.content ?? []);
       setTimeout(() => showResultModal('성공', '해당 댓글이 삭제되었습니다.', 'success'), Platform.OS === 'ios' ? 500 : 300);
     } catch (e: any) {
@@ -701,11 +637,10 @@ export const useCommunityData = (currentFilter: string, isFocused: boolean) => {
     const formattedDateTime = `${yr}-${p(mo)}-${p(dy)}T${p(hr)}:${p(mn)}:00`;
 
     try {
-      const headers = await authHeader();
       const payload = { title, content: desc, isDifferentGym: category === '아웃도어', gymPlace: category === '센터' ? 'olla 클라이밍 센터' : location.trim(), meetDateTime: formattedDateTime, maxMember: parseInt(people, 10) };
       // 수정 모드면 PATCH, 신규면 POST
-      if (isEditMode && editPostId) await axios.patch(`${POSTS}/${editPostId}`, payload, { headers });
-      else await axios.post(POSTS, payload, { headers });
+      if (isEditMode && editPostId) await updatePostApi(editPostId, payload);
+      else await createPost(payload);
 
       initData(currentFilter);
       onSuccess();
