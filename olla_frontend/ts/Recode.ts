@@ -388,6 +388,8 @@ export const useRecode = ({ route, navigation }: any) => {
   // 지구력 기록 모달 닫기 (타이머가 실행 중이면 정지 후 슬라이드 다운)
   const closeEnduranceModal = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
+    timerStartRef.current = null;
+    timerBaseRef.current = 0;
     setTimerRunning(false);
     Animated.timing(enduranceHeightAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => {
       setEnduranceModalVisible(false); setEnduranceLaps(0); setSelectedMapNode(null); setEnduranceMin(''); setEnduranceSec(''); setIsTimerActive(false);
@@ -509,6 +511,10 @@ export const useRecode = ({ route, navigation }: any) => {
   const [timerSeconds,  setTimerSeconds]  = useState(0);
   // setInterval 핸들 보관용 ref
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // 타이머 시작 시각(Unix ms) — 백그라운드 복귀 후 실제 경과시간 계산용
+  const timerStartRef = useRef<number | null>(null);
+  // 이전에 누적된 초 (일시정지 전까지 쌓인 시간)
+  const timerBaseRef = useRef<number>(0);
 
   // 지구력 기록 모달 열기 (기간권 보유 확인 후 절반 높이로 슬라이드 업)
   const openEnduranceModal = () => requireMembership(() => {
@@ -592,19 +598,57 @@ export const useRecode = ({ route, navigation }: any) => {
 
   // 타이머 시작/정지 토글
   const toggleTimer = () => {
-    if (timerRunning) { setTimerRunning(false); if (timerRef.current) clearInterval(timerRef.current); } 
-    else { setTimerRunning(true); if (timerRef.current) clearInterval(timerRef.current); timerRef.current = setInterval(() => setTimerSeconds(p => p + 1), 1000); }
+    if (timerRunning) {
+      // 정지: 현재 세션 경과 시간을 누적값에 더하고 확정
+      if (timerStartRef.current !== null) {
+        timerBaseRef.current += Math.floor((Date.now() - timerStartRef.current) / 1000);
+        timerStartRef.current = null;
+      }
+      if (timerRef.current) clearInterval(timerRef.current);
+      setTimerRunning(false);
+      setTimerSeconds(timerBaseRef.current);
+    } else {
+      // 시작: 현재 시각 기록 후 interval로 화면 갱신
+      timerStartRef.current = Date.now();
+      setTimerRunning(true);
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = setInterval(() => {
+        if (timerStartRef.current !== null) {
+          const total = timerBaseRef.current + Math.floor((Date.now() - timerStartRef.current) / 1000);
+          setTimerSeconds(total);
+        }
+      }, 500);
+    }
   };
   // 타이머 정지 후 종료 확인 모달 표시
-  const confirmStopTimer = () => { if (timerRunning) { setTimerRunning(false); if (timerRef.current) clearInterval(timerRef.current); } setShowTimerFinishConfirm(true); };
+  const confirmStopTimer = () => {
+    if (timerRunning) {
+      if (timerStartRef.current !== null) {
+        timerBaseRef.current += Math.floor((Date.now() - timerStartRef.current) / 1000);
+        timerStartRef.current = null;
+      }
+      if (timerRef.current) clearInterval(timerRef.current);
+      setTimerRunning(false);
+      setTimerSeconds(timerBaseRef.current);
+    }
+    setShowTimerFinishConfirm(true);
+  };
   // 타이머 종료 확정: 측정된 시간을 분/초 입력값으로 반영
   const stopTimerAndSave = () => {
     setShowTimerFinishConfirm(false); setIsTimerActive(false);
-    if (timerRef.current) clearInterval(timerRef.current); setTimerRunning(false);
-    const [m, s] = formatTime(timerSeconds).split(':'); setEnduranceMin(m); setEnduranceSec(s);
+    if (timerRef.current) clearInterval(timerRef.current);
+    setTimerRunning(false);
+    const [m, s] = formatTime(timerBaseRef.current).split(':');
+    setEnduranceMin(m); setEnduranceSec(s);
   };
   // 타이머 모달 초기화 후 열기
-  const openTimerModal = () => { setTimerSeconds(0); setTimerRunning(false); setIsTimerActive(true); };
+  const openTimerModal = () => {
+    timerBaseRef.current = 0;
+    timerStartRef.current = null;
+    setTimerSeconds(0);
+    setTimerRunning(false);
+    setIsTimerActive(true);
+  };
   // 언마운트 시 실행 중인 타이머 정리
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
